@@ -8,6 +8,7 @@ import type {
 } from "@veolms/contracts";
 import type { Database } from "@veolms/database";
 import type { Kysely } from "kysely";
+import { AppError } from "../../../lib/errors.ts";
 import { CommerceErrors } from "../shared/commerce.errors.ts";
 import { isUniqueViolation } from "../shared/db-errors.ts";
 import * as couponRepo from "../coupons/coupon.repository.ts";
@@ -25,6 +26,16 @@ import {
   createPaymentReconciliationService,
   type PaymentReconciliationService,
 } from "../payments/payment-reconciliation.service.ts";
+
+/** Coupon refusals that confirm a code exists; see previewCheckout. */
+const ANONYMOUS_HIDDEN_COUPON_ERRORS: ReadonlySet<string> = new Set([
+  "COUPON_INACTIVE",
+  "COUPON_NOT_STARTED",
+  "COUPON_EXPIRED",
+  "COUPON_USAGE_LIMIT_REACHED",
+  "COUPON_MIN_ORDER_NOT_MET",
+  "COUPON_NOT_APPLICABLE",
+]);
 
 export interface CheckoutService {
   previewCheckout(
@@ -64,13 +75,29 @@ export function createCheckoutService({
     userId: string | undefined,
     request: CheckoutPreviewRequest,
   ): Promise<CheckoutPreviewResponse> {
-    const { pricing, couponValidation } = await pricingService.calculatePricing(
-      {
+    const { pricing, couponValidation } = await pricingService
+      .calculatePricing({
         userId,
         items: request.items,
         couponCode: request.couponCode,
-      },
-    );
+      })
+      .catch((error: unknown) => {
+        // A visitor who is not signed in learns only that a code did not
+        // work. The exact reason (expired, used up, not yet started, a
+        // minimum order) confirms that the code exists, and is given once
+        // the buyer is signed in.
+        if (
+          !userId &&
+          request.couponCode &&
+          error instanceof AppError &&
+          ANONYMOUS_HIDDEN_COUPON_ERRORS.has(error.code)
+        ) {
+          throw CommerceErrors.INVALID_COUPON(
+            request.couponCode.trim().toUpperCase(),
+          );
+        }
+        throw error;
+      });
 
     // The wire shape is what the checkout UI shows; the per-item breakdown
     // and the coupon's id are for order creation and stay here.

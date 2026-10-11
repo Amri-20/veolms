@@ -2,6 +2,7 @@ import { CheckIcon as Check } from "@phosphor-icons/react/Check";
 import { CircleNotchIcon as CircleNotch } from "@phosphor-icons/react/CircleNotch";
 import { DownloadSimpleIcon as DownloadSimple } from "@phosphor-icons/react/DownloadSimple";
 import { FolderOpenIcon as FolderOpen } from "@phosphor-icons/react/FolderOpen";
+import { LockSimpleIcon as LockSimple } from "@phosphor-icons/react/LockSimple";
 import { WarningCircleIcon as WarningCircle } from "@phosphor-icons/react/WarningCircle";
 import { useMemo } from "react";
 import type { RefObject } from "react";
@@ -138,7 +139,11 @@ export function LessonResourcesMenu({
                     <span className="block truncate text-[0.72rem] text-(--muted)">
                       {status === "failed"
                         ? "Couldn't download. Try again."
-                        : item.meta}
+                        : status === "signInRequired"
+                          ? "Log in to download this resource."
+                          : status === "accessRequired"
+                            ? "Enroll in this course to download."
+                            : item.meta}
                     </span>
                   </span>
                   <ResourceDownloadGlyph status={status} />
@@ -178,6 +183,16 @@ function ResourceDownloadGlyph({
         size={17}
         weight="bold"
         className={`${className} text-(--success)`}
+        aria-hidden="true"
+      />
+    );
+  }
+  if (status === "signInRequired" || status === "accessRequired") {
+    return (
+      <LockSimple
+        size={17}
+        weight="fill"
+        className={`${className} text-(--muted)`}
         aria-hidden="true"
       />
     );

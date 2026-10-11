@@ -71,6 +71,68 @@ export interface AttachmentsRepository {
     db: DatabaseExecutor,
     noteIds: readonly string[],
   ): Promise<AttachmentSummaryRow[]>;
+
+  /**
+   * Bytes an account has uploaded since `since`, whatever became of the
+   * files. Removed uploads still count, so deleting and uploading again
+   * does not win the allowance back.
+   */
+  sumOwnerUploadBytesSince(
+    db: DatabaseExecutor,
+    ownerId: string,
+    since: Date,
+  ): Promise<number>;
+
+  /**
+   * Uploads that were never attached to a post and are older than
+   * `olderThan`, in id order, after `afterId`. Paged by id because an id
+   * compares exactly; a timestamp read into the application loses the
+   * precision the database keeps, and a page boundary on it repeats rows.
+   */
+  listUnattachedAttachments(
+    db: DatabaseExecutor,
+    input: {
+      olderThan: Date;
+      limit: number;
+      afterId?: string | undefined;
+    },
+  ): Promise<UnattachedAttachmentRow[]>;
+
+  /**
+   * Which of the given attachments a thread, reply or note mentions in its
+   * text, as a post does when it shows an image inline. One pass over the
+   * posts for the whole set; `attachmentIds` must be lower-case UUIDs.
+   */
+  findAttachmentsMentionedInPosts(
+    db: DatabaseExecutor,
+    attachmentIds: readonly string[],
+  ): Promise<string[]>;
+
+  /**
+   * Puts back an upload that markUnattachedAttachmentDeleted marked removed,
+   * when its file could not be removed after all.
+   */
+  restoreUnattachedAttachment(
+    db: DatabaseExecutor,
+    input: { attachmentId: string; status: AttachmentStatus },
+  ): Promise<void>;
+
+  /**
+   * Marks an upload removed, but only while it is still unattached and
+   * older than `olderThan`. False when it was attached, or already
+   * removed, in the meantime.
+   */
+  markUnattachedAttachmentDeleted(
+    db: DatabaseExecutor,
+    input: { attachmentId: string; olderThan: Date },
+  ): Promise<boolean>;
+}
+
+export interface UnattachedAttachmentRow {
+  id: string;
+  storageKey: string;
+  fileSize: number;
+  status: AttachmentStatus;
 }
 
 export function createAttachmentsRepository(): AttachmentsRepository {
@@ -140,6 +202,81 @@ export function createAttachmentsRepository(): AttachmentsRepository {
             : null,
         })
         .execute();
+    },
+
+    async sumOwnerUploadBytesSince(db, ownerId, since) {
+      const row = await db
+        .selectFrom("learning_attachments")
+        .select(sql<string>`coalesce(sum(file_size), 0)`.as("bytes"))
+        .where("owner_id", "=", ownerId)
+        .where("created_at", ">", since)
+        .executeTakeFirst();
+
+      return Number(row?.bytes ?? 0);
+    },
+
+    async listUnattachedAttachments(db, input) {
+      let query = db
+        .selectFrom("learning_attachments")
+        .select([
+          "id",
+          "storage_key as storageKey",
+          "file_size as fileSize",
+          "status",
+        ])
+        .where("target_id", "is", null)
+        .where("status", "in", ["uploading", "ready"])
+        .where("created_at", "<", input.olderThan);
+
+      if (input.afterId) query = query.where("id", ">", input.afterId);
+
+      return await query.orderBy("id", "asc").limit(input.limit).execute();
+    },
+
+    async findAttachmentsMentionedInPosts(db, attachmentIds) {
+      if (attachmentIds.length === 0) return [];
+
+      const result = await sql<{ id: string }>`
+        select distinct lower(found[1]) as id
+        from (
+          select content as body from learning_threads
+          union all
+          select content from learning_replies
+          union all
+          select content from learning_notes
+        ) as texts
+        cross join lateral regexp_matches(
+          texts.body,
+          '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})',
+          'g'
+        ) as found
+        where lower(found[1]) = any(${[...attachmentIds]}::text[])
+      `.execute(db);
+
+      return result.rows.map((row) => row.id);
+    },
+
+    async restoreUnattachedAttachment(db, input) {
+      await db
+        .updateTable("learning_attachments")
+        .set({ status: input.status })
+        .where("id", "=", input.attachmentId)
+        .where("target_id", "is", null)
+        .where("status", "=", "deleted")
+        .execute();
+    },
+
+    async markUnattachedAttachmentDeleted(db, input) {
+      const result = await db
+        .updateTable("learning_attachments")
+        .set({ status: "deleted" })
+        .where("id", "=", input.attachmentId)
+        .where("target_id", "is", null)
+        .where("status", "in", ["uploading", "ready"])
+        .where("created_at", "<", input.olderThan)
+        .executeTakeFirst();
+
+      return Number(result.numUpdatedRows) > 0;
     },
 
     async findAttachmentById(db, attachmentId) {

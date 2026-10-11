@@ -70,6 +70,11 @@ systemd timer (weekly is fine):
 pnpm purge:sessions        # sessions older than SESSION_RETENTION_DAYS (30)
 pnpm purge:quiz-attempts   # expire overdue in-progress quiz attempts
 pnpm purge:course-deletions
+
+# Discussion uploads that were never attached to a post, older than
+# DISCUSSION_UPLOAD_ORPHAN_RETENTION_DAYS (7), and mentioned by no post, note,
+# lesson or course text. Reports only; add "-- --apply" to remove them.
+pnpm --filter @veolms/api purge:discussion-uploads
 ```
 
 Webhook events (processed, >30 days) and processed outbox events are

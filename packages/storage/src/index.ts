@@ -492,12 +492,19 @@ export class S3StorageService {
    *
    * The URL is single-use and expires after `expiresIn` seconds (default 300).
    * Callers must set Content-Type on the PUT request to match `contentType`.
+   *
+   * By default nothing enforces that: the presigner leaves Content-Type out
+   * of the signature, so the holder of the URL can store the object under
+   * any type. `bindContentType` signs it, and storage then refuses a PUT
+   * whose Content-Type differs. Use it wherever the stored type decides how
+   * the object is served to other people (anything under a public prefix).
    */
   async getPresignedPutUrl(
     key: string,
     contentType: string,
     contentLength?: number,
     expiresIn = 300,
+    options?: { bindContentType?: boolean },
   ): Promise<string> {
     await this.ensureBucketCors().catch(() => {});
     const storageKey = this.keyForWrite(key);
@@ -510,6 +517,9 @@ export class S3StorageService {
     return getSignedUrl(this.client, command, {
       expiresIn,
       unhoistableHeaders: new Set(["content-length"]),
+      ...(options?.bindContentType
+        ? { signableHeaders: new Set(["content-type"]) }
+        : {}),
     });
   }
 

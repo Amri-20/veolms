@@ -32,6 +32,44 @@ function layout(heading: string, bodyHtml: string): string {
   ].join("");
 }
 
+/**
+ * Sent in place of a sign-in code when the address belongs to a deactivated
+ * account. The sign-in screen answers the same for every address, so this
+ * message, which only the owner of the address reads, is how they learn
+ * why no code arrived and where to turn.
+ */
+export function deactivatedAccountSignInEmail({
+  academyName,
+}: {
+  academyName: string;
+}): EmailContent {
+  const intro = `Someone asked to sign in to ${academyName} with this email address.`;
+  const reason =
+    "The account for this address is deactivated, so no sign-in code was sent.";
+  const recovery = `To use the account again, contact the ${academyName} team and ask for it to be reactivated.`;
+
+  return {
+    subject: `Your ${academyName} account is deactivated`,
+    text:
+      `${intro}
+
+${reason}
+
+${recovery}
+
+` + "If this was not you, no action is needed.",
+    html: layout(
+      `Your ${academyName} account is deactivated`,
+      [intro, reason, recovery]
+        .map(
+          (line) =>
+            `<p style="font-size:14px;margin:0 0 12px">${escapeHtml(line)}</p>`,
+        )
+        .join(""),
+    ),
+  };
+}
+
 export interface OtpVerificationInput {
   code: string;
   expiresInMinutes: number;

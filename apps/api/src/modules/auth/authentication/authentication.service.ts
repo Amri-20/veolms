@@ -10,6 +10,7 @@ import {
   buildDicebearSvgUrl,
   DEFAULT_AVATAR_STYLE,
   DICEBEAR_BASE_URL,
+  PUBLIC_PROFILE_USERNAME_MAX_LENGTH,
 } from "@veolms/contracts";
 import type { S3StorageService } from "@veolms/storage";
 import { sql, type Kysely } from "kysely";
@@ -47,6 +48,10 @@ import { createOutboxService } from "../../../events/outbox.service.ts";
 const AVATAR_VALIDATION_RANGE = "bytes=0-31";
 const USER_AVATAR_RETENTION_LIMIT = 2;
 const DICEBEAR_ORIGIN = new URL(DICEBEAR_BASE_URL).origin;
+/** "_" and three digits, appended when the plain name is taken. */
+const USERNAME_SUFFIX_LENGTH = 4;
+/** The longest display name a response may carry (`authUserSchema`). */
+const DISPLAY_NAME_MAX_LENGTH = 100;
 
 /**
  * First path segments the web app and its hosting serve themselves. A profile
@@ -550,24 +555,36 @@ export function createAuthService({
       throw new AppError(404, "USER_NOT_FOUND", "User account was not found.");
     }
 
+    if (!otpService) {
+      throw new AppError(
+        500,
+        "CONFIG_ERROR",
+        "AuthService requires otpService for phone verification.",
+      );
+    }
+
     const existingUser = await userRepository.findUserIdByIdentifier(
       database,
       normalizedPhoneNo,
       "phone",
     );
     if (existingUser && existingUser.id !== userId) {
+      // The owner of the account is told the number is taken, which they
+      // need to know. It is counted against their daily allowance first, as
+      // a sent code would be: a refusal that cost nothing let one account
+      // test any quantity of numbers for membership.
+      await otpService.recordRefusedSend(
+        normalizedPhoneNo,
+        "phone",
+        "phone_verification",
+        { userId, ip: requesterIp },
+        // Charged to the asker only, never to the number's owner.
+        { countAgainstDestination: false },
+      );
       throw new AppError(
         409,
         "PHONE_TAKEN",
         "That phone number is already linked to another account.",
-      );
-    }
-
-    if (!otpService) {
-      throw new AppError(
-        500,
-        "CONFIG_ERROR",
-        "AuthService requires otpService for phone verification.",
       );
     }
 
@@ -672,6 +689,25 @@ export function createAuthService({
       throw new AppError(404, "USER_NOT_FOUND", "User account was not found.");
     }
 
+    if (!otpService) {
+      throw new AppError(
+        500,
+        "CONFIG_ERROR",
+        "AuthService requires otpService for phone verification.",
+      );
+    }
+
+    // The code is checked before anything is said about the number. Asked
+    // the other way round, this answered "taken" or "not taken" for any
+    // number and any made-up code. No code is ever sent for a taken number,
+    // so a caller without one learns nothing here.
+    await otpService.assertOtpMatches(
+      normalizedPhoneNo,
+      "phone",
+      "phone_verification",
+      code,
+    );
+
     const existingUser = await userRepository.findUserIdByIdentifier(
       database,
       normalizedPhoneNo,
@@ -682,14 +718,6 @@ export function createAuthService({
         409,
         "PHONE_TAKEN",
         "That phone number is already linked to another account.",
-      );
-    }
-
-    if (!otpService) {
-      throw new AppError(
-        500,
-        "CONFIG_ERROR",
-        "AuthService requires otpService for phone verification.",
       );
     }
 
@@ -760,12 +788,34 @@ export function createAuthService({
       existingSessionToken?: string | null;
     };
   }) {
+    if (!otpService || !sessionService) {
+      throw new AppError(
+        500,
+        "CONFIG_ERROR",
+        "AuthService requires otpService and sessionService for login.",
+      );
+    }
+
     const user = await findUserByIdentifierIncludingDeleted(
       input.identifier,
       input.identifierType,
     );
 
+    // Nothing below says whether the identifier has an account until the
+    // caller has proven the code that was sent to it. A wrong code gets the
+    // same answer in every branch, so the answers cannot be used to list
+    // accounts. The codes are only checked here, not consumed: sign-up
+    // consumes its own, and the refused accounts never sign in.
     if (!user) {
+      await otpService.assertOtpMatches(
+        input.identifier,
+        input.identifierType,
+        input.identifierType === "email"
+          ? "email_verification"
+          : "phone_verification",
+        input.code,
+        { failureStatus: 401 },
+      );
       throw new AppError(
         400,
         "REGISTRATION_REQUIRED",
@@ -774,6 +824,12 @@ export function createAuthService({
     }
 
     if (user.is_deleted) {
+      await otpService.assertOtpMatches(
+        input.identifier,
+        input.identifierType,
+        "login",
+        input.code,
+      );
       throw new AppError(
         403,
         "ACCOUNT_DEACTIVATED",
@@ -781,11 +837,26 @@ export function createAuthService({
       );
     }
 
-    if (!otpService || !sessionService) {
+    // A number nobody confirmed (the one typed during platform setup) is not
+    // proof of ownership: whoever holds it would receive the code. It cannot
+    // sign in until the owner confirms it from their profile. An account
+    // with no confirmed email is left alone: its number is the channel it
+    // was opened with, and it has no other way in.
+    if (
+      input.identifierType === "phone" &&
+      !user.phone_verified_at &&
+      user.email_verified_at
+    ) {
+      await otpService.assertOtpMatches(
+        input.identifier,
+        input.identifierType,
+        "login",
+        input.code,
+      );
       throw new AppError(
-        500,
-        "CONFIG_ERROR",
-        "AuthService requires otpService and sessionService for login.",
+        403,
+        "PHONE_NOT_VERIFIED",
+        "This mobile number has not been confirmed yet. Sign in with your email, then confirm the number in Settings.",
       );
     }
 
@@ -831,6 +902,60 @@ export function createAuthService({
     };
   }) {
     const hasBothChannels = Boolean(input.email && input.phoneNo);
+
+    if (!otpService || !sessionService) {
+      throw new AppError(
+        500,
+        "CONFIG_ERROR",
+        "AuthService requires otpService and sessionService for registration.",
+      );
+    }
+
+    // The codes are checked before anything is said about the email, number
+    // or username, so those answers cannot be read without a code sent to
+    // the caller. They are consumed further down, once every check has
+    // passed: with two channels, a wrong second code used to spend the
+    // first one.
+    if (hasBothChannels) {
+      if (!input.emailCode || !input.phoneCode) {
+        throw new AppError(
+          400,
+          "INVALID_REQUEST",
+          "Email and phone verification codes are required.",
+        );
+      }
+
+      await otpService.assertOtpMatches(
+        input.email!,
+        "email",
+        "email_verification",
+        input.emailCode,
+      );
+      await otpService.assertOtpMatches(
+        input.phoneNo!,
+        "phone",
+        "phone_verification",
+        input.phoneCode,
+      );
+    } else {
+      if (!input.code) {
+        throw new AppError(
+          400,
+          "INVALID_REQUEST",
+          "A verification code is required.",
+        );
+      }
+
+      await otpService.assertOtpMatches(
+        input.identifier,
+        input.identifierType,
+        input.identifierType === "email"
+          ? "email_verification"
+          : "phone_verification",
+        input.code,
+      );
+    }
+
     const existingUsers = hasBothChannels
       ? await Promise.all([
           userRepository.findUserStatusByIdentifier(
@@ -872,51 +997,27 @@ export function createAuthService({
       throw new AppError(400, "USERNAME_TAKEN", "Username is already taken.");
     }
 
-    if (!otpService || !sessionService) {
-      throw new AppError(
-        500,
-        "CONFIG_ERROR",
-        "AuthService requires otpService and sessionService for registration.",
-      );
-    }
-
     if (hasBothChannels) {
-      if (!input.emailCode || !input.phoneCode) {
-        throw new AppError(
-          400,
-          "INVALID_REQUEST",
-          "Email and phone verification codes are required.",
-        );
-      }
-
       await otpService.verifyAndConsumeOtp(
         input.email!,
         "email",
         "email_verification",
-        input.emailCode,
+        input.emailCode!,
       );
       await otpService.verifyAndConsumeOtp(
         input.phoneNo!,
         "phone",
         "phone_verification",
-        input.phoneCode,
+        input.phoneCode!,
       );
     } else {
-      if (!input.code) {
-        throw new AppError(
-          400,
-          "INVALID_REQUEST",
-          "A verification code is required.",
-        );
-      }
-
       await otpService.verifyAndConsumeOtp(
         input.identifier,
         input.identifierType,
         input.identifierType === "email"
           ? "email_verification"
           : "phone_verification",
-        input.code,
+        input.code!,
       );
     }
 
@@ -937,9 +1038,18 @@ export function createAuthService({
   /**
    * Appends a numeric suffix until the username is free. A reserved name
    * (an email that starts "settings@", say) is treated as taken.
+   *
+   * The result never exceeds the length every response allows for a
+   * username. A provider login or an email's local part can be longer than
+   * that, and an account created with such a name could not load its own
+   * profile afterwards.
    */
   async function generateUniqueUsername(base: string): Promise<string> {
-    const normalised = base.toLowerCase().replace(/[^a-z0-9_]/g, "_") || "user";
+    const normalised =
+      base
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, "_")
+        .slice(0, PUBLIC_PROFILE_USERNAME_MAX_LENGTH) || "user";
 
     if (
       !isReservedUsername(normalised) &&
@@ -948,8 +1058,13 @@ export function createAuthService({
       return normalised;
     }
 
+    const stem = normalised.slice(
+      0,
+      PUBLIC_PROFILE_USERNAME_MAX_LENGTH - USERNAME_SUFFIX_LENGTH,
+    );
+
     for (let attempt = 0; attempt < USERNAME_SUFFIX_ATTEMPTS; attempt++) {
-      const candidate = `${normalised}_${crypto.randomInt(100, 1000)}`;
+      const candidate = `${stem}_${crypto.randomInt(100, 1000)}`;
       if (!(await userRepository.usernameExists(database, candidate))) {
         return candidate;
       }
@@ -1031,7 +1146,8 @@ export function createAuthService({
           email: input.email,
           phoneNo: input.phoneNo,
           username: input.username,
-          displayName: input.displayName,
+          // A provider's profile name has no length limit of its own.
+          displayName: input.displayName.slice(0, DISPLAY_NAME_MAX_LENGTH),
           emailVerifiedAt: input.emailVerified ? new Date() : null,
           phoneVerifiedAt: input.phoneVerified ? new Date() : null,
           mfaMandatory: isFirstUser,
@@ -1109,6 +1225,10 @@ export function createAuthService({
       avatarOriginalKey(userId, input.contentType, uploadId),
       input.contentType,
       input.fileSize,
+      undefined,
+      // Avatars are public. Unsigned, the type checked above was only a
+      // promise: the upload could be sent, and stored, as anything.
+      { bindContentType: true },
     );
 
     return { uploadId, uploadUrl };

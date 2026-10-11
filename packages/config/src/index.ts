@@ -113,6 +113,37 @@ const serverConfigSchema = z.object({
     .default("default_session_secret_at_least_32_chars_long"),
   SESSION_RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
   /**
+   * How much a learner may upload to discussions and notes in any 24 hours,
+   * in megabytes. One file is capped at 50 MB separately. 0 means no limit.
+   */
+  DISCUSSION_UPLOAD_DAILY_QUOTA_MB: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(1_000_000)
+    .default(500),
+  /**
+   * The same allowance for accounts with any role beyond student
+   * (instructors, administrators), who post teaching material. 0 means no
+   * limit.
+   */
+  DISCUSSION_UPLOAD_DAILY_QUOTA_STAFF_MB: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(1_000_000)
+    .default(5000),
+  /**
+   * Days an upload that was never attached to a post is kept before the
+   * retention job may remove it.
+   */
+  DISCUSSION_UPLOAD_ORPHAN_RETENTION_DAYS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(3650)
+    .default(7),
+  /**
    * TTL for the process-local per-request authentication cache (ms).
    * Bounds how long a role/MFA-factor change made OUTSIDE the session
    * repository — or on another instance — can be served stale. Session
@@ -165,6 +196,24 @@ const serverConfigSchema = z.object({
 
   // One-time passcodes
   OTP_RESEND_COOLDOWN_SECONDS: otpResendCooldownSecondsSchema,
+  /**
+   * Codes one network address may request in any ten minutes, across every
+   * destination. Counted in the database, so it holds across API instances.
+   * Many learners can share one address (a campus, an office); raise it for
+   * such an audience. 0 turns the limit off.
+   */
+  OTP_IP_WINDOW_LIMIT: z.coerce.number().int().min(0).max(100_000).default(50),
+  /**
+   * Different addresses and numbers with no account that one network
+   * address may send a sign-up code to in a day. Bounds using the platform
+   * to send mail or texts to strangers. 0 turns the limit off.
+   */
+  OTP_IP_DAILY_SIGNUP_LIMIT: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(1_000_000)
+    .default(200),
 
   /**
    * Enables the `mock_<email>` OAuth short-circuit, which skips both the
@@ -501,6 +550,15 @@ export function loadServerConfig(
       throw new Error(
         `Refusing to start in production without required value(s) for: ${missingRequired.join(", ")}. ` +
           `Set these via environment variables — a payment gateway must never boot with missing credentials.`,
+      );
+    }
+    if (parsed.TRUST_PROXY === true) {
+      // Not refused: a deployment may rely on it. With "true", the client
+      // address is whatever the X-Forwarded-For header claims, and every
+      // per-address limit (sign-in codes, sign-in attempts) keys on it.
+      console.warn(
+        "[SECURITY WARNING] TRUST_PROXY=true trusts any X-Forwarded-For value a client sends. " +
+          "Set it to the number of proxies in front of the API, or to their addresses, so per-address limits cannot be sidestepped.",
       );
     }
   } else if (offenders.length > 0) {

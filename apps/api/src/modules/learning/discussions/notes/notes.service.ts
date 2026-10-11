@@ -75,6 +75,10 @@ async function linkOwnedAttachments(
     .updateTable("learning_attachments")
     .set({ target_type: "note", target_id: noteId })
     .where("id", "in", validIds)
+    // Held to the same conditions as the check above, so an upload removed
+    // or attached elsewhere in between is not attached here.
+    .where("status", "=", "ready")
+    .where("target_id", "is", null)
     .execute();
 }
 

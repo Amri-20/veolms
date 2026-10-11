@@ -6,6 +6,7 @@ export {
   type EmailTransportConfig,
 } from "./email.service.ts";
 export {
+  deactivatedAccountSignInEmail,
   escapeHtml,
   otpVerificationEmail,
   type EmailContent,

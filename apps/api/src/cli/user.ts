@@ -344,7 +344,8 @@ async function main() {
           .split("@")[0]!
           .toLowerCase()
           .replace(/[^a-z0-9_]/g, "_")
-          .slice(0, 30) || selectedRole;
+          // Room for the "_N" suffix below within the 30 a username may be.
+          .slice(0, 26) || selectedRole;
 
       username = baseUsername;
       let suffix = 1;
