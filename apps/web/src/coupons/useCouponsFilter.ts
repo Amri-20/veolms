@@ -13,6 +13,9 @@ export type {
 } from "./couponHelpers";
 export { getCouponStatus } from "./couponHelpers";
 
+/** How often coupon statuses are re-read against the clock. */
+const STATUS_CLOCK_INTERVAL_MS = 60_000;
+
 export function useCouponsFilter(options?: {
   courseId?: string | null;
   enabled?: boolean;
@@ -34,11 +37,15 @@ export function useCouponsFilter(options?: {
     [data],
   );
 
+  // "Now" decides each coupon's status (scheduled, active, expired), and
+  // those turn over on the minute. Ticking every five seconds re-filtered
+  // and re-sorted the whole list, and redrew the table, twelve times as
+  // often as anything could change.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => {
       setNow(Date.now());
-    }, 5000);
+    }, STATUS_CLOCK_INTERVAL_MS);
     return () => clearInterval(timer);
   }, []);
 
