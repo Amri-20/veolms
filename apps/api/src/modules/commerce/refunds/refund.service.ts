@@ -177,6 +177,19 @@ export function createRefundService({
         );
       }
 
+      // A manual payment arrived by bank or UPI transfer, outside any
+      // gateway, so there is no gateway payment to refund. Asked anyway, the
+      // gateway refused the made-up payment id and every such refund failed
+      // as a gateway error. It is refused here instead, before anything is
+      // reserved or sent, and nothing about the order changes: this service
+      // cannot move that money, and it does not record a refund it did not
+      // make. The money is returned outside the platform.
+      if (payment.gateway_provider === "manual") {
+        throw CommerceErrors.REFUND_NOT_ALLOWED(
+          "This order was paid by manual transfer, so it cannot be refunded from here. Return the money outside the platform.",
+        );
+      }
+
       // Calculate total already refunded — safe from the race now that
       // this read happens under the order row's lock. No exclusion
       // needed: this refund doesn't exist as a row yet.
@@ -268,33 +281,20 @@ export function createRefundService({
           .update(`refund:${order.id}:${idempotencyKey}`)
           .digest("hex")
       : refundId;
-    //
-    //    A manual payment arrived by bank or UPI transfer, outside any
-    //    gateway, and goes back the same way: there is nothing to ask the
-    //    gateway for. (Asked anyway, it refused the made-up payment id and
-    //    every such refund failed.) The refund is recorded as done; sending
-    //    the money is the administrator's own step.
-    const dispatchRefund = () =>
-      payment.gateway_provider === "manual"
-        ? Promise.resolve({
-            gatewayRefundId: `manual_rfnd_${refundId}`,
-            status: "processed" as const,
-          })
-        : paymentGateway.refundPayment({
-            gatewayPaymentId: payment.gateway_payment_id!,
-            amount: requestedAmount,
-            currency: payment.currency,
-            reason: reason ?? "Admin initiated refund",
-            idempotencyKey: gatewayIdempotencyKey,
-            notes: {
-              orderId: order.id,
-              adminUserId,
-              ...(targetItem ? { orderItemId: targetItem.id } : {}),
-            },
-          });
     let gatewayResult;
     try {
-      gatewayResult = await dispatchRefund();
+      gatewayResult = await paymentGateway.refundPayment({
+        gatewayPaymentId: payment.gateway_payment_id!,
+        amount: requestedAmount,
+        currency: payment.currency,
+        reason: reason ?? "Admin initiated refund",
+        idempotencyKey: gatewayIdempotencyKey,
+        notes: {
+          orderId: order.id,
+          adminUserId,
+          ...(targetItem ? { orderItemId: targetItem.id } : {}),
+        },
+      });
     } catch (err) {
       // Outcome unknown (timeout, 5xx, ...) and the caller can retry under
       // a key: keep the reservation `pending` with its key. It keeps

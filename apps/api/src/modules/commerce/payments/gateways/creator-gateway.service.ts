@@ -8,6 +8,7 @@ import type {
 } from "@veolms/contracts";
 import type { ServerConfig } from "@veolms/config";
 import { RazorpayPaymentGateway } from "@veolms/services";
+import { AppError } from "../../../../lib/errors.ts";
 import * as creatorGatewayRepo from "./creator-gateway.repository.ts";
 import { encryptSecret, decryptSecret } from "./crypto.helper.ts";
 
@@ -22,6 +23,18 @@ export interface CreatorGatewayService {
   ): Promise<CreatorPaymentConfig | null>;
   resolveGatewayForCreator(creatorId?: string | null): Promise<PaymentGateway>;
 }
+
+/**
+ * Whether new gateway keys are accepted. Off: nothing reads a stored key.
+ * Checkout, refunds, webhooks and the recovery worker all use the one
+ * gateway the platform is configured with (`resolveGatewayForCreator` has no
+ * caller), so "connecting" a gateway stored live secrets to no effect while
+ * telling the person their sales would be paid into that account.
+ *
+ * Turning this on is not enough to make it true. Every one of those paths
+ * would have to resolve the gateway per order first.
+ */
+const ACCEPTS_NEW_GATEWAY_KEYS = false;
 
 /**
  * A key id as it is shown back to the person who saved it: enough to tell
@@ -45,6 +58,14 @@ export function createCreatorGatewayService({
     creatorId: string,
     request: SaveCreatorPaymentConfigRequest,
   ): Promise<CreatorPaymentConfig> {
+    if (!ACCEPTS_NEW_GATEWAY_KEYS) {
+      throw new AppError(
+        409,
+        "PAYMENT_GATEWAY_CONFIG_UNAVAILABLE",
+        "Connecting your own payment gateway is not available. Payments are taken through the platform's gateway, and the keys you sent were not stored.",
+      );
+    }
+
     const encryptedKeyId = encryptSecret(request.keyId);
     const encryptedKeySecret = encryptSecret(request.keySecret);
     const encryptedWebhookSecret = request.webhookSecret
