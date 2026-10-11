@@ -164,14 +164,23 @@ function buildRequestUrl(url: string, params?: object) {
 function combineSignals(
   requestSignal: AbortSignal | undefined,
   timeout: number | undefined,
-): { signal: AbortSignal | undefined; didTimeout: () => boolean } {
+): {
+  signal: AbortSignal | undefined;
+  didTimeout: () => boolean;
+  /** Stops the timeout once the request is over. */
+  release: () => void;
+} {
   let timedOut = false;
   if (!timeout) {
-    return { signal: requestSignal, didTimeout: () => false };
+    return {
+      signal: requestSignal,
+      didTimeout: () => false,
+      release: () => undefined,
+    };
   }
 
   const controller = new AbortController();
-  window.setTimeout(() => {
+  const timer = window.setTimeout(() => {
     timedOut = true;
     controller.abort();
   }, timeout);
@@ -182,7 +191,11 @@ function combineSignals(
         once: true,
       });
   }
-  return { signal: controller.signal, didTimeout: () => timedOut };
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    release: () => window.clearTimeout(timer),
+  };
 }
 
 function redirectToMfaSetup(apiError: ApiError): void {
@@ -342,7 +355,13 @@ async function request<T>(
     }
   }
 
-  const { signal, didTimeout } = combineSignals(config.signal, config.timeout);
+  // The timeout covers the response body as well, so it is only stopped
+  // once that has been read. It used to be left running after every
+  // request, to fire later on a request that had long finished.
+  const { signal, didTimeout, release } = combineSignals(
+    config.signal,
+    config.timeout,
+  );
 
   let response: Response;
   try {
@@ -354,6 +373,7 @@ async function request<T>(
       signal,
     });
   } catch (error) {
+    release();
     const aborted =
       error instanceof DOMException && error.name === "AbortError";
     const code = aborted
@@ -370,7 +390,7 @@ async function request<T>(
     throw getApiError(createHttpError(message, { code, config: { url } }));
   }
 
-  const responseBody = await readResponseBody(response);
+  const responseBody = await readResponseBody(response).finally(release);
 
   if (!response.ok) {
     const apiError = getApiError(
