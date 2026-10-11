@@ -157,6 +157,11 @@ import {
   getShellProfileSubtitle,
 } from "./shell/workspaceRole";
 import { useNotificationSummary } from "./services/notifications";
+import { setLearnerView } from "./lib/learner-view";
+import { MOBILE_NAVIGATION_REVEAL_EVENT } from "./learning/player/mobileNavigationFollow";
+import { courseKeys } from "./services/courses";
+import { learningProgressKeys } from "./services/learning-progress";
+import { mediaKeys } from "./services/media";
 
 import {
   SIDEBAR_MIN_WIDTH,
@@ -863,8 +868,11 @@ const SIDEBAR_DOCK_CLASS =
 // moved the logo and the whole menu by 2px mid-drag.
 // The logo keeps its 38px box in the compact slot too, so the mark sits at
 // the same height in every state.
+// It keeps one horizontal place in every state as well: the mark centred on
+// the menu's icon column. Only the settled collapsed sidebar used to have
+// that nudge, so the logo stepped 1.5px left on the frame it collapsed.
 const SIDEBAR_BRAND_CLASS =
-  "courses-sidebar__brand [.courses-app:not(.courses-app--collapsed)_&]:[&>.courses-logo-clip]:max-w-[min(156px,calc(100%-36px))]! [.courses-app--collapsed_&]:flex-row! [.courses-app--collapsed_&]:items-end! [.courses-app--collapsed_&]:justify-start! [.courses-app--collapsed_&]:pl-[19.375px]! [.courses-app--collapsed_&]:pr-[7px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:static! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:block! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:w-[156px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:opacity-100! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:transform-none! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:[clip-path:inset(0)]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:max-w-[min(156px,max(0px,calc(100%-36px)))]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:static! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:block! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:w-[156px]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:opacity-100! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:transform-none! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:[clip-path:inset(0)]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:max-w-[min(156px,max(20px,calc(100%-36px)))]! [&>.courses-logo-clip>svg]:origin-left [&>.courses-logo-clip>svg]:scale-110 [.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip>svg]:scale-95 [&>.courses-logo-clip]:translate-y-[4px] [&>.courses-logo-clip]:-translate-x-[0.5px] [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:h-12! [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:min-h-12! [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:[&>.courses-logo-clip]:translate-y-[6px] [.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:-translate-x-[2px] [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:[&>.courses-logo-clip]:h-[38px]!";
+  "courses-sidebar__brand [.courses-app:not(.courses-app--collapsed)_&]:[&>.courses-logo-clip]:max-w-[min(156px,calc(100%-36px))]! [.courses-app--collapsed_&]:flex-row! [.courses-app--collapsed_&]:items-end! [.courses-app--collapsed_&]:justify-start! [.courses-app--collapsed_&]:pl-[19.375px]! [.courses-app--collapsed_&]:pr-[7px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:static! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:block! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:w-[156px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:opacity-100! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:transform-none! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:[clip-path:inset(0)]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:max-w-[min(156px,max(0px,calc(100%-36px)))]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:static! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:block! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:w-[156px]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:opacity-100! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:transform-none! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:[clip-path:inset(0)]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:max-w-[min(156px,max(23px,calc(100%-36px)))]! [&>.courses-logo-clip>svg]:origin-left [&>.courses-logo-clip>svg]:scale-110 [&>.courses-logo-clip]:translate-y-[4px] [&>.courses-logo-clip]:-translate-x-[0.5px] min-[641px]:[&>.courses-logo-clip]:-translate-x-[2px] [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:h-12! [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:min-h-12! [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:[&>.courses-logo-clip]:translate-y-[6px] [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:[&>.courses-logo-clip]:h-[38px]!";
 const SIDEBAR_COLLAPSE_BUTTON_CLASS =
   "sidebar-collapse [.courses-app:not(.courses-app--collapsed)_&]:absolute! [.courses-app:not(.courses-app--collapsed)_&]:top-[14px]! [.courses-app:not(.courses-app--collapsed)_&]:bottom-auto! [.courses-app:not(.courses-app--collapsed)_&]:left-[calc(100%-39px-clamp(0px,(112px-100%)*0.1,4px))]! [.courses-app--collapsed_&]:absolute! [.courses-app--collapsed_&]:top-[14px]! [.courses-app--collapsed_&]:bottom-auto! [.courses-app--collapsed_&]:left-auto! [.courses-app--collapsed_&]:right-[calc(7.5px+clamp(0px,(120px-100%)*0.1,4px))]! [.courses-app--collapsed.courses-app--resizing_&]:opacity-100! [.courses-app--collapsed.courses-app--resizing_&]:pointer-events-auto! [.courses-app--collapsed:not(.courses-app--resizing)_.courses-sidebar:not(:hover)_&]:delay-[220ms]! [&>span]:scale-[1.16] [&>span]:translate-y-[0.5px] hover:bg-transparent! hover:shadow-none! hover:[&>span]:rounded-[24%]! hover:[&>span]:bg-[color-mix(in_srgb,var(--accent)_55%,var(--app-shell))]! hover:[&>span]:shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_55%,var(--app-shell))]!";
 
@@ -1141,6 +1149,14 @@ export function CoursesPage({
     number | string | null
   >(MOBILE_DRAWER_INITIAL_SNAP_POINT);
   const [mobileBottomNavHidden, setMobileBottomNavHidden] = useState(false);
+  // The lesson player asks for the bottom menu when it is minimized: its
+  // mini window rests on the menu.
+  useEffect(() => {
+    const reveal = () => setMobileBottomNavHidden(false);
+    window.addEventListener(MOBILE_NAVIGATION_REVEAL_EVENT, reveal);
+    return () =>
+      window.removeEventListener(MOBILE_NAVIGATION_REVEAL_EVENT, reveal);
+  }, []);
   const [notice, setNotice] = useState<ToastMessage | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(() =>
     typeof document === "undefined"
@@ -1825,6 +1841,26 @@ export function CoursesPage({
       setRole(nextRole);
     }
   }, [role, userRoles]);
+
+  // An account that manages courses is answered by the API as a learner
+  // while it is in its Student view (see `lib/learner-view`). What was
+  // fetched under the other view lists and numbers lessons differently, so
+  // it is fetched again when the view changes.
+  useEffect(() => {
+    if (!isWorkspaceRoleHydrated) return;
+    const learnerView =
+      isAuthenticated && canSwitchWorkspace && effectiveRole === "student";
+    if (!setLearnerView(learnerView)) return;
+    void queryClient.invalidateQueries({ queryKey: courseKeys.overviews() });
+    void queryClient.invalidateQueries({ queryKey: learningProgressKeys.all });
+    void queryClient.invalidateQueries({ queryKey: mediaKeys.all });
+  }, [
+    canSwitchWorkspace,
+    effectiveRole,
+    isAuthenticated,
+    isWorkspaceRoleHydrated,
+    queryClient,
+  ]);
 
   useEffect(() => {
     if (!storedPreferencesReady || !authUserFetched || !isWorkspaceRoleHydrated)

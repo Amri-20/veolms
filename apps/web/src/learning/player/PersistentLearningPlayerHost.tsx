@@ -586,9 +586,13 @@ export function PersistentLearningPlayerHost({
           onLessonEnded: undefined,
         }
       : player.playerProps;
+    // A failure that came with a retry gets the mini window's own. One that
+    // came with none (a lesson with no video) can never play, so it gets
+    // none here either.
     const basePlayerProps =
       retryPlayback &&
-      registeredPlayerProps.playbackAccessError?.kind === "retry"
+      registeredPlayerProps.playbackAccessError?.kind === "retry" &&
+      registeredPlayerProps.playbackAccessError.onAction
         ? {
             ...registeredPlayerProps,
             playbackAccessError: {

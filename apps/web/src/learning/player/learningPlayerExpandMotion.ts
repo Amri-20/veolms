@@ -607,6 +607,12 @@ export function startLearningPlayerExpand(
   const startRect = miniHost.getBoundingClientRect();
   if (startRect.width <= 0 || target.width <= 0) return null;
 
+  // From its first frame the growing window carries the same mark the full
+  // player carries while it lands. Whatever is drawn on the video (its
+  // controls, a message, a retry button) is hidden for as long as the mark
+  // is there, so only the picture travels and nothing is scaled with it.
+  miniHost.dataset.learningPlayerRestorePhase = "expanding";
+
   const durationMs = LEARNING_PLAYER_MOTION_DURATION_MS;
   const easing = LEARNING_PLAYER_MOTION_EASING;
   const startedAt = performance.now();
@@ -773,6 +779,7 @@ export function startLearningPlayerExpand(
   const release = () => {
     if (released) return;
     released = true;
+    delete miniHost.dataset.learningPlayerRestorePhase;
     windowRun.animation?.cancel();
     for (const track of tracks) track.animation?.cancel();
     cancelAnimations(chromeFades);

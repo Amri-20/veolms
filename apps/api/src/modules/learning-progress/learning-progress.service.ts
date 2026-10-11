@@ -36,7 +36,29 @@ const LEARNING_STREAK_MILESTONES = [7, 30, 100, 365] as const;
 /** Days after a milestone on which a missed announcement is still made. */
 const STREAK_MILESTONE_CATCH_UP_DAYS = 2;
 
-type UserContext = { id: string; roles: readonly string[] };
+type UserContext = {
+  id: string;
+  roles: readonly string[];
+  /**
+   * The viewer manages courses but asked to be answered as a learner (their
+   * Student view): they get the lessons a learner gets.
+   */
+  learnerView?: boolean;
+};
+
+/**
+ * Whether the viewer is shown the course as the people who manage it are:
+ * every lesson, unpublished ones included. Its creator and an admin are,
+ * unless they are in their Student view. This decides what is listed and how
+ * lessons are numbered, never what the viewer may open.
+ */
+function seesUnpublishedLessons(
+  user: UserContext,
+  course: { creator_id: string | null },
+): boolean {
+  if (user.learnerView) return false;
+  return course.creator_id === user.id || user.roles.includes(ADMIN_ROLE);
+}
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -369,8 +391,7 @@ export function createLearningProgressService({
     courseKey: string,
   ): Promise<LearningProgressResponse> {
     const course = await requireCourse(user, courseKey);
-    const canManageCourse =
-      course.creator_id === user.id || user.roles.includes(ADMIN_ROLE);
+    const canManageCourse = seesUnpublishedLessons(user, course);
     const [lessons, rows] = await Promise.all([
       listAvailableLessons(course.id, canManageCourse),
       learningProgressRepository.listUserCourseProgress(
@@ -387,8 +408,7 @@ export function createLearningProgressService({
     courseKey: string,
   ): Promise<LearningProgressResumeContextResponse> {
     const course = await requireCourse(user, courseKey);
-    const canManageCourse =
-      course.creator_id === user.id || user.roles.includes(ADMIN_ROLE);
+    const canManageCourse = seesUnpublishedLessons(user, course);
     const [lessons, rows] = await Promise.all([
       listAvailableLessons(course.id, canManageCourse),
       learningProgressRepository.listUserCourseProgress(
@@ -407,8 +427,7 @@ export function createLearningProgressService({
     input: LearningProgressBatchRequest,
   ): Promise<LearningProgressSyncResponse> {
     const course = await requireCourse(user, courseKey);
-    const canManageCourse =
-      course.creator_id === user.id || user.roles.includes(ADMIN_ROLE);
+    const canManageCourse = seesUnpublishedLessons(user, course);
     const lessons = await curriculumService.findLessonsByCourseId(course.id);
     const availableLessonIds = new Set(
       lessons

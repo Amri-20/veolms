@@ -20,7 +20,10 @@ const courseGridClasses = [
   "@[100rem]/courses:grid-cols-4",
 ].join(" ");
 
-/** The learner's enrolled courses, the one they are in first. */
+/**
+ * The learner's enrolled courses, other than the one the hero leads with:
+ * the ones in progress first, then the ones not started, then the finished.
+ */
 export function LearnerCoursesSection({
   courses,
   subtitle,
@@ -28,6 +31,7 @@ export function LearnerCoursesSection({
   setCourseMenu,
   getCourseHref,
   onOpenCourse,
+  onPinCourse,
   onNavigatePage,
 }: {
   courses: readonly EnrolledCourse[];
@@ -37,6 +41,8 @@ export function LearnerCoursesSection({
   setCourseMenu: (courseId: string | null) => void;
   getCourseHref: (course: EnrolledCourse) => string;
   onOpenCourse: (course: EnrolledCourse) => void;
+  /** Makes the course the one the home's hero leads with. */
+  onPinCourse: (course: EnrolledCourse) => void;
   onNavigatePage: NavigateTo;
 }) {
   return (
@@ -63,6 +69,7 @@ export function LearnerCoursesSection({
             menuOpen={courseMenu === course.courseId}
             setMenuOpen={setCourseMenu}
             onOpen={() => onOpenCourse(course)}
+            onPin={() => onPinCourse(course)}
             onNavigatePage={onNavigatePage}
           />
         ))}

@@ -7,6 +7,7 @@ import type {
   CourseStaticPageRefreshStatus,
 } from "@veolms/contracts";
 import { httpError } from "../../../lib/errors.ts";
+import { isLearnerViewRequest } from "../../../lib/learner-view.ts";
 import type { CourseService } from "./course.service.ts";
 import type { CourseStaticPageRefreshService } from "@veolms/services/course-static-pages";
 
@@ -118,7 +119,11 @@ export function createCourseController({
   ) {
     const { idOrSlug } = request.params;
     const user = request.user
-      ? { id: request.user.id, roles: request.user.roles }
+      ? {
+          id: request.user.id,
+          roles: request.user.roles,
+          learnerView: isLearnerViewRequest(request),
+        }
       : undefined;
     return await service.getCourseOverviewData(idOrSlug, user);
   }

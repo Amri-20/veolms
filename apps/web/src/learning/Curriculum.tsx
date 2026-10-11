@@ -1,3 +1,4 @@
+import { BooksIcon as Books } from "@phosphor-icons/react/Books";
 import { CaretDownIcon as CaretDown } from "@phosphor-icons/react/CaretDown";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { RefObject } from "react";
@@ -49,6 +50,12 @@ interface CurriculumProps {
   /** Lessons the visitor cannot play yet; their cards show a lock. */
   lockedLessonNumbers?: ReadonlySet<number>;
   isLoading?: boolean;
+  /**
+   * The course could not be loaded, or has no lessons. There is then no
+   * course to head the panel with and nothing to list, and it says so
+   * instead of drawing a header out of the address's slug and blanks.
+   */
+  unavailable?: boolean;
   scrollportId?: string;
   scrollportRef?: RefObject<HTMLElement | null>;
   scrollControlBottomClearance?: number | string;
@@ -87,6 +94,7 @@ export function Curriculum({
   isLessonAvailable,
   lockedLessonNumbers,
   isLoading = false,
+  unavailable = false,
   scrollportId,
   scrollportRef,
   scrollControlBottomClearance,
@@ -464,7 +472,31 @@ export function Curriculum({
           contentRevision={`${selectedLesson}:${activeLessonSearch}:${expanded.join(",")}`}
           bottomClearance={scrollControlBottomClearance}
         />
-        {!hideHero ? (
+        {/* Until the course is known the header has nothing true to show:
+            its title would be the address's slug, its progress zero, its
+            section and lesson blank, its cover a placeholder. So while the
+            course loads it is bars, like the list under it. */}
+        {!hideHero && isLoading && !unavailable ? (
+          <div
+            className="animate-pulse space-y-4 px-5 pt-6 pb-5"
+            aria-hidden="true"
+            data-testid="curriculum-hero-skeleton"
+          >
+            <div className="h-5 w-3/5 rounded bg-[color-mix(in_srgb,var(--surface-strong)_84%,var(--canvas))]" />
+            <div className="space-y-2.5 pt-3">
+              <div className="flex justify-between">
+                <div className="h-3.5 w-16 rounded bg-[color-mix(in_srgb,var(--surface-strong)_84%,var(--canvas))]" />
+                <div className="h-3.5 w-8 rounded bg-[color-mix(in_srgb,var(--surface-strong)_84%,var(--canvas))]" />
+              </div>
+              <div className="h-2 w-full rounded-full bg-[color-mix(in_srgb,var(--surface-strong)_84%,var(--canvas))]" />
+            </div>
+            <div className="flex gap-4">
+              <div className="h-3 flex-1 rounded bg-[color-mix(in_srgb,var(--surface-strong)_84%,var(--canvas))]" />
+              <div className="h-3 flex-1 rounded bg-[color-mix(in_srgb,var(--surface-strong)_84%,var(--canvas))]" />
+            </div>
+          </div>
+        ) : null}
+        {!hideHero && !isLoading && !unavailable ? (
           <ContextMenuTrigger
             render={
               <div
@@ -608,7 +640,23 @@ export function Curriculum({
         ) : null}
 
         <div ref={lessonListRef} className="learning-curriculum__lesson-list">
-          {isLoading ? (
+          {unavailable ? (
+            <div className="grid min-h-60 place-items-center px-6 py-10 text-center">
+              <div className="space-y-2">
+                <Books
+                  size={34}
+                  aria-hidden="true"
+                  className="mx-auto text-(--muted) opacity-70"
+                />
+                <p className="text-sm font-semibold text-(--text)">
+                  No course content
+                </p>
+                <p className="text-[0.8125rem] leading-5 text-(--muted)">
+                  Lessons will be listed here once the course opens.
+                </p>
+              </div>
+            </div>
+          ) : isLoading ? (
             <div
               className="p-3 space-y-4 animate-pulse"
               data-testid="curriculum-loading-skeleton"
@@ -665,8 +713,19 @@ export function Curriculum({
                       ? currentSectionRef
                       : undefined
                   }
-                  className="learning-curriculum__section relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-(--learning-panel-border) after:content-['']"
+                  // The mini player's playlist keeps its dense rows parted
+                  // by a hairline. In the full panel each section is a box
+                  // of its own (learning.css), so it needs no line.
+                  className={`learning-curriculum__section relative${
+                    hideHero
+                      ? " after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-(--learning-panel-border) after:content-['']"
+                      : ""
+                  }`}
                   data-expanded={isOpen}
+                  data-current={
+                    section.id === currentSection.id ? "" : undefined
+                  }
+                  data-learning-radius-surface={hideHero ? undefined : ""}
                 >
                   <button
                     type="button"
@@ -694,7 +753,9 @@ export function Curriculum({
                     ) : (
                       <>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-xs font-bold tracking-[0.1em] uppercase text-(--muted)">
+                          {/* The section the open lesson is in wears the
+                              accent, so it can be found when it is shut. */}
+                          <span className="block truncate text-xs font-bold tracking-[0.1em] text-(--muted) uppercase [[data-current]_&]:text-[color-mix(in_srgb,var(--accent)_72%,var(--text))]">
                             Section {section.id} · {lessonCount}{" "}
                             {lessonCount === 1 ? "lesson" : "lessons"}
                             {sectionDuration ? (
