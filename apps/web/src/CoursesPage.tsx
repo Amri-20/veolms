@@ -5765,7 +5765,9 @@ export function CoursesPage({
             ref={mobileMoreRef}
             type="button"
             className={mobileMoreActive || mobileMenuOpen ? "is-active" : ""}
-            aria-label="Open navigation and appearance menu"
+            // Starts with the word on the button ("You"), so the spoken
+            // name contains the visible one.
+            aria-label="You: open navigation and appearance menu"
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-navigation-sheet"
             onClick={openMobileNavigationMenu}
