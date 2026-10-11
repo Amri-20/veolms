@@ -27,6 +27,7 @@ import {
   type LearningMiniPlayerResizeEdges,
   type LearningPlayerViewportBounds as ViewportBounds,
 } from "./learningPlayerMotion";
+import { observeMobileNavigationShown } from "./mobileNavigationFollow";
 import {
   readMiniPlayerWidthPreference,
   writeMiniPlayerWidthPreference,
@@ -493,6 +494,18 @@ export function useLearningMiniPlayerGestures(
       settleTimerRef.current = null;
     }
   }, [enabled, measureLayout]);
+
+  // On a phone the mini player rests on the bottom menu. When the menu
+  // hides or shows it is settled again, which carries it down or up to its
+  // new resting place with the settle's own easing instead of leaving it
+  // where the menu used to be.
+  useEffect(() => {
+    if (!enabled) return undefined;
+    return observeMobileNavigationShown(() => {
+      if (isDesktopLearningMinimizeViewport()) return;
+      if (layoutRef.current) settleLayout(layoutRef.current);
+    });
+  }, [enabled, settleLayout]);
 
   useEffect(() => {
     if (!enabled) return undefined;

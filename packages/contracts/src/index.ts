@@ -11,6 +11,7 @@ export * from "./notification.ts";
 export * from "./notification-types.ts";
 export * from "./learning-goals.ts";
 export * from "./learning-progress.ts";
+export * from "./learner-view.ts";
 export * from "./learning-recent-updates.ts";
 export * from "./health.ts";
 export * from "./error.ts";

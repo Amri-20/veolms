@@ -1,3 +1,4 @@
+import { ArrowsOutLineVerticalIcon as ArrowsOutLineVertical } from "@phosphor-icons/react/ArrowsOutLineVertical";
 import {
   useCallback,
   useEffect,
@@ -134,6 +135,22 @@ const markMouseHover = (hovered: boolean) => {
   document
     .querySelector<HTMLElement>(GRIP_STRIP_SELECTOR)
     ?.toggleAttribute("data-mouse-hover", hovered);
+};
+
+/** How long the grip and its line stay up after a scroll asked for the video. */
+const GRIP_HINT_VISIBLE_MS = 2600;
+let gripHintTimer: number | undefined;
+
+/** Shows the grip, and what it is for, for a moment. */
+const showGripHint = () => {
+  const strip = document.querySelector<HTMLElement>(GRIP_STRIP_SELECTOR);
+  if (!strip) return;
+  strip.setAttribute("data-pull-hint", "");
+  window.clearTimeout(gripHintTimer);
+  gripHintTimer = window.setTimeout(
+    () => strip.removeAttribute("data-pull-hint"),
+    GRIP_HINT_VISIBLE_MS,
+  );
 };
 
 const resolveHeight = (wanted: number, fullHeight: number) =>
@@ -280,8 +297,17 @@ export function LessonPlayerHeightHandle({
     >
       <span
         aria-hidden="true"
-        className="block h-1 w-16 shrink-0 translate-y-[7px] rounded-full max-[640px]:translate-y-0 min-[641px]:[.learning-workspace\_\_player-wrap:has([data-learning-player-short])_&]:translate-y-px bg-[color-mix(in_srgb,var(--accent)_54%,var(--border))] opacity-0 transition-[width,opacity,background-color] duration-160 ease-out group-hover/player-height:opacity-50 group-data-mouse-hover/player-height:opacity-50 group-focus-visible/player-height:opacity-50 motion-reduce:transition-none group-data-dragging/player-height:w-20 group-data-dragging/player-height:bg-(--accent) group-data-dragging/player-height:opacity-100"
+        className="block h-1 w-16 shrink-0 translate-y-[7px] rounded-full max-[640px]:translate-y-0 min-[641px]:[.learning-workspace\_\_player-wrap:has([data-learning-player-short])_&]:translate-y-px bg-[color-mix(in_srgb,var(--accent)_54%,var(--border))] opacity-0 transition-[width,opacity,background-color] duration-160 ease-out group-hover/player-height:opacity-50 group-data-mouse-hover/player-height:opacity-50 group-focus-visible/player-height:opacity-50 motion-reduce:transition-none group-data-dragging/player-height:w-20 group-data-dragging/player-height:bg-(--accent) group-data-dragging/player-height:opacity-100 group-data-pull-hint/player-height:w-20 group-data-pull-hint/player-height:animate-bounce group-data-pull-hint/player-height:bg-(--accent) group-data-pull-hint/player-height:opacity-100 motion-reduce:group-data-pull-hint/player-height:animate-none"
       />
+      {/* Shown for a moment when a scroll asks for the video (see
+          `showGripHint`): the grip is what brings it back. */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none invisible absolute top-full left-1/2 mt-3 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-(--accent) px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-(--on-accent) opacity-0 shadow-[0_8px_20px_rgb(0_0_0/0.35)] transition-[opacity,visibility] duration-200 group-data-pull-hint/player-height:visible group-data-pull-hint/player-height:opacity-100 group-data-dragging/player-height:invisible max-[640px]:hidden motion-reduce:transition-none"
+      >
+        <ArrowsOutLineVertical size={14} weight="bold" />
+        Drag this handle down to enlarge the video
+      </span>
     </div>
   );
 }
@@ -495,7 +521,7 @@ const PULL_DOWN_IGNORED_TARGETS =
   "#learning-course-content-trigger, .learning-workspace__lesson-heading, input, textarea, [contenteditable=true], [data-discussion-atomic-editor], [role=dialog]";
 
 /**
- * A wheel or trackpad pulls the video out only with a scroll that begins
+ * A wheel or trackpad asks for the video only with a scroll that begins
  * while the page is already resting at its top, never with the one that
  * brought it there, however fast or long that one was. The page counts as
  * resting once neither the wheel nor the page has moved for this long...
@@ -512,21 +538,12 @@ const WHEEL_GLIDE_TAIL_MAX_STEP = 8;
 const WHEEL_NEW_SCROLL_MIN_STEP = 10;
 const WHEEL_NEW_SCROLL_GROWTH = 2;
 /**
- * The video comes out by this share of the distance scrolled, and glides to
- * each new height over this long, so that the notches of a mouse wheel draw
- * it out gently instead of in jumps of a hundred pixels.
- */
-const WHEEL_PULL_RATIO = 0.5;
-const WHEEL_PULL_GLIDE_MS = 200;
-/**
- * A scroll that begins at the top is watched for this long before it pulls:
+ * A scroll that begins at the top is watched for this long before it counts:
  * the browser may already have moved the page by the time the wheel is
  * heard of here, so "at the top" can be where this very scroll just
  * arrived. If the page reports having scrolled, it was that, not a pull.
  */
 const WHEEL_PULL_CONFIRM_MS = 60;
-/** A wheel pull is over once the wheel has been still for this long. */
-const WHEEL_PULL_IDLE_MS = 180;
 const WHEEL_LINE_HEIGHT = 16;
 
 interface HiddenVideoPull {
@@ -559,10 +576,12 @@ function isScrolledToTop(target: Element) {
  * and comments are scrolled to their top, dragging down anywhere in them
  * draws the video out as far as the finger goes, and a flick down brings it
  * out completely. (The same pull would otherwise be the browser's own
- * overscroll, which is why it is claimed here.) A mouse wheel or trackpad
- * does the same, the second time: a scroll that runs into the top stops
- * there, and scrolling up again from the top draws the video out by as much
- * as is scrolled.
+ * overscroll, which is why it is claimed here.)
+ *
+ * A mouse wheel or trackpad does not pull the video: a scroll is too easily
+ * made without meaning it. A scroll up from a page already at its top is
+ * answered by showing the grip under the video, with a line saying it is
+ * what to drag (`showGripHint`).
  */
 export function useLessonHiddenVideoPullDown(
   height: number | null,
@@ -665,51 +684,10 @@ export function useLessonHiddenVideoPullDown(
     /** A scroll that began at the top and has not yet proved to be a pull. */
     let wheelCandidate: {
       confirmTimer: number;
-      distance: number;
       target: Element;
     } | null = null;
     /** When the page under the lesson last scrolled. */
     let lastPageScrollTime = Number.NEGATIVE_INFINITY;
-    let wheelPull: {
-      endTimer: number;
-      /** Where the video is gliding to, in pixels. */
-      height: number;
-      fullHeight: number;
-      slot: HTMLElement;
-    } | null = null;
-
-    const endWheelPull = () => {
-      if (!wheelPull) return;
-      const ended = wheelPull;
-      wheelPull = null;
-      window.clearTimeout(ended.endTimer);
-      markResizing(ended.slot, false);
-      const settled = settleHeight(
-        resolveHeight(ended.height, ended.fullHeight),
-      );
-      applyHeight(ended.slot, settled);
-      // A video let go nearly shut glides shut; the glide is then done with.
-      window.setTimeout(
-        () => ended.slot.style.removeProperty("transition"),
-        settled === 0 ? WHEEL_PULL_GLIDE_MS : 0,
-      );
-      onChangeRef.current(settled);
-    };
-
-    const pullByWheel = (distance: number) => {
-      if (!wheelPull) return;
-      wheelPull.height = Math.min(
-        wheelPull.fullHeight,
-        Math.max(0, wheelPull.height + distance * WHEEL_PULL_RATIO),
-      );
-      applyHeight(wheelPull.slot, wheelPull.height);
-      window.clearTimeout(wheelPull.endTimer);
-      wheelPull.endTimer = window.setTimeout(
-        endWheelPull,
-        // Long enough for the glide to the last height to finish.
-        Math.max(WHEEL_PULL_IDLE_MS, WHEEL_PULL_GLIDE_MS + 20),
-      );
-    };
     const dropWheelCandidate = () => {
       if (!wheelCandidate) return;
       window.clearTimeout(wheelCandidate.confirmTimer);
@@ -719,20 +697,8 @@ export function useLessonHiddenVideoPullDown(
     const confirmWheelCandidate = () => {
       const candidate = wheelCandidate;
       wheelCandidate = null;
-      const slot = document.querySelector<HTMLElement>(
-        "[data-learning-player-anchor]",
-      );
-      if (!candidate || !slot || !isScrolledToTop(candidate.target)) return;
-      const bounds = slot.getBoundingClientRect();
-      markResizing(slot, true);
-      slot.style.transition = `max-height ${WHEEL_PULL_GLIDE_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
-      wheelPull = {
-        endTimer: 0,
-        fullHeight: (bounds.width * 9) / 16,
-        height: bounds.height,
-        slot,
-      };
-      pullByWheel(candidate.distance);
+      if (!candidate || !isScrolledToTop(candidate.target)) return;
+      showGripHint();
     };
 
     const handleWheel = (event: WheelEvent) => {
@@ -756,15 +722,8 @@ export function useLessonHiddenVideoPullDown(
       lastWheelStep = step;
       const pullsDown = distance > 0 && !event.ctrlKey && !pull;
 
-      if (wheelPull) {
-        // Scrolling the other way is a scroll of the page again.
-        if (pullsDown) pullByWheel(distance);
-        else endWheelPull();
-        return;
-      }
       if (wheelCandidate) {
-        if (pullsDown) wheelCandidate.distance += distance;
-        else dropWheelCandidate();
+        if (!pullsDown) dropWheelCandidate();
         return;
       }
       const target = event.target;
@@ -784,7 +743,6 @@ export function useLessonHiddenVideoPullDown(
           confirmWheelCandidate,
           WHEEL_PULL_CONFIRM_MS,
         ),
-        distance,
         target,
       };
     };
@@ -819,11 +777,6 @@ export function useLessonHiddenVideoPullDown(
     document.addEventListener("touchcancel", handleEnd);
     return () => {
       dropWheelCandidate();
-      if (wheelPull) {
-        window.clearTimeout(wheelPull.endTimer);
-        wheelPull.slot.style.removeProperty("transition");
-        markResizing(wheelPull.slot, false);
-      }
       document.removeEventListener("scroll", handleScroll, { capture: true });
       document.removeEventListener("wheel", handleWheel);
       document.removeEventListener("touchstart", handleStart);

@@ -1,4 +1,4 @@
-import type { AnchorHTMLAttributes, MouseEvent } from "react";
+import type { AnchorHTMLAttributes, MouseEvent, Ref } from "react";
 import type { NavigateTo, NavigationOptions } from "../../routing/navigation";
 
 interface GuestHomeLinkProps extends Omit<
@@ -6,6 +6,7 @@ interface GuestHomeLinkProps extends Omit<
   "href"
 > {
   href: string;
+  ref?: Ref<HTMLAnchorElement>;
   onNavigatePage?: NavigateTo;
   navigationOptions?: NavigationOptions;
 }

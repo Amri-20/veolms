@@ -7,6 +7,7 @@ import type {
   VideoTranscodeRetryResponse,
 } from "@veolms/contracts";
 import { AppError } from "../../lib/errors.ts";
+import { isLearnerViewRequest } from "../../lib/learner-view.ts";
 import type { MediaService } from "./media.service.ts";
 import type { MediaConvertWebhookPayload } from "./webhooks/mediaconvert-webhook.schema.ts";
 
@@ -53,7 +54,11 @@ export function createMediaController({ service }: { service: MediaService }) {
     }>,
   ) {
     const user = request.user
-      ? { id: request.user.id, roles: request.user.roles }
+      ? {
+          id: request.user.id,
+          roles: request.user.roles,
+          learnerView: isLearnerViewRequest(request),
+        }
       : undefined;
     return await service.getPlaybackBootstrap(
       request.params.idOrSlug,
@@ -69,7 +74,11 @@ export function createMediaController({ service }: { service: MediaService }) {
     reply: FastifyReply,
   ) {
     const user = request.user
-      ? { id: request.user.id, roles: request.user.roles }
+      ? {
+          id: request.user.id,
+          roles: request.user.roles,
+          learnerView: isLearnerViewRequest(request),
+        }
       : undefined;
     // The link is signed for this request and expires within minutes.
     reply.header("Cache-Control", "private, no-store");
@@ -88,7 +97,11 @@ export function createMediaController({ service }: { service: MediaService }) {
     reply: FastifyReply,
   ) {
     const user = request.user
-      ? { id: request.user.id, roles: request.user.roles }
+      ? {
+          id: request.user.id,
+          roles: request.user.roles,
+          learnerView: isLearnerViewRequest(request),
+        }
       : undefined;
     reply.header("Cache-Control", "private, no-store");
     return await service.getPlaybackToken(

@@ -12,6 +12,8 @@ export type LearnerHeroIntent = "start" | "continue" | "next" | "review";
 export interface LearnerHomePlan {
   heroCourse: EnrolledCourse;
   intent: LearnerHeroIntent;
+  /** The learner pinned this course to the home; it was not chosen for them. */
+  heroPinned: boolean;
   /** Every enrolment, in the order "My Courses" lists them. */
   courses: EnrolledCourse[];
 }
@@ -48,9 +50,14 @@ const byEnrolled = (left: EnrolledCourse, right: EnrolledCourse) =>
  * Decides what the learner's home leads with. Courses in progress come
  * first (the one opened last leads), then the ones not started (newest
  * enrolment first), then the finished ones.
+ *
+ * A course the learner has pinned to the home leads instead, for as long
+ * as they are enrolled in it; what the hero asks of them then follows that
+ * course's own progress. The order of the courses is the same either way.
  */
 export function planLearnerHome(
   enrolledCourses: readonly EnrolledCourse[],
+  pinnedCourseId?: string | null,
 ): LearnerHomePlan | null {
   const inProgress = enrolledCourses
     .filter((course) => progressOf(course) > 0 && progressOf(course) < 100)
@@ -66,6 +73,19 @@ export function planLearnerHome(
   const heroCourse = courses[0];
   if (!heroCourse) return null;
 
+  const pinnedCourse = pinnedCourseId
+    ? courses.find((course) => course.courseId === pinnedCourseId)
+    : undefined;
+  if (pinnedCourse) {
+    const progress = progressOf(pinnedCourse);
+    return {
+      heroCourse: pinnedCourse,
+      intent: progress >= 100 ? "review" : progress > 0 ? "continue" : "start",
+      heroPinned: true,
+      courses,
+    };
+  }
+
   const intent: LearnerHeroIntent =
     inProgress.length > 0
       ? "continue"
@@ -75,13 +95,21 @@ export function planLearnerHome(
           : "start"
         : "review";
 
-  return { heroCourse, intent, courses };
+  return { heroCourse, intent, heroPinned: false, courses };
 }
 
 /** The course's public address key: its readable slug when it has one. */
 export function getEnrolledCourseKey(course: EnrolledCourse) {
   return course.courseSlug.trim() || course.courseId;
 }
+
+/** The course's own page: what it covers, and its curriculum. */
+export function getEnrolledCourseOverviewHref(course: EnrolledCourse) {
+  return `/courses/${encodeURIComponent(getEnrolledCourseKey(course))}/overview`;
+}
+
+/** What a course's name says under the pointer, where it leads to that page. */
+export const VIEW_COURSE_CURRICULUM_HINT = "View course curriculum";
 
 /**
  * The published courses the learner is not enrolled in, paid ones first and

@@ -7,9 +7,12 @@ import {
   useState,
 } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { LockKeyIcon as LockKey } from "@phosphor-icons/react/LockKey";
 import {
+  PlayerErrorNotice,
+  PlayerThemeProvider,
   VideoPlayer as VeoVideoPlayer,
-  VideoPlayerCloseButton,
+  VideoPlayerNotice,
   VideoLoadingSpinner,
   type VideoPlayerEvent,
   type VideoPlayerHandle,
@@ -26,6 +29,7 @@ import {
   readLearningPreferences,
 } from "../../settings/settingsPreferences";
 import { LessonAmbientProjection } from "./LessonAmbientProjection";
+import { LessonTroubleIllustration } from "./LessonTroubleIllustration";
 import {
   LessonEndScreenOverlay,
   type NextLessonInfo,
@@ -36,7 +40,7 @@ import {
   LessonPlayerMinimizeControl,
   type CourseLessonsSecondPressHoldProps,
 } from "./LessonPlayerControls";
-import { MiniPlayerRestoreControl } from "./MiniPlayerControls";
+import { MiniPlayerWindowControls } from "./MiniPlayerControls";
 import type { LearningMiniPlayerRequest } from "./learningMiniPlayerTypes";
 import {
   DEFAULT_LEARNING_PLAYER_PREFERENCES,
@@ -190,6 +194,37 @@ export interface LessonVideoPlayerProps {
   protectedPlayback?: boolean;
   /** Engine injection is useful for deterministic integration testing. */
   engineFactory?: () => VideoEngine;
+}
+
+/**
+ * The lesson's picture, dimmed and out of focus, behind a message that
+ * stands where the video would: a lesson that cannot play yet still shows
+ * what it is, instead of an empty black screen.
+ */
+function LessonPictureBackdrop({ src }: { src?: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      // A lesson with no picture, or one whose picture does not load, still
+      // gets a lit stage in the page's accent rather than plain black.
+      className="pointer-events-none absolute inset-0 overflow-hidden bg-[radial-gradient(ellipse_70%_80%_at_50%_42%,color-mix(in_srgb,var(--accent)_30%,#070b16)_0,#070b16_68%,#04060c_100%)]"
+    >
+      {src ? (
+        <>
+          <img
+            src={src}
+            alt=""
+            decoding="async"
+            className="size-full scale-110 object-cover opacity-45 blur-md"
+            onError={(event) => {
+              event.currentTarget.hidden = true;
+            }}
+          />
+          <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgb(0_0_0/0.72)_0,rgb(0_0_0/0.4)_55%,rgb(0_0_0/0.68)_100%)] [img[hidden]+&]:hidden" />
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 export function LessonVideoPlayer({
@@ -901,83 +936,138 @@ export function LessonVideoPlayer({
 
   if (playbackBootstrapPending || playbackAccessError) {
     const MinimizeIcon = playerTheme.icons.minimize;
-    const CloseIcon = playerTheme.icons.close;
     const isPending = !playbackAccessError;
+    const gateTitle = !playbackAccessError
+      ? ""
+      : playbackAccessError.kind === "login"
+        ? // Signing in is the whole message here, so it stands alone.
+          playbackAccessError.message
+        : (playbackAccessError.title ??
+          (playbackAccessError.kind === "access"
+            ? "Course access required"
+            : "Something went wrong"));
     return (
       <div
-        className="video-shell relative isolate aspect-video w-full overflow-hidden bg-black shadow-[0_18px_50px_rgba(0,0,0,.22)]"
+        // While the window is in motion (minimizing, turning back, or
+        // expanding again) it is scaled as one picture, and whatever is
+        // drawn on it shrinks with it: the minimize control, a message.
+        // So everything on the shell is hidden for exactly that stretch, as
+        // the playing video's controls are, and only the black surface
+        // travels. The motion marks the host (`learningPlayerMotion.ts`).
+        //
+        // A surface with no video on it is swiped down into the mini player
+        // exactly as a playing one is: it takes the same gesture, keeps the
+        // vertical swipe from the page on touch screens as the player does,
+        // and is the same kind of surface to the motion.
+        className={cn(
+          "video-shell relative isolate aspect-video w-full overflow-hidden bg-black shadow-[0_18px_50px_rgba(0,0,0,.22)] [[data-learning-player-restore-phase=expanding]_&]:*:invisible! [[data-learning-player-window-motion]_&]:*:invisible!",
+          presentation === "full" &&
+            "touch-pan-x touch-pinch-zoom min-[641px]:[@media(pointer:fine)]:touch-pan-y",
+          // Under a finger the surface is moved by the gesture itself, which
+          // sets no mark on the host; it says so here instead.
+          minimizeGesture.controlsSuppressed && "*:invisible!",
+        )}
         data-learning-playback-gate={playbackAccessError?.kind ?? "pending"}
+        data-learning-player-motion-surface=""
+        {...(presentation === "full" ? minimizeGesture.handlers : {})}
         role={isPending ? "status" : "alert"}
         aria-label={isPending ? "Loading video" : undefined}
       >
+        {/* A lesson that is waiting for the learner (to sign in, to get the
+            course) shows what it is: its own picture, dimmed and out of
+            focus behind the message, instead of an empty black screen. */}
+        {playbackAccessError &&
+        playbackAccessError.kind !== "retry" &&
+        media.thumbnailSrc ? (
+          <LessonPictureBackdrop src={media.thumbnailSrc} />
+        ) : null}
         {presentation === "full" && onMinimize ? (
           <LessonPlayerMinimizeControl
             icon={<MinimizeIcon size={22} />}
             onMinimize={minimizePlayerFromControl}
           />
         ) : null}
-        {presentation === "mini" && onMiniRestore ? (
-          <>
-            <div className="min-[641px]:hidden absolute inset-0">
-              <MiniPlayerRestoreControl mobile onRestore={onMiniRestore} />
-            </div>
-            <div
-              className="absolute inset-x-2 top-2 z-50 hidden min-[641px]:flex items-center justify-between pointer-events-none"
-              data-learning-mini-player-gesture-ignore=""
-            >
-              <MiniPlayerRestoreControl onRestore={onMiniRestore} />
-            </div>
-          </>
+        {presentation === "mini" ? (
+          // The window's own expand and close, as on a playing video. There
+          // is no player around them here, so they are told its theme.
+          <PlayerThemeProvider theme={playerTheme}>
+            <MiniPlayerWindowControls
+              onClose={onMiniClose ?? (() => undefined)}
+              onRestore={onMiniRestore ?? (() => undefined)}
+            />
+          </PlayerThemeProvider>
         ) : null}
-        {presentation === "mini" && onMiniClose ? (
-          <VideoPlayerCloseButton
-            icon={<CloseIcon size={20} />}
-            onClose={onMiniClose}
+        {playbackAccessError &&
+        (presentation === "mini" || playbackAccessError.kind === "login") ? (
+          // The mini window is a few lines tall: it says what is wrong in
+          // one line and keeps the action, sized to fit, between the
+          // window's tap-to-expand surface and its buttons. The longer
+          // explanation and the link are the full player's.
+          //
+          // Signing in is one line and one action at every size, so the
+          // full player uses the same notice for it, which fits itself to
+          // the player's height: a smaller lock, then none, and smaller
+          // type, before the action could be cut off.
+          <VideoPlayerNotice
+            className="z-20"
+            title={gateTitle}
+            icon={
+              presentation === "full" ? (
+                <span className="grid size-14 place-items-center rounded-full bg-white/12 ring-1 ring-white/20 backdrop-blur-sm">
+                  <LockKey size={28} weight="fill" aria-hidden="true" />
+                </span>
+              ) : undefined
+            }
+            smallIcon={
+              presentation === "full" ? (
+                <span className="grid size-8 place-items-center rounded-full bg-white/12 ring-1 ring-white/20 [@container_(min-height:10.5rem)]:size-10">
+                  <LockKey size={18} weight="fill" aria-hidden="true" />
+                </span>
+              ) : undefined
+            }
+            action={
+              playbackAccessError.onAction
+                ? {
+                    label: playbackAccessError.actionLabel,
+                    prominent: playbackAccessError.kind === "login",
+                    onSelect: playbackAccessError.onAction,
+                  }
+                : undefined
+            }
           />
-        ) : null}
-        <div className="pointer-events-none absolute inset-0 grid place-items-center p-6 text-center text-white">
-          {isPending ? (
-            <VideoLoadingSpinner />
-          ) : (
-            <div className="relative z-20 max-w-md space-y-4">
-              {playbackAccessError.kind === "login" ? (
-                // Signing in is the whole message here, so it stands alone.
-                <h2 className="text-xl font-bold tracking-[-0.01em] sm:text-2xl">
-                  {playbackAccessError.message}
-                </h2>
-              ) : (
+        ) : (
+          <div className="pointer-events-none absolute inset-0 grid place-items-center p-6 text-center text-white">
+            {isPending ? (
+              <VideoLoadingSpinner />
+            ) : (
+              <div className="relative z-20 max-w-md space-y-4">
                 <div className="space-y-1">
-                  <h2 className="text-base font-semibold">
-                    {playbackAccessError.title ??
-                      (playbackAccessError.kind === "access"
-                        ? "Course access required"
-                        : "Unable to play this video")}
-                  </h2>
+                  <h2 className="text-base font-semibold">{gateTitle}</h2>
                   <p className="text-sm text-white/70">
                     {playbackAccessError.message}
                   </p>
                 </div>
-              )}
-              {playbackAccessError.onAction ? (
-                <button
-                  type="button"
-                  className="pointer-events-auto mx-auto inline-flex min-h-10 items-center rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-white/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                  onClick={playbackAccessError.onAction}
-                >
-                  {playbackAccessError.actionLabel}
-                </button>
-              ) : null}
-              {presentation === "full" && playbackAccessError.link ? (
-                <a
-                  href={playbackAccessError.link.href}
-                  className="pointer-events-auto mx-auto block w-fit text-sm font-medium text-white/80 underline underline-offset-4 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                >
-                  {playbackAccessError.link.label}
-                </a>
-              ) : null}
-            </div>
-          )}
-        </div>
+                {playbackAccessError.onAction ? (
+                  <button
+                    type="button"
+                    className="pointer-events-auto mx-auto inline-flex min-h-10 items-center rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-white/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    onClick={playbackAccessError.onAction}
+                  >
+                    {playbackAccessError.actionLabel}
+                  </button>
+                ) : null}
+                {playbackAccessError.link ? (
+                  <a
+                    href={playbackAccessError.link.href}
+                    className="pointer-events-auto mx-auto block w-fit text-sm font-medium text-white/80 underline underline-offset-4 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                  >
+                    {playbackAccessError.link.label}
+                  </a>
+                ) : null}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -1074,18 +1164,48 @@ export function LessonVideoPlayer({
       keepControlsVisibleUntilFirstPlay
       keepPosterVisibleUntilFirstPlay
       onEvent={handleEvent}
-      onErrorOverlayClose={
-        presentation === "mini"
-          ? onMiniClose
-          : onMinimize
-            ? minimizePlayerFromControl
-            : undefined
+      // In the mini window the controls draw a failure under their own
+      // expand and close. The full player says it where its loader turns,
+      // in the middle, and nothing more: no screen over the player, so the
+      // controls around it are seen clearly and stay in use (lessons,
+      // settings, minimize, full screen), and it takes only the presses on
+      // its own action.
+      errorOverlay={
+        presentation === "mini" ? (
+          false
+        ) : (
+          <PlayerErrorNotice
+            source={source}
+            backdrop={false}
+            // The lesson's own picture behind the message, as on the
+            // surface that asks the learner to sign in.
+            background={<LessonPictureBackdrop src={media.thumbnailSrc} />}
+            // Under the controls' layer (z-30), so the picture behind the
+            // message does not dim the controls that lie over it.
+            backgroundClassName="z-20"
+            // The message itself is laid out in what the controls leave
+            // free: below the top row and above the timeline and the
+            // bottom row. A shorter player draws the picture smaller and
+            // then not at all, before the action would reach a control;
+            // and the action is above the controls, should it ever.
+            contentClassName="z-40 top-12! bottom-20!"
+            icon={<LessonTroubleIllustration className="h-24 w-auto" />}
+            smallIcon={
+              <LessonTroubleIllustration className="h-8 w-auto [@container_(min-height:10.5rem)]:h-12 [@container_(min-height:12.5rem)]:h-16" />
+            }
+          />
+        )
       }
       lockLandscapeOnFullscreen
       mediaProps={{
         muted: restoreAutoplayRef.current !== null ? true : muted,
       }}
       className={cn(
+        // A failure's message is drawn on the video, and the window is
+        // scaled as one picture while it minimizes, turns back or expands.
+        // So the message is hidden for that stretch, as the surface with no
+        // video hides what is on it, and under a finger too.
+        "[[data-learning-player-restore-phase=expanding]_&]:[&_[data-video-player-notice]]:invisible! [[data-learning-player-window-motion]_&]:[&_[data-video-player-notice]]:invisible! data-learning-player-controls-suppressed:[&_[data-video-player-notice]]:invisible!",
         // Wide touch screens keep the vertical swipe for the minimize
         // gesture, as phones do; only a mouse-first device hands vertical
         // panning back to the page. The tap surface inside allows vertical
@@ -1137,6 +1257,7 @@ export function LessonVideoPlayer({
             onGoPrevious={onGoPrevious}
             onClose={onMiniClose ?? (() => undefined)}
             onRestore={onMiniRestore ?? (() => undefined)}
+            source={source}
           />
         ) : (
           <LessonPlayerControls

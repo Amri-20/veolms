@@ -127,12 +127,14 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
             // sidebar shadow token spreads too far for cards stacked in a
             // list, so only its widest layers are reined in here.
             "bg-(image:--sidebar-menu-active-background) shadow-[inset_0_1px_0_rgb(255_255_255/15%),inset_1px_0_0_rgb(255_255_255/7%),inset_0_-1px_0_rgb(0_0_0/28%),0_2px_5px_rgb(0_0_0/45%),0_7px_14px_rgb(0_0_0/36%)] [[data-theme=light]_&]:shadow-[inset_0_1px_0_rgb(255_255_255/96%),0_2px_5px_rgb(25_32_45/10%),0_7px_16px_rgb(25_32_45/14%)]"
-          : "bg-[color-mix(in_srgb,var(--text)_4%,transparent)]"
+          : // A shade lighter than the section's tray it lies in. By day the
+            // tray is a tint and the card is the panel's own white.
+            "bg-[color-mix(in_srgb,var(--text)_4%,transparent)] [[data-theme=light]_&]:bg-(--surface)"
       } ${
         isAvailable
           ? isActive
             ? ""
-            : "hover:bg-[color-mix(in_srgb,var(--text)_7.5%,transparent)]"
+            : "hover:bg-[color-mix(in_srgb,var(--text)_7.5%,transparent)] [[data-theme=light]_&]:hover:bg-[color-mix(in_srgb,var(--text)_4%,var(--surface))]"
           : "opacity-55"
       }`}
     >

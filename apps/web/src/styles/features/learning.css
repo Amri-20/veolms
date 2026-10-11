@@ -955,6 +955,53 @@ html[data-app-hydrated="false"] .learning-workspace__main {
   border: 0;
 }
 
+/* In the full panel a section is a box: a tray a shade darker than the
+   panel, holding its heading and, when open, its lessons, with the panel
+   showing between one tray and the next. Which lessons belong to which
+   section is then a matter of which tray they lie in. Nothing is drawn
+   around a tray and no line parts two of them; the space does that.
+   (The mini player's playlist is the compact list, and keeps its rows.) */
+.learning-curriculum:not(.learning-curriculum--compact)
+  .learning-curriculum__lesson-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 8px calc(16px + var(--curriculum-reveal-space, 0px));
+}
+
+.learning-curriculum:not(.learning-curriculum--compact)
+  .learning-curriculum__section {
+  flex: 0 0 auto;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 42%, var(--canvas));
+}
+
+/* By day the panel is near white and the tray a tint of the page behind
+   it; the lessons in it are then the white cards. */
+:root[data-theme="light"]
+  .learning-curriculum:not(.learning-curriculum--compact)
+  .learning-curriculum__section {
+  background: color-mix(in srgb, var(--surface) 30%, var(--canvas));
+}
+
+.learning-curriculum:not(.learning-curriculum--compact)
+  .learning-curriculum__section-toggle {
+  min-height: 0;
+  padding: 14px 12px 14px 14px;
+}
+
+/* Open, the heading draws close to its lessons. */
+.learning-curriculum:not(.learning-curriculum--compact)
+  .learning-curriculum__section[data-expanded="true"]
+  > .learning-curriculum__section-toggle {
+  padding-bottom: 8px;
+}
+
+.learning-curriculum:not(.learning-curriculum--compact)
+  .learning-curriculum__section-lessons {
+  background: transparent;
+}
+
 .learning-curriculum__section-toggle {
   position: relative;
   display: flex;

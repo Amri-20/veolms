@@ -105,6 +105,12 @@ export interface VideoPlayerProps extends Omit<
   onPlayerError?: (error: Error) => void;
   /** Optional action shown in the error state, for example closing a mini-player. */
   onErrorOverlayClose?: () => void;
+  /**
+   * Replaces the default error screen, which covers the controls. Pass false
+   * when the controls draw the error under their own buttons instead (see
+   * `PlayerErrorNotice`).
+   */
+  errorOverlay?: ReactNode | false;
   onEvent?: VideoPlayerEventListener;
   onStoryboardError?: (error: unknown) => void;
   accentColor?: string;
@@ -162,6 +168,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
       engine = "shaka",
       engineFactory,
       emptyTapBehavior = "toggle-playback",
+      errorOverlay,
       keyboardEnabled = true,
       lockLandscapeOnFullscreen = false,
       interactionMode = "responsive",
@@ -410,7 +417,11 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
             ? null
             : (bufferingIndicator ?? <BufferingIndicator />)}
           <PlayerHud />
-          <ErrorOverlay onClose={onErrorOverlayClose} source={source} />
+          {errorOverlay === false
+            ? null
+            : (errorOverlay ?? (
+                <ErrorOverlay onClose={onErrorOverlayClose} source={source} />
+              ))}
           {controls === false
             ? null
             : (controls ?? (

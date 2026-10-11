@@ -270,6 +270,20 @@ export class PlayerController {
 
   async play(): Promise<void> {
     this.assertActive();
+    // A player that has failed has nothing to play. Asked to anyway (a press
+    // on the picture, the play button, a shortcut), it used to drop the
+    // failure and wait for media that was never coming, so it showed
+    // loading for good. Playing a failed video means trying it again.
+    if (this.#snapshot.media.error) {
+      if (!this.#snapshot.media.source) return;
+      try {
+        await this.reload();
+      } catch {
+        return;
+      }
+      this.assertActive();
+      if (this.#snapshot.media.error) return;
+    }
     const generation = ++this.#playRequestGeneration;
     if (!this.isMediaReady()) {
       await this.waitForMedia();

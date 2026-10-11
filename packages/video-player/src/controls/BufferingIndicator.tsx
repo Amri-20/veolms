@@ -64,7 +64,12 @@ export function BufferingIndicator({
           initialLoading,
           playInFlight,
           playbackHasBegun,
+          // A player that has failed is not waiting for anything: it says
+          // so, and a spinner turning over that message would say it is
+          // still trying. (A play that was asked for before the failure
+          // stays "in flight", which is what kept the spinner up.)
           waitingForMedia:
+            snapshot.media.error === null &&
             !snapshot.ui.scrubbing &&
             (initialLoading ||
               playInFlight ||

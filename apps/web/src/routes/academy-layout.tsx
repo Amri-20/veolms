@@ -1248,7 +1248,7 @@ export default function AcademyLayout() {
           bootstrapError?.code === "MFA_REQUIRED"
             ? {
                 kind: "login" as const,
-                message: "Log in to access the lesson.",
+                message: "Log in to dive in",
                 actionLabel: "Log in",
                 onAction: openPersistentPlayerLogin,
               }
