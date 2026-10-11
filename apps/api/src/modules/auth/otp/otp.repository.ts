@@ -195,6 +195,57 @@ export async function countOtpsSince(
   return Number(row?.count ?? 0);
 }
 
+/** Codes requested from one network address, across every destination. */
+export async function countOtpsRequestedFromIpSince(
+  database: Executor,
+  input: { requesterIp: string; since: Date },
+): Promise<number> {
+  const row = await database
+    .selectFrom("otp_codes")
+    .select((eb) => eb.fn.count<string>("id").as("count"))
+    .where("requester_ip", "=", input.requesterIp)
+    .where("created_at", ">", input.since)
+    .executeTakeFirst();
+
+  return Number(row?.count ?? 0);
+}
+
+/**
+ * How many different destinations one network address asked a sign-up code
+ * for, not counting `excluding` (the one being requested now).
+ */
+export async function countSignupDestinationsFromIpSince(
+  database: Executor,
+  input: {
+    requesterIp: string;
+    since: Date;
+    excluding: { identifier: string; identifierType: IdentifierType };
+  },
+): Promise<number> {
+  const row = await database
+    .selectFrom("otp_codes")
+    .select(
+      sql<string>`count(distinct (identifier_type || ':' || identifier))`.as(
+        "count",
+      ),
+    )
+    .where("requester_ip", "=", input.requesterIp)
+    .where("purpose", "in", ["email_verification", "phone_verification"])
+    .where("requester_user_id", "is", null)
+    .where("created_at", ">", input.since)
+    .where((eb) =>
+      eb.not(
+        eb.and([
+          eb("identifier", "=", input.excluding.identifier),
+          eb("identifier_type", "=", input.excluding.identifierType),
+        ]),
+      ),
+    )
+    .executeTakeFirst();
+
+  return Number(row?.count ?? 0);
+}
+
 /** Sends a signed-in user has requested, across every destination. */
 export async function countOtpsRequestedByUserSince(
   database: Executor,

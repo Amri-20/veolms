@@ -127,11 +127,14 @@ export function presentCurriculum({
   lessons,
   resources,
   mediaById,
+  omitResourceMedia = false,
 }: {
   sections: readonly SectionRow[];
   lessons: readonly LessonRow[];
   resources: readonly ResourceRow[];
   mediaById: ReadonlyMap<string, MediaRow>;
+  /** Leaves every resource's file details out, whatever `mediaById` holds. */
+  omitResourceMedia?: boolean;
 }): CourseSection[] {
   return sections.map((section) => ({
     id: section.id,
@@ -152,7 +155,9 @@ export function presentCurriculum({
         resources: resources
           .filter((resource) => resource.lesson_id === lesson.id)
           .map((resource) => {
-            const media = mediaById.get(resource.media_asset_id);
+            const media = omitResourceMedia
+              ? undefined
+              : mediaById.get(resource.media_asset_id);
             return {
               id: resource.id,
               mediaAssetId: resource.media_asset_id,

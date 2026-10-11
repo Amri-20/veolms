@@ -151,10 +151,30 @@ export const LAMBDA_ACTIONS = ["tick", "claim", "monitor", "queue"] as const;
 export type LambdaAction = (typeof LAMBDA_ACTIONS)[number];
 export const lambdaActionSchema = z.enum(LAMBDA_ACTIONS);
 
+/**
+ * Whether a file may be stored where anyone can open it by address. Public
+ * files are served to every visitor under the platform's own media domain
+ * with the content type given here, so only passive media belongs there: a
+ * picture or a video. A page, a script, or an SVG (which can carry script)
+ * would run as that domain's own content.
+ */
+function isPublishableMedia(
+  type: z.infer<typeof mediaAssetTypeSchema>,
+  contentType: string,
+): boolean {
+  const mimeType = contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+
+  if (type === "image") {
+    return /^image\/[a-z0-9.+-]+$/u.test(mimeType) && !mimeType.includes("svg");
+  }
+  if (type === "video") return /^video\/[a-z0-9.+-]+$/u.test(mimeType);
+  return false;
+}
+
 export const presignMediaRequestSchema = z
   .object({
-    filename: z.string().min(1),
-    contentType: z.string().min(1),
+    filename: z.string().min(1).max(255),
+    contentType: z.string().min(1).max(255),
     fileSize: z.number().int().positive(),
     type: mediaAssetTypeSchema,
     visibility: z.enum(["public", "protected"]).default("protected"),
@@ -162,7 +182,16 @@ export const presignMediaRequestSchema = z
   .refine((data) => data.fileSize <= MEDIA_MAX_SIZES[data.type], {
     message: "File size exceeds maximum allowed for this media type",
     path: ["fileSize"],
-  });
+  })
+  .refine(
+    (data) =>
+      data.visibility !== "public" ||
+      isPublishableMedia(data.type, data.contentType),
+    {
+      message: "Only pictures and videos can be stored publicly",
+      path: ["contentType"],
+    },
+  );
 
 export const presignMediaResponseSchema = z.object({
   uploadUrl: z.url(),

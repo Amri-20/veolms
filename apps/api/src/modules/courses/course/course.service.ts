@@ -44,6 +44,7 @@ import {
   createIncludesService,
   type IncludesService,
 } from "../includes/includes.service.ts";
+import { createAccessService, isOpenFreeCourse } from "../../access/index.ts";
 import { createMediaService, type MediaService } from "../../media/index.ts";
 import {
   getLessonDurationSeconds,
@@ -54,6 +55,24 @@ import {
   presentSettings,
   type CourseThumbnailUrls,
 } from "../shared/courses.presenters.ts";
+
+const accessService = createAccessService();
+
+/**
+ * Resource rows for a viewer who may not download them. Each keeps its place
+ * in its lesson and loses its name: a resource's title starts out as the
+ * name of the uploaded file, so the title says as much as the file name.
+ */
+function redactLockedResources<
+  Resource extends { lesson_id: string; title: string },
+>(resources: readonly Resource[]): Resource[] {
+  const countByLesson = new Map<string, number>();
+  return resources.map((resource) => {
+    const position = (countByLesson.get(resource.lesson_id) ?? 0) + 1;
+    countByLesson.set(resource.lesson_id, position);
+    return { ...resource, title: `Resource ${position}` };
+  });
+}
 
 const ALLOWED_THUMBNAIL_MIME_TYPES = new Set([
   "image/jpeg",
@@ -976,6 +995,28 @@ export function createCourseService({
   }
 
   /**
+   * Whether a signed-in viewer who does not manage the course has it: the
+   * course is free and unrestricted, or the viewer holds access.
+   */
+  async function viewerHasCourse(
+    userId: string,
+    courseId: string,
+    pricingType: string | null | undefined,
+  ): Promise<boolean> {
+    const [accessRule, hasAccess] = await Promise.all([
+      configurationService.findAccessRuleByCourseId(courseId),
+      accessService.hasActiveAccess(database, userId, courseId),
+    ]);
+    return (
+      hasAccess ||
+      isOpenFreeCourse({
+        pricing_type: pricingType,
+        access_type: accessRule?.access_type,
+      })
+    );
+  }
+
+  /**
    * Assembles public course overview data for learners.
    */
   async function getCourseOverviewData(
@@ -1052,16 +1093,30 @@ export function createCourseService({
       lessonIds.has(resource.lesson_id),
     );
 
+    // What a lesson's files are called and how large they are is shown to
+    // viewers who may download them, by the same rule the download applies:
+    // whoever manages the course, a signed-in learner on a free unrestricted
+    // course, or a learner who holds access. Everyone else sees that a
+    // lesson has resources and how many, nothing about the files.
+    const viewerMayDownloadResources =
+      viewerManagesCourse ||
+      (user !== undefined &&
+        resources.length > 0 &&
+        (await viewerHasCourse(user.id, courseId, pricing?.pricing_type)));
+    const visibleResources = viewerMayDownloadResources
+      ? resources
+      : redactLockedResources(resources);
+
     // "Show instructor name" is the instructor's choice, so it is applied
     // here rather than left to each client to honour.
     const instructorHidden =
       settings?.show_instructor_name === false && !viewerManagesCourse;
 
-    // Learners see what each resource is before downloading it, so its file
+    // Learners who may download a resource see what it is first, so its file
     // details go out with the overview. Media is read without an owner
     // filter: the viewer is not the uploader.
     const [mediaById, creatorRows] = await Promise.all([
-      loadCurriculumMedia(lessons, resources),
+      loadCurriculumMedia(lessons, viewerMayDownloadResources ? resources : []),
       course.creator_id && !instructorHidden
         ? authService.listUserDisplayNamesByIds([course.creator_id])
         : [],
@@ -1095,7 +1150,15 @@ export function createCourseService({
       creator: creatorRow
         ? { id: creatorRow.id, displayName: creatorRow.display_name }
         : null,
-      sections: presentCurriculum({ sections, lessons, resources, mediaById }),
+      sections: presentCurriculum({
+        sections,
+        lessons,
+        resources: visibleResources,
+        mediaById,
+        // The map also holds every lesson's own media, and a resource can
+        // point at one of those.
+        omitResourceMedia: !viewerMayDownloadResources,
+      }),
       pricing: pricing
         ? {
             pricingType: pricing.pricing_type,

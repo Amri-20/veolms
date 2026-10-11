@@ -306,3 +306,30 @@ There is no test runner in the repository, and frontend tests are out of policy.
 7. **Tests:** restore a minimal API test runner for the money and auth paths, or stay with typecheck, lint and manual checks?
 
 **Recommended first phase: phase 1 (C3, C12, X3, C9a).** It fixes the only High-severity money bug that an ordinary learner can trigger from the shipped UI, it is confined to one block of one web file, it changes no contract and has no deploy-order risk, and it needs none of the decisions above.
+
+## 10. Security section (S1–S16): closed 11 Oct 2026
+
+Implemented on `fix/security-audit-s1-s16`, independently reviewed, and verified with scripted requests against a local API on a throwaway database. Not verified: a browser, real storage, real email or SMS, a real passkey, production mode. Do not reopen without a newly found defect.
+
+| ID                          | Status                                                   |
+| --------------------------- | -------------------------------------------------------- |
+| S1, S2, S4–S8, S10–S14, S16 | FIXED                                                    |
+| S3                          | DEFERRED by decision (see below)                         |
+| S9                          | FIXED in code; `TRUST_PROXY` is deployment configuration |
+| S15                         | FIXED; a durable backup-code lock is deferred            |
+
+**Decisions taken.** S3: `allow_downloads` stays a stored setting that nothing enforces. S5: watching a preview lesson does not grant its resource files; a download needs a signed-in account that has the course. S12: file names, types and sizes are shown only to viewers who may download. S6: a deactivated account is answered like any other and told by email. `PHONE_TAKEN` is still reported to a signed-in user adding a number, but only after their code checks out or against their daily allowance.
+
+**Residual risks, accepted and recorded.**
+
+- S3 is unenforced: anyone who may download a resource can, whatever the course's download setting says.
+- `TRUST_PROXY=true` lets a caller choose their own address and step around every per-address limit; `false` behind a public proxy pools all visitors. Production logs a warning for `true`. Requests arriving from a private address are exempt from the database-backed code limits.
+- The backup-code lock and the route rate limits are kept per API process and reset on restart.
+- IPv6 callers are counted by full address for the database-backed code limits.
+- A deactivated account with only a phone number is told "code sent" and receives nothing.
+- The upload quota counts started-but-unfinished slots for 24 hours.
+- The upload cleanup job is not scheduled, and scans all discussion and course text once per 100 candidates.
+- Existing rows are not repaired: usernames over 30 characters, display names over 100, phone numbers never confirmed.
+- How the CDN worker serves public objects could not be read (its script is not in this repository).
+
+**Staging checks still owed.** The deployed `TRUST_PROXY` value; a thumbnail, trailer and avatar upload through real storage (their upload URLs now sign the content type); every sign-in origin present in `WEB_URL` or `CORS_ORIGINS`; counts of the existing rows above; the resource menu and a passkey sign-in in a browser; the one index migration; the cleanup job in report-only mode.

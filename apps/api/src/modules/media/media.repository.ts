@@ -43,6 +43,7 @@ export async function findMediaAssetSummaryById(
       "status",
       "storage_key",
       "original_filename",
+      "mime_type",
       "size_bytes",
       "width",
       "height",

@@ -21,6 +21,8 @@ import {
   BACKUP_CODE_LENGTH,
   BACKUP_CODE_MAX,
   BACKUP_CODE_MIN,
+  TOTP_LOCK_DURATION_MS,
+  TOTP_MAX_FAILED_ATTEMPTS,
   WEBAUTHN_CHALLENGE_TTL_MS,
 } from "../shared/auth.constants.ts";
 import type { Executor } from "../shared/repository.types.ts";
@@ -43,6 +45,70 @@ import { isMfaMandatoryAccount } from "../shared/mfa-policy.ts";
 export interface MfaServiceOptions {
   database: Kysely<Database>;
   sessionService: SessionService;
+}
+
+/**
+ * Wrong backup codes per account. The authenticator lock counts wrong
+ * six-digit codes only and lives on the authenticator's own row, so backup
+ * codes could be guessed without limit, and an account whose only factor is
+ * a passkey has no such row at all. Kept in this process, like the route
+ * rate limits: it bounds guessing per account on each instance and is
+ * forgotten on restart.
+ */
+interface BackupCodeFailureState {
+  count: number;
+  lockedUntil: number;
+  updatedAt: number;
+}
+
+const backupCodeFailures = new Map<string, BackupCodeFailureState>();
+const BACKUP_CODE_FAILURE_ENTRIES_MAX = 10_000;
+
+function assertBackupCodeAttemptAllowed(userId: string): void {
+  const state = backupCodeFailures.get(userId);
+  if (state && state.lockedUntil > Date.now()) {
+    throw new AppError(
+      429,
+      "TOTP_LOCKED",
+      "Too many failed attempts. Try again later.",
+    );
+  }
+}
+
+function recordBackupCodeFailure(userId: string): void {
+  const now = Date.now();
+
+  if (backupCodeFailures.size >= BACKUP_CODE_FAILURE_ENTRIES_MAX) {
+    for (const [key, entry] of backupCodeFailures) {
+      const idleSince = Math.max(entry.updatedAt, entry.lockedUntil);
+      if (now - idleSince > TOTP_LOCK_DURATION_MS) {
+        backupCodeFailures.delete(key);
+      }
+    }
+  }
+
+  // Still full: every entry is recent. The oldest makes room.
+  if (
+    backupCodeFailures.size >= BACKUP_CODE_FAILURE_ENTRIES_MAX &&
+    !backupCodeFailures.has(userId)
+  ) {
+    const oldest = backupCodeFailures.keys().next().value;
+    if (oldest !== undefined) backupCodeFailures.delete(oldest);
+  }
+
+  const previous = backupCodeFailures.get(userId);
+  // Failures older than one lock period no longer count.
+  const count =
+    previous && now - previous.updatedAt <= TOTP_LOCK_DURATION_MS
+      ? previous.count + 1
+      : 1;
+  const isLocked = count >= TOTP_MAX_FAILED_ATTEMPTS;
+
+  backupCodeFailures.set(userId, {
+    count: isLocked ? 0 : count,
+    lockedUntil: isLocked ? now + TOTP_LOCK_DURATION_MS : 0,
+    updatedAt: now,
+  });
 }
 
 interface AuthenticatedMfaUser {
@@ -256,6 +322,16 @@ export function createMfaService({
     sessionId: string;
     code: string;
   }): Promise<{ message: string }> {
+    const isBackupCodeAttempt = code.length === BACKUP_CODE_LENGTH;
+    if (isBackupCodeAttempt) {
+      assertBackupCodeAttemptAllowed(userId);
+      // Counted before the code is looked up, in the same tick as the check
+      // above: counted afterwards, a burst of guesses sent together was all
+      // let through before the first of them had been recorded. A correct
+      // code clears the count below.
+      recordBackupCodeFailure(userId);
+    }
+
     const credential = await mfaRepository.findTotpCredential(database, userId);
 
     // Backup codes are checked before the TOTP-enabled gate so passkey-only
@@ -268,6 +344,7 @@ export function createMfaService({
 
     if (backupCode) {
       if (await mfaRepository.redeemBackupCode(database, backupCode.id)) {
+        backupCodeFailures.delete(userId);
         await sessionRepository.markSessionMfaVerified(database, sessionId);
         return { message: "MFA verified using backup code" };
       }
@@ -452,7 +529,9 @@ export function createMfaService({
         credentialId: credential.id,
         publicKey: Buffer.from(credential.publicKey).toString("base64"),
         counter: credential.counter,
-        transports: response.transports?.join(",") ?? null,
+        transports: Array.isArray(response.transports)
+          ? response.transports.join(",")
+          : null,
       });
       await outbox.publish(trx, {
         type: "auth.passkey_added",
@@ -534,14 +613,10 @@ export function createMfaService({
       );
     }
 
-    if (!(await mfaRepository.consumeChallenge(database, record.id))) {
-      throw new AppError(
-        400,
-        "VERIFICATION_FAILED",
-        "Challenge has already been used.",
-      );
-    }
-
+    // Looked up before the challenge is spent: a credential that is not on
+    // this account cannot pass, and refusing it here leaves the challenge
+    // for the real one. The challenge is still consumed exactly once, before
+    // any assertion is verified against it.
     const passkey = await mfaRepository.findUserPasskey(
       database,
       userId,
@@ -553,6 +628,14 @@ export function createMfaService({
         400,
         "CREDENTIAL_NOT_FOUND",
         "Passkey credential matching this session is not registered.",
+      );
+    }
+
+    if (!(await mfaRepository.consumeChallenge(database, record.id))) {
+      throw new AppError(
+        400,
+        "VERIFICATION_FAILED",
+        "Challenge has already been used.",
       );
     }
 

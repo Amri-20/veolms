@@ -178,7 +178,7 @@ export const authUserSchema = z.object({
   username: z.string().max(30),
   displayName: z.string().max(100),
   email: z.email().max(255).nullable(),
-  phoneNo: z.string().max(15).nullable(),
+  phoneNo: z.string().max(16).nullable(),
   emailVerified: z.boolean().default(false),
   mobileVerified: z.boolean().default(false),
   roles: z.array(z.string().max(50)).default([]),
@@ -191,7 +191,7 @@ export const userProfileResponseSchema = z.object({
   username: z.string().max(30),
   displayName: z.string().max(100),
   email: z.email().max(255).nullable(),
-  phoneNo: z.string().max(15).nullable(),
+  phoneNo: z.string().max(16).nullable(),
   emailVerified: z.boolean(),
   mobileVerified: z.boolean(),
   roles: z.array(z.string().max(50)),
@@ -238,7 +238,7 @@ export const publicProfileResponseSchema = z.strictObject({
   avatarSrcSet: z.array(avatarImageVariantSchema),
   bio: z.string().max(160).nullable(),
   email: z.email().max(255).nullable(),
-  phoneNo: z.string().max(15).nullable(),
+  phoneNo: z.string().max(16).nullable(),
   linkedinUrl: z.string().max(500).nullable(),
   githubUrl: z.string().max(500).nullable(),
   websiteUrl: z.string().max(500).nullable(),
@@ -260,7 +260,13 @@ export const creatorRegisterRequestSchema = z.object({
     .meta({ example: "ada@example.com" }),
   phoneNo: z
     .string()
+    .trim()
     .min(8)
+    .max(32)
+    .regex(
+      /^\+?[0-9\s().-]+$/,
+      "Phone number can contain digits, spaces, and + ( ) - only",
+    )
     .meta({ example: "+15551234567" })
     .nullable()
     .optional(),

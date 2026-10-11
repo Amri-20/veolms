@@ -1,11 +1,16 @@
 import crypto from "node:crypto";
+import { isIP } from "node:net";
 
 import type { Database } from "@veolms/database";
 import type { Kysely } from "kysely";
 
 import { config } from "../../../config.ts";
 import { AppError } from "../../../lib/errors.ts";
-import { ADMIN_ROLE, SESSION_TTL_MS } from "../shared/auth.constants.ts";
+import {
+  ADMIN_ROLE,
+  SESSION_TTL_MS,
+  SESSION_USER_AGENT_MAX_LENGTH,
+} from "../shared/auth.constants.ts";
 import { isMfaMandatoryAccount } from "../shared/mfa-policy.ts";
 import type {
   AuthenticatedRequestContext,
@@ -166,6 +171,13 @@ export function createSessionService({ database }: SessionServiceOptions) {
       factors,
     );
 
+    // Stored within what the session list is allowed to return. A longer
+    // user agent, or an address that is not an IP, made that list fail for
+    // the account until the session expired.
+    const ipAddress = isIP(request.ip) ? request.ip : null;
+    const userAgent =
+      request.userAgent?.slice(0, SESSION_USER_AGENT_MAX_LENGTH) ?? null;
+
     const token = generateRandomToken();
     const tokenHash = hashToken(token);
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
@@ -184,8 +196,8 @@ export function createSessionService({ database }: SessionServiceOptions) {
         {
           previousTokenHash: existingTokenHash,
           tokenHash,
-          ipAddress: request.ip,
-          userAgent: request.userAgent,
+          ipAddress,
+          userAgent,
           mfaVerified,
           expiresAt,
         },
@@ -202,8 +214,8 @@ export function createSessionService({ database }: SessionServiceOptions) {
       id: sessionId,
       userId: user.id,
       tokenHash,
-      ipAddress: request.ip,
-      userAgent: request.userAgent,
+      ipAddress,
+      userAgent,
       mfaVerified,
       expiresAt,
     });

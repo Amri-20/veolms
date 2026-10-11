@@ -139,6 +139,13 @@ export interface DiscussionUploadStore {
   }): Promise<StoredDiscussionUpload>;
   get(fileName: string): Promise<DiscussionUploadFile | null>;
   remove(fileName: string): Promise<void>;
+  /**
+   * Removes a stored file and says so when it could not: `remove` is for
+   * tidying up after a failed request and ignores errors, which a caller
+   * that records the file as gone cannot afford. A file that is already
+   * absent counts as removed.
+   */
+  removeOrThrow(fileName: string): Promise<void>;
 }
 
 export function discussionUploadStorageKey(fileName: string): string {
@@ -257,6 +264,17 @@ export function createDiscussionUploadStore(
           .deleteObject(discussionUploadStorageKey(fileName))
           .catch(() => undefined);
       }
+    },
+
+    async removeOrThrow(fileName) {
+      if (!isSafeDiscussionUploadFileName(fileName)) {
+        throw new Error("UNSUPPORTED_DISCUSSION_UPLOAD_TYPE");
+      }
+      await unlink(diskPath(fileName)).catch((error: unknown) => {
+        const code = (error as { code?: unknown } | null)?.code;
+        if (code !== "ENOENT") throw error;
+      });
+      if (s3) await s3.deleteObject(discussionUploadStorageKey(fileName));
     },
   };
 }

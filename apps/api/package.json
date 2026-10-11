@@ -9,6 +9,7 @@
     "purge:course-deletions": "node --env-file-if-exists=../../.env src/jobs/course-retention.ts",
     "purge:sessions": "node --env-file-if-exists=../../.env src/jobs/session-retention.ts",
     "purge:quiz-attempts": "node --env-file-if-exists=../../.env src/jobs/quiz-attempt-reaper.ts",
+    "purge:discussion-uploads": "node --env-file-if-exists=../../.env src/jobs/discussion-upload-retention.ts",
     "notifications:process": "node --env-file-if-exists=../../.env src/jobs/notification-worker.ts",
     "notifications:watch": "node --env-file-if-exists=../../.env src/jobs/notification-worker.ts --watch",
     "user:cli": "node --env-file-if-exists=../../.env src/cli/user.ts",
