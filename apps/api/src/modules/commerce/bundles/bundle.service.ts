@@ -9,6 +9,7 @@ import type { Database } from "@veolms/database";
 import type { Kysely } from "kysely";
 import { AppError } from "../../../lib/errors.ts";
 import { CommerceErrors } from "../shared/commerce.errors.ts";
+import { isUniqueViolation } from "../shared/db-errors.ts";
 import * as bundleRepo from "./bundle.repository.ts";
 import * as courseRepo from "../../courses/course/course.repository.ts";
 
@@ -112,10 +113,26 @@ export function createBundleService({
     return await hydrateBundle(bundle);
   }
 
+  /**
+   * A slug stays taken after its bundle is deleted (the row is kept), and
+   * two requests can pass the slug check at once. Both reach the unique
+   * index, and both are the same refusal the check gives.
+   */
+  function slugTakenOr(error: unknown, slug: string): unknown {
+    if (!isUniqueViolation(error)) return error;
+    return new AppError(
+      409,
+      "BUNDLE_SLUG_EXISTS",
+      `A bundle with slug "${slug}" already exists.`,
+    );
+  }
+
   async function createBundle(
     request: CreateBundleRequest,
   ): Promise<CourseBundle> {
     const normalizedSlug = request.slug.toLowerCase().trim();
+    // A course named twice is still one course in the bundle.
+    const courseIds = [...new Set(request.courseIds)];
     const existing = await bundleRepo.findBundleBySlug(
       database,
       normalizedSlug,
@@ -129,7 +146,7 @@ export function createBundleService({
     }
 
     // Verify all courses exist
-    for (const courseId of request.courseIds) {
+    for (const courseId of courseIds) {
       const course = await courseRepo.findCourseById(database, courseId);
       if (!course) {
         throw CommerceErrors.COURSE_NOT_FOUND(courseId);
@@ -139,31 +156,36 @@ export function createBundleService({
     const bundleId = crypto.randomUUID();
     const now = new Date();
 
-    const created = await database.transaction().execute(async (trx) => {
-      const bundle = await bundleRepo.insertBundle(trx, {
-        id: bundleId,
-        slug: normalizedSlug,
-        title: request.title.trim(),
-        description: request.description ?? null,
-        thumbnail_media_id: request.thumbnailMediaId ?? null,
-        status: request.status,
-        price: request.price,
-        currency: request.currency,
-        created_at: now,
-        updated_at: now,
-      });
-
-      for (const courseId of request.courseIds) {
-        await bundleRepo.insertBundleItem(trx, {
-          id: crypto.randomUUID(),
-          bundle_id: bundleId,
-          course_id: courseId,
+    const created = await database
+      .transaction()
+      .execute(async (trx) => {
+        const bundle = await bundleRepo.insertBundle(trx, {
+          id: bundleId,
+          slug: normalizedSlug,
+          title: request.title.trim(),
+          description: request.description ?? null,
+          thumbnail_media_id: request.thumbnailMediaId ?? null,
+          status: request.status,
+          price: request.price,
+          currency: request.currency,
           created_at: now,
+          updated_at: now,
         });
-      }
 
-      return bundle;
-    });
+        for (const courseId of courseIds) {
+          await bundleRepo.insertBundleItem(trx, {
+            id: crypto.randomUUID(),
+            bundle_id: bundleId,
+            course_id: courseId,
+            created_at: now,
+          });
+        }
+
+        return bundle;
+      })
+      .catch((error: unknown) => {
+        throw slugTakenOr(error, request.slug);
+      });
 
     return await hydrateBundle(created);
   }
@@ -194,8 +216,11 @@ export function createBundleService({
       }
     }
 
-    if (request.courseIds) {
-      for (const courseId of request.courseIds) {
+    const courseIds = request.courseIds
+      ? [...new Set(request.courseIds)]
+      : undefined;
+    if (courseIds) {
+      for (const courseId of courseIds) {
         const course = await courseRepo.findCourseById(database, courseId);
         if (!course) {
           throw CommerceErrors.COURSE_NOT_FOUND(courseId);
@@ -205,32 +230,37 @@ export function createBundleService({
 
     const now = new Date();
 
-    const updated = await database.transaction().execute(async (trx) => {
-      const bundle = await bundleRepo.updateBundle(trx, id, {
-        slug: request.slug?.toLowerCase().trim(),
-        title: request.title?.trim(),
-        description: request.description,
-        thumbnail_media_id: request.thumbnailMediaId,
-        status: request.status,
-        price: request.price,
-        currency: request.currency,
-        updated_at: now,
-      });
+    const updated = await database
+      .transaction()
+      .execute(async (trx) => {
+        const bundle = await bundleRepo.updateBundle(trx, id, {
+          slug: request.slug?.toLowerCase().trim(),
+          title: request.title?.trim(),
+          description: request.description,
+          thumbnail_media_id: request.thumbnailMediaId,
+          status: request.status,
+          price: request.price,
+          currency: request.currency,
+          updated_at: now,
+        });
 
-      if (request.courseIds) {
-        await bundleRepo.deleteBundleItems(trx, id);
-        for (const courseId of request.courseIds) {
-          await bundleRepo.insertBundleItem(trx, {
-            id: crypto.randomUUID(),
-            bundle_id: id,
-            course_id: courseId,
-            created_at: now,
-          });
+        if (courseIds) {
+          await bundleRepo.deleteBundleItems(trx, id);
+          for (const courseId of courseIds) {
+            await bundleRepo.insertBundleItem(trx, {
+              id: crypto.randomUUID(),
+              bundle_id: id,
+              course_id: courseId,
+              created_at: now,
+            });
+          }
         }
-      }
 
-      return bundle;
-    });
+        return bundle;
+      })
+      .catch((error: unknown) => {
+        throw slugTakenOr(error, request.slug ?? existing.slug);
+      });
 
     if (!updated) {
       throw CommerceErrors.BUNDLE_NOT_FOUND(id);
