@@ -27,6 +27,7 @@ import {
 } from "../shared/discussion.utils.ts";
 import { discussionVisibilityPredicate } from "../shared/discussion.visibility.ts";
 import { publicLessonDiscussionPredicate } from "../shared/lesson-discussion-access.ts";
+import { containsPattern } from "../shared/discussion.utils.ts";
 import { exactCursorTimestamp } from "../../../../lib/keyset.ts";
 
 // Kysely represents a `"learning_threads as t"` aliased query with the alias
@@ -284,7 +285,7 @@ function applyMentionFilters<O>(
   }
 
   if (options.search) {
-    const pattern = `%${options.search.toLowerCase()}%`;
+    const pattern = containsPattern(options.search);
     q = q.where(
       sql<boolean>`(
         (
@@ -628,7 +629,7 @@ function applyThreadFilters<O>(
   }
 
   if (options.search) {
-    const searchPattern = `%${options.search.toLowerCase()}%`;
+    const searchPattern = containsPattern(options.search);
     q = q.where((eb: ExpressionBuilder<ThreadsAliasedDB, "t">) =>
       eb.or([
         eb(sql`lower(t.title)`, "like", searchPattern),
@@ -938,6 +939,7 @@ export function createThreadsRepository(): ThreadsRepository {
           join.onRef("u.id", "=", "t.user_id").on("u.is_deleted", "=", false),
         )
         .leftJoin("course_pricing as p", "p.course_id", "c.id")
+        .leftJoin("course_access_rules as ar", "ar.course_id", "c.id")
         .select([
           "t.id as id",
           "t.kind as kind",
@@ -974,6 +976,7 @@ export function createThreadsRepository(): ThreadsRepository {
             lesson: "l",
             section: "s",
             pricing: "p",
+            accessRules: "ar",
           }),
         )
         .where(discussionVisibilityPredicate("t", null, false));

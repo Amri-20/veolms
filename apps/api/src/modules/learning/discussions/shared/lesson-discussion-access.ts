@@ -4,6 +4,7 @@ import type { RawBuilder } from "kysely";
 import { ADMIN_ROLE } from "../../../auth/index.ts";
 import {
   createAccessService,
+  isOpenFreeCourse,
   type AccessService,
 } from "../../../access/index.ts";
 import { DiscussionErrors } from "./discussion.errors.ts";
@@ -21,6 +22,8 @@ export interface PublicLessonDiscussionSqlAliases {
   lesson: string;
   section: string;
   pricing: string;
+  /** The course's access rules row (left-joined; a course may have none). */
+  accessRules: string;
 }
 
 export function isPublicLessonDiscussion(input: {
@@ -28,11 +31,16 @@ export function isPublicLessonDiscussion(input: {
   isPublished: boolean;
   isPreview: boolean;
   pricingType: string | null;
+  accessType: string | null;
 }): boolean {
   return (
     input.courseStatus === "published" &&
     input.isPublished &&
-    (input.isPreview || input.pricingType === "free")
+    (input.isPreview ||
+      isOpenFreeCourse({
+        pricing_type: input.pricingType,
+        access_type: input.accessType,
+      }))
   );
 }
 
@@ -41,12 +49,17 @@ export function isPublicLessonDiscussion(input: {
  * public discovery queries. Anonymous discussion content is readable only
  * when the course is published, the lesson is published and not deleted, the
  * section is not deleted, and the course is free or the lesson is previewable.
+ *
+ * "Free" means open: free and not access-restricted. A restricted course
+ * needs a grant even when it costs nothing, and its discussions used to be
+ * readable by anyone because only the price was looked at.
  */
 export function publicLessonDiscussionPredicate({
   course,
   lesson,
   section,
   pricing,
+  accessRules,
 }: PublicLessonDiscussionSqlAliases): RawBuilder<boolean> {
   return sql<boolean>`(
     ${sql.ref(`${course}.status`)} = 'published'
@@ -56,7 +69,10 @@ export function publicLessonDiscussionPredicate({
     and ${sql.ref(`${section}.deleted_at`)} is null
     and (
       ${sql.ref(`${lesson}.is_preview`)} = true
-      or ${sql.ref(`${pricing}.pricing_type`)} = 'free'
+      or (
+        ${sql.ref(`${pricing}.pricing_type`)} = 'free'
+        and ${sql.ref(`${accessRules}.access_type`)} is distinct from 'restricted'
+      )
     )
   )`;
 }
@@ -83,6 +99,11 @@ export function createLessonDiscussionAccess(options?: {
         .selectFrom("course_lessons")
         .innerJoin("courses", "courses.id", "course_lessons.course_id")
         .leftJoin("course_pricing", "course_pricing.course_id", "courses.id")
+        .leftJoin(
+          "course_access_rules",
+          "course_access_rules.course_id",
+          "courses.id",
+        )
         .innerJoin(
           "course_sections",
           "course_sections.id",
@@ -92,6 +113,7 @@ export function createLessonDiscussionAccess(options?: {
           "courses.status as courseStatus",
           "courses.creator_id as courseCreatorId",
           "course_pricing.pricing_type as pricingType",
+          "course_access_rules.access_type as accessType",
           "course_lessons.is_preview as isPreview",
           "course_lessons.is_published as isPublished",
         ])
@@ -132,6 +154,7 @@ export function createLessonDiscussionAccess(options?: {
           isPublished: lesson.isPublished,
           isPreview: lesson.isPreview,
           pricingType: lesson.pricingType,
+          accessType: lesson.accessType,
         })
       ) {
         return { canReadPrivateState: false, canModerate: false };

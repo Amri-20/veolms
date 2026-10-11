@@ -6,6 +6,16 @@ import { exactCursorTimestamp } from "../../../../lib/keyset.ts";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
+/**
+ * A LIKE pattern that finds `term` anywhere in lower-cased text, as typed.
+ * "%" and "_" mean "anything" to LIKE, so a search for "50%" or "a_b"
+ * matched far more than it said; they, and the escape character itself, are
+ * escaped (backslash is LIKE's default escape).
+ */
+export function containsPattern(term: string): string {
+  return `%${term.toLowerCase().replace(/[\\%_]/g, "\\$&")}%`;
+}
+
 export interface DiscussionListCursor {
   id: string;
   createdAt: Date;

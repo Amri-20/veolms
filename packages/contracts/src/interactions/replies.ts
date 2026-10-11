@@ -35,7 +35,7 @@ export const createLearningReplyRequestSchema = z.object({
   parentReplyId: z.uuid().nullable().optional(),
   replyToReplyId: z.uuid().nullable().optional(),
   timestampSeconds: z.number().int().nonnegative().nullable().optional(),
-  attachmentIds: z.array(z.uuid()).optional(),
+  attachmentIds: z.array(z.uuid()).max(50).optional(),
 });
 export type CreateLearningReplyRequest = z.infer<
   typeof createLearningReplyRequestSchema
