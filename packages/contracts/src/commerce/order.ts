@@ -22,11 +22,10 @@ export const courseBundleSchema = z.strictObject({
   description: z.string().nullable().optional(),
   thumbnailMediaId: z.uuid().nullable().optional(),
   status: bundleStatusSchema,
-  price: z
-    .number()
-    .int()
-    .nonnegative()
-    .meta({ description: "Price in smallest currency unit (e.g. paise)" }),
+  price: z.number().int().nonnegative().meta({
+    description:
+      "Price in major currency units (e.g. rupees), as course prices are",
+  }),
   currency: z.string().length(3).default("INR"),
   items: z.array(bundleItemSchema).optional(),
   createdAt: z.string().or(z.date()),

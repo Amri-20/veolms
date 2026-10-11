@@ -153,11 +153,40 @@ export function createPaymentRecoveryWorker({
     // abandoned checkouts sat in the window (every dismissed payment modal
     // leaves one for 24 hours) each tick re-read the same 50 and a genuinely
     // captured payment further back was never looked at.
+    //
+    // Only this gateway's payments: a no-cost or manually verified payment
+    // has no gateway order, and asking the gateway about one failed on every
+    // tick for as long as the row stayed open.
+    //
+    // A FAILED payment is looked at too, while its order is still unpaid. A
+    // gateway order stays payable after a declined attempt, and the buyer
+    // usually pays it on the next try in the same window. If that capture's
+    // webhook and the browser's confirmation were both lost, nothing ever
+    // looked at the row again: money taken, nothing delivered.
     function listRecent() {
       return database
         .selectFrom("payments")
         .selectAll()
-        .where("status", "in", ["initiated", "processing"])
+        .where("gateway_provider", "=", paymentGateway.providerName)
+        .where((eb) =>
+          eb.or([
+            eb("status", "in", ["initiated", "processing"]),
+            eb.and([
+              eb("status", "=", "failed"),
+              eb.exists(
+                eb
+                  .selectFrom("orders")
+                  .select("orders.id")
+                  .whereRef("orders.id", "=", "payments.order_id")
+                  .where("orders.status", "in", [
+                    "pending",
+                    "payment_processing",
+                    "expired",
+                  ]),
+              ),
+            ]),
+          ]),
+        )
         .where("updated_at", "<", staleMinuteCutoff)
         .where("created_at", ">", maxAgeCutoff)
         .orderBy("updated_at", "asc")
@@ -189,7 +218,7 @@ export function createPaymentRecoveryWorker({
             .updateTable("payments")
             .set({ updated_at: new Date() })
             .where("id", "=", payment.id)
-            .where("status", "in", ["initiated", "processing"])
+            .where("status", "in", ["initiated", "processing", "failed"])
             .execute();
         }
       } catch (err: unknown) {
@@ -212,6 +241,7 @@ export function createPaymentRecoveryWorker({
     const agedOut = await database
       .selectFrom("payments")
       .selectAll()
+      .where("gateway_provider", "=", paymentGateway.providerName)
       .where("status", "in", ["initiated", "processing"])
       .where("created_at", "<=", maxAgeCutoff)
       .orderBy("created_at", "asc")
