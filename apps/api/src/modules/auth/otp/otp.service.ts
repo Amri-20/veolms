@@ -18,6 +18,7 @@ import {
   OTP_TTL_MINUTES,
   OTP_TTL_MS,
   OTP_USER_DAILY_LIMIT,
+  STUDENT_ROLE,
 } from "../shared/auth.constants.ts";
 import type { IdentifierType, OtpPurpose } from "../shared/auth.types.ts";
 import * as otpRepository from "./otp.repository.ts";
@@ -174,7 +175,41 @@ export function createOtpService({
     requester: OtpRequester = {},
   ): Promise<void> {
     const purpose = await resolveOtpPurpose(identifier, identifierType);
-    await sendOtpWithPurpose(identifier, identifierType, purpose, requester);
+    const fixedCode = await resolveTestLoginCode(identifier, identifierType);
+    await sendOtpWithPurpose(
+      identifier,
+      identifierType,
+      purpose,
+      requester,
+      fixedCode,
+    );
+  }
+
+  /**
+   * The fixed code of a shared test account (TEST_LOGIN_ACCOUNTS), or null
+   * when the identifier is an ordinary one. The pair is public by design, so
+   * an account holding any role other than student never gets it and falls
+   * back to an emailed code: a mistyped address in the setting must not open
+   * a staff account.
+   */
+  async function resolveTestLoginCode(
+    identifier: string,
+    identifierType: IdentifierType,
+  ): Promise<string | null> {
+    if (identifierType !== "email") return null;
+    const fixedCode = config.TEST_LOGIN_ACCOUNTS.get(identifier);
+    if (!fixedCode) return null;
+
+    const user = await userRepository.findUserStatusByIdentifier(
+      database,
+      identifier,
+      identifierType,
+    );
+    if (user) {
+      const roles = await userRepository.listUserRoleNames(database, user.id);
+      if (roles.some((role) => role !== STUDENT_ROLE)) return null;
+    }
+    return fixedCode;
   }
 
   async function sendOtpWithPurpose(
@@ -182,11 +217,21 @@ export function createOtpService({
     identifierType: IdentifierType,
     purpose: OtpPurpose,
     requester: OtpRequester = {},
+    fixedCode: string | null = null,
   ): Promise<void> {
     if (identifierType === "phone") assertSmsDestinationAllowed(identifier);
-    await assertOtpSendAllowed(identifier, identifierType, purpose, requester);
+    // A test account is shared, so its testers would spend each other's
+    // resend window and daily allowance; nothing is delivered for it either.
+    if (!fixedCode) {
+      await assertOtpSendAllowed(
+        identifier,
+        identifierType,
+        purpose,
+        requester,
+      );
+    }
 
-    const code = crypto.randomInt(100_000, 1_000_000).toString();
+    const code = fixedCode ?? crypto.randomInt(100_000, 1_000_000).toString();
     const now = new Date();
 
     await otpRepository.retireOutstandingOtps(database, {
@@ -207,6 +252,8 @@ export function createOtpService({
       requesterIp: requester.ip,
       requesterUserId: requester.userId,
     });
+
+    if (fixedCode) return;
 
     const delivery =
       identifierType === "email"
