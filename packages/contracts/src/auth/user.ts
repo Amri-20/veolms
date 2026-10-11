@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { emailInput } from "./email-input.ts";
 import {
   PUBLIC_PROFILE_USERNAME_MAX_LENGTH,
   PUBLIC_PROFILE_USERNAME_MIN_LENGTH,
@@ -7,10 +8,7 @@ import {
 
 export const otpSendRequestSchema = z
   .object({
-    email: z
-      .email("Invalid email address")
-      .max(255)
-      .toLowerCase()
+    email: emailInput("Invalid email address")
       .meta({ example: "ada@example.com" })
       .optional(),
     phoneNo: z
@@ -26,12 +24,7 @@ export const otpSendRequestSchema = z
 
 export const otpVerifyRequestSchema = z
   .object({
-    email: z
-      .email()
-      .max(255)
-      .toLowerCase()
-      .meta({ example: "ada@example.com" })
-      .optional(),
+    email: emailInput().meta({ example: "ada@example.com" }).optional(),
     phoneNo: z.string().meta({ example: "+15551234567" }).optional(),
     code: z
       .string()
@@ -80,10 +73,7 @@ export const emailVerificationVerifyRequestSchema = z.strictObject({
 
 export const registerRequestSchema = z
   .object({
-    email: z
-      .email("Invalid email address")
-      .max(255)
-      .toLowerCase()
+    email: emailInput("Invalid email address")
       .meta({ example: "ada@example.com" })
       .optional(),
     phoneNo: z
@@ -253,11 +243,9 @@ export const creatorRegisterRequestSchema = z.object({
     .min(1, "Name is required")
     .max(100)
     .meta({ example: "Ada Lovelace" }),
-  email: z
-    .email("Invalid email address")
-    .max(255)
-    .toLowerCase()
-    .meta({ example: "ada@example.com" }),
+  email: emailInput("Invalid email address").meta({
+    example: "ada@example.com",
+  }),
   phoneNo: z
     .string()
     .trim()
