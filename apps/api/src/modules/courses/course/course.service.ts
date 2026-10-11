@@ -355,6 +355,19 @@ export function createCourseService({
   /**
    * Verifies course existence and owner permissions.
    */
+  /** Refuses a category id that names no category. */
+  async function assertCategoryExists(
+    categoryId: string | null | undefined,
+  ): Promise<void> {
+    if (!categoryId) return;
+    if (await categoryService.findCategoryById(categoryId)) return;
+    throw new AppError(
+      400,
+      "INVALID_CATEGORY",
+      "Selected category does not exist.",
+    );
+  }
+
   function getCourseAndVerifyOwner(
     courseId: string,
     creatorId: string,
@@ -596,6 +609,9 @@ export function createCourseService({
     const shortDescription = data.shortDescription ?? null;
     const description = data.description ?? null;
     const categoryId = data.categoryId ?? null;
+    // The same refusal an edit gives. Without it an unknown id reached the
+    // foreign key and came back as a generic error.
+    await assertCategoryExists(categoryId);
     const difficulty = (data.difficulty ?? data.difficultyLevel ?? null) as
       "beginner" | "intermediate" | "advanced" | null;
     const thumbnailMediaId = data.thumbnailMediaId ?? null;
@@ -812,18 +828,7 @@ export function createCourseService({
       );
     }
 
-    if (updates.categoryId) {
-      const category = await categoryService.findCategoryById(
-        updates.categoryId,
-      );
-      if (!category) {
-        throw new AppError(
-          400,
-          "INVALID_CATEGORY",
-          "Selected category does not exist.",
-        );
-      }
-    }
+    await assertCategoryExists(updates.categoryId);
 
     if (updates.thumbnailMediaId) {
       const thumb = await mediaService.getMediaAsset(
@@ -1294,6 +1299,7 @@ export function createCourseService({
     },
   ) {
     await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await assertCategoryExists(payload.categoryId);
 
     const updates: Record<string, unknown> = {};
     if (payload.title !== undefined) updates.title = payload.title;
