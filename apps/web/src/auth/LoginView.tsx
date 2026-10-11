@@ -50,6 +50,14 @@ function rememberCodeSent(identifier: AuthIdentifier) {
   };
 }
 
+// When this tab last had a code sent to that destination, if it did.
+function codeSentAt(identifier: AuthIdentifier): number | null {
+  return lastCodeSent !== null &&
+    lastCodeSent.destination === resolveDestination(identifier)
+    ? lastCodeSent.at
+    : null;
+}
+
 // Once a code has been used it is no longer one the visitor can still enter.
 function forgetCodeSent() {
   lastCodeSent = null;
@@ -255,12 +263,13 @@ export function LoginView({
     } catch (err: unknown) {
       const errorObj = err as { code?: string; message?: string };
 
+      // By its code only. Any refusal whose wording happened to mention
+      // registering was once taken for "this is a new account" as well, and
+      // moved the visitor on to the name step with a code nobody had checked.
       if (
         errorObj.code === "REGISTRATION_REQUIRED" ||
         errorObj.code === "USER_NOT_FOUND" ||
-        errorObj.code === "NO_USER" ||
-        (errorObj.message &&
-          errorObj.message.toLowerCase().includes("register"))
+        errorObj.code === "NO_USER"
       ) {
         const requiredSecondary =
           primaryVerifiedIdentifier === null
@@ -429,6 +438,7 @@ export function LoginView({
           onSubmit={(code) => handleVerifyCode(otpStep.identifier, code)}
           resending={otpStep.status === "sendingOtp"}
           sendCount={otpStep.sendCount}
+          sentAt={codeSentAt(otpStep.identifier)}
           status={otpStep.status === "verifyingOtp" ? "verifying" : "idle"}
         />
       );

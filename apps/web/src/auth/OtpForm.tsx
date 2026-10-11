@@ -27,6 +27,12 @@ export interface OtpFormProps {
   errorMessage?: string | null;
   /** Replaces the line under the heading, e.g. when the code was sent earlier. */
   notice?: string | null;
+  /**
+   * When the code on its way was sent (epoch milliseconds), if known. The
+   * wait before another can be requested runs from then, not from when this
+   * form appeared.
+   */
+  sentAt?: number | null;
   sendCount: number;
   onSubmit: (code: string) => void;
   onResend: () => void;
@@ -43,6 +49,22 @@ const SUBHEADINGS = {
   email: "Enter the 6-digit code sent to your email",
   mobile: "Enter the 6-digit code sent to your mobile number",
 } as const;
+
+/**
+ * Seconds left before another code may be requested. This form is taken off
+ * the page and put back as the visitor moves between steps (to the name step
+ * and back, or closing and reopening the login pop-up). Counting from when
+ * it appeared made each return start a full wait again, although the server
+ * counts from the send.
+ */
+function resendSecondsLeft(sentAt: number | null | undefined): number {
+  if (sentAt === null || sentAt === undefined) return RESEND_COOLDOWN_SECONDS;
+  const elapsed = Math.floor((Date.now() - sentAt) / MILLISECONDS_PER_SECOND);
+  return Math.min(
+    RESEND_COOLDOWN_SECONDS,
+    Math.max(0, RESEND_COOLDOWN_SECONDS - elapsed),
+  );
+}
 
 function resolveMessage(
   invalidReason: string | null,
@@ -72,12 +94,13 @@ export function OtpForm({
   onSubmit,
   resending = false,
   sendCount,
+  sentAt,
   status,
 }: OtpFormProps) {
   const verifying = status === "verifying";
   const [invalidReason, setInvalidReason] = useState<string | null>(null);
   const [countedSendCount, setCountedSendCount] = useState(sendCount);
-  const [remaining, setRemaining] = useState(RESEND_COOLDOWN_SECONDS);
+  const [remaining, setRemaining] = useState(() => resendSecondsLeft(sentAt));
   const message = resolveMessage(invalidReason, failure, errorMessage);
 
   if (countedSendCount !== sendCount) {
