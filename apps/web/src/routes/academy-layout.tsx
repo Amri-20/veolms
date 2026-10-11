@@ -132,6 +132,7 @@ import {
   getMatchedRouteDescriptor,
   getStaticRouteDescriptor,
   normalizeNavigationPath,
+  NOT_FOUND_SECTION,
 } from "../routing/routeDescriptors";
 
 export const links: Route.LinksFunction = () => [
@@ -460,7 +461,12 @@ export default function AcademyLayout() {
   const activeRouteSection = hasValidNavigationOrigin
     ? originSectionValue
     : (currentNavigationMatch?.label ??
-      (workspaceNavigationItems.some(([label]) => label === route.section)
+      // "Not found" is no sidebar entry, but it is the section the page has
+      // to be told about. Treated like any other unknown name it became the
+      // first entry, so an address that leads nowhere opened a page headed
+      // "Home is not implemented yet" instead of the not-found screen.
+      (route.section === NOT_FOUND_SECTION ||
+      workspaceNavigationItems.some(([label]) => label === route.section)
         ? route.section
         : workspaceNavigationItems[0]?.[0]));
   const showRouteBackButton = !currentNavigationMatch?.exact;
