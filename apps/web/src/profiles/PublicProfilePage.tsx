@@ -39,17 +39,21 @@ function PublicProfileAvatar({ profile }: { profile: PublicProfileResponse }) {
     setImageFailed(false);
   }, [profile.avatarDataUrl]);
 
+  // On someone's own profile page the portrait is content, not decoration,
+  // so it is named. The placeholder icon shown without one stays hidden.
+  const hasPortrait = Boolean(profile.avatarDataUrl) && !imageFailed;
+
   return (
     <span
       className="settings-profile__avatar settings-profile__avatar--large"
-      aria-hidden="true"
+      aria-hidden={hasPortrait ? undefined : true}
     >
       {profile.avatarDataUrl && !imageFailed ? (
         <ResponsiveAvatar
           src={profile.avatarDataUrl}
           srcSet={profile.avatarSrcSet}
           sizes="150px"
-          alt=""
+          alt={`${profile.displayName || profile.username}'s profile picture`}
           width={160}
           height={160}
           loading="eager"

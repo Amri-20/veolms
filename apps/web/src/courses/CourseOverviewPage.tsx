@@ -446,8 +446,14 @@ function CurriculumSectionItem({
                           if (isReadOnlyPreview) return;
                           onSelectLesson?.(number);
                         }}
-                        aria-label={`Lesson ${number}: ${title}${duration ? `, ${duration}` : ""}`}
                       >
+                        {/* The row is named by what it shows, with the lesson
+                            number added for screen readers. A separate
+                            aria-label used to replace the visible text with
+                            wording of its own ("Lesson 1: Title, 12:30"),
+                            which voice control cannot match to what is on
+                            screen and which left the "Free" badge out. */}
+                        <span className="sr-only">{`Lesson ${number}: `}</span>
                         {/* Content type icon */}
                         <span
                           className={`inline-flex w-5 shrink-0 items-center justify-center text-(--muted) transition-colors duration-140 ${
