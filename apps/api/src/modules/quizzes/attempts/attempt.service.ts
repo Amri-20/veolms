@@ -3,6 +3,10 @@ import type {
   BulkQuizAnswersRequest,
   QuizResponseValue,
 } from "@veolms/contracts";
+import {
+  hasUnsafeQuizAnswerContent,
+  UNSAFE_QUIZ_ANSWER_MESSAGE,
+} from "@veolms/contracts";
 import { AppError } from "../../../lib/errors.ts";
 import * as repo from "../shared/quiz.repository.ts";
 import * as pricingRepo from "../shared/quiz-pricing.repository.ts";
@@ -277,17 +281,29 @@ export function createAttemptService(options: QuizServiceOptions) {
     );
     if (existing) {
       const now = new Date();
-      if (
-        !isPastDeadline(
-          attemptDeadline(existing, assignment),
-          now,
-          ANSWER_SAVE_GRACE_MS,
-        )
-      )
+      const stillOpen = !isPastDeadline(
+        attemptDeadline(existing, assignment),
+        now,
+        ANSWER_SAVE_GRACE_MS,
+      );
+      if (stillOpen && existing.quiz_version_id === version.id)
         return buildAttempt(existing, assignment);
-      // Time ran out on the previous attempt: grade what was saved before
-      // a new attempt is opened.
-      await closer.closeIfOverdue(existing.id, now, ANSWER_SAVE_GRACE_MS);
+      if (stillOpen) {
+        // Open on a version the assignment has since moved away from. The
+        // move clears these out; this one was started while it happened.
+        // It goes the same way, and a fresh attempt on the current version
+        // is opened below under the same attempt number.
+        await repo.deleteOpenAttemptsOnOtherVersions(
+          database,
+          assignmentId,
+          version.id,
+          now,
+        );
+      } else {
+        // Time ran out on the previous attempt: grade what was saved
+        // before a new attempt is opened.
+        await closer.closeIfOverdue(existing.id, now, ANSWER_SAVE_GRACE_MS);
+      }
     }
     checkRateLimit(
       startAttemptTimestamps,
@@ -429,6 +445,14 @@ export function createAttemptService(options: QuizServiceOptions) {
           "INVALID_TEXT_RESPONSE",
           "Short answer response must be a text string.",
         );
+      // Checked as it will be stored. The page refuses this before it is
+      // sent; this is for whatever does not go through the page.
+      if (
+        hasUnsafeQuizAnswerContent(
+          cleanQuizTextAnswer(response.textResponse ?? ""),
+        )
+      )
+        throw new AppError(400, "UNSAFE_ANSWER", UNSAFE_QUIZ_ANSWER_MESSAGE);
       return;
     }
     const ids = response.selectedOptionIds ?? [];

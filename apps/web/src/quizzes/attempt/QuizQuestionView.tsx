@@ -1,9 +1,8 @@
 import { CheckIcon as Check } from "@phosphor-icons/react/Check";
-import {
-  QUIZ_TEXT_RESPONSE_MAX_LENGTH,
-  type LearnerQuizAttempt,
-} from "@veolms/contracts";
+import type { LearnerQuizAttempt } from "@veolms/contracts";
+import { QuizFormattedText } from "./QuizFormattedText";
 import { QUIZ_EYEBROW } from "./QuizStage";
+import { QuizWrittenAnswer } from "./QuizWrittenAnswer";
 
 type QuizQuestion = LearnerQuizAttempt["questions"][number];
 
@@ -22,7 +21,7 @@ const ANSWER_HINT: Record<QuizQuestion["questionType"], string> = {
   single_choice: "Choose one answer",
   multiple_choice: "Select all that apply",
   true_false: "True or false",
-  short_answer: "Type your answer",
+  short_answer: "Write your answer",
 };
 
 export function QuizQuestionView({
@@ -41,54 +40,39 @@ export function QuizQuestionView({
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
-        <p className={QUIZ_EYEBROW}>
+        {/* The heading of the question. The question text below can hold
+            paragraphs, lists and code, which a heading cannot. */}
+        <h2 className={QUIZ_EYEBROW}>
           Question {index + 1}
           <span className="font-semibold opacity-70"> of {total}</span>
-        </p>
+        </h2>
         <p className="shrink-0 text-xs font-medium text-(--muted) tabular-nums">
           {question.points} point{question.points === 1 ? "" : "s"}
         </p>
       </div>
 
       {/* The question is what the learner came for, so it carries the
-          largest type on the stage; it was the same size as its options. */}
-      <h2
-        id={promptId}
-        className="mt-2.5 text-[1.125rem] leading-[1.45] font-semibold tracking-[-0.011em] wrap-break-word text-(--text) sm:mt-3 sm:text-xl lg:text-[1.375rem]"
-      >
-        {question.prompt}
-      </h2>
+          largest type on the stage; it was the same size as its options.
+          It is drawn with the formatting the author gave it. */}
+      <div id={promptId} className="mt-2.5 sm:mt-3">
+        <QuizFormattedText
+          text={question.prompt}
+          label="Question"
+          className="text-[1.125rem]! leading-[1.45]! font-semibold tracking-[-0.011em] text-(--text)! sm:text-xl! lg:text-[1.375rem]! [&_strong]:font-extrabold"
+        />
+      </div>
       <p className="mt-1.5 text-[0.8125rem] text-(--muted)">
         {ANSWER_HINT[question.questionType] ?? ANSWER_HINT.single_choice}
       </p>
 
       {question.questionType === "short_answer" ? (
-        <div className="mt-5 sm:mt-6">
-          <input
-            id={`question-input-${question.id}`}
-            type="text"
-            aria-labelledby={promptId}
-            disabled={disabled}
-            value={textResponse}
-            onChange={(event) => onTextChange(event.target.value)}
-            placeholder="Your answer"
-            // The server takes no more than this; without the cap here a
-            // longer answer made the save of every answer fail.
-            maxLength={QUIZ_TEXT_RESPONSE_MAX_LENGTH}
-            autoComplete="off"
-            // The answer is compared with the accepted ones, so a phone
-            // keyboard must not "correct" or capitalise what was typed.
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            enterKeyHint="done"
-            className="h-13 w-full rounded-[14px] bg-(--card-surface-raised,var(--surface-strong)) px-4 text-base! font-medium! text-(--text) ring-1 ring-[color-mix(in_srgb,var(--text)_12%,transparent)] transition-shadow outline-none ring-inset placeholder:font-normal placeholder:text-(--muted) focus:ring-2 focus:ring-(--accent) disabled:cursor-not-allowed disabled:opacity-60"
-          />
-          <p className="mt-2 text-xs leading-relaxed text-(--muted)">
-            Type anything: letters, numbers, symbols or code. Capital letters
-            and extra spaces do not matter.
-          </p>
-        </div>
+        <QuizWrittenAnswer
+          questionId={question.id}
+          labelledBy={promptId}
+          value={textResponse}
+          disabled={disabled}
+          onChange={onTextChange}
+        />
       ) : (
         <fieldset
           disabled={disabled}

@@ -41,12 +41,25 @@ import {
   answeredQuestionCount,
   formatQuizRemainingTime,
   hasAnsweredEveryQuestion,
+  hasRefusedAnswer,
   isQuestionAnswered,
   serverClockOffsetMs,
   toBulkQuizAnswers,
   type QuizAttemptDraft,
 } from "./quizDraft";
 import { QuizEnrollmentCard } from "./QuizEnrollmentCard";
+
+/**
+ * An error as a learner should read it. A request the server could not
+ * accept comes back described in terms of its fields and schema; that is for
+ * a developer, and what the learner can do with it is try again.
+ */
+function learnerQuizError(error: unknown) {
+  const apiError = getApiError(error);
+  return apiError.code === "REQUEST_VALIDATION_FAILED"
+    ? "We could not accept that. Please check your answers and try again."
+    : apiError.message;
+}
 
 /** The lesson page shows this while the quiz assignment itself is loading. */
 export { QuizStageMessage };
@@ -88,6 +101,9 @@ export function QuizAttemptPanel({
   // it, opening the quiz again only shows where they stand: starting another
   // attempt (and its timer) takes an explicit click.
   const [startConfirmed, setStartConfirmed] = useState(false);
+  // The quiz was republished while this learner had it open, and their
+  // attempt restarted on the new questions.
+  const [restartedForUpdate, setRestartedForUpdate] = useState(false);
   const awaitingStartConfirmation = attemptCount > 0 && !startConfirmed;
   const prevAssignmentIdRef = useRef(assignmentId);
   const startRequestedForAssignmentRef = useRef<string | null>(null);
@@ -103,6 +119,7 @@ export function QuizAttemptPanel({
       setAttemptId(activeAttemptId);
       setResult(null);
       setStartConfirmed(false);
+      setRestartedForUpdate(false);
       return;
     }
     if (
@@ -193,10 +210,26 @@ export function QuizAttemptPanel({
     enabled: Boolean(attempt),
     // Partial drafts are saved too. Saving only a complete draft meant a
     // student who ran out of time one question short had nothing recorded.
-    validate: () =>
-      attempt ? true : { valid: false, message: "Quiz is still loading." },
+    validate: (draft) => {
+      if (!attempt) return { valid: false, message: "Quiz is still loading." };
+      // Held back here, where the learner is shown why (see
+      // QuizWrittenAnswer), instead of sent to be refused by the server.
+      if (hasRefusedAnswer(attempt, draft)) {
+        return { valid: false, message: "An answer needs changing." };
+      }
+      return true;
+    },
     sync: (draft) =>
-      quizzesService.saveAnswers(attempt!.id, toBulkQuizAnswers(draft)),
+      quizzesService
+        .saveAnswers(attempt!.id, toBulkQuizAnswers(draft))
+        .catch((error: unknown) => {
+          // The attempt is gone: see the restart below. Asking for it again
+          // is what notices.
+          if (getApiError(error).code === "ATTEMPT_NOT_FOUND") {
+            void attemptQuery.refetch();
+          }
+          throw error;
+        }),
   });
   const answersUnsaved = isAutosaveUnsaved(autosync.status);
   const autosyncValue = autosync.value;
@@ -242,6 +275,26 @@ export function QuizAttemptPanel({
   }, [attempt, autosyncIsRestoring, autosyncValue, flushAutosync]);
 
   const refetchAttempt = attemptQuery.refetch;
+
+  // An open attempt is removed when the author publishes new questions for
+  // the quiz: the learner restarts on those, without using up an attempt.
+  // The page that still had the old attempt open finds it gone and starts
+  // again here, instead of stopping at "Unable to open this quiz".
+  const attemptGone =
+    Boolean(attemptId) && !result && attemptErrorCode === "ATTEMPT_NOT_FOUND";
+  useEffect(() => {
+    if (!attemptGone) return;
+    dismissedAttemptIdRef.current = attemptId;
+    startRequestedForAssignmentRef.current = null;
+    expiryRefreshRef.current = null;
+    discardAutosync();
+    resetStart();
+    setRestartedForUpdate(true);
+    // The count of attempts the page was given still includes the one that
+    // is gone; without this it would stop to ask before starting.
+    setStartConfirmed(true);
+    setAttemptId(null);
+  }, [attemptGone, attemptId, discardAutosync, resetStart]);
   useEffect(() => {
     if (!attempt?.expiresAt) return undefined;
     setNow(Date.now());
@@ -378,7 +431,8 @@ export function QuizAttemptPanel({
   const openingError =
     startError ??
     (attemptClosed ? closedResultQuery.error : attemptQuery.error);
-  if (openingError) {
+  // A removed attempt is not an error to show: the quiz is restarting.
+  if (openingError && !attemptGone) {
     const retryOpening = () => {
       if (startError) {
         resetStart();
@@ -410,11 +464,17 @@ export function QuizAttemptPanel({
           </Button>
         }
       >
-        {openingError.message}
+        {learnerQuizError(openingError)}
       </QuizStageMessage>
     );
   }
-  if (attemptQuery.isLoading || isStarting || !attempt || attemptClosed) {
+  if (
+    attemptQuery.isLoading ||
+    isStarting ||
+    !attempt ||
+    attemptClosed ||
+    attemptGone
+  ) {
     return (
       <QuizStageMessage
         lessonBadge={lessonBadge}
@@ -498,6 +558,8 @@ export function QuizAttemptPanel({
       }
     } catch {
       /* Autosync keeps the draft for retry. */
+      // If the attempt was removed meanwhile, this is what finds out.
+      void attemptQuery.refetch();
     } finally {
       setIsSubmitting(false);
     }
@@ -584,6 +646,17 @@ export function QuizAttemptPanel({
         {/* Held to the bottom of the stage, so the buttons stay where they
             are from one question to the next whatever its length. */}
         <div className="mt-auto grid gap-3 pt-7 sm:pt-9">
+          {restartedForUpdate ? (
+            <QuizNotice
+              tone="caution"
+              icon={
+                <WarningCircle size={17} weight="bold" aria-hidden="true" />
+              }
+            >
+              This quiz was updated, so it has restarted with the latest
+              questions. It does not count as an extra attempt.
+            </QuizNotice>
+          ) : null}
           {timeExpired ? (
             <QuizNotice
               tone="negative"
@@ -603,7 +676,7 @@ export function QuizAttemptPanel({
                 <WarningCircle size={17} weight="bold" aria-hidden="true" />
               }
             >
-              {submit.error.message}
+              {learnerQuizError(submit.error)}
             </QuizNotice>
           ) : null}
           <QuizAttemptFooter

@@ -54,6 +54,7 @@ import { ThemedSelect, type ThemedSelectOption } from "../ThemedSelect";
 import { ThemedDateTimePicker } from "../ThemedDateTimePicker";
 import { SettingsToggle } from "../settings/SettingsControls";
 import { QuizRichTextField } from "./QuizRichTextField";
+import { markdownToPlainText } from "../learning/discussion-editor/types";
 import { selectQuizAssignment } from "./quizAssignmentSelection";
 import { AutosaveStatus } from "../lib/autosync";
 import { ConfirmActionModal } from "../shell/ConfirmActionModal";
@@ -147,7 +148,7 @@ const QUESTION_TYPES: readonly {
   {
     type: "short_answer",
     label: "Short Answer",
-    description: "Learners type the answer",
+    description: "Learners write anything",
     icon: FileText,
   },
 ];
@@ -349,6 +350,12 @@ export function QuizAuthoringPanel({
   >(null);
   const questionDebounceRef = useRef<number | null>(null);
   const pendingSaveAfterCreateRef = useRef(false);
+  // "Publish changes" in two steps, so that what is published is what is on
+  // screen: first the question being edited is saved, then the quiz is
+  // published. Null when no publish is under way.
+  const [publishStep, setPublishStep] = useState<"save" | "publish" | null>(
+    null,
+  );
   // Why a save or publish was held back before it reached the server: the
   // number of the unfinished question and what it still needs.
   const [unfinishedQuestion, setUnfinishedQuestion] = useState<{
@@ -884,10 +891,11 @@ export function QuizAuthoringPanel({
 
       if (
         !quizId ||
-        !qPrompt ||
-        qOptions.length === 0 ||
-        qOptions.some((option) => !option.text.trim()) ||
-        !qOptions.some((option) => option.isCorrect) ||
+        quizQuestionProblem({
+          questionType: qType,
+          prompt: qPromptValue,
+          options: editedOptions,
+        }) ||
         updateQuestion.isPending
       )
         return;
@@ -979,14 +987,8 @@ export function QuizAuthoringPanel({
       ];
       setOptions(nextOptions);
     } else if (nextType === "short_answer") {
-      const existingText = options[0]?.text?.trim() || "";
-      const isPlaceholder =
-        /^Option\s*\d+$/i.test(existingText) ||
-        existingText.toLowerCase() === "true" ||
-        existingText.toLowerCase() === "false";
-      nextOptions = [
-        { text: isPlaceholder ? "" : existingText, isCorrect: true },
-      ];
+      // A free response has no options.
+      nextOptions = [];
       setOptions(nextOptions);
     } else if (
       options.length < 2 ||
@@ -1213,6 +1215,65 @@ export function QuizAuthoringPanel({
     );
   };
 
+  /**
+   * True when the question open in the editor is unfinished, having told the
+   * author so. An unfinished question is not saved, so publishing now would
+   * publish the quiz without the change the author is in the middle of.
+   */
+  const heldByUnfinishedQuestion = () => {
+    const editingAt = (version?.questions ?? []).findIndex(
+      (question) => question.id === editingQuestionId,
+    );
+    const problem =
+      editingAt >= 0
+        ? quizQuestionProblem({ questionType, prompt, options })
+        : null;
+    setUnfinishedQuestion(problem ? { number: editingAt + 1, problem } : null);
+    return Boolean(problem);
+  };
+
+  /** Points the lesson at a published version of this quiz. */
+  const moveLessonToVersion = (versionId: string) => {
+    if (!assignment) return;
+    setAssignmentVersionId(versionId);
+    setAssignmentSaveStatus("saving");
+    updateAssignment.mutate(
+      {
+        id: assignment.id,
+        payload: { ...assignmentPayload(), quizVersionId: versionId },
+      },
+      {
+        onSuccess: () => setAssignmentSaveStatus("saved"),
+        onError: () => setAssignmentSaveStatus("failed"),
+      },
+    );
+  };
+
+  /**
+   * Makes the edits to an assigned quiz reach its learners: publishes the
+   * draft the edits were saved into, then points the lesson at it. Editing a
+   * published quiz never changes what learners are taking; until this runs
+   * they keep getting the version that was published before.
+   */
+  const publishChangesNow = () => {
+    if (!quizId) return;
+    publish.mutate(quizId, {
+      onSuccess: (publishedQuiz) => {
+        const published = publishedQuiz.versions
+          .filter((item) => item.publishedAt)
+          .at(-1);
+        if (published) moveLessonToVersion(published.id);
+      },
+    });
+  };
+
+  const publishChanges = () => {
+    if (!quizId || publish.isPending || updateAssignment.isPending) return;
+    if (heldByUnfinishedQuestion()) return;
+    // Carried on by the effect below.
+    setPublishStep("save");
+  };
+
   const publishAndAssign = () => {
     if (!quizId) {
       if (create.isPending || !draftQuestions.length) return;
@@ -1227,23 +1288,7 @@ export function QuizAuthoringPanel({
       return;
     }
     if (!version) return;
-    // An unfinished question is not saved, so publishing now would publish
-    // the quiz without the change the author is in the middle of.
-    const editingAt = version.questions.findIndex(
-      (question) => question.id === editingQuestionId,
-    );
-    const editingProblemNow =
-      editingAt >= 0
-        ? quizQuestionProblem({ questionType, prompt, options })
-        : null;
-    if (editingProblemNow) {
-      setUnfinishedQuestion({
-        number: editingAt + 1,
-        problem: editingProblemNow,
-      });
-      return;
-    }
-    setUnfinishedQuestion(null);
+    if (heldByUnfinishedQuestion()) return;
     if (
       version.publishedAt &&
       quiz.data &&
@@ -1260,6 +1305,26 @@ export function QuizAuthoringPanel({
       );
     }
   };
+
+  useEffect(() => {
+    // Each step waits for a question save that is still on its way.
+    if (publishStep === null || updateQuestion.isPending) return;
+    if (publishStep === "save") {
+      // Edits are saved on a short delay, and a save is skipped while an
+      // earlier one is in flight. Sent now, with nothing in flight, the
+      // question is stored exactly as it stands.
+      flushQuestionSave();
+      setPublishStep("publish");
+      return;
+    }
+    setPublishStep(null);
+    // The edit did not go through: publishing would leave it out.
+    if (updateQuestion.error) return;
+    publishChangesNow();
+    // Driven by the step and by the save settling; the functions it calls
+    // are not reasons to run again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publishStep, updateQuestion.isPending]);
 
   const courseOptions: readonly ThemedSelectOption<string>[] = useMemo(() => {
     const courses = myCourses.data?.courses ?? [];
@@ -1393,6 +1458,28 @@ export function QuizAuthoringPanel({
   const canPersistBrowserDraft = Boolean(
     quizTitle.trim() || lessonTitle?.trim(),
   );
+  // Where an assigned quiz stands against what its learners are getting.
+  const latestPublishedVersion = (quiz.data?.versions ?? [])
+    .filter((item) => item.publishedAt)
+    .at(-1);
+  const assignedToThisLesson = Boolean(
+    assignment && assignment.quizId === quizId,
+  );
+  // Edits to a published quiz are saved into a draft. Learners do not get
+  // them until that draft is published and the lesson pointed at it.
+  const hasUnpublishedChanges =
+    assignedToThisLesson && Boolean(version && !version.publishedAt);
+  // Published, but the lesson is still on an earlier version.
+  const lessonOnOlderVersion =
+    assignedToThisLesson &&
+    !hasUnpublishedChanges &&
+    Boolean(
+      latestPublishedVersion &&
+      assignment?.quizVersionId !== latestPublishedVersion.id,
+    );
+  const publishingChanges =
+    publishStep !== null || publish.isPending || updateAssignment.isPending;
+
   // The question open in the editor, as it stands right now.
   const editingProblem = editingQuestionId
     ? quizQuestionProblem({ questionType, prompt, options })
@@ -1658,7 +1745,11 @@ export function QuizAuthoringPanel({
                   total points
                 </span>
                 <span className="rounded-full bg-[color-mix(in_srgb,var(--text)_8%,var(--surface))] px-2.5 py-0.5 sm:py-1 text-[0.7rem] sm:text-[0.72rem] font-semibold text-(--text-secondary)">
-                  {version?.publishedAt ? "Published version" : "Draft version"}
+                  {hasUnpublishedChanges
+                    ? "Unpublished changes"
+                    : version?.publishedAt
+                      ? "Published version"
+                      : "Draft version"}
                 </span>
               </div>
             </div>
@@ -1670,7 +1761,11 @@ export function QuizAuthoringPanel({
                 const correctCount = question.options.filter(
                   (option) => option.isCorrect,
                 ).length;
-                const promptSummary = stripHtml(question.prompt);
+                // One line of plain text: the formatting marks of the
+                // question ("**", backticks) are not part of its summary.
+                const promptSummary = markdownToPlainText(
+                  stripHtml(question.prompt),
+                );
 
                 return (
                   <div
@@ -1713,7 +1808,7 @@ export function QuizAuthoringPanel({
                         </span>
                         <span className="hidden md:inline-block text-[0.72rem] text-(--muted)">
                           {question.questionType === "short_answer"
-                            ? "Text input answer"
+                            ? "Free response"
                             : `${correctCount} correct choice${correctCount === 1 ? "" : "s"}`}
                         </span>
                         <button
@@ -1938,135 +2033,24 @@ export function QuizAuthoringPanel({
 
                         {/* Short Answer (Input Box Question) vs Multiple Choice Options */}
                         {questionType === "short_answer" ? (
-                          <div className="rounded-[10px] sm:rounded-[12px] bg-[color-mix(in_srgb,var(--canvas)_75%,var(--surface))] p-3 sm:p-4 border border-[color-mix(in_srgb,var(--text)_8%,transparent)] shadow-[inset_0_1px_3px_color-mix(in_srgb,black_10%,transparent)] space-y-3">
+                          // A free response: the learner writes anything and
+                          // there is nothing to match it against, so there
+                          // is nothing for the author to fill in here.
+                          <div className="flex items-start gap-3 rounded-[10px] sm:rounded-[12px] bg-[color-mix(in_srgb,var(--canvas)_75%,var(--surface))] p-3 sm:p-4 border border-[color-mix(in_srgb,var(--text)_8%,transparent)] shadow-[inset_0_1px_3px_color-mix(in_srgb,black_10%,transparent)]">
+                            <FileText
+                              size={18}
+                              weight="duotone"
+                              className="mt-0.5 shrink-0 text-(--accent)"
+                            />
                             <div>
                               <span className="text-xs font-bold text-(--text) tracking-tight">
-                                Accepted answer
+                                Learners get a text box
                               </span>
-                              <p className="mt-0.5 text-[0.72rem] text-(--muted)">
-                                Learners type their answer. It is marked correct
-                                when it matches an answer below. Capital letters
-                                and spaces around it do not matter.
+                              <p className="mt-0.5 text-[0.72rem] leading-relaxed text-(--muted)">
+                                They can write anything. Any answer earns this
+                                question&apos;s full points; a blank answer
+                                earns none. There is no correct answer to set.
                               </p>
-                            </div>
-
-                            {/* Primary Answer Box */}
-                            <div className="space-y-2.5">
-                              <div>
-                                <input
-                                  value={options[0]?.text ?? ""}
-                                  onChange={(event) => {
-                                    const val = event.target.value;
-                                    const nextOpts = [
-                                      {
-                                        ...(options[0] ?? {}),
-                                        text: val,
-                                        isCorrect: true,
-                                      },
-                                      ...options.slice(1).map((o) => ({
-                                        ...o,
-                                        isCorrect: true,
-                                      })),
-                                    ];
-                                    setOptions(nextOpts);
-                                    scheduleAutoSaveQuestion(
-                                      undefined,
-                                      nextOpts,
-                                    );
-                                  }}
-                                  onBlur={() => flushQuestionSave()}
-                                  className={`${inputClass} w-full !h-9.5 sm:!h-10 text-sm`}
-                                  // Choosing Short Answer leaves this empty,
-                                  // and the question cannot be saved until it
-                                  // is filled: put the cursor here.
-                                  autoFocus={!options[0]?.text}
-                                  aria-label="Accepted answer"
-                                  aria-invalid={!options[0]?.text.trim()}
-                                  placeholder="e.g. Photosynthesis"
-                                />
-                              </div>
-
-                              {/* Alternative accepted answers (if any) */}
-                              {options.length > 1 && (
-                                <div className="pt-1.5 space-y-2">
-                                  <span className="block text-[0.72rem] font-semibold text-(--text-secondary)">
-                                    Also accept
-                                  </span>
-                                  {options.slice(1).map((option, altIndex) => {
-                                    const realIndex = altIndex + 1;
-                                    return (
-                                      <div
-                                        key={option.id ?? realIndex}
-                                        className="flex items-center gap-2"
-                                      >
-                                        <input
-                                          value={option.text}
-                                          onChange={(event) => {
-                                            const nextOpts = options.map(
-                                              (item, idx) =>
-                                                idx === realIndex
-                                                  ? {
-                                                      ...item,
-                                                      text: event.target.value,
-                                                      isCorrect: true,
-                                                    }
-                                                  : item,
-                                            );
-                                            setOptions(nextOpts);
-                                            scheduleAutoSaveQuestion(
-                                              undefined,
-                                              nextOpts,
-                                            );
-                                          }}
-                                          onBlur={() => flushQuestionSave()}
-                                          className={`${inputClass} flex-1 min-w-0 !h-9 text-xs sm:text-sm`}
-                                          aria-label={`Alternative accepted answer ${realIndex}`}
-                                          placeholder="Another spelling or an abbreviation"
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const nextOpts = options.filter(
-                                              (_, idx) => idx !== realIndex,
-                                            );
-                                            setOptions(nextOpts);
-                                            scheduleAutoSaveQuestion(
-                                              undefined,
-                                              nextOpts,
-                                            );
-                                          }}
-                                          title={`Remove alternative answer ${realIndex}`}
-                                          aria-label={`Remove alternative answer ${realIndex}`}
-                                          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-(--muted) hover:bg-rose-500/10 hover:text-rose-500 transition-colors cursor-pointer"
-                                        >
-                                          <Trash size={14} />
-                                        </button>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              <div>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const nextOptions = [
-                                      ...options,
-                                      { text: "", isCorrect: true },
-                                    ];
-                                    setOptions(nextOptions);
-                                    scheduleAutoSaveQuestion(
-                                      undefined,
-                                      nextOptions,
-                                    );
-                                  }}
-                                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-(--accent) hover:underline cursor-pointer"
-                                >
-                                  <Plus size={13} weight="bold" />
-                                  <span>Add another accepted answer</span>
-                                </button>
-                              </div>
                             </div>
                           </div>
                         ) : (
@@ -2365,16 +2349,36 @@ export function QuizAuthoringPanel({
               <div className="space-y-3 sm:space-y-4">
                 {assignment ? (
                   assignment.quizId === quizId ? (
-                    <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs font-medium text-emerald-500">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <CheckCircle
-                          size={15}
-                          weight="bold"
-                          className="shrink-0"
-                        />
-                        <span className="truncate">
-                          This quiz is currently assigned to this lesson.
-                          Delivery rules are active and auto-saving.
+                    <div
+                      className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs font-medium ${
+                        hasUnpublishedChanges || lessonOnOlderVersion
+                          ? `border-[color-mix(in_srgb,#f59e0b_30%,transparent)] bg-[color-mix(in_srgb,#f59e0b_10%,transparent)] ${CAUTION_TEXT}`
+                          : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+                      }`}
+                    >
+                      <div className="flex items-start gap-2 min-w-0">
+                        {hasUnpublishedChanges || lessonOnOlderVersion ? (
+                          <WarningCircle
+                            size={15}
+                            weight="bold"
+                            className="mt-px shrink-0"
+                          />
+                        ) : (
+                          <CheckCircle
+                            size={15}
+                            weight="bold"
+                            className="mt-px shrink-0"
+                          />
+                        )}
+                        {/* Said plainly, because it was not: the banner
+                            used to read "active and auto-saving" while
+                            learners went on getting the old questions. */}
+                        <span>
+                          {hasUnpublishedChanges
+                            ? "Your changes are saved, but learners still get the version published before. Publish changes to give them this one."
+                            : lessonOnOlderVersion
+                              ? "A newer version of this quiz is published, but this lesson is still on an older one."
+                              : "This quiz is assigned to this lesson, and learners get its latest published version."}
                         </span>
                       </div>
                       <button
@@ -2634,7 +2638,39 @@ export function QuizAuthoringPanel({
                       {create.isPending ? "Saving quiz..." : "Save draft"}
                     </Button>
                   ) : null}
-                  {assignment && assignment.quizId === quizId ? (
+                  {hasUnpublishedChanges || lessonOnOlderVersion ? (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <Button
+                        onClick={
+                          hasUnpublishedChanges
+                            ? publishChanges
+                            : () =>
+                                latestPublishedVersion &&
+                                moveLessonToVersion(latestPublishedVersion.id)
+                        }
+                        disabled={
+                          publishingChanges || !editableQuestions.length
+                        }
+                        className="h-9.5 sm:h-10 px-4 sm:px-5 font-semibold text-xs sm:text-sm"
+                      >
+                        {publishingChanges ? (
+                          <>
+                            <CircleNotch size={15} className="animate-spin" />
+                            Publishing...
+                          </>
+                        ) : hasUnpublishedChanges ? (
+                          "Publish changes"
+                        ) : (
+                          "Use latest version"
+                        )}
+                      </Button>
+                      <p className="max-w-md text-[0.72rem] leading-relaxed text-(--muted)">
+                        Learners who have not handed the quiz in restart on the
+                        new questions. Attempts already handed in keep their
+                        marks.
+                      </p>
+                    </div>
+                  ) : assignment && assignment.quizId === quizId ? (
                     <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 px-3.5 py-2 text-xs sm:text-sm font-semibold text-emerald-500">
                       <CheckCircle size={16} weight="bold" />
                       <span>Assigned to lesson</span>
