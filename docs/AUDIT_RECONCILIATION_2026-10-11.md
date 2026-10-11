@@ -516,3 +516,53 @@ On `chore/architecture-hygiene-audit-r1-r6`. One line of code changed; the rest 
 **Why so little.** Every finding here except R6 is a restructuring with no user-visible fault behind it. The value of such work comes from being able to run the result, and a browser or a production build is exactly what this pass could not use.
 
 **Staging checks still owed.** None for R6 beyond the discussion card showing the same actions to a moderator as before.
+
+## 18. Pre-push checks: status on 11 Oct 2026
+
+Four checks have to be answered before `dev` is pushed. **All four are BLOCKED**: each needs something that is not in this repository and that this pass did not have. Nothing was guessed, no production system was contacted, and no `.env` file was read.
+
+**What was used.** The deploy workflows, the worker configurations and the code in this repository; public DNS for the hostnames they name; and a local throwaway database to prove the two count queries run and count correctly.
+
+**What the repository shows about the deployment.**
+
+- The API is deployed by SSH to one server (`deploy-development-api.yml`): the code is checked out in an application directory, migrations run, and a PM2 or systemd service is restarted. Its settings come from a `.env` file on that server, which is not in the repository.
+- Only "development" deployments are defined. Nothing in the repository names a production environment, so "production" below means whatever that server and its web front end are.
+- `api-origin.dev.veolms.org` (the API address the web build uses) and `dev.veolms.org` (the web) resolve to Cloudflare addresses. `api.procodrr.dev`, the fallback API address in the web workflows, is an alias of a different host.
+- No reverse-proxy configuration (nginx, Caddy) is in the repository.
+
+| #   | Check                     | Status  | Evidence, and what is missing                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --- | ------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `TRUST_PROXY`             | BLOCKED | Known: at least one proxy (Cloudflare) sits in front of the API, so `false` is wrong, and `true` is unsafe because it takes whatever `X-Forwarded-For` a caller sends. Missing: the value in the server's `.env`; what, if anything, runs on the server in front of Node; whether the server accepts connections only from Cloudflare. The right value follows from those three (table below).                                                           |
+| 2   | Sign-in origins           | BLOCKED | Found in the repository: `https://dev.veolms.org`. Missing: the custom domains attached to the Cloudflare web worker (they are set in the Cloudflare dashboard, not in `wrangler.jsonc`) and to the CloudFront distribution, and whether a `workers.dev` address is live; and the server's `WEB_URL`, `CORS_ORIGINS` and `WEBAUTHN_ORIGINS`. An origin is allowed when it is in `CORS_ORIGINS` or in `WEBAUTHN_ORIGINS` (which defaults from `WEB_URL`). |
+| 3   | Restricted free courses   | BLOCKED | No production database was queried. The query is written, runs against the real schema and counts correctly on local test rows: `docs/audit-pre-push-checks.sql`.                                                                                                                                                                                                                                                                                        |
+| 4   | Unconfirmed phone numbers | BLOCKED | Same file. The rule it measures: phone sign-in is refused only for an account whose number was never confirmed **and** which has a confirmed email (it signs in by email and confirms the number from its profile). An account with no confirmed email keeps phone sign-in.                                                                                                                                                                              |
+
+**Check 1: the value for each topology.**
+
+| What is in front of Node                    | Value                                                  | Condition                                                                                                                 |
+| ------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Nothing (Node is reached directly)          | `false`                                                | Not the case here: Cloudflare is in front.                                                                                |
+| Cloudflare only                             | Cloudflare's published address ranges, comma-separated | Safe on its own: a caller who reaches the server directly is not trusted.                                                 |
+| Cloudflare only, by count                   | `1`                                                    | Only if the server refuses everything that does not come from Cloudflare. Otherwise a direct caller can forge the header. |
+| Cloudflare, then a proxy on the same server | `loopback` followed by Cloudflare's ranges             | The local proxy must append the address it received from to `X-Forwarded-For`.                                            |
+| Cloudflare, then a local proxy, by count    | `2`                                                    | Only with the same restriction to Cloudflare.                                                                             |
+
+Why this blocks the push rather than following it: the per-address limits on sign-in codes added under S13 are counted in the database. If Node sees Cloudflare's addresses instead of visitors' (`TRUST_PROXY=false` with no local proxy), every visitor arriving through one Cloudflare location shares one allowance, and a busy hour stops sign-ups for all of them.
+
+**To resolve the four.** On the API server, in the application directory (prints no secret):
+
+```bash
+grep -E '^(NODE_ENV|TRUST_PROXY|WEB_URL|CORS_ORIGINS|WEBAUTHN_ORIGINS|RP_ID)=' .env
+```
+
+```bash
+sudo ss -ltnp | grep -E ':(80|443)\b'
+```
+
+Then list the custom domains on the Cloudflare worker and the CloudFront distribution, and run the count file against the production database (read-only; it returns two rows of counts and writes nothing):
+
+```bash
+psql "$PRODUCTION_DATABASE_URL" -x -f docs/audit-pre-push-checks.sql
+```
+
+**How to read the counts.** Check 3: if `restricted_free_courses` is 0, nothing changes for anyone. Otherwise the learner counts beside it are the people who lose that course's quizzes and lesson discussions unless they are given a grant first. Check 4: `will_lose_phone_sign_in_keep_email` is the number of accounts that can no longer sign in by phone until they confirm their number; they can still sign in by email.
