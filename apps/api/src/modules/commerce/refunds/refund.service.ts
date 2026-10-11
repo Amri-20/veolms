@@ -169,6 +169,27 @@ export function createRefundService({
         );
       }
 
+      // A no-cost order has a payment row of zero and nothing to return.
+      // It used to be refused as "already fully refunded".
+      if (payment.gateway_provider === "free" || payment.amount === 0) {
+        throw CommerceErrors.REFUND_NOT_ALLOWED(
+          "This order had no charge, so there is nothing to refund.",
+        );
+      }
+
+      // A manual payment arrived by bank or UPI transfer, outside any
+      // gateway, so there is no gateway payment to refund. Asked anyway, the
+      // gateway refused the made-up payment id and every such refund failed
+      // as a gateway error. It is refused here instead, before anything is
+      // reserved or sent, and nothing about the order changes: this service
+      // cannot move that money, and it does not record a refund it did not
+      // make. The money is returned outside the platform.
+      if (payment.gateway_provider === "manual") {
+        throw CommerceErrors.REFUND_NOT_ALLOWED(
+          "This order was paid by manual transfer, so it cannot be refunded from here. Return the money outside the platform.",
+        );
+      }
+
       // Calculate total already refunded — safe from the race now that
       // this read happens under the order row's lock. No exclusion
       // needed: this refund doesn't exist as a row yet.

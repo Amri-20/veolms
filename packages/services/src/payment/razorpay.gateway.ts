@@ -53,6 +53,19 @@ export class RazorpayPaymentGateway implements PaymentGateway {
     endpoint: string,
     options: RequestInit = {},
   ): Promise<T> {
+    // Without credentials there is nothing to ask: the provider would only
+    // answer "unauthorised", and this answers the same way, which callers
+    // already treat as a definite refusal. Outside production the API
+    // starts without them (with a warning), so this is where a paid checkout
+    // stops, before any request leaves the machine.
+    if (!this.keyId || !this.keySecret) {
+      throw new AppError(
+        401,
+        "PAYMENT_GATEWAY_ERROR",
+        "Payment gateway is not configured",
+      );
+    }
+
     const url = `${this.baseUrl}${endpoint}`;
     const headers = {
       Authorization: this.getBasicAuthHeader(),
@@ -428,11 +441,17 @@ export class RazorpayPaymentGateway implements PaymentGateway {
         break;
     }
 
+    // The provider's own event id (a request header) when there is one.
+    // Without it the id is built from the event name and the entity it is
+    // about. The bare entity id used to stand in, which made every event
+    // about one payment look like a repeat of the first: an "authorized"
+    // notice was stored, and the "captured" one that followed was dropped
+    // as a duplicate. The same held for a refund's created and processed.
+    const entityId = refundEntity?.id ?? paymentEntity?.id;
     const resolvedEventId =
       eventId ||
       payloadObj?.id ||
-      paymentEntity?.id ||
-      refundEntity?.id ||
+      (entityId ? `${event ?? "event"}:${entityId}` : undefined) ||
       crypto.randomUUID();
 
     // Razorpay refund webhooks carry BOTH the refund entity and the payment

@@ -22,11 +22,10 @@ export const courseBundleSchema = z.strictObject({
   description: z.string().nullable().optional(),
   thumbnailMediaId: z.uuid().nullable().optional(),
   status: bundleStatusSchema,
-  price: z
-    .number()
-    .int()
-    .nonnegative()
-    .meta({ description: "Price in smallest currency unit (e.g. paise)" }),
+  price: z.number().int().nonnegative().meta({
+    description:
+      "Price in major currency units (e.g. rupees), as course prices are",
+  }),
   currency: z.string().length(3).default("INR"),
   items: z.array(bundleItemSchema).optional(),
   createdAt: z.string().or(z.date()),
@@ -65,6 +64,12 @@ export type OrderItemType = z.infer<typeof orderItemTypeSchema>;
 export const MIN_VOLUNTARY_AMOUNT = 1;
 /** Highest voluntary contribution, in major currency units (e.g. ₹5,00,000). */
 export const MAX_VOLUNTARY_AMOUNT = 500_000;
+
+/**
+ * Most items one checkout, preview or coupon check may name. Each entry is
+ * looked up and priced, and these endpoints are open to visitors.
+ */
+export const MAX_CHECKOUT_ITEMS = 50;
 
 export const cartItemInputSchema = z
   .strictObject({
@@ -234,7 +239,7 @@ export type UpdateCouponRequest = z.infer<typeof updateCouponRequestSchema>;
 
 export const validateCouponRequestSchema = z.strictObject({
   code: z.string().min(1).max(50).toUpperCase(),
-  items: z.array(cartItemInputSchema).min(1),
+  items: z.array(cartItemInputSchema).min(1).max(MAX_CHECKOUT_ITEMS),
 });
 export type ValidateCouponRequest = z.infer<typeof validateCouponRequestSchema>;
 
@@ -588,7 +593,7 @@ export const orderResponseSchema = z.union([
 export type OrderResponse = z.infer<typeof orderResponseSchema>;
 
 export const checkoutPreviewRequestSchema = z.strictObject({
-  items: z.array(cartItemInputSchema).min(1),
+  items: z.array(cartItemInputSchema).min(1).max(MAX_CHECKOUT_ITEMS),
   couponCode: z.string().max(50).toUpperCase().optional(),
 });
 export type CheckoutPreviewRequest = z.infer<
@@ -619,7 +624,7 @@ export type CheckoutPreviewResponse = z.infer<
 >;
 
 export const createCheckoutOrderRequestSchema = z.strictObject({
-  items: z.array(cartItemInputSchema).min(1),
+  items: z.array(cartItemInputSchema).min(1).max(MAX_CHECKOUT_ITEMS),
   couponCode: z.string().max(50).toUpperCase().optional(),
   idempotencyKey: z.string().max(255).optional(),
 });

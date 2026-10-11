@@ -708,6 +708,73 @@ export async function cancelFreeOrder(database: Executor, orderId: string) {
     .executeTakeFirst();
 }
 
+/**
+ * Takes an order's idempotency key away, so a repeat of the request that
+ * created it starts a new order. For an order nobody can continue: expired,
+ * cancelled or refunded.
+ */
+export async function releaseOrderIdempotencyKey(
+  database: Executor,
+  orderId: string,
+) {
+  await database
+    .updateTable("orders")
+    .set({ idempotency_key: null, updated_at: new Date() })
+    .where("id", "=", orderId)
+    .execute();
+}
+
+/**
+ * Ends unpaid orders early, as the expiry job would at their deadline. An
+ * expired order no longer holds its coupon, and a payment that still arrives
+ * for one is honoured (see markOrderPaidIfPending).
+ */
+export async function expirePendingOrders(
+  database: Executor,
+  orderIds: string[],
+  now: Date,
+) {
+  if (orderIds.length === 0) return;
+  await database
+    .updateTable("orders")
+    .set({ status: "expired", updated_at: now })
+    .where("id", "in", orderIds)
+    .where("status", "=", "pending")
+    .execute();
+}
+
+/**
+ * Cancels an order that was created a moment ago and never got a payment to
+ * go with it, and gives up its idempotency key. Does nothing once a payment
+ * row exists: that order can still be continued.
+ */
+export async function cancelOrderWithoutPayment(
+  database: Executor,
+  orderId: string,
+) {
+  return await database
+    .updateTable("orders")
+    .set({
+      status: "cancelled",
+      idempotency_key: null,
+      updated_at: new Date(),
+    })
+    .where("id", "=", orderId)
+    .where("status", "=", "pending")
+    .where((eb) =>
+      eb.not(
+        eb.exists(
+          eb
+            .selectFrom("payments")
+            .select("payments.id")
+            .whereRef("payments.order_id", "=", "orders.id"),
+        ),
+      ),
+    )
+    .returning("id")
+    .executeTakeFirst();
+}
+
 export async function markOrderPaidIfPending(
   database: Executor,
   orderId: string,

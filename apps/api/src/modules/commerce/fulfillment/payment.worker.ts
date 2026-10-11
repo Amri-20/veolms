@@ -163,11 +163,15 @@ export function createPaymentWorker({
         );
         if (!failed) return false;
 
+        const attemptCount = await paymentRepository.countPaymentAttempts(
+          transaction,
+          payment.id,
+        );
         await paymentRepository.insertPaymentAttempt(transaction, {
           id: crypto.randomUUID(),
           payment_id: payment.id,
           gateway_payment_id: event.gatewayPaymentId ?? null,
-          attempt_number: 1,
+          attempt_number: attemptCount + 1,
           status: "failed",
           error_code: event.errorCode ?? null,
           error_description: event.errorDescription ?? null,
@@ -205,7 +209,30 @@ export function createPaymentWorker({
       database,
       event.gatewayPaymentId,
     );
-    if (!payment) return { status: "skipped" as const };
+    if (!payment) {
+      // No payment recorded under this id. If the refund is for one of our
+      // gateway orders whose capture has not been recorded yet (events can
+      // arrive out of order), dropping it here lost the refund for good: the
+      // order stayed paid and kept its access. Throwing has the queue try
+      // again, by which time the capture is in. A refund for a payment that
+      // is not ours at all is still skipped.
+      const pending = event.gatewayOrderId
+        ? await paymentRepository.findPaymentByGatewayOrderId(
+            database,
+            event.gatewayOrderId,
+          )
+        : undefined;
+      if (pending && pending.status !== "captured") {
+        log?.warn(
+          { gatewayOrderId: event.gatewayOrderId },
+          "Refund event arrived before its payment was recorded as captured; will retry",
+        );
+        throw new Error(
+          `Refund ${event.gatewayRefundId} arrived before the capture of gateway order ${event.gatewayOrderId} was recorded`,
+        );
+      }
+      return { status: "skipped" as const };
+    }
 
     const order = await orderRepository.findOrderById(
       database,
