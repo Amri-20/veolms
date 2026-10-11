@@ -169,6 +169,14 @@ export function createRefundService({
         );
       }
 
+      // A no-cost order has a payment row of zero and nothing to return.
+      // It used to be refused as "already fully refunded".
+      if (payment.gateway_provider === "free" || payment.amount === 0) {
+        throw CommerceErrors.REFUND_NOT_ALLOWED(
+          "This order had no charge, so there is nothing to refund.",
+        );
+      }
+
       // Calculate total already refunded — safe from the race now that
       // this read happens under the order row's lock. No exclusion
       // needed: this refund doesn't exist as a row yet.
@@ -260,20 +268,33 @@ export function createRefundService({
           .update(`refund:${order.id}:${idempotencyKey}`)
           .digest("hex")
       : refundId;
+    //
+    //    A manual payment arrived by bank or UPI transfer, outside any
+    //    gateway, and goes back the same way: there is nothing to ask the
+    //    gateway for. (Asked anyway, it refused the made-up payment id and
+    //    every such refund failed.) The refund is recorded as done; sending
+    //    the money is the administrator's own step.
+    const dispatchRefund = () =>
+      payment.gateway_provider === "manual"
+        ? Promise.resolve({
+            gatewayRefundId: `manual_rfnd_${refundId}`,
+            status: "processed" as const,
+          })
+        : paymentGateway.refundPayment({
+            gatewayPaymentId: payment.gateway_payment_id!,
+            amount: requestedAmount,
+            currency: payment.currency,
+            reason: reason ?? "Admin initiated refund",
+            idempotencyKey: gatewayIdempotencyKey,
+            notes: {
+              orderId: order.id,
+              adminUserId,
+              ...(targetItem ? { orderItemId: targetItem.id } : {}),
+            },
+          });
     let gatewayResult;
     try {
-      gatewayResult = await paymentGateway.refundPayment({
-        gatewayPaymentId: payment.gateway_payment_id!,
-        amount: requestedAmount,
-        currency: payment.currency,
-        reason: reason ?? "Admin initiated refund",
-        idempotencyKey: gatewayIdempotencyKey,
-        notes: {
-          orderId: order.id,
-          adminUserId,
-          ...(targetItem ? { orderItemId: targetItem.id } : {}),
-        },
-      });
+      gatewayResult = await dispatchRefund();
     } catch (err) {
       // Outcome unknown (timeout, 5xx, ...) and the caller can retry under
       // a key: keep the reservation `pending` with its key. It keeps

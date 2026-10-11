@@ -5,7 +5,7 @@ import type { AccessService } from "../../access/access.service.ts";
 import { createAccessService } from "../../access/access.service.ts";
 import * as paymentRepo from "./payment.repository.ts";
 import * as orderRepo from "../orders/order.repository.ts";
-import * as couponRepo from "../coupons/coupon.repository.ts";
+import { recordCouponRedemptionForPaidOrder } from "../coupons/coupon-redemption.service.ts";
 import * as cartRepo from "../cart/cart.repository.ts";
 import { createCourseAccessService } from "../shared/course-access.service.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
@@ -152,52 +152,17 @@ export function createPaymentReconciliationService({
         );
       }
 
-      // 3. Record coupon redemption — atomic global & per-user usage limit check + idempotent insert
-      if (order.coupon_id) {
-        const coupon = await trx
-          .selectFrom("coupons")
-          .select(["code", "global_usage_limit", "per_user_limit"])
-          .where("id", "=", order.coupon_id)
-          .executeTakeFirst();
-
-        const redemptionResult =
-          await couponRepo.insertCouponRedemptionIfLimitNotReached(trx, {
-            id: crypto.randomUUID(),
-            coupon_id: order.coupon_id,
-            user_id: order.user_id,
-            order_id: order.id,
-            discount_amount: order.discount_amount,
-            global_usage_limit: coupon?.global_usage_limit ?? null,
-            per_user_limit: coupon?.per_user_limit ?? null,
-            created_at: now,
-          });
-
-        if (!redemptionResult.success) {
-          // The gateway has already captured this payment (real money moved)
-          // before this transaction runs. Aborting fulfillment here would
-          // roll back the payment claim/order-paid/access grant while the
-          // customer stays charged, with every retry hitting this same
-          // limit forever. The coupon limit is a soft check enforced up
-          // front at checkout (pricing.service.ts); this final atomic
-          // check only prevents *over*-redemption bookkeeping in a rare
-          // race — it must not block delivering what was already paid for.
-          // Skip recording the redemption and continue fulfilling the order.
-          const couponCode = coupon?.code ?? order.coupon_id;
-          await outbox.publish(trx, {
-            type: "coupon.redemption_limit_exceeded_at_finalization",
-            version: 1,
-            dedupeKey: `coupon.redemption_limit_exceeded:${claimed.id}`,
-            occurredAt: now,
-            payload: {
-              paymentId: claimed.id,
-              orderId: order.id,
-              couponId: order.coupon_id,
-              couponCode,
-              reason: redemptionResult.reason,
-            },
-          });
-        }
-      }
+      // 3. Record coupon redemption — atomic global & per-user usage limit
+      //    check + idempotent insert. The gateway has already captured this
+      //    payment, so a limit reached here never blocks delivering what was
+      //    paid for: the redemption is skipped and an event is published
+      //    instead (see coupon-redemption.service.ts, shared with manual
+      //    payment verification).
+      await recordCouponRedemptionForPaidOrder(trx, {
+        order,
+        paymentId: claimed.id,
+        now,
+      });
 
       // 4. Grant access + enroll for every order item (course + bundle-expanded).
       //    Both access_grants and enrollments use ON CONFLICT DO NOTHING,

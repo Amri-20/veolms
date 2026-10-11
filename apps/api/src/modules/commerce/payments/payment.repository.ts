@@ -195,6 +195,32 @@ export async function reinitializePaymentIfNotFinal(
     .executeTakeFirst();
 }
 
+/**
+ * Closes whatever gateway payment an order still has open, when the order
+ * has been settled some other way. The row stops being treated as a payment
+ * in progress; a capture that still arrives for it is not lost (a failed
+ * payment can be claimed) and is refused loudly, because its order is
+ * already paid.
+ */
+export async function closeOpenPaymentsForOrder(
+  database: Executor,
+  orderId: string,
+  reason: { error_code: string; error_description: string; now: Date },
+) {
+  return await database
+    .updateTable("payments")
+    .set({
+      status: "failed",
+      error_code: reason.error_code,
+      error_description: reason.error_description,
+      updated_at: reason.now,
+    })
+    .where("order_id", "=", orderId)
+    .where("status", "in", ["initiated", "processing"])
+    .returning("id")
+    .execute();
+}
+
 /** Attempts recorded so far; the next attempt's number is this plus one. */
 export async function countPaymentAttempts(
   database: Executor,
