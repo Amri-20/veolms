@@ -480,3 +480,20 @@ Implemented on `fix/performance-audit-p1-p5`. No response shape changed.
 - Home discovery can lag a publish by up to 30 seconds.
 
 **Staging checks still owed.** Lighthouse on `/`, a course overview and `/courses` (P2); the overview payload size on a large course (P1); the coupons page left open for a minute making no list requests; Home discovery response time before and after.
+
+## 16. Accessibility (X1–X6): status on 11 Oct 2026
+
+Implemented on `fix/accessibility-audit-x1-x6`. Web only.
+
+**How it was verified.** The web typecheck, ESLint and Prettier. **No browser, Lighthouse, axe or screen-reader check was run**: each fix below follows the rule the finding cites, and none has been heard or measured.
+
+| ID  | Status                                     | What changed, and what is left                                                                                                                                                                                                                                                             |
+| --- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| X1  | FIXED (unmeasured)                         | Each lesson row on the course overview is named by its visible text, with "Lesson N:" added for screen readers only. Its separate `aria-label` replaced that text with different wording and left the "Free" badge out.                                                                    |
+| X2  | DEFERRED (design tokens)                   | The accent text colour on accent-tinted chips comes from each palette's tokens. Raising it to 4.5:1 means changing those tokens across sixteen palettes in light and dark, which is a visual change to be made with contrast tooling, not by reading.                                      |
+| X3  | FIXED (with the payments work, `e79e8d0b`) | The busy Apply button has a name; coupon, payment and amount messages are announced; the custom amount field and its clear button are named. "Apply coupon is a div" was not reproducible.                                                                                                 |
+| X4  | PARTLY FIXED                               | The portrait on a public profile page is named after the person. Left as they are, deliberately: avatars beside a name and the learner-home course thumbnail inside a card that is already named, where a second name would only be read twice. Catalogue cards already carried the title. |
+| X5  | FIXED (unmeasured)                         | The mobile "You" button's spoken name starts with the word on the button.                                                                                                                                                                                                                  |
+| X6  | NOT REPRODUCIBLE                           | The composer chooser is a fieldset of native radio inputs.                                                                                                                                                                                                                                 |
+
+**Staging checks still owed.** Lighthouse or axe on a course overview and the guest home (X1, X5, and to size X2); a screen reader reading a lesson row, the "You" button and a profile portrait; voice control activating a lesson by its visible title.
