@@ -302,9 +302,7 @@ export const CommentCard = React.memo(function CommentCard({
         r.toLowerCase() === "admin" ||
         r.toLowerCase() === "instructor" ||
         r.toLowerCase() === "creator",
-    ) ||
-    (authUser as any)?.role === "Instructor" ||
-    (authUser as any)?.role === "Admin",
+    ),
   );
   const canLock =
     canParticipate && !isNote && (Boolean(comment.isOwn) || isModerator);
