@@ -1,12 +1,10 @@
 import { z } from "zod";
+import { emailInput } from "./email-input.ts";
 import { authUserSchema } from "./user.ts";
 
 export const loginRequestSchema = z
   .object({
-    email: z
-      .email("Invalid email address")
-      .max(255)
-      .toLowerCase()
+    email: emailInput("Invalid email address")
       .meta({ example: "ada@example.com" })
       .optional(),
     phoneNo: z

@@ -207,7 +207,7 @@ function redirectToMfaSetup(apiError: ApiError): void {
 
 function shouldClearAuthOnUnauthorized(
   url: string,
-  apiError: ApiError,
+  apiError: Pick<ApiError, "status" | "code">,
 ): boolean {
   if (apiError.status !== 401) {
     return false;
@@ -250,6 +250,42 @@ function shouldClearAuthOnUnauthorized(
     apiError.code === "SESSION_REVOKED";
 
   return isExplicitSessionFailure || url.endsWith("/auth/me");
+}
+
+/**
+ * Ends the tab's signed-in state when a response says its session is gone.
+ * Every request made through this client is checked here. Code that has to
+ * call `fetch` itself (the video playback requests) passes the response it
+ * got, so a session that ends in the middle of a lesson signs the shell out
+ * there too instead of leaving it signed in with every request failing.
+ */
+export function endSessionIfUnauthorized(
+  url: string,
+  apiError: Pick<ApiError, "status" | "code">,
+  options: {
+    /**
+     * Leave a tab that is not signed in alone. A visitor who was never
+     * signed in gets the same "not signed in" answer for a locked lesson,
+     * and has no session to end.
+     */
+    onlyIfSignedIn?: boolean;
+  } = {},
+): void {
+  if (!shouldClearAuthOnUnauthorized(url, apiError)) return;
+  if (
+    options.onlyIfSignedIn &&
+    !authStore.getState().isAuthenticated &&
+    !queryClient.getQueryData(authKeys.me())
+  ) {
+    return;
+  }
+
+  authStore.clearAuth();
+  // The route guards also read the cached current user. Left in place,
+  // it kept the signed-in shell on screen — every request failing —
+  // until that cache next refreshed, minutes later.
+  queryClient.setQueryData(authKeys.me(), null);
+  resetRegisteredInteractionState();
 }
 
 function isHtmlDocumentBody(body: unknown): boolean {
@@ -348,14 +384,7 @@ async function request<T>(
       }),
     );
     redirectToMfaSetup(apiError);
-    if (shouldClearAuthOnUnauthorized(url, apiError)) {
-      authStore.clearAuth();
-      // The route guards also read the cached current user. Left in place,
-      // it kept the signed-in shell on screen — every request failing —
-      // until that cache next refreshed, minutes later.
-      queryClient.setQueryData(authKeys.me(), null);
-      resetRegisteredInteractionState();
-    }
+    endSessionIfUnauthorized(url, apiError);
     throw apiError;
   }
 
