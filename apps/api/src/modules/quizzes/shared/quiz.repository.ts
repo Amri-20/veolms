@@ -1,5 +1,6 @@
 import type { Database, DatabaseExecutor } from "@veolms/database";
 import { sql, type Insertable, type Updateable } from "kysely";
+import { isOpenFreeCourse } from "../../access/index.ts";
 
 const QUIZ_COLUMNS = [
   "id",
@@ -527,6 +528,12 @@ export async function listAssignmentsForCourses(
     .execute();
 }
 
+/**
+ * Whether a course's quizzes are open to any signed-in learner: it is
+ * published, free, and not access-restricted. A restricted course needs a
+ * grant even when it costs nothing; being free alone used to be enough, so a
+ * restricted free course's quizzes were open to everyone.
+ */
 export async function isPublishedFreeCourse(
   database: DatabaseExecutor,
   courseId: string,
@@ -534,21 +541,48 @@ export async function isPublishedFreeCourse(
   const row = await database
     .selectFrom("courses")
     .innerJoin("course_pricing", "course_pricing.course_id", "courses.id")
-    .select(["courses.status", "course_pricing.pricing_type"])
+    .leftJoin(
+      "course_access_rules",
+      "course_access_rules.course_id",
+      "courses.id",
+    )
+    .select([
+      "courses.status",
+      "course_pricing.pricing_type",
+      "course_access_rules.access_type",
+    ])
     .where("courses.id", "=", courseId)
     .where("courses.deleted_at", "is", null)
     .executeTakeFirst();
-  return row?.status === "published" && row.pricing_type === "free";
+  return (
+    row?.status === "published" &&
+    isOpenFreeCourse({
+      pricing_type: row.pricing_type,
+      access_type: row.access_type,
+    })
+  );
 }
 
 export async function listPublishedFreeCourseIds(database: DatabaseExecutor) {
   const rows = await database
     .selectFrom("courses")
     .innerJoin("course_pricing", "course_pricing.course_id", "courses.id")
+    .leftJoin(
+      "course_access_rules",
+      "course_access_rules.course_id",
+      "courses.id",
+    )
     .select("courses.id")
     .where("courses.status", "=", "published")
     .where("courses.deleted_at", "is", null)
     .where("course_pricing.pricing_type", "=", "free")
+    // Same rule as isPublishedFreeCourse: restricted courses are left out.
+    .where((eb) =>
+      eb.or([
+        eb("course_access_rules.access_type", "is", null),
+        eb("course_access_rules.access_type", "!=", "restricted"),
+      ]),
+    )
     .execute();
   return rows.map((row) => row.id);
 }
