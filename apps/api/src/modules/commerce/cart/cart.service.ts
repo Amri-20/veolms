@@ -107,6 +107,24 @@ export function createCartService({
 
     const enrichedItems: CartItem[] = [];
 
+    // Two lookups for the whole cart, not one per item.
+    const [courseRows, bundleRows] = await Promise.all([
+      courseRepo.findCoursesByIds(
+        database,
+        rawItems.flatMap((it) =>
+          it.item_type === "course" && it.course_id ? [it.course_id] : [],
+        ),
+      ),
+      bundleRepo.findBundlesByIds(
+        database,
+        rawItems.flatMap((it) =>
+          it.item_type === "bundle" && it.bundle_id ? [it.bundle_id] : [],
+        ),
+      ),
+    ]);
+    const coursesById = new Map(courseRows.map((row) => [row.id, row]));
+    const bundlesById = new Map(bundleRows.map((row) => [row.id, row]));
+
     for (let i = 0; i < rawItems.length; i++) {
       const raw = rawItems[i]!;
       const calculated = pricingItems[i];
@@ -115,11 +133,11 @@ export function createCartService({
       let thumbnailMediaId: string | null | undefined = null;
 
       if (raw.item_type === "course" && raw.course_id) {
-        const course = await courseRepo.findCourseById(database, raw.course_id);
+        const course = coursesById.get(raw.course_id);
         slug = course?.slug ?? "";
         thumbnailMediaId = course?.thumbnail_media_id;
       } else if (raw.item_type === "bundle" && raw.bundle_id) {
-        const bundle = await bundleRepo.findBundleById(database, raw.bundle_id);
+        const bundle = bundlesById.get(raw.bundle_id);
         slug = bundle?.slug ?? "";
         thumbnailMediaId = bundle?.thumbnail_media_id;
       }

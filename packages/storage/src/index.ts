@@ -93,6 +93,9 @@ export function assertVisibilityPrefixedKey(key: string): string {
   return normalized;
 }
 
+/** How long a failed bucket CORS call is left alone before it is retried. */
+const BUCKET_CORS_RETRY_MS = 5 * 60 * 1000;
+
 export class S3StorageService {
   private client: S3Client;
   private bucket: string;
@@ -103,6 +106,8 @@ export class S3StorageService {
   private cdnPublicFolders: readonly string[];
   private requireVisibilityPrefix: boolean;
   private bucketCorsEnsured: Promise<void> | null = null;
+  /** Earliest time the bucket CORS call may be made again after failing. */
+  private bucketCorsRetryAt = 0;
 
   constructor(options: StorageOptions) {
     if (!options.bucket) {
@@ -443,7 +448,10 @@ export class S3StorageService {
    * upload request) await the same cached result instead of re-issuing it.
    */
   async ensureBucketCors(): Promise<void> {
-    if (!this.bucketCorsEnsured) {
+    // After a failure it is not tried again straight away. A bucket that
+    // refuses the setting (no permission, say) otherwise cost every upload
+    // request a failed call of its own.
+    if (!this.bucketCorsEnsured && Date.now() >= this.bucketCorsRetryAt) {
       this.bucketCorsEnsured = this.client
         .send(
           new PutBucketCorsCommand({
@@ -476,6 +484,7 @@ export class S3StorageService {
           () => undefined,
           (error) => {
             this.bucketCorsEnsured = null;
+            this.bucketCorsRetryAt = Date.now() + BUCKET_CORS_RETRY_MS;
             console.warn(
               `[storage] Failed to set S3 bucket CORS for ${this.bucket}:`,
               error instanceof Error ? error.message : error,
