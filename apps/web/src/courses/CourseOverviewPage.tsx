@@ -139,7 +139,9 @@ export function formatPriceWithCurrency(
   currency: string = "INR",
 ): string {
   const sym = getCurrencySymbol(currency);
-  return `${sym}${amount.toLocaleString("en-US")}`;
+  // Rupees are grouped the Indian way (1,00,000), not in thousands.
+  const locale = currency.toUpperCase() === "INR" ? "en-IN" : "en-US";
+  return `${sym}${amount.toLocaleString(locale)}`;
 }
 
 export function isCourseSaleActive(
