@@ -8,7 +8,7 @@ import type {
 
 const loadVideoPlaybackSchemas = () =>
   import("@veolms/contracts/video-playback");
-import { getApiBaseUrl } from "../lib/api-client";
+import { endSessionIfUnauthorized, getApiBaseUrl } from "../lib/api-client";
 
 const API_BASE_URL = getApiBaseUrl();
 const CDN_URL = import.meta.env.VITE_CDN_URL || "/cdn";
@@ -116,11 +116,16 @@ function createPlaybackResponseError(
     payload && typeof payload === "object" && "error" in payload
       ? (payload as { error?: { code?: unknown; message?: unknown } }).error
       : undefined;
-  return new VideoPlaybackBootstrapError(
+  const failure = new VideoPlaybackBootstrapError(
     response.status,
     typeof error?.code === "string" ? error.code : fallbackCode,
     typeof error?.message === "string" ? error.message : fallbackMessage,
   );
+  // These requests do not go through the API client, so nothing told the
+  // rest of the app when one came back "not signed in": the lesson asked
+  // for a login while the shell around it still showed the account.
+  endSessionIfUnauthorized(response.url, failure, { onlyIfSignedIn: true });
+  return failure;
 }
 
 async function readResponsePayload(response: Response): Promise<unknown> {
