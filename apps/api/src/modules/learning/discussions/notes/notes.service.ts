@@ -307,10 +307,12 @@ export function createNotesService(
       );
       await courseAccess.assertNotesEnabled(db, input.courseId);
 
+      // Not under a lesson that has been removed (see threads.service.ts).
       const lesson = await db
         .selectFrom("course_lessons")
         .select("course_id")
         .where("id", "=", input.lessonId)
+        .where("deleted_at", "is", null)
         .executeTakeFirst();
 
       if (!lesson || lesson.course_id !== input.courseId) {
