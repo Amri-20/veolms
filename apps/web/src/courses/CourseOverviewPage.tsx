@@ -277,6 +277,27 @@ function checkoutCourseItem(
   };
 }
 
+/**
+ * What a typed custom amount means. `null` when the text is not a whole
+ * number: the field then keeps what it had, with a message. Stripping the
+ * odd characters instead turned "199.50" into 19950.
+ */
+function readCustomAmount(
+  raw: string,
+): { text: string; amount: number; overMaximum: boolean } | null {
+  const text = raw.trim();
+  if (text === "") return { text: "", amount: 0, overMaximum: false };
+  if (!/^\d+$/.test(text)) return null;
+
+  const parsed = Number(text);
+  const amount = Math.min(parsed, MAX_VOLUNTARY_AMOUNT);
+  return {
+    text: String(amount),
+    amount,
+    overMaximum: parsed > MAX_VOLUNTARY_AMOUNT,
+  };
+}
+
 function appliedCouponFromPreview(code: string, res: CheckoutPreviewResponse) {
   const discountAmount = res.pricing.discountAmount;
   const currency = res.pricing.currency || "INR";
@@ -561,6 +582,9 @@ function CourseHeroSection({
     useState<ContributionPresetId>("0");
   const [voluntaryAmount, setVoluntaryAmount] = useState<number>(0);
   const [customAmountInput, setCustomAmountInput] = useState<string>("");
+  const [customAmountError, setCustomAmountError] = useState<string | null>(
+    null,
+  );
 
   const [couponInputOpen, setCouponInputOpen] = useState(false);
   const [couponCodeInput, setCouponCodeInput] = useState("");
@@ -641,8 +665,16 @@ function CourseHeroSection({
     : voluntaryAmount > 0 && voluntaryAmount > baseNumericPrice
       ? formatPriceWithCurrency(voluntaryAmount, courseCurrency)
       : basePrice;
-  const originalPrice = pricing?.originalPrice;
-  const discount = pricing?.discount;
+  // The headline is then the buyer's own, higher amount. The catalogue's
+  // "was" price and "% OFF" badge describe the regular price, and next to a
+  // chosen amount they claimed a discount that is not being given.
+  const isPayingAbovePrice =
+    !isFree &&
+    !appliedCoupon &&
+    voluntaryAmount > 0 &&
+    voluntaryAmount > baseNumericPrice;
+  const originalPrice = isPayingAbovePrice ? undefined : pricing?.originalPrice;
+  const discount = isPayingAbovePrice ? undefined : pricing?.discount;
   const displayDiscount = appliedCoupon
     ? appliedCoupon.discountLabel ||
       `${formatPriceWithCurrency(appliedCoupon.discountAmount, appliedCoupon.currency)} OFF`
@@ -824,10 +856,15 @@ function CourseHeroSection({
 
       rzp.open();
     } catch (error) {
+      // The payment provider could not be reached or refused to start the
+      // order, so this attempt never reached the point of paying. Said
+      // plainly, with what matters most to the buyer.
       const msg =
-        error && typeof error === "object" && "message" in error
-          ? String((error as { message: unknown }).message)
-          : "Checkout could not be started. Please retry.";
+        getApiError(error).code === "PAYMENT_GATEWAY_ERROR"
+          ? "Payments are unavailable right now. Nothing was charged for this attempt. Please try again in a little while."
+          : error && typeof error === "object" && "message" in error
+            ? String((error as { message: unknown }).message)
+            : "Checkout could not be started. Please retry.";
       setPaymentError(msg);
       setIsPaymentBusy(false);
     }
@@ -852,6 +889,15 @@ function CourseHeroSection({
     selectedPreset === "custom" &&
     voluntaryAmount > 0 &&
     voluntaryAmount < baseNumericPrice;
+  // Why the amount in the custom box cannot be used. The pay button is
+  // disabled for an amount under the price; without this nothing said why.
+  const customAmountMessage =
+    selectedPreset !== "custom"
+      ? null
+      : (customAmountError ??
+        (isCustomUnderPrice
+          ? `The least you can pay for this course is ${formatPriceWithCurrency(baseNumericPrice, courseCurrency)}.`
+          : null));
 
   if (isCreatorNormal || isEnrolled) {
     // 1. Creator viewing their course normally or already enrolled student:
@@ -1204,10 +1250,15 @@ function CourseHeroSection({
                     type="button"
                     onClick={handleApplyCoupon}
                     disabled={couponBusy || !couponCodeInput.trim()}
+                    aria-label={couponBusy ? "Applying coupon" : undefined}
                     className="inline-flex items-center justify-center px-3.5 py-1.5 rounded-[7px] bg-(--accent) text-(--on-accent,#ffffff) text-[0.82rem] font-[750] cursor-pointer whitespace-nowrap transition-all hover:bg-(--accent-hover,color-mix(in_srgb,var(--accent)_85%,var(--text))) disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                   >
                     {couponBusy ? (
-                      <CircleNotch size={14} className="animate-spin" />
+                      <CircleNotch
+                        size={14}
+                        className="animate-spin"
+                        aria-hidden="true"
+                      />
                     ) : (
                       "Apply"
                     )}
@@ -1226,7 +1277,10 @@ function CourseHeroSection({
                   </button>
                 </div>
                 {couponError && (
-                  <p className="m-0 text-xs text-rose-500 font-semibold px-1">
+                  <p
+                    role="alert"
+                    className="m-0 text-xs text-rose-500 font-semibold px-1"
+                  >
                     {couponError}
                   </p>
                 )}
@@ -1247,6 +1301,12 @@ function CourseHeroSection({
                     <span>Support Teacher (Optional)</span>
                   </span>
                   <span
+                    // Kept in the layout while hidden so the row does not
+                    // jump; hidden from assistive technology too, which
+                    // otherwise read out a stale "₹0 Total".
+                    aria-hidden={
+                      !(voluntaryAmount > (isFree ? 0 : baseNumericPrice))
+                    }
                     className={`text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full transition-opacity duration-150 ${
                       voluntaryAmount > (isFree ? 0 : baseNumericPrice)
                         ? "opacity-100"
@@ -1328,25 +1388,25 @@ function CourseHeroSection({
                               inputMode="numeric"
                               pattern="[0-9]*"
                               value={customAmountInput}
+                              aria-label="Custom amount"
+                              aria-invalid={Boolean(customAmountMessage)}
+                              onBlur={() => setCustomAmountError(null)}
                               onChange={(e) => {
-                                const raw = e.target.value.replace(/\D/g, "");
-                                if (!raw) {
-                                  setCustomAmountInput("");
-                                  setVoluntaryAmount(0);
+                                const entry = readCustomAmount(e.target.value);
+                                if (!entry) {
+                                  // The field keeps what it had.
+                                  setCustomAmountError(
+                                    "Enter a whole number, with no decimals or symbols.",
+                                  );
                                   return;
                                 }
-                                const parsed = parseInt(raw, 10);
-                                if (Number.isNaN(parsed) || parsed <= 0) {
-                                  setCustomAmountInput(raw);
-                                  setVoluntaryAmount(0);
-                                  return;
-                                }
-                                const clamped = Math.min(
-                                  parsed,
-                                  MAX_VOLUNTARY_AMOUNT,
+                                setCustomAmountInput(entry.text);
+                                setVoluntaryAmount(entry.amount);
+                                setCustomAmountError(
+                                  entry.overMaximum
+                                    ? `The most you can pay here is ${formatPriceWithCurrency(MAX_VOLUNTARY_AMOUNT, courseCurrency)}.`
+                                    : null,
                                 );
-                                setCustomAmountInput(String(clamped));
-                                setVoluntaryAmount(clamped);
                               }}
                               placeholder={
                                 isFree ? "Amount" : `>= ${baseNumericPrice}`
@@ -1360,7 +1420,9 @@ function CourseHeroSection({
                                 onClick={() => {
                                   setCustomAmountInput("");
                                   setVoluntaryAmount(0);
+                                  setCustomAmountError(null);
                                 }}
+                                aria-label="Clear custom amount"
                                 className="inline-flex items-center justify-center w-4 h-4 rounded-full text-(--muted) hover:text-(--text) cursor-pointer"
                               >
                                 <X size={11} weight="bold" />
@@ -1398,6 +1460,7 @@ function CourseHeroSection({
                           setSelectedPreset(preset.id);
                           setVoluntaryAmount(preset.value);
                           setCustomAmountInput("");
+                          setCustomAmountError(null);
                         }}
                         className={`px-3 py-1.5 rounded-[8px] text-[0.82rem] font-bold border transition-all cursor-pointer ${
                           isSelected
@@ -1410,6 +1473,14 @@ function CourseHeroSection({
                     );
                   })}
                 </div>
+                {customAmountMessage && (
+                  <p
+                    role="alert"
+                    className="m-0 text-xs text-rose-500 font-semibold"
+                  >
+                    {customAmountMessage}
+                  </p>
+                )}
               </div>
             )}
 
@@ -1457,7 +1528,10 @@ function CourseHeroSection({
 
             {/* Payment Error Banner */}
             {paymentError && (
-              <div className="flex items-center justify-between gap-2 w-full rounded-lg bg-rose-500/12 border border-rose-500/30 p-2.5 text-xs text-rose-500 font-medium">
+              <div
+                role="alert"
+                className="flex items-center justify-between gap-2 w-full rounded-lg bg-rose-500/12 border border-rose-500/30 p-2.5 text-xs text-rose-500 font-medium"
+              >
                 <span>{paymentError}</span>
                 <button
                   type="button"
