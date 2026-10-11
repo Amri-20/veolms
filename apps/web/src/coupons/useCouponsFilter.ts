@@ -124,24 +124,12 @@ export function useCouponsFilter(options?: {
       });
   }, [coupons, now, activeTab, discountTypeFilter, searchQuery, sortBy]);
 
-  useEffect(() => {
-    if (
-      filteredCoupons.length === 0 &&
-      hasNextPage &&
-      !isFetchingNextPage &&
-      !isLoading &&
-      !isError
-    ) {
-      void fetchNextPage();
-    }
-  }, [
-    filteredCoupons.length,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading,
-    isError,
-    fetchNextPage,
-  ]);
+  // Nothing here asks for the next page on its own. When a search or filter
+  // matched none of the coupons loaded so far, an effect used to fetch the
+  // next page, and the next, until something matched or the library ran
+  // out: a search with no match downloaded every coupon there is, and each
+  // of those pages then refetched on the list's timer. The table offers
+  // "Load more" instead.
 
   return {
     coupons: filteredCoupons,

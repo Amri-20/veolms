@@ -8312,7 +8312,9 @@ export function CourseCreatePage({
       area: "pricing",
       label: "Pricing",
       summary:
-        pricing.pricingType === "free" ? "Free" : `₹${pricing.sellingPrice}`,
+        pricing.pricingType === "free"
+          ? "Free"
+          : `${currencySymbol}${pricing.sellingPrice}`,
     },
     {
       area: "extras",

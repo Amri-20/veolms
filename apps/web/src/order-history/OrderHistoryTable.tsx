@@ -15,7 +15,10 @@ import {
 import type { NavigateTo } from "../routing/navigation";
 import { useBackDismiss } from "../navigation/useBackDismiss";
 import type { OrderSortOrder } from "@veolms/contracts";
-import type { OrderHistoryItem } from "./orderHistoryData";
+import {
+  formatOrderHistoryPayment,
+  type OrderHistoryItem,
+} from "./orderHistoryData";
 import {
   getCourseBrandBadge,
   getOrderStatusStyle,
@@ -99,14 +102,18 @@ function OrderActions({
           void copyText(order.orderNumber, "Order ID copied.");
         }}
       />
-      <MenuAction
-        Icon={LinkSimple}
-        label="Copy invoice ID"
-        onClick={() => {
-          setOpen(false);
-          void copyText(order.invoiceNumber, "Invoice ID copied.");
-        }}
-      />
+      {order.invoiceNumber && (
+        <MenuAction
+          Icon={LinkSimple}
+          label="Copy invoice ID"
+          onClick={() => {
+            setOpen(false);
+            if (order.invoiceNumber) {
+              void copyText(order.invoiceNumber, "Invoice ID copied.");
+            }
+          }}
+        />
+      )}
       {order.courseId && (
         <>
           <MenuDivider />
@@ -262,9 +269,11 @@ export function OrderHistoryTable({
                       <p className="truncate text-xs font-semibold text-(--text)">
                         {order.payment.brand}
                       </p>
-                      <p className="truncate text-[11px] text-(--muted)">
-                        {order.payment.label}
-                      </p>
+                      {order.payment.label ? (
+                        <p className="truncate text-[11px] text-(--muted)">
+                          {order.payment.label}
+                        </p>
+                      ) : null}
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3.5">
@@ -357,7 +366,7 @@ export function OrderHistoryTable({
                 <div className="min-w-0">
                   <p className="text-[11px] text-(--muted)">Payment method</p>
                   <p className="mt-0.5 truncate text-xs text-(--text)">
-                    {order.payment.brand} ({order.payment.label})
+                    {formatOrderHistoryPayment(order.payment)}
                   </p>
                 </div>
                 <div>
@@ -369,7 +378,8 @@ export function OrderHistoryTable({
               </div>
 
               <p className="mt-3 truncate font-mono text-[11px] text-(--muted)">
-                Order {order.orderNumber} · Invoice {order.invoiceNumber}
+                Order {order.orderNumber}
+                {order.invoiceNumber ? ` · Invoice ${order.invoiceNumber}` : ""}
               </p>
             </article>
           );

@@ -24,6 +24,13 @@ export interface CouponsTableProps {
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
   fetchNextPage?: () => void;
+  /**
+   * Whether reaching the end of the list loads the next page by itself.
+   * Off while a search, tab or filter narrows the list: a short list leaves
+   * the end on screen, and each page that added no match loaded another, so
+   * a narrow search downloaded the whole library. "Load more" stays.
+   */
+  autoLoadMore?: boolean;
   onEditCoupon: (coupon: CouponListItem) => void;
   onToggleStatus: (coupon: CouponListItem) => void;
   onCreateNew: () => void;
@@ -36,6 +43,7 @@ export function CouponsTable({
   hasNextPage,
   isFetchingNextPage,
   fetchNextPage,
+  autoLoadMore = true,
   onEditCoupon,
   onToggleStatus,
   onCreateNew,
@@ -45,7 +53,9 @@ export function CouponsTable({
   const observerTarget = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!hasNextPage || isFetchingNextPage || !fetchNextPage) return;
+    if (!autoLoadMore || !hasNextPage || isFetchingNextPage || !fetchNextPage) {
+      return;
+    }
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -66,7 +76,7 @@ export function CouponsTable({
         observer.unobserve(current);
       }
     };
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, [autoLoadMore, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const handleCopyCode = async (coupon: CouponListItem) => {
     await navigator.clipboard.writeText(coupon.code);
@@ -101,7 +111,7 @@ export function CouponsTable({
               </h3>
               <p className="mt-1 max-w-sm text-xs leading-5 text-(--muted)">
                 {hasNextPage
-                  ? "More matching coupons may be available."
+                  ? "Nothing matches among the coupons loaded so far. Load more to keep looking."
                   : "Create a coupon to start offering discounts, or adjust the filters to see more of your library."}
               </p>
             </>
@@ -113,11 +123,11 @@ export function CouponsTable({
           ) : null}
         </div>
 
+        {/* A button only. With the scroll sentinel attached here it was on
+            screen the moment the list came up empty, so it loaded page after
+            page by itself. */}
         {hasNextPage ? (
-          <div
-            ref={observerTarget}
-            className="flex flex-col items-center justify-center p-4 sm:p-6 border-t border-(--border)"
-          >
+          <div className="flex flex-col items-center justify-center p-4 sm:p-6 border-t border-(--border)">
             {!isFetchingNextPage ? (
               <button
                 type="button"

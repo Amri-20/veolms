@@ -1296,12 +1296,10 @@ export function CoursesPage({
         shouldQueryCreatorCourses),
   });
   const myCoursesData = myCoursesQuery.data;
+  // Asked for on every tab, not only on Bin: the tab's badge is this list's
+  // length, so asked for only once the tab was open it read 0 until clicked.
   const deletedCoursesQuery = useDeletedCourses(undefined, {
-    enabled:
-      shouldQueryCourses &&
-      isAdmin &&
-      effectiveRole === "creator" &&
-      enrollmentFilter === "bin",
+    enabled: shouldQueryCourses && isAdmin && effectiveRole === "creator",
   });
   const deletedCoursesData = deletedCoursesQuery.data;
   const isCourseCatalogueLoadError =

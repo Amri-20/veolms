@@ -51,12 +51,13 @@ export function adaptOrderToOrderHistoryItem(
   }
 
   const dateObj = order.createdAt ? new Date(order.createdAt) : new Date();
-  const date = dateObj.toLocaleDateString("en-US", {
+  // In the reader's own date and time conventions, not American ones.
+  const date = dateObj.toLocaleDateString(undefined, {
     month: "short",
     day: "2-digit",
     year: "numeric",
   });
-  const time = dateObj.toLocaleTimeString("en-US", {
+  const time = dateObj.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -70,10 +71,16 @@ export function adaptOrderToOrderHistoryItem(
   const cleanOrderNumber = order.orderNumber.startsWith("#")
     ? order.orderNumber
     : `#${order.orderNumber}`;
-  const invoiceNumber = `INV-${
-    order.orderNumber.replace(/^[#A-Za-z_-]+/, "") || order.id.slice(0, 8)
-  }`;
-  const transactionId = `TXN_${order.id.replace(/-/g, "").slice(0, 10)}`;
+  // The server numbers an invoice "INV-" plus the order number, and issues
+  // one only for an order that was paid. A number made up here used to be
+  // shown, and offered for copying, on every order: it matched no invoice,
+  // and unpaid orders have none. The same went for a "transaction id" cut
+  // from the order's own id, which no payment provider would recognise; the
+  // API gives a learner no payment reference, so none is shown.
+  const invoiceNumber =
+    status === "completed" || status === "refunded"
+      ? `INV-${order.orderNumber}`
+      : null;
 
   let iconColor = "#3b82f6";
   const titleLower = courseTitle.toLowerCase();
@@ -90,6 +97,30 @@ export function adaptOrderToOrderHistoryItem(
 
   const itemCount =
     order.items.length > 1 ? `${order.items.length} Courses` : "1 Course";
+
+  // Said in words a buyer would use. The provider and method used to be
+  // printed as they come ("free (free)"), and an order nobody had paid yet
+  // read "Payment (Payment method unavailable)".
+  const paymentSummary = order.paymentSummary;
+  const paymentDetail = [paymentSummary?.method, paymentSummary?.detail]
+    .filter(Boolean)
+    .join(" · ");
+  const isNoCostOrder =
+    order.totalAmount === 0 ||
+    paymentSummary?.provider.toLowerCase() === "free";
+  const paymentBrand = isNoCostOrder
+    ? "No payment needed"
+    : paymentSummary
+      ? paymentSummary.provider
+      : status === "processing"
+        ? "Awaiting payment"
+        : "No payment taken";
+  const paymentLabel =
+    isNoCostOrder ||
+    !paymentSummary ||
+    paymentDetail.toLowerCase() === paymentSummary.provider.toLowerCase()
+      ? ""
+      : paymentDetail;
 
   const paymentMethod = order.paymentSummary?.method.toLowerCase() ?? "";
   const paymentType = paymentMethod.includes("upi")
@@ -114,11 +145,8 @@ export function adaptOrderToOrderHistoryItem(
     time,
     payment: {
       type: paymentType,
-      brand: order.paymentSummary?.provider || "Payment",
-      label:
-        [order.paymentSummary?.method, order.paymentSummary?.detail]
-          .filter(Boolean)
-          .join(" · ") || "Payment method unavailable",
+      brand: paymentBrand,
+      label: paymentLabel,
     },
     amount,
     formattedAmount,
@@ -126,7 +154,7 @@ export function adaptOrderToOrderHistoryItem(
     statusLabel,
     subtotal,
     tax,
-    transactionId,
+    transactionId: null,
   };
 }
 

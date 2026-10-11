@@ -225,14 +225,34 @@ export function OrderHistoryPage({
             </div>
             <h2 className="text-base sm:text-lg font-bold tracking-tight text-(--text)">
               {hasFilters
-                ? "No purchases match these filters"
+                ? hasNextPage
+                  ? "No match in the purchases loaded so far"
+                  : "No purchases match these filters"
                 : "No purchases yet"}
             </h2>
             <p className="mt-1.5 max-w-sm text-xs sm:text-sm text-(--muted) leading-relaxed">
               {hasFilters
-                ? "Try changing your search query or reset your active filters to view all orders."
+                ? hasNextPage
+                  ? `Search and filters look through the ${totalLoadedCount} purchases loaded so far. Older ones have not been loaded yet.`
+                  : "Try changing your search query or reset your active filters to view all orders."
                 : "Your completed purchases, invoices, and payment history will appear here."}
             </p>
+            {/* The filters only see what has been loaded. Saying "nothing
+                matches" with older purchases still unloaded, and no way to
+                load them, hid orders that were there. */}
+            {hasFilters && hasNextPage && (
+              <button
+                type="button"
+                onClick={() => void fetchNextPage()}
+                aria-busy={isFetchingNextPage}
+                disabled={isFetchingNextPage}
+                className="mt-4 rounded-xl border border-(--border) bg-(--card-surface) px-5 py-2.5 text-xs md:text-sm font-semibold text-(--text) hover:bg-(--hover) transition-colors cursor-pointer disabled:cursor-wait disabled:opacity-60"
+              >
+                {isFetchingNextPage
+                  ? "Loading older purchases…"
+                  : "Load older purchases"}
+              </button>
+            )}
             {hasFilters && (
               <button
                 type="button"

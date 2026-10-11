@@ -143,8 +143,11 @@ export function KpiCard({
           previous
         </p>
       ) : (
+        // No change is given when the period before had nothing to compare
+        // with. "New this period" said that of every tile, including ones
+        // (an average, a total) that are not new at all.
         <p className="mt-0.5 sm:mt-1 text-[0.68rem] sm:text-xs text-(--muted)">
-          New this period
+          No earlier period to compare
         </p>
       )}
     </div>

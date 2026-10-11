@@ -36,6 +36,7 @@ import {
   notePendingMfaLogin,
 } from "../../store/pendingMfaLogin";
 import { clearCoursePlayerSessions } from "../../learning/coursePlayerNavigation";
+import { forgetSessionTabs } from "../../routing/tabSessionState";
 import { authKeys } from "./auth.keys";
 import { updatePublicProfileCacheFromUser } from "./auth.queries";
 import { authService, type TotpSetupResponse } from "./auth.service";
@@ -107,6 +108,7 @@ function clearSignedOutState(queryClient: QueryClient) {
   authStore.clearAuth();
   resetRegisteredInteractionState();
   clearCoursePlayerSessions();
+  forgetSessionTabs();
   queryClient.setQueryData(authKeys.me(), null);
   queryClient.removeQueries({ queryKey: authKeys.me() });
   queryClient.removeQueries({ queryKey: authKeys.avatars() });

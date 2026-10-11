@@ -197,6 +197,11 @@ export function CouponsPage({ onNavigatePage, setNotice }: CouponsPageProps) {
             hasNextPage={hasNextPage}
             isFetchingNextPage={isFetchingNextPage}
             fetchNextPage={fetchNextPage}
+            autoLoadMore={
+              activeTab === "all" &&
+              discountTypeFilter === "all" &&
+              !searchQuery.trim()
+            }
             onEditCoupon={handleOpenEdit}
             onToggleStatus={handleToggleStatus}
             onCreateNew={handleOpenCreate}
