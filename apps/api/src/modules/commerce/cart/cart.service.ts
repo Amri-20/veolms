@@ -60,7 +60,8 @@ export function createCartService({
     }));
 
     // Attempt pricing — degrade gracefully if an item became unavailable.
-    let pricingItems: Array<{ title: string; unitPrice: number }> = [];
+    let pricingItems: Array<{ title: string; unitPrice: number } | undefined> =
+      [];
     let subtotalAmount = 0;
     let currency = "INR";
 
@@ -82,9 +83,26 @@ export function createCartService({
         // below; anything else propagates as a real error.
         throw err;
       }
-      // Pricing failed for a business reason (e.g., a course was unpublished);
-      // show items at zero price rather than breaking the whole cart view.
+      // Pricing failed for a business reason (e.g., a course was unpublished).
+      // One item that can no longer be bought used to blank the whole cart to
+      // zero, so each is priced on its own: the others keep their price and
+      // only the unavailable one shows none.
       pricingItems = [];
+      subtotalAmount = 0;
+      for (const input of pricingInputs) {
+        try {
+          const { pricing } = await pricingService.calculatePricing({
+            userId,
+            items: [input],
+          });
+          pricingItems.push(pricing.items[0]);
+          subtotalAmount += pricing.subtotalAmount;
+          currency = pricing.currency;
+        } catch (itemError) {
+          if (!(itemError instanceof AppError)) throw itemError;
+          pricingItems.push(undefined);
+        }
+      }
     }
 
     const enrichedItems: CartItem[] = [];

@@ -11,7 +11,9 @@ import type { Kysely } from "kysely";
 import { AppError } from "../../../lib/errors.ts";
 import { CommerceErrors } from "../shared/commerce.errors.ts";
 import { isUniqueViolation } from "../shared/db-errors.ts";
+import * as bundleRepo from "../bundles/bundle.repository.ts";
 import * as couponRepo from "../coupons/coupon.repository.ts";
+import * as enrollmentRepo from "../enrollments/enrollment.repository.ts";
 import * as orderRepo from "../orders/order.repository.ts";
 import * as paymentRepo from "../payments/payment.repository.ts";
 import {
@@ -136,6 +138,47 @@ export function createCheckoutService({
   >;
 
   /**
+   * Refuses to continue an unpaid order for something the buyer has come to
+   * own since it was created (another order of theirs was paid, or access
+   * was granted). New orders are refused for this by pricing; a resumed one
+   * skipped that check and handed out a gateway order for a second payment.
+   */
+  async function assertStillPurchasable(order: OrderRow): Promise<void> {
+    const [items, ownedCourseIds] = await Promise.all([
+      orderRepo.listOrderItems(database, order.id),
+      enrollmentRepo.listUserEnrolledCourseIds(database, order.user_id),
+    ]);
+    const owned = new Set(ownedCourseIds);
+    if (owned.size === 0) return;
+
+    const bundleIds = items
+      .filter((item) => item.item_type === "bundle" && item.bundle_id)
+      .map((item) => item.bundle_id!);
+    const bundleCourses = await bundleRepo.listBundleCoursesForBundleIds(
+      database,
+      bundleIds,
+    );
+
+    for (const item of items) {
+      if (item.item_type === "course" && item.course_id) {
+        if (owned.has(item.course_id)) {
+          throw CommerceErrors.COURSE_ALREADY_OWNED(item.title_snapshot);
+        }
+      } else if (item.item_type === "bundle" && item.bundle_id) {
+        const courseIds = bundleCourses
+          .filter((row) => row.bundle_id === item.bundle_id)
+          .map((row) => row.course_id);
+        if (
+          courseIds.length > 0 &&
+          courseIds.every((courseId) => owned.has(courseId))
+        ) {
+          throw CommerceErrors.BUNDLE_ALL_COURSES_OWNED(item.title_snapshot);
+        }
+      }
+    }
+  }
+
+  /**
    * Returns the checkout response for an order that already exists, bringing
    * its payment to the point the client can continue from. Used when a
    * request repeats an earlier one: same idempotency key, or the same items
@@ -150,6 +193,10 @@ export function createCheckoutService({
       existingOrder.id,
     );
     const order = { id: existingOrder.id, status: existingOrder.status };
+
+    if (existingOrder.status !== "paid" && existingOrder.total_amount > 0) {
+      await assertStillPurchasable(existingOrder);
+    }
 
     if (payment) {
       const isFreeOrder =
@@ -239,7 +286,19 @@ export function createCheckoutService({
           throw CommerceErrors.IDEMPOTENCY_KEY_CONFLICT();
         }
 
-        return await resumeExistingOrder(existingOrder, user);
+        // A paid order is replayed as it is (the client shows it as bought),
+        // and an unpaid one is continued while it is still open. Anything
+        // else (expired, cancelled, refunded) cannot be continued: handing
+        // back its gateway order invited a payment for an order that had
+        // already ended. It gives up the key and this request starts afresh,
+        // at today's price.
+        const isOpen =
+          existingOrder.status === "pending" &&
+          new Date(existingOrder.expires_at) > new Date();
+        if (isOpen || existingOrder.status === "paid") {
+          return await resumeExistingOrder(existingOrder, user);
+        }
+        await orderRepo.releaseOrderIdempotencyKey(database, existingOrder.id);
       }
     }
 
@@ -257,6 +316,13 @@ export function createCheckoutService({
     // payment window and clicks Pay again is not blocked by their own
     // earlier attempt, a repeat of the same items under the same coupon
     // continues that order instead of creating another.
+    //
+    // Only when it is the same purchase to the last rupee. The same items at
+    // a different amount (the buyer changed what they chose to pay) used to
+    // continue the earlier order at the earlier amount, so the gateway asked
+    // for a sum other than the one on the button. Such an order is closed
+    // instead, which frees the coupon for the order created below.
+    const supersededOrderIds: string[] = [];
     if (pricing.couponId) {
       const pendingOrders = await orderRepo.listPendingOrdersUsingCoupon(
         database,
@@ -281,9 +347,14 @@ export function createCheckoutService({
           )
           .sort()
           .join("|");
-        if (held === wanted) {
+        if (held !== wanted) continue;
+        if (
+          pendingOrder.total_amount === pricing.totalAmount &&
+          pendingOrder.currency === pricing.currency
+        ) {
           return await resumeExistingOrder(pendingOrder, user);
         }
+        supersededOrderIds.push(pendingOrder.id);
       }
     }
 
@@ -317,6 +388,10 @@ export function createCheckoutService({
 
     async function insertOrderWithItems() {
       return await database.transaction().execute(async (trx) => {
+        // Before the coupon's limits are counted, so the earlier order's hold
+        // is not counted against this one.
+        await orderRepo.expirePendingOrders(trx, supersededOrderIds, now);
+
         // Reserve the coupon use. The limits used to be checked only against
         // redemptions, which are written when an order is PAID — so any
         // number of unpaid orders could be created under a single-use coupon
@@ -438,12 +513,23 @@ export function createCheckoutService({
     }
 
     // 5. External Gateway Call for Paid Orders (executed OUTSIDE the database transaction)
-    const { gatewayOrder } = await paymentService.initializePayment({
-      orderId: createdOrder.id,
-      // Inserted by this request a moment ago, so there is nothing to re-read.
-      order: createdOrder,
-      customer: user,
-    });
+    const { gatewayOrder } = await paymentService
+      .initializePayment({
+        orderId: createdOrder.id,
+        // Inserted by this request a moment ago, so there is nothing to re-read.
+        order: createdOrder,
+        customer: user,
+      })
+      .catch(async (error: unknown) => {
+        // The gateway did not give this order anything to pay with, and the
+        // buyer is told so. Left as it was, the order sat in their purchase
+        // history as "processing" for an hour and kept hold of its coupon.
+        // Best effort: the gateway's error is the one that matters here.
+        await orderRepo
+          .cancelOrderWithoutPayment(database, createdOrder.id)
+          .catch(() => undefined);
+        throw error;
+      });
 
     return {
       order: { id: createdOrder.id, status: createdOrder.status },

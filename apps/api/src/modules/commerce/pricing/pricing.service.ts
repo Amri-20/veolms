@@ -139,6 +139,21 @@ export function createPricingService({
       throw CommerceErrors.EMPTY_CHECKOUT_ITEMS();
     }
 
+    // Every entry becomes an order line of its own, so a course or bundle
+    // named twice was charged twice for one enrolment. (Quiz passes have the
+    // same check below, with their own message.)
+    const seenItems = new Set<string>();
+    for (const it of items) {
+      if (it.itemType === "quiz") continue;
+      const key = `${it.itemType}:${it.courseId ?? it.bundleId ?? ""}`;
+      if (seenItems.has(key)) {
+        throw CommerceErrors.PRICE_CALCULATION_FAILED(
+          "The same item appears more than once in this request.",
+        );
+      }
+      seenItems.add(key);
+    }
+
     // 1. Fetch user enrollments if authenticated to prevent duplicate ownership
     const enrolledCourseIds = userId
       ? new Set(
@@ -368,6 +383,19 @@ export function createPricingService({
       }
     }
 
+    // A course bought on its own next to a bundle that already contains it
+    // would be paid for twice. Checked once every item is known to be on
+    // sale, so the answer says nothing about an unpublished course.
+    const requestedCourseIds = new Set(courseIds);
+    for (const bundleId of bundleIds) {
+      const included = itemCourseMap.get(bundleId) ?? [];
+      if (included.some((courseId) => requestedCourseIds.has(courseId))) {
+        throw CommerceErrors.PRICE_CALCULATION_FAILED(
+          "A course in this request is already part of a bundle in the same request.",
+        );
+      }
+    }
+
     // 3. Process Coupon if provided
     let totalDiscount = 0;
     let couponValidation: CouponValidationResult | undefined;
@@ -444,6 +472,19 @@ export function createPricingService({
           coupon.restricted_bundle_ids &&
           coupon.restricted_bundle_ids.length > 0,
         );
+        const hasCourseRestriction = Boolean(
+          coupon.restricted_course_ids &&
+          coupon.restricted_course_ids.length > 0,
+        );
+        // The mirror of the rule below: a coupon limited to specific bundles
+        // is for those bundles only, and used to discount every course too.
+        if (
+          hasBundleRestriction &&
+          !hasCourseRestriction &&
+          item.itemType === "course"
+        ) {
+          isEligible = false;
+        }
         if (
           coupon.restricted_course_ids &&
           coupon.restricted_course_ids.length > 0
