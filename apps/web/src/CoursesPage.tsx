@@ -1486,6 +1486,18 @@ export function CoursesPage({
   const revertPalettePreviewRef = useRef<
     ((origin?: ThemeRevealOrigin) => void) | null
   >(null);
+  // The same for the two handlers the long-press effect calls. They are
+  // declared after that effect, further down, and it reached them by name
+  // before they existed in the source.
+  const activateAppearanceOptionRef = useRef<
+    | ((
+        option: AppearanceOption,
+        mobile?: boolean,
+        source?: "appearance" | "theme",
+      ) => void)
+    | null
+  >(null);
+  const acknowledgeLongPressRef = useRef<(() => void) | null>(null);
   const openLogoutConfirm = useCallback(() => {
     setProfileMenu(false);
     setLogoutConfirmOpen(true);
@@ -2405,7 +2417,7 @@ export function CoursesPage({
         );
       });
     const openAppearancePaletteFromControl = (control: HTMLButtonElement) =>
-      activateAppearanceOption(
+      activateAppearanceOptionRef.current?.(
         "theme",
         control.hasAttribute("data-mobile-palette-trigger"),
         "appearance",
@@ -2541,8 +2553,12 @@ export function CoursesPage({
           press.longPressTimer = null;
           press.longPressActivated = true;
           dockLongPressConsumedUntilRef.current = performance.now() + 1000;
-          acknowledgeLongPress();
-          activateAppearanceOption("theme", isMobile, "appearance");
+          acknowledgeLongPressRef.current?.();
+          activateAppearanceOptionRef.current?.(
+            "theme",
+            isMobile,
+            "appearance",
+          );
         }, APPEARANCE_LONG_PRESS_DURATION);
       }
       // Prevent a press on the transition snapshot from being replayed
@@ -3568,6 +3584,7 @@ export function CoursesPage({
     if (mobile) setMobilePaletteMenu(false);
     else setPaletteMenu(false);
   };
+  activateAppearanceOptionRef.current = activateAppearanceOption;
 
   const openAppearanceThemeMenu = (
     event: ReactMouseEvent<HTMLButtonElement>,
@@ -3643,6 +3660,7 @@ export function CoursesPage({
     }
     playLongPressPop(context);
   };
+  acknowledgeLongPressRef.current = acknowledgeLongPress;
 
   const startDockLongPress = (
     event: ReactPointerEvent<HTMLButtonElement>,
