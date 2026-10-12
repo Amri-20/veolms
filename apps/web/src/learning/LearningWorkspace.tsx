@@ -10,6 +10,7 @@ import {
 } from "react";
 import "./learning-feature.css";
 import "./learning-split-layout.css";
+import { useLearningSplitMark } from "./learningSplitMark";
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -110,6 +111,7 @@ import {
   getCachedVideoPlaybackBootstrap,
   getVideoPlaybackBootstrap,
   refreshVideoPlaybackToken,
+  PLAYBACK_BOOTSTRAP_LIMIT_MS,
   VideoPlaybackBootstrapError,
 } from "./videoPlaybackBootstrap";
 import {
@@ -586,6 +588,8 @@ export function LearningWorkspace({
   const [chaptersPanelHost, setChaptersPanelHost] =
     useState<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement>(null);
+  const splitPaneRef = useRef<HTMLDivElement>(null);
+  useLearningSplitMark(splitPaneRef, !theaterMode);
   const playerWrapRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const lessonContentRef = useRef<HTMLElement>(null);
@@ -1157,18 +1161,36 @@ export function LearningWorkspace({
   const playbackBootstrapPending = Boolean(
     protectedPlayback && !playbackBootstrap && !playbackBootstrapError,
   );
+  // The loader is never the last word. Whatever leaves the player waiting
+  // (a request that does not come back, or one this page is no longer
+  // listening to), after the limit it says that it failed and offers to try
+  // again, which asks afresh.
+  useEffect(() => {
+    if (!playbackBootstrapPending) return undefined;
+    const timer = window.setTimeout(() => {
+      playbackRequestKeyRef.current = null;
+      setPlaybackBootstrapError(
+        new VideoPlaybackBootstrapError(
+          0,
+          "PLAYBACK_BOOTSTRAP_TIMEOUT",
+          "The video took too long to prepare.",
+        ),
+      );
+    }, PLAYBACK_BOOTSTRAP_LIMIT_MS + 1000);
+    return () => window.clearTimeout(timer);
+  }, [playbackBootstrapPending, playbackRequestKey, playbackBootstrapAttempt]);
   const lessonContentAccess = useMemo<LessonContentAccessState>(() => {
     if (!courseOverview || !adaptedCurriculum) return "pending";
 
     const lesson = adaptedCurriculum.lessonsByNumber.get(selectedLesson);
     if (!lesson) return "pending";
 
-    // Anyone may read a public lesson's discussions, so they do not wait to
-    // learn who the visitor is: they load alongside the rest of the lesson.
+    // Anyone may read a published lesson's discussions, enrolled or not and
+    // signed in or not, so they do not wait to learn who the visitor is:
+    // they load alongside the rest of the lesson. Taking part is another
+    // matter (`lessonParticipationState`).
     const isPublicLesson =
-      courseOverview.course.status === "published" &&
-      lesson.isPublished &&
-      (lesson.isPreview || courseOverview.pricing?.pricingType === "free");
+      courseOverview.course.status === "published" && lesson.isPublished;
     if (isPublicLesson) return "granted";
     if (isAuthResolutionPending) return "pending";
     if (!isAuthenticated) return "denied";
@@ -3323,6 +3345,7 @@ export function LearningWorkspace({
         {/* On desktop this is the second card of the page. Theater mode hides
             the course content, so the lesson card takes the full width. */}
         <div
+          ref={splitPaneRef}
           className="learning-workspace__curriculum-clip"
           data-learning-split-pane={theaterMode ? undefined : ""}
         >

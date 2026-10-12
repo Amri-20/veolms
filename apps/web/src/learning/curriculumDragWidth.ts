@@ -12,6 +12,12 @@
  */
 const DRAG_WIDTH_PROPERTY = "--learning-curriculum-drag-width";
 const DRAG_CONTENT_WIDTH_PROPERTY = "--learning-curriculum-drag-content-width";
+/**
+ * On the shell and its frame for as long as a drag has a width on them: the
+ * stylesheet asks them whether the edge is being dragged, and without this
+ * has to look through the whole page for the answer each time it does.
+ */
+const DRAGGING_ATTRIBUTE = "data-learning-split-dragging";
 
 export interface CurriculumDragWidth {
   /** How wide the course content is while the pointer is held. */
@@ -55,6 +61,12 @@ export function applyCurriculumDragWidth(
 ) {
   const { byWidth, content } = findSized(workspace);
   const width = `${previewWidth}px`;
+  const [shell, frame] = byWidth;
+  for (const element of [shell, frame]) {
+    if (element && !element.hasAttribute(DRAGGING_ATTRIBUTE)) {
+      element.setAttribute(DRAGGING_ATTRIBUTE, "");
+    }
+  }
   for (const element of byWidth) {
     element?.style.setProperty(DRAG_WIDTH_PROPERTY, width);
   }
@@ -66,6 +78,7 @@ export function clearCurriculumDragWidth(workspace: HTMLElement) {
   const { byWidth, content } = findSized(workspace);
   for (const element of byWidth) {
     element?.style.removeProperty(DRAG_WIDTH_PROPERTY);
+    element?.removeAttribute(DRAGGING_ATTRIBUTE);
   }
   content?.style.removeProperty(DRAG_CONTENT_WIDTH_PROPERTY);
 }

@@ -202,14 +202,18 @@ export interface LessonVideoPlayerProps {
  * what it is, instead of an empty black screen.
  */
 /**
- * A failed player shorter than this has no room for its controls and the
- * message both: the top row, the timeline and the bottom row take 128px
- * between them, and the message needs about 70.
+ * A failed player shorter than this gives its controls up, and the message
+ * takes the whole of it. The top row, the timeline and the bottom row take
+ * 116px between them; under 300px that leaves the message so little that
+ * its drawing was a third of an inch tall or was dropped altogether, beside
+ * controls that have nothing to play. Without them the drawing has room to
+ * be seen (about 100px in a 260px player).
  */
-const FAILED_PLAYER_CONTROLS_MIN_HEIGHT = 200;
+const FAILED_PLAYER_CONTROLS_MIN_HEIGHT = 300;
 
 /**
- * Marks the player while it has failed and is too short for its controls
+ * Marks the player while it has failed (`data-learning-player-failed`), and
+ * while it has failed and is too short for its controls
  * (`data-learning-player-failed-small`). The player then shows only what
  * went wrong and the way to try again. It is mounted with the failure's
  * message, so the mark comes and goes with the failure; the size is
@@ -228,24 +232,80 @@ function FailedPlayerSizeMark() {
         "data-learning-player-failed-small",
         shell.clientHeight < FAILED_PLAYER_CONTROLS_MIN_HEIGHT,
       );
+    shell.setAttribute("data-learning-player-failed", "");
     update();
     const observer = new ResizeObserver(update);
     observer.observe(shell);
     return () => {
       observer.disconnect();
+      shell.removeAttribute("data-learning-player-failed");
       shell.removeAttribute("data-learning-player-failed-small");
     };
   }, []);
   return <span ref={probeRef} hidden />;
 }
 
-function LessonPictureBackdrop({ src }: { src?: string }) {
+/**
+ * A failed player by day stands on a light stage (`LessonPictureBackdrop`),
+ * so everything drawn on it in white turns dark: the message, and the
+ * controls through the player theme's own variables. The theme sets those
+ * on this same element, hence the `!`. Nothing here applies while a video
+ * is on screen: only a failure carries the mark.
+ */
+const failedByDayClasses = [
+  // The theme writes its variables on the shell, on the player inside it
+  // and on the layer of corner controls, so each is told. The names are
+  // written out in full: Tailwind only makes the classes it can read.
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[--video-player-control-text:rgb(15_23_42/0.92)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[&_:is([data-video-player-root],[data-player-bottom-corner-controls-layer])]:[--video-player-control-text:rgb(15_23_42/0.92)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[--video-player-control-text-muted:rgb(15_23_42/0.62)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[&_:is([data-video-player-root],[data-player-bottom-corner-controls-layer])]:[--video-player-control-text-muted:rgb(15_23_42/0.62)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[--video-player-control-surface:rgb(255_255_255/0.72)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[&_:is([data-video-player-root],[data-player-bottom-corner-controls-layer])]:[--video-player-control-surface:rgb(255_255_255/0.72)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[--video-player-control-surface-hover:rgb(15_23_42/0.1)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[&_:is([data-video-player-root],[data-player-bottom-corner-controls-layer])]:[--video-player-control-surface-hover:rgb(15_23_42/0.1)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[--video-player-control-surface-active:rgb(15_23_42/0.16)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[&_:is([data-video-player-root],[data-player-bottom-corner-controls-layer])]:[--video-player-control-surface-active:rgb(15_23_42/0.16)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[--video-player-control-hover:rgb(15_23_42/0.1)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[&_:is([data-video-player-root],[data-player-bottom-corner-controls-layer])]:[--video-player-control-hover:rgb(15_23_42/0.1)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[--video-player-control-border:rgb(15_23_42/0.12)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[&_:is([data-video-player-root],[data-player-bottom-corner-controls-layer])]:[--video-player-control-border:rgb(15_23_42/0.12)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[--video-player-control-shadow:0_1px_3px_rgb(15_23_42/0.16)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[&_:is([data-video-player-root],[data-player-bottom-corner-controls-layer])]:[--video-player-control-shadow:0_1px_3px_rgb(15_23_42/0.16)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[--video-player-timeline-track:rgb(15_23_42/0.2)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[&_:is([data-video-player-root],[data-player-bottom-corner-controls-layer])]:[--video-player-timeline-track:rgb(15_23_42/0.2)]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[--video-player-vignette-rgb:255_255_255]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[&_:is([data-video-player-root],[data-player-bottom-corner-controls-layer])]:[--video-player-vignette-rgb:255_255_255]!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:text-slate-900!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[&_:is([data-video-player-root],[data-player-bottom-corner-controls-layer])]:text-slate-900!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[&_[data-video-player-notice-content]_*]:text-slate-900",
+  // The layers of controls name white outright, and what is in them takes it.
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[&_.text-white]:text-slate-900!",
+  "[:root[data-theme=light]_&]:data-learning-player-failed:[&_[data-player-control]]:text-(--video-player-control-text)!",
+].join(" ");
+
+function LessonPictureBackdrop({
+  src,
+  followTheme = false,
+}: {
+  src?: string;
+  /**
+   * By day the stage is a light one with the accent's glow in the middle,
+   * and the lesson's picture is left out of it. Only for a surface whose
+   * own text and controls turn dark with it (see `failedByDayClasses`).
+   */
+  followTheme?: boolean;
+}) {
   return (
     <div
       aria-hidden="true"
       // A lesson with no picture, or one whose picture does not load, still
       // gets a lit stage in the page's accent rather than plain black.
-      className="pointer-events-none absolute inset-0 overflow-hidden bg-[radial-gradient(ellipse_70%_80%_at_50%_42%,color-mix(in_srgb,var(--accent)_30%,#070b16)_0,#070b16_68%,#04060c_100%)]"
+      className={`pointer-events-none absolute inset-0 overflow-hidden bg-[radial-gradient(ellipse_70%_80%_at_50%_42%,color-mix(in_srgb,var(--accent)_30%,#070b16)_0,#070b16_68%,#04060c_100%)] ${
+        followTheme
+          ? "[:root[data-theme=light]_&]:bg-[radial-gradient(ellipse_62%_74%_at_50%_42%,color-mix(in_srgb,var(--accent)_26%,white)_0,color-mix(in_srgb,var(--accent)_7%,white)_58%,color-mix(in_srgb,var(--accent)_3%,#f4f5f7)_100%)] [:root[data-theme=light]_&]:*:hidden"
+          : ""
+      }`}
     >
       {src ? (
         <>
@@ -1220,7 +1280,7 @@ export function LessonVideoPlayer({
             // surface that asks the learner to sign in.
             background={
               <>
-                <LessonPictureBackdrop src={media.thumbnailSrc} />
+                <LessonPictureBackdrop src={media.thumbnailSrc} followTheme />
                 <FailedPlayerSizeMark />
               </>
             }
@@ -1232,10 +1292,22 @@ export function LessonVideoPlayer({
             // bottom row. A shorter player draws the picture smaller and
             // then not at all, before the action would reach a control;
             // and the action is above the controls, should it ever.
-            contentClassName="z-40 top-12! bottom-20!"
-            icon={<LessonTroubleIllustration className="h-24 w-auto" />}
+            // The top row's controls are in the corners and the message
+            // is in the middle, so its room starts a little above their
+            // lower edge.
+            contentClassName="z-40 top-9! bottom-20!"
+            // The drawing takes whatever height the title and the action
+            // leave in that room (`cqh` is the room's own height), so it is
+            // as large as the player allows at every size: 5rem to 10rem
+            // here, and 2rem to 6rem in the shorter room the smaller
+            // drawing is for. What is taken off is the notice's own
+            // padding, gaps, title and action at that size, and 8px to
+            // spare.
+            icon={
+              <LessonTroubleIllustration className="h-[clamp(5rem,calc(100cqh_-_9.75rem),10rem)] w-auto" />
+            }
             smallIcon={
-              <LessonTroubleIllustration className="h-8 w-auto [@container_(min-height:10.5rem)]:h-12 [@container_(min-height:12.5rem)]:h-16" />
+              <LessonTroubleIllustration className="h-8 w-auto [@container_(min-height:10.5rem)]:h-[clamp(3rem,calc(100cqh_-_7.5rem),6rem)]" />
             }
           />
         )
@@ -1252,6 +1324,7 @@ export function LessonVideoPlayer({
         // A failed player too short for its controls drops them, and the
         // message takes the whole of it (`FailedPlayerSizeMark`).
         "data-learning-player-failed-small:[&_:is([data-video-player-control-layer],[data-player-bottom-corner-controls-layer],[data-player-timeline-wrap])]:invisible! data-learning-player-failed-small:[&_[data-video-player-notice-content]]:inset-0!",
+        failedByDayClasses,
         "[[data-learning-player-restore-phase=expanding]_&]:[&_[data-video-player-notice]]:invisible! [[data-learning-player-window-motion]_&]:[&_[data-video-player-notice]]:invisible! data-learning-player-controls-suppressed:[&_[data-video-player-notice]]:invisible!",
         // Wide touch screens keep the vertical swipe for the minimize
         // gesture, as phones do; only a mouse-first device hands vertical

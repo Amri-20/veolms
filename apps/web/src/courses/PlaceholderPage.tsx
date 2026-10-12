@@ -2,7 +2,6 @@ import { BellIcon as Bell } from "@phosphor-icons/react/Bell";
 import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { ChartBarIcon as ChartBar } from "@phosphor-icons/react/ChartBar";
 import { ChatCircleDotsIcon as ChatCircleDots } from "@phosphor-icons/react/ChatCircleDots";
-import { CompassIcon as Compass } from "@phosphor-icons/react/Compass";
 import { EnvelopeSimpleIcon as EnvelopeSimple } from "@phosphor-icons/react/EnvelopeSimple";
 import { GearSixIcon as GearSix } from "@phosphor-icons/react/GearSix";
 import { PlusCircleIcon as PlusCircle } from "@phosphor-icons/react/PlusCircle";
@@ -12,6 +11,7 @@ import { StarIcon as Star } from "@phosphor-icons/react/Star";
 import { ToteIcon as Tote } from "@phosphor-icons/react/Tote";
 import { UsersIcon as Users } from "@phosphor-icons/react/Users";
 import type { ComponentType } from "react";
+import { OctopusIllustration } from "../components/OctopusIllustration";
 import type { CourseRole } from "./catalogue";
 import { getRoleDisplayName } from "../shell/workspaceRole";
 
@@ -109,35 +109,45 @@ export interface PlaceholderPageProps {
 
 const NOT_FOUND_SECTION = "Not Found";
 
+/**
+ * What an address that leads nowhere shows: the octopus failing to find the
+ * page, and the two ways back.
+ */
 function NotFoundPage() {
   return (
     <div
-      className="courses-placeholder-page"
+      className="grid min-h-[min(34rem,calc(100dvh-8rem))] place-items-center px-6 py-12 text-center"
       aria-labelledby="placeholder-page-title"
     >
-      <header className="courses-placeholder-heading">
-        <div>
-          <h1 id="placeholder-page-title">Page not found</h1>
-          <p>This page does not exist or is no longer available.</p>
-        </div>
-        <span className="courses-placeholder-heading-icon" aria-hidden="true">
-          <Compass size={26} weight="duotone" />
-        </span>
-      </header>
-
-      <section
-        className="courses-placeholder-empty"
-        aria-label="Page not found"
-      >
-        <span className="courses-placeholder-empty-icon" aria-hidden="true">
-          <Compass size={34} weight="duotone" />
-        </span>
-        <h2>We couldn&apos;t find that page</h2>
-        <p>
-          The address may be mistyped, or the page may have moved. Go back to{" "}
-          <a href="/">Home</a> or <a href="/courses">browse courses</a>.
+      <div className="max-w-md">
+        <OctopusIllustration
+          kind="not-found"
+          className="mx-auto h-36 w-auto sm:h-40"
+        />
+        <h1
+          id="placeholder-page-title"
+          className="mt-6 text-2xl font-bold tracking-tight text-(--text)"
+        >
+          Page not found
+        </h1>
+        <p className="mt-2 text-[0.9375rem] leading-6 text-(--muted)">
+          The address may be mistyped, or the page may have moved.
         </p>
-      </section>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <a
+            href="/"
+            className="inline-flex h-11 items-center justify-center rounded-lg bg-(--accent) px-5 text-[0.9375rem] font-semibold text-(--on-accent) transition-colors hover:bg-(--accent-hover) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
+          >
+            Go to Home
+          </a>
+          <a
+            href="/courses"
+            className="inline-flex h-11 items-center justify-center rounded-lg border border-[color-mix(in_srgb,var(--text)_14%,transparent)] px-5 text-[0.9375rem] font-semibold text-(--text) transition-colors hover:bg-(--hover) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
+          >
+            Browse courses
+          </a>
+        </div>
+      </div>
     </div>
   );
 }

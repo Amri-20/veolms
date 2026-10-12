@@ -1,4 +1,6 @@
+import { useRef } from "react";
 import "./learning-split-layout.css";
+import { useLearningSplitMark } from "./learningSplitMark";
 import {
   LESSON_SIDE_PLACEHOLDER_SURFACE_CLASS,
   LessonContentPlaceholderBars,
@@ -20,6 +22,8 @@ import {
  * column are already two cards here, as on the real page.
  */
 export function LearningWorkspaceFallback() {
+  const splitPaneRef = useRef<HTMLDivElement>(null);
+  useLearningSplitMark(splitPaneRef, true);
   return (
     <div
       className="min-h-dvh bg-(--canvas) text-(--text)"
@@ -45,6 +49,7 @@ export function LearningWorkspaceFallback() {
         </div>
         <div
           className={`sticky top-0 hidden h-dvh min-w-0 flex-col gap-3 self-start overflow-hidden p-4 min-[1081px]:flex [[data-learning-curriculum-state=collapsed]_&]:hidden ${LESSON_SIDE_PLACEHOLDER_SURFACE_CLASS}`}
+          ref={splitPaneRef}
           aria-hidden="true"
           data-learning-split-pane=""
           data-learning-split-card=""

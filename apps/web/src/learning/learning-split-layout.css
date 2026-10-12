@@ -148,12 +148,23 @@
   }
 }
 
+/* Whether the course content's card is in the frame is asked of the shell
+   and of the frame in most rules below. `:has([data-learning-split-pane])`
+   answers it, but only by going through everything inside, and those two
+   are re-styled on every frame of a drag of the card's edge. So the page
+   says it on them once it runs (`data-learning-split`, learningSplitMark.ts)
+   and the search is only the answer until then. Likewise for "the edge is
+   being dragged" (`data-learning-split-dragging`, curriculumDragWidth.ts).
+   Each pair is written so that it weighs what the search alone did. */
 @media (min-width: 1081px) {
   /* The shell normally draws the edge highlight of the full-width frame (its
      overlay with a mouse, FrameEdge on touch devices); here the frame draws
      its own below, at whatever width it has, and the shell's is not drawn. */
   :root[data-content-layout="framed"]
-    .courses-app:has(> .courses-main-frame [data-learning-split-pane])
+    .courses-app:is(
+      [data-learning-split],
+      :has(> .courses-main-frame [data-learning-split-pane])
+    )
     > [data-frame-edge="shell"] {
     display: none;
   }
@@ -163,7 +174,10 @@
      the lesson card: a shadow on the card itself is painted over the lesson
      card, and cutting it off at the gutter leaves a hard edge in the glow. */
   :root[data-content-layout="framed"]
-    .courses-app:has(> .courses-main-frame [data-learning-split-pane])::after {
+    .courses-app:is(
+      [data-learning-split],
+      :has(> .courses-main-frame [data-learning-split-pane])
+    )::after {
     /* A drag writes its width on the shell; the overlay has to ask for it. */
     --learning-curriculum-drag-width: inherit;
     z-index: 0;
@@ -176,8 +190,9 @@
      course content's room begins. That room is one of the properties that
      are not inherited, so the stand-in asks for the frame's. */
   :root[data-content-layout="framed"]
-    .courses-main-frame[data-learning-frame-reveal]:has(
-      [data-learning-split-pane]
+    .courses-main-frame[data-learning-frame-reveal]:is(
+      [data-learning-split],
+      :has([data-learning-split-pane])
     )::before {
     --learning-split-pane-space: inherit;
     right: var(--learning-split-pane-space);
@@ -190,9 +205,14 @@
      the motion lasts, see setLearningFrameReveal) and comes back with the
      lesson. */
   :root[data-content-layout="framed"]
-    .courses-app:has(
-      > .courses-main-frame[data-learning-frame-reveal]
-        [data-learning-split-pane]
+    .courses-app:is(
+      [data-learning-split]:has(
+        > .courses-main-frame[data-learning-frame-reveal]
+      ),
+      :has(
+        > .courses-main-frame[data-learning-frame-reveal]
+          [data-learning-split-pane]
+      )
     )::after {
     opacity: 0;
     transition: opacity 90ms ease-out;
@@ -202,11 +222,20 @@
      it (see the top of this file) and animates that copy, all with the same
      timing, so they move as one. */
   :root[data-content-layout="framed"]
-    .courses-app:has(> .courses-main-frame [data-learning-split-pane])::after,
+    .courses-app:is(
+      [data-learning-split],
+      :has(> .courses-main-frame [data-learning-split-pane])
+    )::after,
   :root[data-content-layout="framed"]
-    .courses-main-frame:has([data-learning-split-pane]),
+    .courses-main-frame:is(
+      [data-learning-split],
+      :has([data-learning-split-pane])
+    ),
   :root[data-content-layout="framed"]
-    .courses-main-frame:has([data-learning-split-pane])
+    .courses-main-frame:is(
+      [data-learning-split],
+      :has([data-learning-split-pane])
+    )
     :is([data-learning-split-lesson], [data-learning-split-pane]) {
     --learning-split-width: var(
       --learning-curriculum-drag-width,
@@ -228,23 +257,44 @@
   /* Keep the head bootstrap width on first paint, and follow the pointer
      exactly while the gutter is dragged. */
   :root[data-content-layout="framed"][data-app-hydrated="false"]
-    .courses-app:has(> .courses-main-frame [data-learning-split-pane])::after,
+    .courses-app:is(
+      [data-learning-split],
+      :has(> .courses-main-frame [data-learning-split-pane])
+    )::after,
   :root[data-content-layout="framed"]
-    .courses-app:has(> .courses-main-frame [data-learning-split-pane]):has(
-      .learning-workspace.is-curriculum-resizing
+    .courses-app:is(
+      [data-learning-split],
+      :has(> .courses-main-frame [data-learning-split-pane])
+    ):is(
+      [data-learning-split-dragging],
+      :has(.learning-workspace.is-curriculum-resizing)
     )::after,
   :root[data-content-layout="framed"][data-app-hydrated="false"]
-    .courses-main-frame:has([data-learning-split-pane]),
+    .courses-main-frame:is(
+      [data-learning-split],
+      :has([data-learning-split-pane])
+    ),
   :root[data-content-layout="framed"]
-    .courses-main-frame:has([data-learning-split-pane]):has(
-      .learning-workspace.is-curriculum-resizing
+    .courses-main-frame:is(
+      [data-learning-split],
+      :has([data-learning-split-pane])
+    ):is(
+      [data-learning-split-dragging],
+      :has(.learning-workspace.is-curriculum-resizing)
     ),
   :root[data-content-layout="framed"][data-app-hydrated="false"]
-    .courses-main-frame:has([data-learning-split-pane])
+    .courses-main-frame:is(
+      [data-learning-split],
+      :has([data-learning-split-pane])
+    )
     :is([data-learning-split-lesson], [data-learning-split-pane]),
   :root[data-content-layout="framed"]
-    .courses-main-frame:has([data-learning-split-pane]):has(
-      .learning-workspace.is-curriculum-resizing
+    .courses-main-frame:is(
+      [data-learning-split],
+      :has([data-learning-split-pane])
+    ):is(
+      [data-learning-split-dragging],
+      :has(.learning-workspace.is-curriculum-resizing)
     )
     :is([data-learning-split-lesson], [data-learning-split-pane]) {
     transition: none;
@@ -255,21 +305,24 @@
      full-width frame and would run across the gutter. */
   :root[data-content-layout="framed"]
     .courses-app:has([data-learning-expand-sheet-active]):not(
-      :has([data-learning-split-pane])
+      :is([data-learning-split], :has([data-learning-split-pane]))
     )::after {
     content: none;
   }
 
   :root[data-content-layout="framed"]
     .courses-app:has([data-learning-expand-sheet-active]):not(
-      :has([data-learning-split-pane])
+      :is([data-learning-split], :has([data-learning-split-pane]))
     )
     > [data-frame-edge="shell"] {
     display: none;
   }
 
   :root[data-content-layout="framed"]
-    .courses-main-frame:has([data-learning-split-pane]) {
+    .courses-main-frame:is(
+      [data-learning-split],
+      :has([data-learning-split-pane])
+    ) {
     --learning-split-radius: 18px;
     position: relative;
   }
@@ -277,7 +330,10 @@
   /* The frame makes room for the course content, except while the player is
      minimizing: then the lesson reserves that room itself (below). */
   :root[data-content-layout="framed"]
-    .courses-main-frame:has([data-learning-split-pane]):not(
+    .courses-main-frame:is(
+      [data-learning-split],
+      :has([data-learning-split-pane])
+    ):not(
       :has(
         [data-learning-player-motion]:not(
           [data-learning-player-motion="restoring"]
@@ -298,7 +354,10 @@
      explains the split, and why its group has no box). */
   @media not (pointer: coarse) {
     :root[data-content-layout="framed"]
-      .courses-main-frame:has([data-learning-split-pane])::after {
+      .courses-main-frame:is(
+        [data-learning-split],
+        :has([data-learning-split-pane])
+      )::after {
       content: "";
       position: absolute;
       z-index: 46;
@@ -314,14 +373,20 @@
 
   @media (pointer: coarse) {
     :root[data-content-layout="framed"]
-      .courses-main-frame:has([data-learning-split-pane])
+      .courses-main-frame:is(
+        [data-learning-split],
+        :has([data-learning-split-pane])
+      )
       > [data-frame-edge="lesson"] {
       display: contents;
     }
   }
 
   :root[data-content-layout="framed"]
-    .courses-main-frame:has([data-learning-split-pane]) {
+    .courses-main-frame:is(
+      [data-learning-split],
+      :has([data-learning-split-pane])
+    ) {
     & [data-learning-split-lesson] {
       --learning-split-lesson-reserve: var(--learning-split-pane-space);
       box-sizing: border-box;

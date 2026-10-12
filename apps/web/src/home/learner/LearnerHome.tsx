@@ -1,6 +1,5 @@
 import type { EnrolledCourse } from "@veolms/contracts";
-import { useMemo, useState } from "react";
-import { courseSurfaceElevation } from "../../components/cardElevation";
+import { useEffect, useMemo, useState } from "react";
 import type { NavigateTo } from "../../routing/navigation";
 import { getCoursePlayerPath } from "../../learning/coursePlayerNavigation";
 import { useCourses } from "../../services/courses";
@@ -14,17 +13,23 @@ import {
   GuestHomeCourseSection,
   type GuestHomeCourseCardActions,
 } from "../guest/GuestHomeCourseSection";
-import {
-  guestHomeBlockStart,
-  guestHomeGutter,
-  guestHomeSectionGap,
-} from "../guest/guestHomeSpacing";
 import { GUEST_HOME_COURSES_PER_SECTION } from "../guestHomeLimits";
 import { getHomeTimeGreeting } from "../homeGreeting";
 import { LearnerCoursesSection } from "./LearnerCoursesSection";
+import {
+  LearnerCoursesSubtitle,
+  rememberLearnerStarted,
+} from "./learnerCoursesSubtitle";
 import { LearnerGoalScreen } from "./LearnerGoalScreen";
 import { LearnerHeroPinDrop } from "./LearnerHeroPinDrop";
 import { LearnerHomeHero } from "./LearnerHomeHero";
+import {
+  LearnerCoursesSkeleton,
+  LearnerResumeRowSkeleton,
+  learnerHomeBodyClasses,
+  learnerHomePageClasses,
+} from "./LearnerHomeSkeleton";
+import { LearnerResumeRow } from "./LearnerResumeRow";
 import { useDraggedPinCourseId } from "./pinCourseDrag";
 import { pinHomeCourse, usePinnedHomeCourseId } from "./pinnedHomeCourse";
 import {
@@ -40,6 +45,8 @@ import "../guest/guest-home-shell.css";
  */
 const EXPLORE_BELOW_ENROLLED_COUNT = 3;
 
+const NO_COURSES: readonly EnrolledCourse[] = [];
+
 const getCoursePlayerHref = (course: EnrolledCourse) =>
   `/learn/${encodeURIComponent(getEnrolledCourseKey(course))}`;
 
@@ -48,15 +55,27 @@ const getCoursePlayerHref = (course: EnrolledCourse) =>
  * leads with the course to carry on with (or to start, when nothing has
  * been started yet) and shows their learning goals on the laptop in the
  * picture; their other courses follow.
+ *
+ * It is on the page before the courses are known. Until then the picture,
+ * the date, the greeting, the quote and the list's heading are all there,
+ * and only the course's row and the cards are placeholders; they give way
+ * in place when the courses arrive, and nothing else is drawn again.
  */
 export function LearnerHome({
-  enrolledCourses,
+  enrolledCourses: knownCourses,
+  sessionPending = false,
   learnerName,
   courseCardActions,
   onOpenCourse,
   onNavigatePage,
 }: {
-  enrolledCourses: readonly EnrolledCourse[];
+  /** The learner's courses, once they are known. */
+  enrolledCourses: readonly EnrolledCourse[] | undefined;
+  /**
+   * The session has not answered yet, so nothing of the learner's own may be
+   * asked for.
+   */
+  sessionPending?: boolean;
   /** The learner's display name; it may be empty. */
   learnerName: string;
   /** What the cards of courses to explore need from the page shell. */
@@ -64,6 +83,7 @@ export function LearnerHome({
   onOpenCourse: (course: LearningCourse) => void;
   onNavigatePage: NavigateTo;
 }) {
+  const enrolledCourses = knownCourses ?? NO_COURSES;
   const pinnedCourseId = usePinnedHomeCourseId();
   const draggedCourseId = useDraggedPinCourseId();
   const plan = useMemo(
@@ -83,9 +103,11 @@ export function LearnerHome({
       ? resumeQuery.data
       : null;
 
-  const summaryQuery = useLearningSummary();
+  const summaryQuery = useLearningSummary({ enabled: !sessionPending });
 
-  const showExplore = enrolledCourses.length < EXPLORE_BELOW_ENROLLED_COUNT;
+  const showExplore =
+    Boolean(knownCourses) &&
+    enrolledCourses.length < EXPLORE_BELOW_ENROLLED_COUNT;
   const publishedQuery = useCourses({ enabled: showExplore });
   const coursesToExplore = useMemo(
     () =>
@@ -103,6 +125,39 @@ export function LearnerHome({
   );
   const firstName = learnerName.trim().split(/\s+/u)[0] ?? "";
 
+  const coursesKnown = Boolean(knownCourses);
+  const anythingStarted = enrolledCourses.some(
+    (course) => (course.progress ?? 0) > 0,
+  );
+  useEffect(() => {
+    if (coursesKnown) rememberLearnerStarted(anythingStarted);
+  }, [anythingStarted, coursesKnown]);
+
+  const laptopScreen = (
+    <LearnerGoalScreen
+      summary={summaryQuery.data}
+      isLoading={sessionPending || summaryQuery.isLoading}
+      onSetGoal={() => onNavigatePage("/settings/learning")}
+    />
+  );
+
+  if (!knownCourses) {
+    return (
+      <div className={learnerHomePageClasses}>
+        <LearnerHomeHero
+          timeGreeting={timeGreeting}
+          firstName={firstName}
+          namePending={sessionPending}
+          resumeRow={<LearnerResumeRowSkeleton />}
+          laptopScreen={laptopScreen}
+        />
+        <div className={learnerHomeBodyClasses}>
+          <LearnerCoursesSkeleton />
+        </div>
+      </div>
+    );
+  }
+
   if (!plan || !heroCourse) return null;
 
   const openCourse = (course: EnrolledCourse) =>
@@ -117,9 +172,7 @@ export function LearnerHome({
     resumeContext && heroLesson
       ? getCoursePlayerPath(resumeContext.courseSlug, heroLesson.lessonNumber)
       : null;
-  const nothingStarted = enrolledCourses.every(
-    (course) => (course.progress ?? 0) <= 0,
-  );
+  const nothingStarted = !anythingStarted;
   // The pinned course takes the hero's place at the top of the page, so the
   // learner is taken there to see it happen.
   const pinCourse = (course: EnrolledCourse) => {
@@ -133,48 +186,44 @@ export function LearnerHome({
   };
 
   return (
-    <div
-      className={`learner-home-page @container/home min-w-0 ${courseSurfaceElevation}`}
-    >
+    <div className={learnerHomePageClasses}>
       <LearnerHomeHero
         timeGreeting={timeGreeting}
         firstName={firstName}
-        intent={plan.intent}
-        course={heroCourse}
-        resume={{ context: resumeContext, isLoading: resumeQuery.isLoading }}
-        pinned={plan.heroPinned}
-        onUnpin={() => pinHomeCourse(null)}
-        onNavigatePage={onNavigatePage}
-        courseHref={heroLessonPath ?? getCoursePlayerHref(heroCourse)}
-        onOpenCourse={() =>
-          heroLessonPath
-            ? onNavigatePage(heroLessonPath)
-            : openCourse(heroCourse)
-        }
-        // A course card dragged from the list below is pinned by dropping
-        // it on the hero's own course card.
-        pinDrop={
-          draggedCourseId ? <LearnerHeroPinDrop onPin={pinHomeCourse} /> : null
-        }
-        laptopScreen={
-          <LearnerGoalScreen
-            summary={summaryQuery.data}
-            isLoading={summaryQuery.isLoading}
-            onSetGoal={() => onNavigatePage("/settings/learning")}
+        namePending={false}
+        resumeRow={
+          <LearnerResumeRow
+            course={heroCourse}
+            intent={plan.intent}
+            resume={{
+              context: resumeContext,
+              isLoading: resumeQuery.isLoading,
+            }}
+            pinned={plan.heroPinned}
+            onUnpin={() => pinHomeCourse(null)}
+            onNavigatePage={onNavigatePage}
+            href={heroLessonPath ?? getCoursePlayerHref(heroCourse)}
+            onOpen={() =>
+              heroLessonPath
+                ? onNavigatePage(heroLessonPath)
+                : openCourse(heroCourse)
+            }
+            // A course card dragged from the list below is pinned by
+            // dropping it on the hero's own course card.
+            pinDrop={
+              draggedCourseId ? (
+                <LearnerHeroPinDrop onPin={pinHomeCourse} />
+              ) : null
+            }
           />
         }
+        laptopScreen={laptopScreen}
       />
 
-      <div
-        className={`grid min-w-0 pb-[clamp(1.75rem,3.6cqw,3rem)] ${guestHomeSectionGap} ${guestHomeGutter} ${guestHomeBlockStart}`}
-      >
+      <div className={learnerHomeBodyClasses}>
         <LearnerCoursesSection
           courses={plan.courses}
-          subtitle={
-            nothingStarted
-              ? "Start learning from your enrolled courses."
-              : "Continue learning from your enrolled courses."
-          }
+          subtitle={<LearnerCoursesSubtitle started={!nothingStarted} />}
           courseMenu={courseCardActions.courseMenu}
           setCourseMenu={courseCardActions.setCourseMenu}
           getCourseHref={getCoursePlayerHref}

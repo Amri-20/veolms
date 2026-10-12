@@ -2,7 +2,7 @@ import { CheckCircleIcon as CheckCircle } from "@phosphor-icons/react/CheckCircl
 import { ExamIcon as Exam } from "@phosphor-icons/react/Exam";
 import { LockSimpleIcon as LockSimple } from "@phosphor-icons/react/LockSimple";
 import { memo } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
+import type { RefObject } from "react";
 import type { LessonResource } from "@veolms/contracts";
 import type { Lesson } from "./courseContent";
 import { LessonResourcesMenu } from "./LessonResourcesMenu";
@@ -64,8 +64,6 @@ export interface CurriculumLessonCardProps {
   onSelectLesson: (lessonNumber: number) => void;
   onClose?: () => void;
   activeLessonRef?: RefObject<HTMLButtonElement | null>;
-  virtualIndex?: number;
-  onVirtualizedKeyDown?: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   resources?: readonly LessonResource[];
   /** Course slug or id; resources are downloaded through this course. */
   resourceCourseKey?: string;
@@ -74,6 +72,8 @@ export interface CurriculumLessonCardProps {
   quizActive?: boolean;
   onOpenQuiz?: (lessonNumber: number) => void;
   portalContainer?: RefObject<HTMLElement | null>;
+  /** Extra classes for the card itself (how it behaves off screen). */
+  className?: string;
 }
 
 /**
@@ -94,14 +94,13 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
   onSelectLesson,
   onClose,
   activeLessonRef,
-  virtualIndex,
-  onVirtualizedKeyDown,
   resources,
   resourceCourseKey,
   hasQuiz = false,
   quizActive = false,
   onOpenQuiz,
   portalContainer,
+  className = "",
 }: CurriculumLessonCardProps) {
   const [number, title, duration, status, , contentType] = lesson;
   const completed =
@@ -118,6 +117,11 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
     Boolean(resourceCourseKey) &&
     Boolean(resources?.length);
   const hasActions = showLock || showQuiz || showResources;
+  // Said after the lesson's length to a screen reader; most lessons have
+  // nothing to add, and then there is no element for it.
+  const spokenState = !isAvailable
+    ? ", log in to watch"
+    : `${isActive && !showLock ? ", now playing" : ""}${completed ? ", completed" : ""}${showLock ? ", locked" : ""}`;
   const lengthLabel =
     (contentType && NON_VIDEO_LESSON_LABELS[contentType]) || duration;
 
@@ -127,7 +131,7 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
       data-curriculum-lesson-card=""
       data-active={isActive || undefined}
       data-completed={completed || undefined}
-      className={`group/lesson relative overflow-hidden rounded-lg transition-[background-color,box-shadow] duration-150 ${
+      className={`${className} group/lesson relative overflow-hidden rounded-lg transition-[background-color,box-shadow] duration-150 ${
         isActive
           ? // The sidebar's active surface, with a tighter bottom cast: the
             // sidebar shadow token spreads too far for cards stacked in a
@@ -148,8 +152,6 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
         disabled={!isAvailable}
         title={isAvailable ? undefined : "Log in to watch this lecture"}
         aria-current={isActive ? "true" : undefined}
-        data-curriculum-lesson-index={virtualIndex}
-        onKeyDown={onVirtualizedKeyDown}
         onClick={() => {
           if (!isAvailable) return;
           onSelectLesson(number);
@@ -211,11 +213,7 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
               <span>{Math.round(watched)}% complete</span>
             </>
           ) : null}
-          <span className="sr-only">
-            {!isAvailable
-              ? ", log in to watch"
-              : `${isActive && !showLock ? ", now playing" : ""}${completed ? ", completed" : ""}${showLock ? ", locked" : ""}`}
-          </span>
+          {spokenState ? <span className="sr-only">{spokenState}</span> : null}
         </span>
       </button>
       {hasActions ? (

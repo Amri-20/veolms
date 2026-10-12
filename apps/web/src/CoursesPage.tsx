@@ -8,10 +8,13 @@ import {
   useMemo,
   useRef,
   useState,
+  startTransition,
   useSyncExternalStore,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { flushSync } from "react-dom";
+import { PrefetchPageLinks } from "react-router";
+import { SETTINGS_ROUTE_STYLESHEETS } from "./routes/settingsRouteStylesheets";
 import type {
   CSSProperties,
   FocusEvent as ReactFocusEvent,
@@ -81,7 +84,9 @@ import type {
 } from "./courses/catalogue";
 import { AcademyPaletteMenu } from "./shell/AcademyPaletteMenu";
 import { AcademyRouteSkeleton } from "./routing/AcademyRouteSkeleton";
+import { LearnerHomeShell } from "./home/learner/LearnerHomeSkeleton";
 import { FloatingScrollbar } from "./shell/FloatingScrollbar";
+import { useScrollingMark } from "./shell/useScrollingMark";
 import { useMobileProfileDrawerSize } from "./shell/useMobileProfileDrawerSize";
 import { ShellProfileAvatar } from "./shell/ShellProfileAvatar";
 import { ProfileButtonPlaceholder } from "./shell/ProfileButtonPlaceholder";
@@ -131,6 +136,8 @@ import { ChunkStylesheets } from "./routing/ChunkStylesheets";
 import {
   courseCatalogueBody,
   guestHomeBody,
+  settingsPageBody,
+  workspacePageBody,
 } from "./routing/prerenderedBodies";
 import { guestHeroImage } from "./home/guest/guestHeroImage";
 
@@ -350,11 +357,18 @@ function CourseEditorRouteFallback() {
   );
 }
 
-const SettingsPage = lazy(() =>
-  import("./SettingsPage").then((module) => ({
-    default: module.SettingsPage,
-  })),
-);
+// Settings is one click away from every page (the gear, the profile menu,
+// its keyboard shortcut) and is a large page: seven sections' worth of code
+// and styles that arrive in several round trips. Left to load on the click,
+// it opened a second late on an ordinary connection while every other page
+// was instant. So it is fetched ahead of time (see the warm-up effect).
+const SettingsPage = settingsPageBody.Body;
+/**
+ * What a pointer or the keyboard is on when Settings or Discussions is about
+ * to be opened (the menu's own items are buttons named for their page).
+ */
+const SETTINGS_ENTRY_SELECTOR =
+  '[data-settings-quick-trigger], a[href="/settings"], a[href^="/settings/"], a[href="/discussions"], a[href^="/discussions/"], a[href^="/discussions?"], button[aria-label="Discussions"]';
 
 const AuthenticatedHomeBoundary = lazy(() =>
   import("./home/AuthenticatedHomeBoundary").then((module) => ({
@@ -367,11 +381,7 @@ const PlaceholderPage = lazy(() =>
     default: module.PlaceholderPage,
   })),
 );
-const WorkspacePage = lazy(() =>
-  import("./workspace/WorkspacePages").then((module) => ({
-    default: module.WorkspacePage,
-  })),
-);
+const WorkspacePage = workspacePageBody.Body;
 const ReviewsPage = lazy(() =>
   import("./reviews/ReviewsPage").then((module) => ({
     default: module.ReviewsPage,
@@ -775,6 +785,9 @@ const SIDEBAR_DOCK_VERTICAL_MAX_WIDTH = 180;
  * drag has reached (see previewSidebarResizeWidth).
  */
 const SIDEBAR_RESIZE_STATE_SYNC_MS = 140;
+/** How close two presses on the brand must be to count as one double tap. */
+const SIDEBAR_BRAND_DOUBLE_TAP_MS = 450;
+const SIDEBAR_BRAND_DOUBLE_TAP_DISTANCE = 40;
 
 /**
  * Everything a dragged sidebar's width decides about what is rendered: which
@@ -873,9 +886,9 @@ const SIDEBAR_DOCK_CLASS =
 // the menu's icon column. Only the settled collapsed sidebar used to have
 // that nudge, so the logo stepped 1.5px left on the frame it collapsed.
 const SIDEBAR_BRAND_CLASS =
-  "courses-sidebar__brand [.courses-app:not(.courses-app--collapsed)_&]:[&>.courses-logo-clip]:max-w-[min(156px,calc(100%-36px))]! [.courses-app--collapsed_&]:flex-row! [.courses-app--collapsed_&]:items-end! [.courses-app--collapsed_&]:justify-start! [.courses-app--collapsed_&]:pl-[19.375px]! [.courses-app--collapsed_&]:pr-[7px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:static! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:block! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:w-[156px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:opacity-100! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:transform-none! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:[clip-path:inset(0)]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:max-w-[min(156px,max(0px,calc(100%-36px)))]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:static! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:block! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:w-[156px]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:opacity-100! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:transform-none! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:[clip-path:inset(0)]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:max-w-[min(156px,max(23px,calc(100%-36px)))]! [&>.courses-logo-clip>svg]:origin-left [&>.courses-logo-clip>svg]:scale-110 [&>.courses-logo-clip]:translate-y-[4px] [&>.courses-logo-clip]:-translate-x-[0.5px] min-[641px]:[&>.courses-logo-clip]:-translate-x-[2px] [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:h-12! [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:min-h-12! [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:[&>.courses-logo-clip]:translate-y-[6px] [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:[&>.courses-logo-clip]:h-[38px]!";
+  "courses-sidebar__brand [.courses-app:not(.courses-app--collapsed)_&]:[&>.courses-logo-clip]:max-w-[min(156px,max(21px,calc(100%-36px)))]! [.courses-app--collapsed_&]:flex-row! [.courses-app--collapsed_&]:items-end! [.courses-app--collapsed_&]:justify-start! [.courses-app--collapsed_&]:pl-[19.375px]! [.courses-app--collapsed_&]:pr-[7px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:static! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:block! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:w-[156px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:opacity-100! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:transform-none! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:[clip-path:inset(0)]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:max-w-[min(156px,max(0px,calc(100%-36px)))]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:static! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:block! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:w-[156px]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:opacity-100! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:transform-none! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:[clip-path:inset(0)]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:max-w-[min(156px,max(21px,calc(100%-36px)))]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:max-w-[min(156px,max(21px,calc(100%-36px)))]! [&>.courses-logo-clip>svg]:origin-left [&>.courses-logo-clip>svg]:scale-100 [&>.courses-logo-clip]:translate-y-[4px] [&>.courses-logo-clip]:-translate-x-[0.5px] min-[641px]:[&>.courses-logo-clip]:-translate-x-[1px] [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:h-12! [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:min-h-12! [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:[&>.courses-logo-clip]:-mb-[2px] [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:[&>.courses-logo-clip]:h-[38px]!";
 const SIDEBAR_COLLAPSE_BUTTON_CLASS =
-  "sidebar-collapse [.courses-app:not(.courses-app--collapsed)_&]:absolute! [.courses-app:not(.courses-app--collapsed)_&]:top-[14px]! [.courses-app:not(.courses-app--collapsed)_&]:bottom-auto! [.courses-app:not(.courses-app--collapsed)_&]:left-[calc(100%-39px-clamp(0px,(112px-100%)*0.1,4px))]! [.courses-app--collapsed_&]:absolute! [.courses-app--collapsed_&]:top-[14px]! [.courses-app--collapsed_&]:bottom-auto! [.courses-app--collapsed_&]:left-auto! [.courses-app--collapsed_&]:right-[calc(7.5px+clamp(0px,(120px-100%)*0.1,4px))]! [.courses-app--collapsed.courses-app--resizing_&]:opacity-100! [.courses-app--collapsed.courses-app--resizing_&]:pointer-events-auto! [.courses-app--collapsed:not(.courses-app--resizing)_.courses-sidebar:not(:hover)_&]:delay-[220ms]! [&>span]:scale-[1.16] [&>span]:translate-y-[0.5px] hover:bg-transparent! hover:shadow-none! hover:[&>span]:rounded-[24%]! hover:[&>span]:bg-[color-mix(in_srgb,var(--accent)_55%,var(--app-shell))]! hover:[&>span]:shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_55%,var(--app-shell))]!";
+  "sidebar-collapse [.courses-app:not(.courses-app--collapsed)_&]:absolute! [.courses-app:not(.courses-app--collapsed)_&]:top-[14px]! [.courses-app:not(.courses-app--collapsed)_&]:bottom-auto! [.courses-app:not(.courses-app--collapsed)_&]:left-[calc(100%-39px-clamp(0px,(112px-100%)*0.1,4px))]! [.courses-app--collapsed_&]:absolute! [.courses-app--collapsed_&]:top-[14px]! [.courses-app--collapsed_&]:bottom-auto! [.courses-app--collapsed_&]:left-auto! [.courses-app--collapsed_&]:right-[calc(7.5px+clamp(0px,(120px-100%)*0.1,4px))]! [.courses-app--collapsed.courses-app--resizing_&]:opacity-100! [.courses-app--collapsed.courses-app--resizing_&]:pointer-events-auto! [.courses-app--collapsed:not(.courses-app--resizing)_.courses-sidebar:not(:hover)_&]:delay-[220ms]! [&>span]:scale-[1.16] [&>span]:translate-y-[0.5px] [.courses-app--collapsed_&]:[&>span]:translate-x-[0.3px] [.courses-app--collapsed_&]:[&>span]:translate-y-[0.15px] hover:bg-transparent! hover:shadow-none! hover:[&>span]:rounded-[24%]! hover:[&>span]:bg-[color-mix(in_srgb,var(--accent)_55%,var(--app-shell))]! hover:[&>span]:shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_55%,var(--app-shell))]!";
 
 function LoginProfileButton({
   className,
@@ -1241,6 +1254,18 @@ export function CoursesPage({
   const { routeContentBlocked } = useAcademyRouteGuardState();
   const isEditingOrCreatingCourse = page === "course-create";
   const isAuthReady = Boolean(storeUser) || authUserFetched;
+  // The Discussions page needs a session, and the route guard holds every
+  // such page back until the session check has answered. A browser that was
+  // signed in last time is shown the page meanwhile: its heading, tabs and
+  // filters are the same whatever the answer, and it asks for nothing until
+  // the answer is in (see DiscussionsWorkspace). Should the session turn out
+  // to be gone, the guard sends the visitor to sign in as it always did.
+  const discussionsWhileSessionPending =
+    routeContentBlocked &&
+    !isAuthReady &&
+    sessionPresentAtBoot &&
+    page === "workspace" &&
+    activeSection === "Discussions";
   const workspaceRoleKey =
     storedPreferencesReady && authUserFetched
       ? (activeUser?.id ?? "guest")
@@ -1497,6 +1522,7 @@ export function CoursesPage({
   const mobilePaletteTriggerRef = useRef<HTMLButtonElement>(null);
   const navigationRef = useRef<HTMLElement>(null);
   const mainScrollportRef = useRef<HTMLElement>(null);
+  useScrollingMark(mainScrollportRef);
   const mobileBottomNavRef = useRef<HTMLElement>(null);
   const mobileMoreRef = useRef<HTMLButtonElement>(null);
   const mobileSheetRef = useRef<HTMLDivElement>(null);
@@ -2057,6 +2083,75 @@ export function CoursesPage({
   useEffect(() => {
     if (logoutConfirmOpen) setLogoutModalMounted(true);
   }, [logoutConfirmOpen]);
+
+  // Settings and Discussions are fetched once the shell is idle, or sooner
+  // if the pointer or the keyboard reaches one of the ways into them. The page's own code comes
+  // with the import, its route module with `PrefetchPageLinks` (rendered
+  // below once this has run), and the stylesheets that route links are
+  // fetched outright.
+  const [settingsWarmed, setSettingsWarmed] = useState(false);
+  useEffect(() => {
+    let idleHandle = 0;
+    let timeoutHandle = 0;
+    const onIntent = (event: Event) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(SETTINGS_ENTRY_SELECTOR)
+      ) {
+        warm();
+      }
+    };
+    const stop = () => {
+      if (idleHandle) window.cancelIdleCallback?.(idleHandle);
+      window.clearTimeout(timeoutHandle);
+      document.removeEventListener("pointerover", onIntent, true);
+      document.removeEventListener("focusin", onIntent, true);
+      document.removeEventListener("pointerdown", onIntent, true);
+    };
+    function warm() {
+      stop();
+      setSettingsWarmed(true);
+      void settingsPageBody.preload().catch(() => undefined);
+      // Discussions likewise: it is in two pieces, and until both are here
+      // the page is placeholders from top to bottom.
+      void import("./workspace/WorkspacePages")
+        .then((module) =>
+          Promise.all([
+            workspacePageBody.preload(),
+            module.preloadDiscussionsWorkspace(),
+          ]),
+        )
+        .catch(() => undefined);
+      // The route's stylesheets are waited for before the page is shown.
+      // Fetched here, they are in the browser's cache by then (a prefetch
+      // hint alone is the browser's to ignore, and some do).
+      for (const href of SETTINGS_ROUTE_STYLESHEETS) {
+        void fetch(href).catch(() => undefined);
+      }
+    }
+    document.addEventListener("pointerover", onIntent, {
+      capture: true,
+      passive: true,
+    });
+    document.addEventListener("focusin", onIntent, true);
+    document.addEventListener("pointerdown", onIntent, {
+      capture: true,
+      passive: true,
+    });
+    // A visitor who has asked their browser to save data only pays for
+    // Settings when they are about to open it.
+    const saveData =
+      (navigator as Navigator & { connection?: { saveData?: boolean } })
+        .connection?.saveData === true;
+    if (!saveData) {
+      if (typeof window.requestIdleCallback === "function") {
+        idleHandle = window.requestIdleCallback(warm, { timeout: 6000 });
+      } else {
+        timeoutHandle = window.setTimeout(warm, 3500);
+      }
+    }
+    return stop;
+  }, []);
 
   useEffect(() => {
     // The catalogue module is behind a route-body lazy(); warm it once the
@@ -3999,16 +4094,30 @@ export function CoursesPage({
       `${width}px`,
     );
 
-    if (
-      rendersDifferently ||
-      sidebarPreferences.showResizeDimensions === true
-    ) {
+    if (sidebarPreferences.showResizeDimensions === true) {
       setSidebarResizePreviewWidth(width);
+      return;
+    }
+    if (rendersDifferently) {
+      // The shell has to be rendered again, and that is the whole page with
+      // it: long enough, done at once, to hold the drag still while the
+      // pointer went on (the page was seen to fall behind the pointer each
+      // time a fast drag passed one of these widths). The width itself is
+      // already on the shell, so nothing waits for this render: it is done
+      // in pieces between frames, and the sidebar takes its new arrangement
+      // a few frames after the width that calls for it.
+      startTransition(() => setSidebarResizePreviewWidth(width));
       return;
     }
     sidebarResizeSyncTimerRef.current = window.setTimeout(() => {
       const resize = sidebarResizeRef.current;
-      if (resize?.active) setSidebarResizePreviewWidth(resize.previewWidth);
+      // Likewise in pieces: the pointer has only paused, and a drag that
+      // carries on must not find the page busy rendering.
+      if (resize?.active) {
+        startTransition(() =>
+          setSidebarResizePreviewWidth(resize.previewWidth),
+        );
+      }
     }, SIDEBAR_RESIZE_STATE_SYNC_MS);
   };
 
@@ -4365,10 +4474,42 @@ export function CoursesPage({
     onSecondPressHold: floatSidebar,
   });
 
-  const handleSidebarBrandDoubleClick = (
-    event: ReactMouseEvent<HTMLDivElement>,
-  ) => {
-    if ((event.target as Element).closest(".sidebar-collapse")) return;
+  // Two presses on the brand, close together in time and place, float the
+  // sidebar (or dock it again). They are counted here, as the pointer is
+  // lifted, and not left to the browser's double click, which never came
+  // for the logo itself: the logo takes hold of the pointer on a second
+  // press (held, that press floats the sidebar too), and a press that is
+  // taken hold of ends without a click. So it worked in the gaps around the
+  // letters and nowhere on them.
+  // The presses are taken on the brand and on the band behind it (see
+  // `data-sidebar-brand-zone`), which runs the sidebar's whole width from
+  // its top to just under the logo, so there is no need to aim.
+  const sidebarBrandTapRef = useRef<{
+    x: number;
+    y: number;
+    at: number;
+  } | null>(null);
+  const handleSidebarBrandPress = (event: ReactPointerEvent<HTMLElement>) => {
+    if (
+      !event.isPrimary ||
+      event.button !== 0 ||
+      (event.target as Element).closest(".sidebar-collapse")
+    ) {
+      sidebarBrandTapRef.current = null;
+      return;
+    }
+    const previous = sidebarBrandTapRef.current;
+    const tap = { x: event.clientX, y: event.clientY, at: event.timeStamp };
+    if (
+      !previous ||
+      tap.at - previous.at > SIDEBAR_BRAND_DOUBLE_TAP_MS ||
+      Math.hypot(tap.x - previous.x, tap.y - previous.y) >
+        SIDEBAR_BRAND_DOUBLE_TAP_DISTANCE
+    ) {
+      sidebarBrandTapRef.current = tap;
+      return;
+    }
+    sidebarBrandTapRef.current = null;
     const shouldFloat = !sidebarHidden;
     setSidebarMode(shouldFloat ? "hidden" : "expanded");
     setPaletteMenu(false);
@@ -4376,7 +4517,7 @@ export function CoursesPage({
   };
 
   const preventSidebarBrandTextSelection = (
-    event: ReactMouseEvent<HTMLDivElement>,
+    event: ReactMouseEvent<HTMLElement>,
   ) => {
     if (
       event.detail > 1 &&
@@ -4482,7 +4623,7 @@ export function CoursesPage({
     surfaceSettingsTab?: string;
     surfaceUsername?: string;
   } = {}): ReactNode => {
-    if (routeContentBlocked) {
+    if (routeContentBlocked && !discussionsWhileSessionPending) {
       return (
         <AcademyRouteSkeleton
           page={surfacePage}
@@ -4516,6 +4657,9 @@ export function CoursesPage({
       );
     }
     if (effectiveRole === "student" && surfacePage === "home") {
+      const showGuestHomePreview = isAuthReady
+        ? !isAuthenticated
+        : Boolean(initialGuestHomePage) && showGuestHomeWhilePending;
       const guestHomeCourseCardActions = {
         wishlisted,
         onWishlist: toggleWishlist,
@@ -4554,17 +4698,14 @@ export function CoursesPage({
               fetchPriority="high"
             />
           ))}
-          {(
-            isAuthReady
-              ? !isAuthenticated
-              : Boolean(initialGuestHomePage) && showGuestHomeWhilePending
-          ) ? (
+          {showGuestHomePreview ? (
             // Paint the seeded guest home while the session check runs so
             // the prerendered document carries real content (and the LCP
             // image) instead of a blank fallback. This is also the
             // prerendered markup, so a browser that was signed in last
             // time hides it from the first paint (data-session-hint, set
-            // by the head bootstrap) and shows the loading state instead.
+            // by the head bootstrap) and shows the learner's home with
+            // its placeholders instead.
             // A guest keeps this exact element once the check answers:
             // rendering it from a different place in the tree would make
             // React rebuild the whole page that is already on screen.
@@ -4579,43 +4720,57 @@ export function CoursesPage({
               </div>
               {isAuthReady ? null : (
                 <div className="session-pending-home">
-                  <AcademyPageFallback />
+                  <LearnerHomeShell />
                 </div>
               )}
             </>
-          ) : !isAuthReady ? (
+          ) : !isAuthReady && showGuestHomeWhilePending ? (
+            // Nothing says whose home this is yet, and there is no guest
+            // home to show meanwhile.
             <AcademyPageFallback />
           ) : (
-            <AuthenticatedHomeBoundary
-              onOpenCourse={onOpenCourse}
-              onNavigatePage={onNavigatePage}
-              learnerName={activeUser?.displayName?.trim() ?? ""}
-              courseCardActions={guestHomeCourseCardActions}
-              notEnrolledContent={
-                <GuestHome
-                  onNavigatePage={onNavigatePage}
-                  courseCardActions={guestHomeCourseCardActions}
-                  initialPage={initialGuestHomePage}
-                  initialCopy={initialGuestHomeCopy}
-                  learnerName={activeUser?.displayName?.trim() ?? ""}
-                />
+            // Signed in, or signed in last time and waiting for the session
+            // check: the learner's home either way, from the same place in
+            // the tree, so it is put up once and filled in as the answers
+            // come. Its picture and everything that is the same for every
+            // learner are there from the start.
+            <Suspense
+              fallback={
+                <LearnerHomeShell learnerName={shellProfileKnownName ?? ""} />
               }
-              pendingContent={
-                initialGuestHomePage && showGuestHomeWhilePending ? (
-                  // Keep the already-painted guest home on screen until the
-                  // dashboard is ready: one content swap instead of flashing
-                  // spinner states between them.
+            >
+              <AuthenticatedHomeBoundary
+                onOpenCourse={onOpenCourse}
+                onNavigatePage={onNavigatePage}
+                // The name this tab remembers stands in until the session
+                // answers, so the greeting is its full width from the start
+                // (the quote under it wraps to that width).
+                learnerName={shellProfileKnownName?.trim() ?? ""}
+                courseCardActions={guestHomeCourseCardActions}
+                sessionPending={!isAuthReady}
+                notEnrolledContent={
                   <GuestHome
                     onNavigatePage={onNavigatePage}
                     courseCardActions={guestHomeCourseCardActions}
                     initialPage={initialGuestHomePage}
                     initialCopy={initialGuestHomeCopy}
+                    learnerName={activeUser?.displayName?.trim() ?? ""}
                   />
-                ) : (
-                  <AcademyPageFallback />
-                )
-              }
-            />
+                }
+                pendingContent={
+                  initialGuestHomePage && showGuestHomeWhilePending ? (
+                    // Keep the already-painted guest home on screen until
+                    // the learner's home is ready: one content swap.
+                    <GuestHome
+                      onNavigatePage={onNavigatePage}
+                      courseCardActions={guestHomeCourseCardActions}
+                      initialPage={initialGuestHomePage}
+                      initialCopy={initialGuestHomeCopy}
+                    />
+                  ) : undefined
+                }
+              />
+            </Suspense>
           )}
         </Suspense>
       );
@@ -4652,11 +4807,18 @@ export function CoursesPage({
     }
     if (surfacePage === "workspace") {
       return (
-        <Suspense fallback={<AcademyPageFallback />}>
+        <Suspense
+          fallback={
+            surfaceActiveSection === "Discussions" ? null : (
+              <AcademyPageFallback />
+            )
+          }
+        >
           <WorkspacePage
             section={surfaceActiveSection}
             role={role}
             discussionTab={surfaceDiscussionTab}
+            sessionPending={discussionsWhileSessionPending}
             onNavigatePage={onNavigatePage}
             setNotice={setNotice}
             onSignOut={() => {
@@ -5066,12 +5228,23 @@ export function CoursesPage({
                 }}
               />
             )}
+            {/* The band the brand stands in, behind everything else in the
+                sidebar: a press beside, above or just under the logo counts
+                as one on it. */}
+            <span
+              aria-hidden="true"
+              data-sidebar-brand-zone=""
+              data-double-tap-ignore
+              className="absolute inset-x-0 top-0 -z-10 h-14"
+              onMouseDown={preventSidebarBrandTextSelection}
+              onPointerUp={handleSidebarBrandPress}
+            />
             <div
               className={SIDEBAR_BRAND_CLASS}
               title={sidebarBrandTitle}
               data-double-tap-ignore
               onMouseDown={preventSidebarBrandTextSelection}
-              onDoubleClick={handleSidebarBrandDoubleClick}
+              onPointerUp={handleSidebarBrandPress}
             >
               <span
                 className="courses-logo-clip"
@@ -5290,7 +5463,13 @@ export function CoursesPage({
                     ) : null}
                   </span>
                   <span>
-                    <strong>{shellProfileDisplayName}</strong>
+                    {/* A box of its own, as wide as the room there is: a
+                        name too long for it ends in an ellipsis. Left as
+                        inline text it was cut off mid-letter by the box
+                        around it. */}
+                    <strong className="block truncate">
+                      {shellProfileDisplayName}
+                    </strong>
                     {/* A role label sits slightly lower than a username. */}
                     <small
                       className={
@@ -5662,6 +5841,20 @@ export function CoursesPage({
           ref={mainScrollportRef}
           className={[
             "courses-main",
+            // While the page is being scrolled nothing in it answers the
+            // pointer, so nothing changes its hover look as it passes under
+            // a resting pointer (see useScrollingMark).
+            "data-scrolling:**:pointer-events-none!",
+            // The frame's own colour, painted by the scroller as well. On a
+            // screen scaled under 150% the browser only slides a scroller's
+            // content when the scroller has a solid ground of its own to
+            // draw text on; over a see-through one it redrew the page at
+            // every step of a scroll. The frame behind is this same colour,
+            // so nothing looks different. Not on a lesson's page, whose
+            // scroller lies over the shell's own surfaces.
+            renderMain
+              ? ""
+              : "in-data-[content-layout=framed]:bg-(--main-surface)!",
             renderMain
               ? "courses-main--learning overflow-x-clip!"
               : page !== "courses"
@@ -5739,7 +5932,7 @@ export function CoursesPage({
                   })}
                 </LearningBackgroundSurface>
               ) : null
-            ) : routeContentBlocked ? (
+            ) : routeContentBlocked && !discussionsWhileSessionPending ? (
               <AcademyRouteSkeleton
                 page={page}
                 role={effectiveRole}
@@ -6298,6 +6491,11 @@ export function CoursesPage({
           onDismiss={() => setNotice(null)}
         />
       )}
+
+      {/* The Settings route's own module and the stylesheets it links,
+          asked for ahead of the visit (see the warm-up effect). React puts
+          these in the document's head. */}
+      {settingsWarmed ? <PrefetchPageLinks page="/settings" /> : null}
 
       {/* Last, where the shell's `::after` overlay draws it on mouse
           devices: above everything else that shares its level. */}

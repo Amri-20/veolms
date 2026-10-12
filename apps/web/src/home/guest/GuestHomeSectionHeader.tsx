@@ -1,4 +1,5 @@
 import { ArrowRightIcon as ArrowRight } from "@phosphor-icons/react/ArrowRight";
+import type { ReactNode } from "react";
 import type { NavigateTo } from "../../routing/navigation";
 import { GuestHomeLink } from "./GuestHomeLink";
 
@@ -13,7 +14,7 @@ export function GuestHomeSectionHeader({
 }: {
   id: string;
   title: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
   actionLabel?: string;
   actionHref?: string;
   onNavigatePage?: NavigateTo;

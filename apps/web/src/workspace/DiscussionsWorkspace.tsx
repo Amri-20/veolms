@@ -234,6 +234,12 @@ export interface DiscussionsWorkspaceProps {
   tab?: string;
   onNavigatePage: NavigateTo;
   setNotice?: (message: string) => void;
+  /**
+   * The session check has not answered yet. The page is put up all the same
+   * (its heading, tabs and filters do not depend on the answer) and asks for
+   * nothing until it has; the list shows its placeholders meanwhile.
+   */
+  sessionPending?: boolean;
 }
 
 const tabs: readonly {
@@ -1789,6 +1795,7 @@ export function DiscussionsWorkspace({
   tab = "q-and-a",
   onNavigatePage,
   setNotice,
+  sessionPending = false,
 }: DiscussionsWorkspaceProps) {
   const activeTab = normalizeDiscussionTab(tab);
   const location = useLocation();
@@ -1966,7 +1973,9 @@ export function DiscussionsWorkspace({
     });
   };
   const workspaceDatasetKey = JSON.stringify(workspaceQuery);
-  const workspaceQueryResult = useDiscussionsWorkspace(workspaceQuery);
+  const workspaceQueryResult = useDiscussionsWorkspace(workspaceQuery, {
+    enabled: !sessionPending,
+  });
   const {
     data: workspaceData,
     isPending: isWorkspacePending,
