@@ -1,3 +1,4 @@
+import { BooksIcon as Books } from "@phosphor-icons/react/Books";
 import { CaretDownIcon as CaretDown } from "@phosphor-icons/react/CaretDown";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { RefObject } from "react";
@@ -21,6 +22,7 @@ import {
 } from "./useSessionStorageState";
 import type { LessonDrawerHeroControlProps } from "./useLessonDrawerHeroControl";
 import { CurriculumLessonRows } from "./CurriculumLessonRows";
+import { useContinuousLessonNumbering } from "./useContinuousLessonNumbering";
 import { useCurriculumLayoutRevision } from "./useCurriculumLayoutRevision";
 import { useCurriculumSectionScrollAnchor } from "./useCurriculumSectionScrollAnchor";
 
@@ -49,6 +51,12 @@ interface CurriculumProps {
   /** Lessons the visitor cannot play yet; their cards show a lock. */
   lockedLessonNumbers?: ReadonlySet<number>;
   isLoading?: boolean;
+  /**
+   * The course could not be loaded, or has no lessons. There is then no
+   * course to head the panel with and nothing to list, and it says so
+   * instead of drawing a header out of the address's slug and blanks.
+   */
+  unavailable?: boolean;
   scrollportId?: string;
   scrollportRef?: RefObject<HTMLElement | null>;
   scrollControlBottomClearance?: number | string;
@@ -87,6 +95,7 @@ export function Curriculum({
   isLessonAvailable,
   lockedLessonNumbers,
   isLoading = false,
+  unavailable = false,
   scrollportId,
   scrollportRef,
   scrollControlBottomClearance,
@@ -170,15 +179,21 @@ export function Curriculum({
     fallbackSection;
   const currentLesson =
     lessonsById?.get(selectedLesson) || lessonsById?.get(1) || fallbackLesson;
+  // Lessons are numbered from 1 in each section unless the learner has
+  // chosen to have them numbered straight through the course. A lesson's
+  // own number is its place in the course; what a section takes off it is
+  // one less than its first lesson's.
+  const continuousLessonNumbering = useContinuousLessonNumbering();
+  const getLessonNumberBase = (section: CourseSection) =>
+    continuousLessonNumbering ? 0 : (section.lessons[0]?.[0] ?? 1) - 1;
+  const selectedLessonDisplayNumber =
+    selectedLesson - getLessonNumberBase(currentSection);
   useEffect(() => {
     if (expandAllSections || isExpandedControlled) return;
-    if (
-      expandedRef.current.length === 1 &&
-      expandedRef.current[0] === currentSection.id
-    ) {
-      return;
-    }
-    setExpanded([currentSection.id]);
+    // The section of the lesson being played is opened; the ones the
+    // learner has opened themselves stay as they are.
+    if (expandedRef.current.includes(currentSection.id)) return;
+    setExpanded((current) => [...current, currentSection.id]);
   }, [
     currentSection.id,
     expandAllSections,
@@ -202,8 +217,10 @@ export function Curriculum({
     (sectionId: number) => expandedRef.current.includes(sectionId),
     [],
   );
-  const { prepareSectionChange, handleCollapseTransitionEnd } =
-    useCurriculumSectionScrollAnchor(curriculumRef, isSectionExpanded);
+  const { handleCollapseTransitionEnd } = useCurriculumSectionScrollAnchor(
+    curriculumRef,
+    isSectionExpanded,
+  );
 
   const getLessonProgress = (number: number, status: string) => {
     const storedProgress = lessonProgress[number];
@@ -241,12 +258,28 @@ export function Curriculum({
       element === currentSectionRef.current || !lessonList
         ? 0
         : Number.parseFloat(getComputedStyle(lessonList).rowGap) || 0;
+    // In the full panel an open section's heading holds to the top while
+    // its lessons scroll under it. A lesson brought to the top stops below
+    // that heading, not behind it.
+    const sectionHeading =
+      element === currentSectionRef.current
+        ? null
+        : (element
+            .closest(".learning-curriculum__section")
+            ?.querySelector<HTMLElement>(
+              ":scope > .learning-curriculum__section-toggle",
+            ) ?? null);
+    const headingSpace =
+      sectionHeading && getComputedStyle(sectionHeading).position === "sticky"
+        ? sectionHeading.offsetHeight
+        : 0;
     const itemTop = Math.max(
       0,
       element.getBoundingClientRect().top -
         curriculum.getBoundingClientRect().top +
         curriculum.scrollTop -
-        topMargin,
+        topMargin -
+        headingSpace,
     );
 
     if (typeof curriculum.scrollTo === "function") {
@@ -266,7 +299,9 @@ export function Curriculum({
     sectionId: number,
   ) => {
     setSearchOpen(false);
-    setExpanded([sectionId]);
+    setExpanded((current) =>
+      current.includes(sectionId) ? current : [...current, sectionId],
+    );
 
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
@@ -338,18 +373,14 @@ export function Curriculum({
     lessonList.style.setProperty("--curriculum-reveal-space", "0px");
   }, [selectedLesson]);
 
-  const toggleSection = (id: number, header: HTMLElement) => {
+  // Any number of sections can be open: opening one leaves the others alone.
+  const toggleSection = (id: number) => {
     setSearchOpen(false);
     setExpanded((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [id],
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id],
     );
-    if (!expandedRef.current.includes(id)) {
-      prepareSectionChange(
-        id,
-        expandedRef.current.filter((sectionId) => sectionId !== id),
-        header,
-      );
-    }
   };
 
   useEffect(() => {
@@ -357,7 +388,11 @@ export function Curriculum({
       return undefined;
 
     handledFocusRequestRef.current = focusRequest;
-    setExpanded([currentSection.id]);
+    setExpanded((current) =>
+      current.includes(currentSection.id)
+        ? current
+        : [...current, currentSection.id],
+    );
 
     let firstFrame: number;
     let secondFrame: number | undefined;
@@ -464,7 +499,31 @@ export function Curriculum({
           contentRevision={`${selectedLesson}:${activeLessonSearch}:${expanded.join(",")}`}
           bottomClearance={scrollControlBottomClearance}
         />
-        {!hideHero ? (
+        {/* Until the course is known the header has nothing true to show:
+            its title would be the address's slug, its progress zero, its
+            section and lesson blank, its cover a placeholder. So while the
+            course loads it is bars, like the list under it. */}
+        {!hideHero && isLoading && !unavailable ? (
+          <div
+            className="animate-pulse space-y-4 px-5 pt-6 pb-5"
+            aria-hidden="true"
+            data-testid="curriculum-hero-skeleton"
+          >
+            <div className="h-5 w-3/5 rounded bg-[color-mix(in_srgb,var(--surface-strong)_84%,var(--canvas))]" />
+            <div className="space-y-2.5 pt-3">
+              <div className="flex justify-between">
+                <div className="h-3.5 w-16 rounded bg-[color-mix(in_srgb,var(--surface-strong)_84%,var(--canvas))]" />
+                <div className="h-3.5 w-8 rounded bg-[color-mix(in_srgb,var(--surface-strong)_84%,var(--canvas))]" />
+              </div>
+              <div className="h-2 w-full rounded-full bg-[color-mix(in_srgb,var(--surface-strong)_84%,var(--canvas))]" />
+            </div>
+            <div className="flex gap-4">
+              <div className="h-3 flex-1 rounded bg-[color-mix(in_srgb,var(--surface-strong)_84%,var(--canvas))]" />
+              <div className="h-3 flex-1 rounded bg-[color-mix(in_srgb,var(--surface-strong)_84%,var(--canvas))]" />
+            </div>
+          </div>
+        ) : null}
+        {!hideHero && !isLoading && !unavailable ? (
           <ContextMenuTrigger
             render={
               <div
@@ -582,8 +641,8 @@ export function Curriculum({
                 <button
                   type="button"
                   className="learning-curriculum__current-action"
-                  aria-label={`Go to current chapter, Chapter ${selectedLesson}: ${currentLesson[1]}`}
-                  title={`Go to Chapter ${selectedLesson}: ${currentLesson[1]}`}
+                  aria-label={`Go to current chapter, Chapter ${selectedLessonDisplayNumber}: ${currentLesson[1]}`}
+                  title={`Go to Chapter ${selectedLessonDisplayNumber}: ${currentLesson[1]}`}
                   onClick={() => {
                     if (searchOpen) {
                       setSearchOpen(false);
@@ -596,7 +655,7 @@ export function Curriculum({
                     className="learning-curriculum__current-key"
                     aria-hidden="true"
                   >
-                    L{selectedLesson}:
+                    L{selectedLessonDisplayNumber}:
                   </span>
                   <span className="learning-curriculum__current-label">
                     {currentLesson[1]}
@@ -608,7 +667,23 @@ export function Curriculum({
         ) : null}
 
         <div ref={lessonListRef} className="learning-curriculum__lesson-list">
-          {isLoading ? (
+          {unavailable ? (
+            <div className="grid min-h-60 place-items-center px-6 py-10 text-center">
+              <div className="space-y-2">
+                <Books
+                  size={34}
+                  aria-hidden="true"
+                  className="mx-auto text-(--muted) opacity-70"
+                />
+                <p className="text-sm font-semibold text-(--text)">
+                  No course content
+                </p>
+                <p className="text-[0.8125rem] leading-5 text-(--muted)">
+                  Lessons will be listed here once the course opens.
+                </p>
+              </div>
+            </div>
+          ) : isLoading ? (
             <div
               className="p-3 space-y-4 animate-pulse"
               data-testid="curriculum-loading-skeleton"
@@ -665,14 +740,19 @@ export function Curriculum({
                       ? currentSectionRef
                       : undefined
                   }
-                  className="learning-curriculum__section relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-(--learning-panel-border) after:content-['']"
+                  // The line between sections is a faint one in the panel,
+                  // where the headings are far apart; the mini player's
+                  // dense rows keep the panel's own border colour.
+                  className={`learning-curriculum__section relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:content-[''] ${
+                    hideHero
+                      ? "after:bg-(--learning-panel-border)"
+                      : "after:bg-[color-mix(in_srgb,var(--text)_7%,transparent)]"
+                  }`}
                   data-expanded={isOpen}
                 >
                   <button
                     type="button"
-                    onClick={(event) =>
-                      toggleSection(section.id, event.currentTarget)
-                    }
+                    onClick={() => toggleSection(section.id)}
                     aria-expanded={isOpen}
                     className="learning-curriculum__section-toggle"
                   >
@@ -754,6 +834,7 @@ export function Curriculum({
                             sectionId={section.id}
                             sectionTitle={section.title}
                             lessons={matchingLessons}
+                            lessonNumberBase={getLessonNumberBase(section)}
                             forceVirtualized={shouldVirtualizeCurriculum}
                             selectedLesson={selectedLesson}
                             lessonProgress={lessonProgress}

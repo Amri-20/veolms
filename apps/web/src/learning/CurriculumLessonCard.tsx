@@ -47,6 +47,11 @@ function NowPlayingGlyph() {
 
 export interface CurriculumLessonCardProps {
   lesson: Lesson;
+  /**
+   * The number the lesson is shown with: its place in its section, or in
+   * the whole course when the learner has chosen that.
+   */
+  displayNumber: number;
   progress: number;
   isActive: boolean;
   isAvailable: boolean;
@@ -81,6 +86,7 @@ export interface CurriculumLessonCardProps {
  */
 export const CurriculumLessonCard = memo(function CurriculumLessonCard({
   lesson,
+  displayNumber,
   progress,
   isActive,
   isAvailable,
@@ -149,7 +155,7 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
           onSelectLesson(number);
           onClose?.();
         }}
-        className={`block w-full px-3.5 pt-3 text-left focus-visible:-outline-offset-2! ${
+        className={`block w-full px-3 pt-3 text-left focus-visible:-outline-offset-2! ${
           hasActions ? "pb-2.5" : "pb-3"
         } ${isAvailable ? "cursor-pointer" : "cursor-not-allowed"}`}
       >
@@ -162,7 +168,7 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
           // A title longer than two lines is cut off; hovering shows all of it.
           title={isAvailable ? title : undefined}
         >
-          {number}. {title}
+          {displayNumber}. {title}
         </span>
         <span
           className={`mt-1.5 flex items-center gap-1.5 text-[0.8125rem] font-medium tabular-nums text-(--muted) ${
@@ -213,7 +219,7 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
         </span>
       </button>
       {hasActions ? (
-        <div className="absolute right-2.5 bottom-2.5 flex items-center gap-1.5">
+        <div className="absolute right-2 bottom-2.5 flex items-center gap-1.5">
           {showLock ? (
             // Not a button: the card itself opens the lesson. It lets a
             // click through to the card underneath.
@@ -229,7 +235,7 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
             <button
               type="button"
               className={`${LESSON_CARD_ACTION_CLASS} bg-[color-mix(in_srgb,#a050d0_30%,var(--canvas))] text-[#c183ea] hover:bg-[color-mix(in_srgb,#a050d0_44%,var(--canvas))] aria-pressed:bg-[#8e3db4] aria-pressed:text-white [[data-theme=light]_&]:text-purple-700 [[data-theme=light]_&]:aria-pressed:text-white`}
-              aria-label={`Open quiz for lecture ${number}: ${title}`}
+              aria-label={`Open quiz for lecture ${displayNumber}: ${title}`}
               aria-pressed={quizActive}
               title={quizActive ? "Quiz is open" : "Open quiz"}
               onClick={() => onOpenQuiz?.(number)}

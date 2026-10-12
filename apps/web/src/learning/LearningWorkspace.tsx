@@ -48,6 +48,7 @@ import type {
   RegisterPersistentLearningPlayer,
 } from "./player";
 import type { LearningMiniPlayerRequest } from "./player/learningMiniPlayerTypes";
+import { syncMobileNavigationWithMinimizeGesture } from "./player/mobileNavigationFollow";
 import {
   isDesktopLearningMinimizeViewport,
   LEARNING_DESKTOP_MINIMIZE_MEDIA_QUERY,
@@ -591,6 +592,8 @@ export function LearningWorkspace({
   const playerMinimizeActiveRef = useRef(false);
   const updatePlayerMinimizeGesture = useCallback(
     (state: LessonPlayerMinimizeGestureState) => {
+      // A hidden bottom menu comes up with the minimize (a phone only).
+      syncMobileNavigationWithMinimizeGesture(state);
       const active = state.phase !== "idle";
       if (playerMinimizeActiveRef.current !== active) {
         playerMinimizeActiveRef.current = active;
@@ -1096,7 +1099,7 @@ export function LearningWorkspace({
     ) {
       return {
         kind: "login",
-        message: "Log in to access the lesson.",
+        message: "Log in to dive in",
         actionLabel: "Log in",
         onAction: onOpenLogin,
       };
@@ -1107,8 +1110,8 @@ export function LearningWorkspace({
     if (playbackBootstrapError.status === 403) {
       return {
         kind: "access",
-        message: "Get access to this course to watch this lesson.",
-        actionLabel: "Get access",
+        message: "Join the course to unlock this lesson and all the rest.",
+        actionLabel: "Unlock the course",
         onAction: onOpenCourseOverview,
       };
     }
@@ -3390,6 +3393,7 @@ export function LearningWorkspace({
                 activeQuizLesson={showingQuiz ? selectedLesson : null}
                 onOpenLessonQuiz={handleOpenLessonQuiz}
                 isLoading={isApiRoute && isCourseOverviewLoading}
+                unavailable={courseUnavailable !== null}
               />
             </div>
             {/* The lesson player portals its chapters panel here so it
@@ -3558,6 +3562,7 @@ export function LearningWorkspace({
               activeQuizLesson={showingQuiz ? selectedLesson : null}
               onOpenLessonQuiz={handleOpenLessonQuiz}
               isLoading={isApiRoute && isCourseOverviewLoading}
+              unavailable={courseUnavailable !== null}
               onClose={closeLessonDrawer}
               onLessonSearchOpen={
                 phoneLessonDrawer

@@ -1131,7 +1131,6 @@ export function LessonPlayerControls({
       cluster="player-actions"
       className={`relative isolate flex h-8 items-center gap-1 rounded-full !bg-transparent p-0 !shadow-none before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-full before:bg-(--video-player-control-surface) before:shadow-(--video-player-control-shadow) before:content-[''] [&>*]:relative [&>*]:z-10 max-sm:before:hidden sm:h-10.5 sm:p-[3px] ${mobileInteraction ? "sm:!h-8 sm:!p-0 sm:before:hidden" : ""} ${circularSettingsControl ? "!size-9 !rounded-full !p-0 !justify-center sm:!size-9 sm:!p-0 [&>div]:!size-9 [&>div>button]:!size-9" : ""}`}
     >
-      <ZoomLevelIndicator className="mr-0.5" />
       {showAutoplayControl ? (
         <AutoplayToggle
           enabled={autoplayEnabled}
@@ -1413,6 +1412,10 @@ export function LessonPlayerControls({
           <div
             className={`pointer-events-auto absolute right-2 top-2 flex items-center gap-2 ${mobileFullscreen ? "!left-auto !right-3 sm:!left-auto sm:!right-3" : ""}`}
           >
+            {/* The zoom the picture is at, when it is zoomed: always in the
+                video's top right corner, and first in the row when other
+                controls are up there with it. */}
+            <ZoomLevelIndicator />
             {hasChapters && !mobileInteraction ? (
               <LessonChaptersToggleButton
                 open={chaptersOpen}

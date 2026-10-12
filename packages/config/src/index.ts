@@ -216,6 +216,44 @@ const serverConfigSchema = z.object({
     .default(200),
 
   /**
+   * Shared test accounts that sign in with a fixed code instead of an emailed
+   * one, as comma-separated `email:code` pairs (for example
+   * "tester1@example.com:482913,tester2@example.com:771204"). Anyone who
+   * knows a pair can sign in as that account, so list only addresses kept
+   * for testing. Unset disables the feature.
+   */
+  TEST_LOGIN_ACCOUNTS: z
+    .string()
+    .optional()
+    .transform((value, context) => {
+      const accounts = new Map<string, string>();
+      const pairs = (value ?? "")
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      for (const pair of pairs) {
+        const separator = pair.lastIndexOf(":");
+        const email = pair.slice(0, separator).trim().toLowerCase();
+        const code = pair.slice(separator + 1).trim();
+        if (
+          separator < 1 ||
+          !z.email().safeParse(email).success ||
+          !/^\d{6}$/u.test(code) ||
+          accounts.has(email)
+        ) {
+          context.addIssue({
+            code: "custom",
+            message:
+              'Expected comma-separated "email:code" pairs with a six-digit code and no repeated email, such as "tester1@example.com:482913".',
+          });
+          return z.NEVER;
+        }
+        accounts.set(email, code);
+      }
+      return accounts;
+    }),
+
+  /**
    * Enables the `mock_<email>` OAuth short-circuit, which skips both the
    * provider round-trip and the state/CSRF check. Requires `NODE_ENV` to be
    * `development` as well, so it can never be switched on in a deployed

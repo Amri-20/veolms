@@ -111,7 +111,18 @@ export type {
   BufferingIndicatorProps,
   VideoLoadingSpinnerProps,
 } from "./controls/BufferingIndicator";
-export { ErrorOverlay, VideoPlayerCloseButton } from "./controls/ErrorOverlay";
+export {
+  ErrorOverlay,
+  PlayerErrorNotice,
+  VideoPlayerCloseButton,
+  VideoPlayerNotice,
+} from "./controls/ErrorOverlay";
+export type {
+  ErrorOverlayProps,
+  PlayerErrorNoticeProps,
+  VideoPlayerNoticeAction,
+  VideoPlayerNoticeProps,
+} from "./controls/ErrorOverlay";
 export * from "./controls/menus";
 
 export { Timeline } from "./timeline/Timeline";

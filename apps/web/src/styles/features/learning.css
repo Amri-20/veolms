@@ -732,7 +732,8 @@ html[data-app-hydrated="false"] .learning-workspace__main {
   height: 100%;
   min-height: 72px;
   flex-direction: column;
-  padding: 16px 22px 14px;
+  /* 20px at the sides, as the section headings under it have. */
+  padding: 16px 20px 14px;
   pointer-events: none;
 }
 
@@ -823,7 +824,7 @@ html[data-app-hydrated="false"] .learning-workspace__main {
   position: relative;
   z-index: 3;
   flex: 0 0 auto;
-  padding: 12px 22px 14px;
+  padding: 12px 20px 14px;
   pointer-events: none;
   background: transparent;
   box-shadow: none;
@@ -831,13 +832,13 @@ html[data-app-hydrated="false"] .learning-workspace__main {
 
 .learning-curriculum__progress-copy {
   display: flex;
-  width: calc(100% + 44px);
+  width: calc(100% + 40px);
   min-height: 38px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: -12px -22px 0;
-  padding: 12px 22px 0;
+  margin: -12px -20px 0;
+  padding: 12px 20px 0;
   color: var(--learning-curriculum-hero-ink);
   background: transparent;
   font-size: 0.8rem;
@@ -880,7 +881,8 @@ html[data-app-hydrated="false"] .learning-workspace__main {
   min-width: 0;
   align-items: center;
   gap: 2px;
-  margin: 8px -6px -4px;
+  /* Its buttons are padded 8px, so their words begin on the 20px line. */
+  margin: 8px -8px -4px;
 }
 
 .learning-curriculum__current-action {
@@ -980,8 +982,85 @@ html[data-app-hydrated="false"] .learning-workspace__main {
   padding-block: 10px;
 }
 
+/* In the full panel the lessons' cards stand 14px in from the panel
+   (CurriculumLessonRows). The heading stands a little further in than the
+   cards' edges, and not as far as the words inside them. */
+.learning-curriculum:not(.learning-curriculum--compact)
+  .learning-curriculum__section-toggle {
+  padding-inline: 20px;
+}
+
 .learning-curriculum__section-toggle:hover {
   background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+/* A section hides what leaves its box. Cut off without becoming a scroller
+   of its own, an open one still lets its heading hold to the panel's top. */
+.learning-curriculum:not(.learning-curriculum--compact)
+  .learning-curriculum__section[data-expanded="true"] {
+  overflow: clip;
+}
+
+/* An open section's heading in the full panel is set apart by its face
+   alone: the accent washed into the panel's surface. No shadow and no
+   edge. It is opaque, because lessons pass behind it while it holds to
+   the top. (The mini player's playlist is the compact list and is left
+   alone.) */
+.learning-curriculum:not(.learning-curriculum--compact)
+  .learning-curriculum__section[data-expanded="true"]
+  > .learning-curriculum__section-toggle {
+  /* It stays at the top of the panel while its lessons scroll under it,
+     and leaves with the last of them. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: color-mix(in srgb, var(--accent) 17%, var(--surface));
+}
+
+.learning-curriculum:not(.learning-curriculum--compact)
+  .learning-curriculum__section[data-expanded="true"]
+  > .learning-curriculum__section-toggle:hover {
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+}
+
+/* By night the panel has no background of its own: it shows the page's,
+   exactly as the lesson's own column beside it does under the video, so the
+   two are one shade. The lessons and what is picked out stand on it as
+   lighter things: the heading of an open section is the surface's shade. */
+:root:not([data-theme="light"])
+  .learning-workspace__curriculum-column:has(
+    > .learning-curriculum:not(.learning-curriculum--compact)
+  ),
+:root:not([data-theme="light"])
+  .learning-curriculum:not(.learning-curriculum--compact) {
+  background: transparent;
+}
+
+:root:not([data-theme="light"])
+  .learning-curriculum:not(.learning-curriculum--compact)
+  .learning-curriculum__section-lessons {
+  background: transparent;
+}
+
+:root:not([data-theme="light"])
+  .learning-curriculum:not(.learning-curriculum--compact)
+  .learning-curriculum__section[data-expanded="true"]
+  > .learning-curriculum__section-toggle {
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+
+:root:not([data-theme="light"])
+  .learning-curriculum:not(.learning-curriculum--compact)
+  .learning-curriculum__section[data-expanded="true"]
+  > .learning-curriculum__section-toggle:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+:root[data-theme="light"]
+  .learning-curriculum:not(.learning-curriculum--compact)
+  .learning-curriculum__section[data-expanded="true"]
+  > .learning-curriculum__section-toggle {
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
 }
 
 .learning-curriculum__section-arrow {
@@ -1599,6 +1678,13 @@ html[data-app-hydrated="false"] .learning-workspace__main {
 
   .learning-curriculum__section-toggle {
     padding-inline: 16px;
+  }
+
+  /* The header above stands 14px in here, and so do the lessons' cards;
+     the full panel's heading keeps to the same line. */
+  .learning-curriculum:not(.learning-curriculum--compact)
+    .learning-curriculum__section-toggle {
+    padding-inline: 14px;
   }
 }
 

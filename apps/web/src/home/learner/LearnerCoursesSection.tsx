@@ -20,7 +20,11 @@ const courseGridClasses = [
   "@[100rem]/courses:grid-cols-4",
 ].join(" ");
 
-/** The learner's enrolled courses, the one they are in first. */
+/**
+ * All of the learner's enrolled courses, the one the hero leads with among
+ * them: the ones in progress first, then the ones not started, then the
+ * finished.
+ */
 export function LearnerCoursesSection({
   courses,
   subtitle,
@@ -28,6 +32,9 @@ export function LearnerCoursesSection({
   setCourseMenu,
   getCourseHref,
   onOpenCourse,
+  pinnedCourseId,
+  onPinCourse,
+  onUnpinCourse,
   onNavigatePage,
 }: {
   courses: readonly EnrolledCourse[];
@@ -37,6 +44,11 @@ export function LearnerCoursesSection({
   setCourseMenu: (courseId: string | null) => void;
   getCourseHref: (course: EnrolledCourse) => string;
   onOpenCourse: (course: EnrolledCourse) => void;
+  /** The course the learner pinned to the home, if they pinned one. */
+  pinnedCourseId: string | null;
+  /** Makes the course the one the home's hero leads with. */
+  onPinCourse: (course: EnrolledCourse) => void;
+  onUnpinCourse: () => void;
   onNavigatePage: NavigateTo;
 }) {
   return (
@@ -63,6 +75,9 @@ export function LearnerCoursesSection({
             menuOpen={courseMenu === course.courseId}
             setMenuOpen={setCourseMenu}
             onOpen={() => onOpenCourse(course)}
+            pinned={course.courseId === pinnedCourseId}
+            onPin={() => onPinCourse(course)}
+            onUnpin={onUnpinCourse}
             onNavigatePage={onNavigatePage}
           />
         ))}

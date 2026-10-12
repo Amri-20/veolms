@@ -23,7 +23,10 @@ import { GUEST_HOME_COURSES_PER_SECTION } from "../guestHomeLimits";
 import { getHomeTimeGreeting } from "../homeGreeting";
 import { LearnerCoursesSection } from "./LearnerCoursesSection";
 import { LearnerGoalScreen } from "./LearnerGoalScreen";
+import { LearnerHeroPinDrop } from "./LearnerHeroPinDrop";
 import { LearnerHomeHero } from "./LearnerHomeHero";
+import { useDraggedPinCourseId } from "./pinCourseDrag";
+import { pinHomeCourse, usePinnedHomeCourseId } from "./pinnedHomeCourse";
 import {
   getEnrolledCourseKey,
   planLearnerHome,
@@ -44,7 +47,7 @@ const getCoursePlayerHref = (course: EnrolledCourse) =>
  * The home of a learner who is enrolled in at least one course: the hero
  * leads with the course to carry on with (or to start, when nothing has
  * been started yet) and shows their learning goals on the laptop in the
- * picture; their courses follow.
+ * picture; their other courses follow.
  */
 export function LearnerHome({
   enrolledCourses,
@@ -61,9 +64,11 @@ export function LearnerHome({
   onOpenCourse: (course: LearningCourse) => void;
   onNavigatePage: NavigateTo;
 }) {
+  const pinnedCourseId = usePinnedHomeCourseId();
+  const draggedCourseId = useDraggedPinCourseId();
   const plan = useMemo(
-    () => planLearnerHome(enrolledCourses),
-    [enrolledCourses],
+    () => planLearnerHome(enrolledCourses, pinnedCourseId),
+    [enrolledCourses, pinnedCourseId],
   );
   const heroCourse = plan?.heroCourse;
   const heroCourseKey = heroCourse ? getEnrolledCourseKey(heroCourse) : "";
@@ -96,10 +101,7 @@ export function LearnerHome({
   const [timeGreeting] = useState(() =>
     getHomeTimeGreeting(new Date().getHours()),
   );
-  const firstName = learnerName.trim().split(/\s+/u)[0];
-  const greeting = firstName
-    ? `${timeGreeting}, ${firstName} 👋`
-    : `${timeGreeting} 👋`;
+  const firstName = learnerName.trim().split(/\s+/u)[0] ?? "";
 
   if (!plan || !heroCourse) return null;
 
@@ -115,22 +117,44 @@ export function LearnerHome({
     resumeContext && heroLesson
       ? getCoursePlayerPath(resumeContext.courseSlug, heroLesson.lessonNumber)
       : null;
-  const nothingStarted = plan.intent === "start";
+  const nothingStarted = enrolledCourses.every(
+    (course) => (course.progress ?? 0) <= 0,
+  );
+  // The pinned course takes the hero's place at the top of the page, so the
+  // learner is taken there to see it happen.
+  const pinCourse = (course: EnrolledCourse) => {
+    pinHomeCourse(course.courseId);
+    document.getElementById("learner-home-hero-title")?.scrollIntoView({
+      block: "center",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+    });
+  };
 
   return (
     <div
       className={`learner-home-page @container/home min-w-0 ${courseSurfaceElevation}`}
     >
       <LearnerHomeHero
-        greeting={greeting}
+        timeGreeting={timeGreeting}
+        firstName={firstName}
         intent={plan.intent}
         course={heroCourse}
         resume={{ context: resumeContext, isLoading: resumeQuery.isLoading }}
+        pinned={plan.heroPinned}
+        onUnpin={() => pinHomeCourse(null)}
+        onNavigatePage={onNavigatePage}
         courseHref={heroLessonPath ?? getCoursePlayerHref(heroCourse)}
         onOpenCourse={() =>
           heroLessonPath
             ? onNavigatePage(heroLessonPath)
             : openCourse(heroCourse)
+        }
+        // A course card dragged from the list below is pinned by dropping
+        // it on the hero's own course card.
+        pinDrop={
+          draggedCourseId ? <LearnerHeroPinDrop onPin={pinHomeCourse} /> : null
         }
         laptopScreen={
           <LearnerGoalScreen
@@ -155,6 +179,9 @@ export function LearnerHome({
           setCourseMenu={courseCardActions.setCourseMenu}
           getCourseHref={getCoursePlayerHref}
           onOpenCourse={openCourse}
+          pinnedCourseId={plan.heroPinned ? heroCourse.courseId : null}
+          onPinCourse={pinCourse}
+          onUnpinCourse={() => pinHomeCourse(null)}
           onNavigatePage={onNavigatePage}
         />
 

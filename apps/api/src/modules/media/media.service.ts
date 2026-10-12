@@ -40,6 +40,8 @@ const accessService = createAccessService();
 type PlaybackUser = {
   id: string;
   roles?: readonly string[];
+  /** Answer as for a learner: see `LEARNER_VIEW_HEADER`. */
+  learnerView?: boolean;
 };
 
 /**
@@ -1161,7 +1163,10 @@ export function createMediaService({
       database,
       course.id,
       lessonNumber,
-      { includeUnpublished: canManageCourse },
+      // Lesson numbers count the lessons the viewer is shown, so a manager
+      // in their Student view is counted through published lessons only,
+      // as the course overview and the resume context count them.
+      { includeUnpublished: canManageCourse && !user?.learnerView },
     );
     if (!context) {
       throw new AppError(404, "LESSON_NOT_FOUND", "Lesson not found.");

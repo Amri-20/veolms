@@ -1254,15 +1254,16 @@ export default function AcademyLayout() {
           bootstrapError?.code === "MFA_REQUIRED"
             ? {
                 kind: "login" as const,
-                message: "Log in to access the lesson.",
+                message: "Log in to dive in",
                 actionLabel: "Log in",
                 onAction: openPersistentPlayerLogin,
               }
             : bootstrapError?.status === 403
               ? {
                   kind: "access" as const,
-                  message: "Get access to this course to watch this lesson.",
-                  actionLabel: "Get access",
+                  message:
+                    "Join the course to unlock this lesson and all the rest.",
+                  actionLabel: "Unlock the course",
                   onAction: openPersistentPlayerCourseOverview,
                 }
               : {

@@ -1,3 +1,8 @@
+import {
+  getMobileNavigation,
+  getMobileNavigationRestingTop,
+  isMobileNavigationUnderMiniPlayer,
+} from "./mobileNavigationFollow";
 import { readMiniPlayerWidthPreference } from "./lessonPlayerPersistence";
 
 export const LEARNING_PLAYER_MOTION_DURATION_MS = 500;
@@ -639,17 +644,14 @@ export const getLearningMiniPlayerBottomEdge = (
   viewport = getLearningPlayerViewportBounds(),
 ) => {
   const viewportBottom = viewport.top + viewport.height;
-  const mobileNavigation = document.querySelector<HTMLElement>(
-    ".mobile-bottom-nav:not(.is-scroll-hidden)",
-  );
-  const navigationRect = mobileNavigation?.getBoundingClientRect();
-  if (
-    navigationRect &&
-    navigationRect.height > 0 &&
-    navigationRect.top < viewportBottom &&
-    navigationRect.bottom > viewport.top
-  ) {
-    return navigationRect.top - LEARNING_MINI_PLAYER_MARGIN;
+  // On a phone the mini player rests on the bottom menu, measured where the
+  // menu stands once shown (see `mobileNavigationFollow`).
+  const mobileNavigation = getMobileNavigation();
+  if (mobileNavigation && isMobileNavigationUnderMiniPlayer(mobileNavigation)) {
+    const navigationTop = getMobileNavigationRestingTop(mobileNavigation);
+    if (navigationTop < viewportBottom && navigationTop > viewport.top) {
+      return navigationTop - LEARNING_MINI_PLAYER_MARGIN;
+    }
   }
   return viewportBottom - LEARNING_MINI_PLAYER_MARGIN;
 };

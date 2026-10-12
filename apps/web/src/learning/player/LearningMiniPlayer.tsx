@@ -635,7 +635,8 @@ export function LearningMiniPlayer({
           mediaProps={{ muted: preparing || session.muted }}
           onReady={handleReady}
           onEvent={handleEvent}
-          onErrorOverlayClose={handleClose}
+          // The controls draw a failure under their own expand and close.
+          errorOverlay={false}
           ariaLabel={`Mini player video for ${session.lessonTitle}`}
           className="!rounded-none"
           playerClassName="!rounded-none !shadow-none"
@@ -654,6 +655,7 @@ export function LearningMiniPlayer({
               onGoPrevious={handleGoPrevious}
               onClose={handleClose}
               onRestore={handleRestore}
+              source={playerSource}
             />
           }
         />
