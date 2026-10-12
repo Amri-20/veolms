@@ -5,6 +5,7 @@ import type {
 } from "@veolms/contracts";
 import type { Executor } from "../shared/repository.types.ts";
 import { CommerceErrors } from "../shared/commerce.errors.ts";
+import { isRestrictedFreeCourse } from "../../access/index.ts";
 import * as quizRepo from "../../quizzes/shared/quiz.repository.ts";
 import * as quizPricingRepo from "../../quizzes/shared/quiz-pricing.repository.ts";
 import * as courseRepo from "../../courses/course/course.repository.ts";
@@ -208,17 +209,27 @@ export function createPricingService({
       }
     }
 
-    const [courseRows, pricingRows, bundleRows, bundleCourseRows, quizRows] =
-      await Promise.all([
-        courseRepo.findCoursesByIds(database, courseIds),
-        courseConfigRepo.findPricingByCourseIds(database, courseIds),
-        bundleRepo.findBundlesByIds(database, bundleIds),
-        bundleRepo.listBundleCoursesForBundleIds(database, bundleIds),
-        quizPricingRepo.listOfferingsByPricingIds(database, quizPricingIds),
-      ]);
+    const [
+      courseRows,
+      pricingRows,
+      accessTypeRows,
+      bundleRows,
+      bundleCourseRows,
+      quizRows,
+    ] = await Promise.all([
+      courseRepo.findCoursesByIds(database, courseIds),
+      courseConfigRepo.findPricingByCourseIds(database, courseIds),
+      courseConfigRepo.findAccessTypesByCourseIds(database, courseIds),
+      bundleRepo.findBundlesByIds(database, bundleIds),
+      bundleRepo.listBundleCoursesForBundleIds(database, bundleIds),
+      quizPricingRepo.listOfferingsByPricingIds(database, quizPricingIds),
+    ]);
 
     const coursesById = new Map(courseRows.map((c) => [c.id, c]));
     const pricingByCourseId = new Map(pricingRows.map((p) => [p.course_id, p]));
+    const accessTypeByCourseId = new Map(
+      accessTypeRows.map((rule) => [rule.course_id, rule.access_type]),
+    );
     const bundlesById = new Map(bundleRows.map((b) => [b.id, b]));
     const bundleCoursesByBundleId = new Map<string, typeof bundleCourseRows>();
     for (const bc of bundleCourseRows) {
@@ -243,6 +254,21 @@ export function createPricingService({
         }
 
         const pricing = pricingByCourseId.get(courseId);
+        // A restricted course with no price is entered by a grant from
+        // staff and by nothing else. Priced here it would become a
+        // zero-amount order, the order a grant, and the restriction would
+        // be something any signed-in learner could lift for themselves. A
+        // voluntary amount does not change that: a tip buys no way in.
+        // Asked after the ownership check, so a learner who was given
+        // access is told they are enrolled, as for any other course.
+        if (
+          isRestrictedFreeCourse({
+            pricing_type: pricing?.pricing_type,
+            access_type: accessTypeByCourseId.get(courseId),
+          })
+        ) {
+          throw CommerceErrors.COURSE_ACCESS_RESTRICTED(course.title);
+        }
         const isPaidCourse = Boolean(
           pricing && pricing.pricing_type === "paid",
         );
