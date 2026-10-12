@@ -248,6 +248,8 @@ export function VirtualizedLessonList<T>({
     count: virtualized && useWindowScroll ? items.length : 0,
     estimateSize: () => estimatedItemSize + itemGap,
     getItemKey: itemKey,
+    // See the note on the other virtualizer's `initialOffset`.
+    initialOffset: () => (typeof window === "undefined" ? 0 : window.scrollY),
     initialRect: INITIAL_VIRTUALIZER_RECT,
     overscan: effectiveOverscan,
     rangeExtractor,
@@ -260,6 +262,16 @@ export function VirtualizedLessonList<T>({
     estimateSize: () => estimatedItemSize + itemGap,
     getItemKey: itemKey,
     getScrollElement: resolveScrollElement,
+    // When a virtualizer takes hold of its scroller it scrolls it to its
+    // initial offset, which is the top unless it is told otherwise. This
+    // list's scroller is the page, and the list appears when a section is
+    // opened, well down the page: the page was thrown to the top. So it is
+    // told where the page already is. (A page built ahead of time has no
+    // scroller to ask: the option is read there too, while rendering.)
+    initialOffset: () =>
+      typeof document === "undefined"
+        ? 0
+        : (resolveScrollElement()?.scrollTop ?? 0),
     initialRect: INITIAL_VIRTUALIZER_RECT,
     overscan: effectiveOverscan,
     rangeExtractor,

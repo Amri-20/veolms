@@ -1,7 +1,7 @@
-import { BooksIcon as Books } from "@phosphor-icons/react/Books";
+import { OctopusIllustration } from "../components/OctopusIllustration";
 import { CaretDownIcon as CaretDown } from "@phosphor-icons/react/CaretDown";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import type { RefObject } from "react";
+import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
+import type { ReactNode, RefObject } from "react";
 import type { LessonResource } from "@veolms/contracts";
 import { DEFAULT_DEBOUNCE_DELAY_MS, useDebounce } from "../hooks/useDebounce";
 import { ExpandableSearch } from "../ExpandableSearch";
@@ -23,7 +23,6 @@ import {
 import type { LessonDrawerHeroControlProps } from "./useLessonDrawerHeroControl";
 import { CurriculumLessonRows } from "./CurriculumLessonRows";
 import { useContinuousLessonNumbering } from "./useContinuousLessonNumbering";
-import { useCurriculumLayoutRevision } from "./useCurriculumLayoutRevision";
 import { useCurriculumSectionScrollAnchor } from "./useCurriculumSectionScrollAnchor";
 
 const EMPTY_CURRICULUM_SECTIONS: CourseSection[] = [];
@@ -76,7 +75,45 @@ interface CurriculumProps {
   onOpenLessonQuiz?: (lessonNumber: number) => void;
 }
 
-export function Curriculum({
+/** A little over the time a section takes to close (learning.css). */
+const SECTION_CLOSE_MS = 260;
+
+/**
+ * A section's lessons, kept in the page while the section closes. The
+ * closing is a transition of the row they stand in; taken out the moment
+ * the section is told to close, they left nothing for it to animate and
+ * the section simply vanished. They go once it has shut.
+ */
+function ClosingSectionLessons({
+  open,
+  children,
+}: {
+  open: boolean;
+  children: ReactNode;
+}) {
+  const [lingering, setLingering] = useState(false);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    setLingering(!open);
+  }
+  useEffect(() => {
+    if (!lingering) return undefined;
+    const timer = window.setTimeout(
+      () => setLingering(false),
+      SECTION_CLOSE_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [lingering]);
+  return open || lingering ? children : null;
+}
+
+/**
+ * Memoized: the lesson page around it renders for reasons of its own (its
+ * panel being dragged wider is one), and everything it is given is stable
+ * across those.
+ */
+export const Curriculum = memo(function Curriculum({
   selectedLesson,
   sections = EMPTY_CURRICULUM_SECTIONS,
   lessonsById = EMPTY_LESSONS_BY_ID,
@@ -158,7 +195,6 @@ export function Curriculum({
   const activeLessonRef = useRef<HTMLButtonElement>(null);
   const currentSectionRef = useRef<HTMLElement>(null);
   const lessonListRef = useRef<HTMLDivElement>(null);
-  const layoutRevision = useCurriculumLayoutRevision(lessonListRef);
   const curriculumRef = useRef<HTMLElement>(null);
   const contextMenuPortalHostRef = useRef<HTMLElement | null>(null);
   const scrollControlRef = useRef<ElasticScrollerHandle>(null);
@@ -230,11 +266,6 @@ export function Curriculum({
     return 0;
   };
 
-  const totalLessonCount = sections.reduce(
-    (total, section) => total + section.lessons.length,
-    0,
-  );
-  const shouldVirtualizeCurriculum = totalLessonCount >= 80;
   const allLessons = sections.flatMap(({ lessons }) => lessons);
   const courseProgress =
     allLessons.length > 0
@@ -670,10 +701,9 @@ export function Curriculum({
           {unavailable ? (
             <div className="grid min-h-60 place-items-center px-6 py-10 text-center">
               <div className="space-y-2">
-                <Books
-                  size={34}
-                  aria-hidden="true"
-                  className="mx-auto text-(--muted) opacity-70"
+                <OctopusIllustration
+                  kind="not-found"
+                  className="mx-auto mb-3 h-28 w-auto"
                 />
                 <p className="text-sm font-semibold text-(--text)">
                   No course content
@@ -741,11 +771,12 @@ export function Curriculum({
                       : undefined
                   }
                   // The line between sections is a faint one in the panel,
-                  // where the headings are far apart; the mini player's
-                  // dense rows keep the panel's own border colour.
+                  // where the headings are far apart. The mini player's rows
+                  // are dense, so its line is half as thick: a full pixel
+                  // there is two on a scaled screen, and reads as a bar.
                   className={`learning-curriculum__section relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:content-[''] ${
                     hideHero
-                      ? "after:bg-(--learning-panel-border)"
+                      ? "after:origin-bottom after:scale-y-50 after:bg-[color-mix(in_srgb,var(--text)_10%,transparent)]"
                       : "after:bg-[color-mix(in_srgb,var(--text)_7%,transparent)]"
                   }`}
                   data-expanded={isOpen}
@@ -829,13 +860,20 @@ export function Curriculum({
                       }}
                     >
                       <div className="learning-curriculum__section-lessons-inner">
-                        {isOpen && (
+                        <ClosingSectionLessons open={isOpen}>
                           <CurriculumLessonRows
                             sectionId={section.id}
                             sectionTitle={section.title}
-                            lessons={matchingLessons}
+                            // The section's own list when nothing is being
+                            // searched for: the filtered one is a new list
+                            // each time, and would have every section's
+                            // lessons render again with the panel.
+                            lessons={
+                              activeLessonSearch
+                                ? matchingLessons
+                                : section.lessons
+                            }
                             lessonNumberBase={getLessonNumberBase(section)}
-                            forceVirtualized={shouldVirtualizeCurriculum}
                             selectedLesson={selectedLesson}
                             lessonProgress={lessonProgress}
                             onSelectLesson={onSelectLesson}
@@ -843,8 +881,6 @@ export function Curriculum({
                             lockedLessonNumbers={lockedLessonNumbers}
                             onClose={onClose}
                             activeLessonRef={activeLessonRef}
-                            scrollportRef={curriculumRef}
-                            layoutRevision={layoutRevision}
                             compact={hideHero}
                             lessonResources={lessonResources}
                             resourceCourseKey={resourceCourseKey}
@@ -853,7 +889,7 @@ export function Curriculum({
                             onOpenLessonQuiz={onOpenLessonQuiz}
                             portalContainer={contextMenuPortalHostRef}
                           />
-                        )}
+                        </ClosingSectionLessons>
                       </div>
                     </div>
                   )}
@@ -874,4 +910,4 @@ export function Curriculum({
       />
     </ContextMenu>
   );
-}
+});

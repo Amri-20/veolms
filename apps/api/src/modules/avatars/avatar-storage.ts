@@ -8,6 +8,15 @@ export const AVATAR_UPLOAD_MAX_BYTES = 2 * 1024 * 1024;
 const PROVIDER_FETCH_MAX_BYTES = 5 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 4_000;
 export const AVATAR_IMAGE_WIDTHS = [45, 96, 160] as const;
+/**
+ * The widths a client is offered. The CDN's transform Worker serves 45 and
+ * 160 only and answers 400 ("The requested image width is not enabled") for
+ * 96, so offering it made every browser that picked it (a 43px avatar on a
+ * 1.25x or 2x screen) fail its first request and show nothing until it had
+ * fallen back to the original file. 96 stays in `AVATAR_IMAGE_WIDTHS` so
+ * that stored addresses and old variants are still recognised and removed.
+ */
+const AVATAR_OFFERED_WIDTHS = [45, 160] as const;
 const AVATAR_ORIGINAL_EXTENSIONS = ["jpg", "png", "webp", "gif"] as const;
 export const AVATAR_CONTENT_TYPES = new Set([
   "image/jpeg",
@@ -123,7 +132,7 @@ export function avatarSrcSetFromUrl(
   if (!match) return [];
 
   const suffix = match[2] ?? "";
-  return AVATAR_IMAGE_WIDTHS.map((width) => ({
+  return AVATAR_OFFERED_WIDTHS.map((width) => ({
     url: `${match[1]}/${width}.webp${suffix}`,
     width,
     height: width,

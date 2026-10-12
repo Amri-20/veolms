@@ -6,10 +6,26 @@ import type { LessonInteractionCounts } from "../services/learning-interactions"
 export type DiscussionEntryFilter = "all" | DiscussionEntryKind;
 export type DiscussionFeedSort = "newest" | "top";
 
+/**
+ * What the feed's menu offers: the two orders, and "Mine", which is the
+ * newest first of only what the learner posted themselves.
+ */
+export type DiscussionFeedView = DiscussionFeedSort | "mine";
+
 export const DISCUSSION_FEED_SORT_OPTIONS = [
   ["newest", "Newest"],
   ["top", "Top"],
-] as const satisfies readonly (readonly [DiscussionFeedSort, string])[];
+] as const satisfies readonly (readonly [DiscussionFeedView, string])[];
+
+/** With "Mine", for a learner who is signed in: a guest has posted nothing. */
+export const DISCUSSION_FEED_VIEW_OPTIONS = [
+  ...DISCUSSION_FEED_SORT_OPTIONS,
+  ["mine", "Mine"],
+] as const satisfies readonly (readonly [DiscussionFeedView, string])[];
+
+export const getDiscussionFeedSort = (
+  view: DiscussionFeedView,
+): DiscussionFeedSort => (view === "top" ? "top" : "newest");
 
 export function getDiscussionEntryKind(entry: Comment): DiscussionEntryKind {
   return entry.entryKind ?? (entry.isQuestion ? "question" : "comment");

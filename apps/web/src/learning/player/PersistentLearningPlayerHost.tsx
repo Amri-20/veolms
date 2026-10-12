@@ -130,6 +130,12 @@ export interface PersistentLearningPlayerHostProps {
   onOpenCourseOverview?: () => void;
 }
 
+/**
+ * The longest the "growing back to the page" mark may stay on the player.
+ * The motion itself is a few hundred milliseconds; this is well clear of it.
+ */
+const RESTORE_PHASE_LIMIT_MS = 2500;
+
 export function PersistentLearningPlayerHost({
   onClose,
   onRestore,
@@ -256,6 +262,35 @@ export function PersistentLearningPlayerHost({
     setTrackedPresentation(presentation);
     if (isExpanded) setIsExpanded(false);
   }
+
+  // While the window grows from the corner to the lesson page it carries a
+  // mark, and everything drawn on the video (its controls, a message, the
+  // way to try again) is hidden for as long as the mark is there. The
+  // motion takes the mark off when it ends or is handed to the page; if
+  // neither ever happens, the player stayed a black rectangle with nothing
+  // on it, whatever it had to say. The mark is not left on past any motion.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return undefined;
+    let timer = 0;
+    const watch = () => {
+      window.clearTimeout(timer);
+      if (host.dataset.learningPlayerRestorePhase === undefined) return;
+      timer = window.setTimeout(() => {
+        delete host.dataset.learningPlayerRestorePhase;
+      }, RESTORE_PHASE_LIMIT_MS);
+    };
+    watch();
+    const observer = new MutationObserver(watch);
+    observer.observe(host, {
+      attributes: true,
+      attributeFilter: ["data-learning-player-restore-phase"],
+    });
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
+  }, [presentation]);
 
   const miniPlayer = useLearningMiniPlayerGestures(
     hostRef,

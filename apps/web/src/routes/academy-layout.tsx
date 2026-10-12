@@ -132,6 +132,7 @@ import {
   getMatchedRouteDescriptor,
   getStaticRouteDescriptor,
   normalizeNavigationPath,
+  NOT_FOUND_SECTION,
 } from "../routing/routeDescriptors";
 
 export const links: Route.LinksFunction = () => [
@@ -457,12 +458,18 @@ export default function AcademyLayout() {
     location.pathname,
     workspaceNavigationItems,
   );
-  const activeRouteSection = hasValidNavigationOrigin
-    ? originSectionValue
-    : (currentNavigationMatch?.label ??
-      (workspaceNavigationItems.some(([label]) => label === route.section)
-        ? route.section
-        : workspaceNavigationItems[0]?.[0]));
+  // An address that leads nowhere belongs to no item of the menu. It keeps
+  // its own section, which is what has the page say "not found"; given the
+  // menu's first item instead, it showed that item's page as unfinished.
+  const activeRouteSection =
+    route.section === NOT_FOUND_SECTION
+      ? NOT_FOUND_SECTION
+      : hasValidNavigationOrigin
+        ? originSectionValue
+        : (currentNavigationMatch?.label ??
+          (workspaceNavigationItems.some(([label]) => label === route.section)
+            ? route.section
+            : workspaceNavigationItems[0]?.[0]));
   const showRouteBackButton = !currentNavigationMatch?.exact;
 
   useLayoutEffect(() => {

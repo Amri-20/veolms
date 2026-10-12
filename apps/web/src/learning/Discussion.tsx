@@ -42,9 +42,12 @@ import {
 import {
   applyDiscussionFeed,
   DISCUSSION_FEED_SORT_OPTIONS,
+  DISCUSSION_FEED_VIEW_OPTIONS,
+  getDiscussionFeedSort,
   getDiscussionCountForFilter,
   type DiscussionEntryFilter,
   type DiscussionFeedSort,
+  type DiscussionFeedView,
   type InteractionCapabilities,
 } from "./discussionFeed";
 import {
@@ -618,7 +621,13 @@ function DiscussionInner({
   const [entryFilter, setEntryFilter] = useState<DiscussionEntryFilter>(
     enabledKinds.length === 1 ? enabledKinds[0]! : "all",
   );
-  const [feedSort, setFeedSort] = useState<DiscussionFeedSort>("newest");
+  const [chosenFeedView, setFeedView] = useState<DiscussionFeedView>("newest");
+  // "Mine" is only there for a learner who is signed in; one who signs out
+  // while it is chosen is back on the newest.
+  const feedView: DiscussionFeedView =
+    chosenFeedView === "mine" && !currentUser ? "newest" : chosenFeedView;
+  const feedSort: DiscussionFeedSort = getDiscussionFeedSort(feedView);
+  const feedMine = feedView === "mine";
 
   const { data: interactionCounts } = useLessonInteractionCounts(
     courseId,
@@ -699,8 +708,9 @@ function DiscussionInner({
           ? entryFilter
           : ("all" as const),
       sort: feedSort === "top" ? ("top" as const) : ("newest" as const),
+      ...(feedMine ? { mine: true } : {}),
     }),
-    [entryFilter, feedSort],
+    [entryFilter, feedMine, feedSort],
   );
   const unifiedDiscussions = useLessonDiscussions(
     courseId ?? "",
@@ -1394,24 +1404,27 @@ function DiscussionInner({
     [combinedEntries],
   );
 
-  const filteredEntries = useMemo(
-    () =>
-      applyDiscussionFeed({
-        entries: isBackendMode ? dedupedBackendEntries : combinedEntries,
-        filter: entryFilter,
-        sort: feedSort,
-        capabilities: feedCapabilities,
-        preserveOrder: isBackendMode,
-      }),
-    [
-      combinedEntries,
-      dedupedBackendEntries,
-      entryFilter,
-      feedCapabilities,
-      feedSort,
-      isBackendMode,
-    ],
-  );
+  const filteredEntries = useMemo(() => {
+    const entries = applyDiscussionFeed({
+      entries: isBackendMode ? dedupedBackendEntries : combinedEntries,
+      filter: entryFilter,
+      sort: feedSort,
+      capabilities: feedCapabilities,
+      preserveOrder: isBackendMode,
+    });
+    // The server sends only the learner's own for "Mine". What this page
+    // already holds from the other views is merged in beside that, so the
+    // same rule is kept here.
+    return feedMine ? entries.filter((entry) => entry.isOwn) : entries;
+  }, [
+    combinedEntries,
+    dedupedBackendEntries,
+    entryFilter,
+    feedCapabilities,
+    feedMine,
+    feedSort,
+    isBackendMode,
+  ]);
 
   const allFeedPageSnapshotRef = useRef<Comment[] | null>(null);
   const allFeedPagePendingRef = useRef(false);
@@ -2703,7 +2716,8 @@ function DiscussionInner({
         editingEntryId={editingEntry?.id ?? null}
         notice={notice}
         entryFilter={entryFilter}
-        feedSort={feedSort}
+        feedView={feedView}
+        canFilterMine={Boolean(currentUser)}
         entries={displayEntries}
         noteDeepLinkTargetId={noteDeepLinkReadyForFocus ? noteDeepLinkId : null}
         onNoteDeepLinkHandled={consumeNoteDeepLink}
@@ -2792,7 +2806,7 @@ function DiscussionInner({
         onSubmit={submitEntry}
         onCancelEdit={() => setEditingEntry(null)}
         onEntryFilterChange={setEntryFilter}
-        onFeedSortChange={setFeedSort}
+        onFeedViewChange={setFeedView}
         onLike={onLike}
         onEdit={beginEditingEntry}
         onDelete={deleteEntry}
@@ -2979,7 +2993,9 @@ interface ThreadSurfaceProps {
   editingEntryId: string | number | null;
   notice: string;
   entryFilter: DiscussionEntryFilter;
-  feedSort: DiscussionFeedSort;
+  feedView: DiscussionFeedView;
+  /** The learner is signed in, so the feed can be narrowed to their own. */
+  canFilterMine: boolean;
   entries: Comment[];
   noteDeepLinkTargetId?: string | null;
   onNoteDeepLinkHandled?: (noteId: string) => void;
@@ -3029,7 +3045,7 @@ interface ThreadSurfaceProps {
   onSubmit: (onLocallyAccepted?: () => void) => Promise<boolean> | void;
   onCancelEdit: () => void;
   onEntryFilterChange: (filter: DiscussionEntryFilter) => void;
-  onFeedSortChange: (sort: DiscussionFeedSort) => void;
+  onFeedViewChange: (view: DiscussionFeedView) => void;
   onLike: (id: string | number, liked: boolean) => void;
   onEdit: (comment: Comment) => void;
   onDelete: (id: string | number) => void;
@@ -3598,7 +3614,8 @@ function ThreadSurface({
   editingEntryId,
   notice,
   entryFilter,
-  feedSort,
+  feedView,
+  canFilterMine,
   entries,
   noteDeepLinkTargetId = null,
   onNoteDeepLinkHandled,
@@ -3646,7 +3663,7 @@ function ThreadSurface({
   onSubmit,
   onCancelEdit,
   onEntryFilterChange,
-  onFeedSortChange,
+  onFeedViewChange,
   onLike,
   onEdit,
   onDelete,
@@ -4167,9 +4184,13 @@ function ThreadSurface({
       data-discussion-feed-toolbar
     >
       <p className="min-w-0 truncate text-lg leading-none font-semibold tracking-[-0.02em] text-(--text)">
-        {discussionCount === undefined
-          ? "Discussions"
-          : `${discussionCount} Discussions`}
+        {/* The count is of everyone's; it is not said beside only the
+            learner's own. */}
+        {feedView === "mine"
+          ? "My Discussions"
+          : discussionCount === undefined
+            ? "Discussions"
+            : `${discussionCount} Discussions`}
       </p>
       <span
         className="shrink-0 text-lg leading-none text-(--text-secondary)"
@@ -4179,10 +4200,14 @@ function ThreadSurface({
         {"\u00A0\u00A0·\u00A0\u00A0"}
       </span>
       <ThemedSelect
-        value={feedSort}
-        onValueChange={onFeedSortChange}
+        value={feedView}
+        onValueChange={onFeedViewChange}
         ariaLabel="Sort discussions"
-        options={DISCUSSION_FEED_SORT_OPTIONS}
+        options={
+          canFilterMine
+            ? DISCUSSION_FEED_VIEW_OPTIONS
+            : DISCUSSION_FEED_SORT_OPTIONS
+        }
         triggerClassName="h-auto! w-auto! max-w-full shrink-0! items-end! justify-start! gap-1! border-0! bg-transparent! p-0! shadow-none! text-[13px] leading-none! font-medium whitespace-nowrap text-(--text-secondary)! hover:bg-transparent! hover:text-(--text)! data-[state=open]:bg-transparent! data-[state=open]:shadow-none!"
       />
     </div>

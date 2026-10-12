@@ -18,8 +18,12 @@ import {
  * `preload` loads the module ahead of hydration (see entry.client.tsx). Once
  * it has loaded, the body renders synchronously, so it hydrates with the
  * rest of the page and the prerendered markup is kept.
+ *
+ * The same holds for a page fetched ahead of a visit: once its module is
+ * here it renders at once, where a bare `lazy()` shows its fallback for a
+ * moment even then.
  */
-function definePrerenderedBody<Module, Props extends object>(
+export function definePrerenderedBody<Module, Props extends object>(
   load: () => Promise<Module>,
   pick: (module: Module) => ComponentType<Props>,
 ) {
@@ -53,6 +57,18 @@ export const guestHomeBody = definePrerenderedBody(
 export const courseCatalogueBody = definePrerenderedBody(
   () => import("../courses/CourseCatalogue"),
   (module) => module.CourseCatalogue,
+);
+
+// Fetched ahead of a visit by the shell (see its warm-up effect), so that
+// opening them shows the page and not a placeholder for it.
+export const settingsPageBody = definePrerenderedBody(
+  () => import("../SettingsPage"),
+  (module) => module.SettingsPage,
+);
+
+export const workspacePageBody = definePrerenderedBody(
+  () => import("../workspace/WorkspacePages"),
+  (module) => module.WorkspacePage,
 );
 
 function documentPreloads(chunkUrl: string) {

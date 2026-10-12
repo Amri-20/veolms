@@ -237,6 +237,37 @@ export function refreshVideoPlaybackToken(
 }
 
 /**
+ * How long the answer may take before the player is told it failed. A
+ * request that never comes back used to leave the player on its loader for
+ * good; a failure it can show, and offer to try again.
+ */
+export const PLAYBACK_BOOTSTRAP_LIMIT_MS = 10_000;
+
+function withinPlaybackBootstrapLimit<T>(request: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(
+        new VideoPlaybackBootstrapError(
+          0,
+          "PLAYBACK_BOOTSTRAP_TIMEOUT",
+          "The video took too long to prepare.",
+        ),
+      );
+    }, PLAYBACK_BOOTSTRAP_LIMIT_MS);
+    request.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+/**
  * Fetches the minimum protected playback payload once per lesson. The promise
  * is shared by the document-start preload and the mounted React player, so a
  * normal component request cannot duplicate the early bootstrap request.
@@ -248,7 +279,7 @@ export function getVideoPlaybackBootstrap(
   const existing = bootstrapRequests.get(key);
   if (existing) return existing;
 
-  const promise = requestBootstrap(options);
+  const promise = withinPlaybackBootstrapLimit(requestBootstrap(options));
   bootstrapRequests.set(key, promise);
   void promise
     .then((bootstrap) => {

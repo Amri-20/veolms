@@ -12,7 +12,6 @@ import {
 } from "react";
 import { ConfirmDeleteModal } from "../ConfirmDeleteModal";
 import { ExpandableSearch } from "../ExpandableSearch";
-import { ThemedSelect } from "../ThemedSelect";
 import { handleRovingTabKeyDown } from "../accessibility/rovingTabFocus";
 import {
   CourseCard,
@@ -70,11 +69,12 @@ export interface CourseCatalogueProps {
   enrollmentFilter: CourseEnrollmentFilter;
   onEnrollmentFilterChange: (filter: CourseEnrollmentFilter) => void;
   statusFilter: CourseStatusFilter;
-  onStatusFilterChange: (filter: CourseStatusFilter) => void;
+  onStatusFilterChange?: (filter: CourseStatusFilter) => void;
   search: string;
   onSearchChange: (search: string) => void;
-  sort: CourseSort;
-  onSortChange: (sort: CourseSort) => void;
+  /** The page still holds an order; the catalogue no longer offers to change it. */
+  sort?: CourseSort;
+  onSortChange?: (sort: CourseSort) => void;
   visibleCourses: readonly Course[];
   totalCoursesCount?: number;
   hasNextPage?: boolean;
@@ -113,11 +113,8 @@ export function CourseCatalogue({
   enrollmentFilter,
   onEnrollmentFilterChange,
   statusFilter,
-  onStatusFilterChange,
   search,
   onSearchChange,
-  sort,
-  onSortChange,
   visibleCourses,
   totalCoursesCount,
   hasNextPage = false,
@@ -202,26 +199,6 @@ export function CourseCatalogue({
       tabs.removeEventListener("scroll", updateOverflow);
     };
   }, [quickFilters.length]);
-
-  const sortOptions = (
-    role === "creator"
-      ? [
-          ["latest", "Recently Updated"],
-          ["title", "A-Z"],
-        ]
-      : [
-          ["latest", "Default order"],
-          ["title", "A-Z"],
-          ["progress", "Progress"],
-        ]
-  ) satisfies readonly (readonly [CourseSort, string])[];
-
-  const statusOptions = [
-    ["all", "Status: All"],
-    ["in-progress", "In Progress"],
-    ["not-started", "Not Started"],
-    ["completed", "Completed"],
-  ] satisfies readonly (readonly [CourseStatusFilter, string])[];
 
   const gridClasses = getCourseCatalogueGridClasses(role);
 
@@ -465,27 +442,6 @@ export function CourseCatalogue({
               </button>
             ) : null}
           </div>
-        </div>
-
-        <div
-          className={`${wideControlsLayout ? "flex shrink-0 items-center gap-2.5" : "hidden"} min-[821px]:flex min-[821px]:shrink-0 min-[821px]:items-center min-[821px]:gap-2.5`}
-        >
-          <ThemedSelect
-            value={sort}
-            onValueChange={onSortChange}
-            ariaLabel="Sort courses"
-            options={sortOptions}
-            triggerClassName="h-10! w-42.5! rounded-(--control-radius-structured)! border! border-(--border)! bg-[color-mix(in_srgb,var(--surface)_76%,transparent)]! px-3! text-[0.78rem]! text-(--text-secondary)! [:root[data-theme=light]:not([data-elevated-surfaces=false])_&[data-state=closed]]:border-transparent! [:root[data-theme=light]:not([data-elevated-surfaces=false])_&[data-state=closed]]:bg-(image:--raised-surface-image)! [:root[data-theme=light]:not([data-elevated-surfaces=false])_&[data-state=closed]]:shadow-(--sidebar-menu-active-shadow)!"
-          />
-          {role === "student" && (
-            <ThemedSelect
-              value={statusFilter}
-              onValueChange={onStatusFilterChange}
-              ariaLabel="Filter course status"
-              options={statusOptions}
-              triggerClassName="h-10! w-35! rounded-(--control-radius-structured)! border! border-(--border)! bg-[color-mix(in_srgb,var(--surface)_76%,transparent)]! px-3! text-[0.78rem]! text-(--text-secondary)! [:root[data-theme=light]:not([data-elevated-surfaces=false])_&[data-state=closed]]:border-transparent! [:root[data-theme=light]:not([data-elevated-surfaces=false])_&[data-state=closed]]:bg-(image:--raised-surface-image)! [:root[data-theme=light]:not([data-elevated-surfaces=false])_&[data-state=closed]]:shadow-(--sidebar-menu-active-shadow)!"
-            />
-          )}
         </div>
       </div>
 
