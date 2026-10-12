@@ -2404,7 +2404,7 @@ export function DiscussionsWorkspace({
 
       const discussionStatus = thread.status ?? "open";
       const StatusIcon = statusIcons[discussionStatus];
-      return activeTab === "q-and-a" ? (
+      return isQnaTab ? (
         <DiscussionWorkspaceQuestionCard
           thread={thread}
           onNavigatePage={onNavigatePage}
@@ -2484,12 +2484,12 @@ export function DiscussionsWorkspace({
       );
     },
     [
-      activeTab,
       isBookmarksTab,
       isCommentsTab,
       isFollowingTab,
       isMentionsTab,
       isNotesTab,
+      isQnaTab,
       onNavigatePage,
       openThread,
       openMobileActions,
