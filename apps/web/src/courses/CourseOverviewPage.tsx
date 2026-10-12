@@ -43,6 +43,7 @@ import {
   type CourseLifecycleStatus,
   type CourseRole,
 } from "./catalogue";
+import { readCustomAmount } from "./customAmountEntry";
 import { toggleWishlistCourse, useCourseWishlisted } from "./wishlistStorage";
 import { CourseWishlistHeartButton } from "./CourseWishlistHeartButton";
 import { CourseThumbnailPlaceholder } from "./CourseThumbnailPlaceholder";
@@ -276,27 +277,6 @@ function checkoutCourseItem(
     itemType: "course" as const,
     courseId,
     ...(includeCustom ? { customAmount: options.amount } : {}),
-  };
-}
-
-/**
- * What a typed custom amount means. `null` when the text is not a whole
- * number: the field then keeps what it had, with a message. Stripping the
- * odd characters instead turned "199.50" into 19950.
- */
-function readCustomAmount(
-  raw: string,
-): { text: string; amount: number; overMaximum: boolean } | null {
-  const text = raw.trim();
-  if (text === "") return { text: "", amount: 0, overMaximum: false };
-  if (!/^\d+$/.test(text)) return null;
-
-  const parsed = Number(text);
-  const amount = Math.min(parsed, MAX_VOLUNTARY_AMOUNT);
-  return {
-    text: String(amount),
-    amount,
-    overMaximum: parsed > MAX_VOLUNTARY_AMOUNT,
   };
 }
 
@@ -897,15 +877,28 @@ function CourseHeroSection({
     selectedPreset === "custom" &&
     voluntaryAmount > 0 &&
     voluntaryAmount < baseNumericPrice;
+  // The custom box holds something that is not a whole number ("199.50",
+  // "1e5", "abc"). It stays in the box as typed and nothing can be paid or
+  // enrolled until it is corrected: the amount is 0 meanwhile, and paying
+  // the catalogue price next to a box that says otherwise would be a
+  // different mistake.
+  const isCustomAmountUnreadable =
+    selectedPreset === "custom" &&
+    readCustomAmount(customAmountInput, MAX_VOLUNTARY_AMOUNT).kind ===
+      "unreadable";
   // Why the amount in the custom box cannot be used. The pay button is
-  // disabled for an amount under the price; without this nothing said why.
+  // disabled for an unreadable amount and for one under the price; without
+  // this nothing said why. Derived from the box, so it stays for as long as
+  // the box is wrong.
   const customAmountMessage =
     selectedPreset !== "custom"
       ? null
-      : (customAmountError ??
-        (isCustomUnderPrice
-          ? `The least you can pay for this course is ${formatPriceWithCurrency(baseNumericPrice, courseCurrency)}.`
-          : null));
+      : isCustomAmountUnreadable
+        ? "Enter a whole number, with no decimals or symbols."
+        : (customAmountError ??
+          (isCustomUnderPrice
+            ? `The least you can pay for this course is ${formatPriceWithCurrency(baseNumericPrice, courseCurrency)}.`
+            : null));
 
   if (isCreatorNormal || isEnrolled) {
     // 1. Creator viewing their course normally or already enrolled student:
@@ -1042,6 +1035,13 @@ function CourseHeroSection({
           voluntaryAmount > baseNumericPrice ? voluntaryAmount : undefined,
         );
       };
+    }
+
+    // Free or paid: no payment and no enrolment while the custom box holds
+    // text that is not an amount. The message under the box says why.
+    if (isCustomAmountUnreadable) {
+      ctaDisabled = true;
+      ctaOnClick = undefined;
     }
   }
 
@@ -1400,15 +1400,24 @@ function CourseHeroSection({
                               aria-invalid={Boolean(customAmountMessage)}
                               onBlur={() => setCustomAmountError(null)}
                               onChange={(e) => {
-                                const entry = readCustomAmount(e.target.value);
-                                if (!entry) {
-                                  // The field keeps what it had.
-                                  setCustomAmountError(
-                                    "Enter a whole number, with no decimals or symbols.",
+                                const typed = e.target.value;
+                                const entry = readCustomAmount(
+                                  typed,
+                                  MAX_VOLUNTARY_AMOUNT,
+                                );
+                                if (entry.kind !== "amount") {
+                                  // Empty, or not an amount. The box shows
+                                  // what was typed and no amount is taken
+                                  // from it; `isCustomAmountUnreadable`
+                                  // holds the button and shows the reason.
+                                  setCustomAmountInput(
+                                    entry.kind === "empty" ? "" : typed,
                                   );
+                                  setVoluntaryAmount(0);
+                                  setCustomAmountError(null);
                                   return;
                                 }
-                                setCustomAmountInput(entry.text);
+                                setCustomAmountInput(String(entry.amount));
                                 setVoluntaryAmount(entry.amount);
                                 setCustomAmountError(
                                   entry.overMaximum
@@ -1445,11 +1454,12 @@ function CourseHeroSection({
                           type="button"
                           onClick={() => {
                             setSelectedPreset("custom");
-                            const parsed = parseInt(customAmountInput, 10);
+                            const entry = readCustomAmount(
+                              customAmountInput,
+                              MAX_VOLUNTARY_AMOUNT,
+                            );
                             setVoluntaryAmount(
-                              !Number.isNaN(parsed) && parsed > 0
-                                ? Math.min(parsed, MAX_VOLUNTARY_AMOUNT)
-                                : 0,
+                              entry.kind === "amount" ? entry.amount : 0,
                             );
                           }}
                           className="px-3 py-1.5 rounded-[8px] text-[0.82rem] font-bold border transition-all cursor-pointer bg-[color-mix(in_srgb,var(--surface-strong)_70%,var(--canvas))] text-(--text) border-[color-mix(in_srgb,var(--text)_14%,transparent)] hover:border-[color-mix(in_srgb,var(--text)_30%,transparent)] hover:bg-(--hover)"
