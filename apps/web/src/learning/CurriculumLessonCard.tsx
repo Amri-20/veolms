@@ -47,6 +47,11 @@ function NowPlayingGlyph() {
 
 export interface CurriculumLessonCardProps {
   lesson: Lesson;
+  /**
+   * The number the lesson is shown with: its place in its section, or in
+   * the whole course when the learner has chosen that.
+   */
+  displayNumber: number;
   progress: number;
   isActive: boolean;
   isAvailable: boolean;
@@ -81,6 +86,7 @@ export interface CurriculumLessonCardProps {
  */
 export const CurriculumLessonCard = memo(function CurriculumLessonCard({
   lesson,
+  displayNumber,
   progress,
   isActive,
   isAvailable,
@@ -127,14 +133,12 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
             // sidebar shadow token spreads too far for cards stacked in a
             // list, so only its widest layers are reined in here.
             "bg-(image:--sidebar-menu-active-background) shadow-[inset_0_1px_0_rgb(255_255_255/15%),inset_1px_0_0_rgb(255_255_255/7%),inset_0_-1px_0_rgb(0_0_0/28%),0_2px_5px_rgb(0_0_0/45%),0_7px_14px_rgb(0_0_0/36%)] [[data-theme=light]_&]:shadow-[inset_0_1px_0_rgb(255_255_255/96%),0_2px_5px_rgb(25_32_45/10%),0_7px_16px_rgb(25_32_45/14%)]"
-          : // A shade lighter than the section's tray it lies in. By day the
-            // tray is a tint and the card is the panel's own white.
-            "bg-[color-mix(in_srgb,var(--text)_4%,transparent)] [[data-theme=light]_&]:bg-(--surface)"
+          : "bg-[color-mix(in_srgb,var(--text)_4%,transparent)]"
       } ${
         isAvailable
           ? isActive
             ? ""
-            : "hover:bg-[color-mix(in_srgb,var(--text)_7.5%,transparent)] [[data-theme=light]_&]:hover:bg-[color-mix(in_srgb,var(--text)_4%,var(--surface))]"
+            : "hover:bg-[color-mix(in_srgb,var(--text)_7.5%,transparent)]"
           : "opacity-55"
       }`}
     >
@@ -151,7 +155,7 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
           onSelectLesson(number);
           onClose?.();
         }}
-        className={`block w-full px-3.5 pt-3 text-left focus-visible:-outline-offset-2! ${
+        className={`block w-full px-3 pt-3 text-left focus-visible:-outline-offset-2! ${
           hasActions ? "pb-2.5" : "pb-3"
         } ${isAvailable ? "cursor-pointer" : "cursor-not-allowed"}`}
       >
@@ -164,7 +168,7 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
           // A title longer than two lines is cut off; hovering shows all of it.
           title={isAvailable ? title : undefined}
         >
-          {number}. {title}
+          {displayNumber}. {title}
         </span>
         <span
           className={`mt-1.5 flex items-center gap-1.5 text-[0.8125rem] font-medium tabular-nums text-(--muted) ${
@@ -215,7 +219,7 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
         </span>
       </button>
       {hasActions ? (
-        <div className="absolute right-2.5 bottom-2.5 flex items-center gap-1.5">
+        <div className="absolute right-2 bottom-2.5 flex items-center gap-1.5">
           {showLock ? (
             // Not a button: the card itself opens the lesson. It lets a
             // click through to the card underneath.
@@ -231,7 +235,7 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
             <button
               type="button"
               className={`${LESSON_CARD_ACTION_CLASS} bg-[color-mix(in_srgb,#a050d0_30%,var(--canvas))] text-[#c183ea] hover:bg-[color-mix(in_srgb,#a050d0_44%,var(--canvas))] aria-pressed:bg-[#8e3db4] aria-pressed:text-white [[data-theme=light]_&]:text-purple-700 [[data-theme=light]_&]:aria-pressed:text-white`}
-              aria-label={`Open quiz for lecture ${number}: ${title}`}
+              aria-label={`Open quiz for lecture ${displayNumber}: ${title}`}
               aria-pressed={quizActive}
               title={quizActive ? "Quiz is open" : "Open quiz"}
               onClick={() => onOpenQuiz?.(number)}

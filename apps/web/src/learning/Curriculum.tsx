@@ -22,6 +22,7 @@ import {
 } from "./useSessionStorageState";
 import type { LessonDrawerHeroControlProps } from "./useLessonDrawerHeroControl";
 import { CurriculumLessonRows } from "./CurriculumLessonRows";
+import { useContinuousLessonNumbering } from "./useContinuousLessonNumbering";
 import { useCurriculumLayoutRevision } from "./useCurriculumLayoutRevision";
 import { useCurriculumSectionScrollAnchor } from "./useCurriculumSectionScrollAnchor";
 
@@ -178,15 +179,21 @@ export function Curriculum({
     fallbackSection;
   const currentLesson =
     lessonsById?.get(selectedLesson) || lessonsById?.get(1) || fallbackLesson;
+  // Lessons are numbered from 1 in each section unless the learner has
+  // chosen to have them numbered straight through the course. A lesson's
+  // own number is its place in the course; what a section takes off it is
+  // one less than its first lesson's.
+  const continuousLessonNumbering = useContinuousLessonNumbering();
+  const getLessonNumberBase = (section: CourseSection) =>
+    continuousLessonNumbering ? 0 : (section.lessons[0]?.[0] ?? 1) - 1;
+  const selectedLessonDisplayNumber =
+    selectedLesson - getLessonNumberBase(currentSection);
   useEffect(() => {
     if (expandAllSections || isExpandedControlled) return;
-    if (
-      expandedRef.current.length === 1 &&
-      expandedRef.current[0] === currentSection.id
-    ) {
-      return;
-    }
-    setExpanded([currentSection.id]);
+    // The section of the lesson being played is opened; the ones the
+    // learner has opened themselves stay as they are.
+    if (expandedRef.current.includes(currentSection.id)) return;
+    setExpanded((current) => [...current, currentSection.id]);
   }, [
     currentSection.id,
     expandAllSections,
@@ -210,8 +217,10 @@ export function Curriculum({
     (sectionId: number) => expandedRef.current.includes(sectionId),
     [],
   );
-  const { prepareSectionChange, handleCollapseTransitionEnd } =
-    useCurriculumSectionScrollAnchor(curriculumRef, isSectionExpanded);
+  const { handleCollapseTransitionEnd } = useCurriculumSectionScrollAnchor(
+    curriculumRef,
+    isSectionExpanded,
+  );
 
   const getLessonProgress = (number: number, status: string) => {
     const storedProgress = lessonProgress[number];
@@ -249,12 +258,28 @@ export function Curriculum({
       element === currentSectionRef.current || !lessonList
         ? 0
         : Number.parseFloat(getComputedStyle(lessonList).rowGap) || 0;
+    // In the full panel an open section's heading holds to the top while
+    // its lessons scroll under it. A lesson brought to the top stops below
+    // that heading, not behind it.
+    const sectionHeading =
+      element === currentSectionRef.current
+        ? null
+        : (element
+            .closest(".learning-curriculum__section")
+            ?.querySelector<HTMLElement>(
+              ":scope > .learning-curriculum__section-toggle",
+            ) ?? null);
+    const headingSpace =
+      sectionHeading && getComputedStyle(sectionHeading).position === "sticky"
+        ? sectionHeading.offsetHeight
+        : 0;
     const itemTop = Math.max(
       0,
       element.getBoundingClientRect().top -
         curriculum.getBoundingClientRect().top +
         curriculum.scrollTop -
-        topMargin,
+        topMargin -
+        headingSpace,
     );
 
     if (typeof curriculum.scrollTo === "function") {
@@ -274,7 +299,9 @@ export function Curriculum({
     sectionId: number,
   ) => {
     setSearchOpen(false);
-    setExpanded([sectionId]);
+    setExpanded((current) =>
+      current.includes(sectionId) ? current : [...current, sectionId],
+    );
 
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
@@ -346,18 +373,14 @@ export function Curriculum({
     lessonList.style.setProperty("--curriculum-reveal-space", "0px");
   }, [selectedLesson]);
 
-  const toggleSection = (id: number, header: HTMLElement) => {
+  // Any number of sections can be open: opening one leaves the others alone.
+  const toggleSection = (id: number) => {
     setSearchOpen(false);
     setExpanded((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [id],
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id],
     );
-    if (!expandedRef.current.includes(id)) {
-      prepareSectionChange(
-        id,
-        expandedRef.current.filter((sectionId) => sectionId !== id),
-        header,
-      );
-    }
   };
 
   useEffect(() => {
@@ -365,7 +388,11 @@ export function Curriculum({
       return undefined;
 
     handledFocusRequestRef.current = focusRequest;
-    setExpanded([currentSection.id]);
+    setExpanded((current) =>
+      current.includes(currentSection.id)
+        ? current
+        : [...current, currentSection.id],
+    );
 
     let firstFrame: number;
     let secondFrame: number | undefined;
@@ -614,8 +641,8 @@ export function Curriculum({
                 <button
                   type="button"
                   className="learning-curriculum__current-action"
-                  aria-label={`Go to current chapter, Chapter ${selectedLesson}: ${currentLesson[1]}`}
-                  title={`Go to Chapter ${selectedLesson}: ${currentLesson[1]}`}
+                  aria-label={`Go to current chapter, Chapter ${selectedLessonDisplayNumber}: ${currentLesson[1]}`}
+                  title={`Go to Chapter ${selectedLessonDisplayNumber}: ${currentLesson[1]}`}
                   onClick={() => {
                     if (searchOpen) {
                       setSearchOpen(false);
@@ -628,7 +655,7 @@ export function Curriculum({
                     className="learning-curriculum__current-key"
                     aria-hidden="true"
                   >
-                    L{selectedLesson}:
+                    L{selectedLessonDisplayNumber}:
                   </span>
                   <span className="learning-curriculum__current-label">
                     {currentLesson[1]}
@@ -713,25 +740,12 @@ export function Curriculum({
                       ? currentSectionRef
                       : undefined
                   }
-                  // The mini player's playlist keeps its dense rows parted
-                  // by a hairline. In the full panel each section is a box
-                  // of its own (learning.css), so it needs no line.
-                  className={`learning-curriculum__section relative${
-                    hideHero
-                      ? " after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-(--learning-panel-border) after:content-['']"
-                      : ""
-                  }`}
+                  className="learning-curriculum__section relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-(--learning-panel-border) after:content-['']"
                   data-expanded={isOpen}
-                  data-current={
-                    section.id === currentSection.id ? "" : undefined
-                  }
-                  data-learning-radius-surface={hideHero ? undefined : ""}
                 >
                   <button
                     type="button"
-                    onClick={(event) =>
-                      toggleSection(section.id, event.currentTarget)
-                    }
+                    onClick={() => toggleSection(section.id)}
                     aria-expanded={isOpen}
                     className="learning-curriculum__section-toggle"
                   >
@@ -753,9 +767,7 @@ export function Curriculum({
                     ) : (
                       <>
                         <span className="min-w-0 flex-1">
-                          {/* The section the open lesson is in wears the
-                              accent, so it can be found when it is shut. */}
-                          <span className="block truncate text-xs font-bold tracking-[0.1em] text-(--muted) uppercase [[data-current]_&]:text-[color-mix(in_srgb,var(--accent)_72%,var(--text))]">
+                          <span className="block truncate text-xs font-bold tracking-[0.1em] uppercase text-(--muted)">
                             Section {section.id} · {lessonCount}{" "}
                             {lessonCount === 1 ? "lesson" : "lessons"}
                             {sectionDuration ? (
@@ -815,6 +827,7 @@ export function Curriculum({
                             sectionId={section.id}
                             sectionTitle={section.title}
                             lessons={matchingLessons}
+                            lessonNumberBase={getLessonNumberBase(section)}
                             forceVirtualized={shouldVirtualizeCurriculum}
                             selectedLesson={selectedLesson}
                             lessonProgress={lessonProgress}

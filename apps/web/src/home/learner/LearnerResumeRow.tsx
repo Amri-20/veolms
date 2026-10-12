@@ -4,7 +4,7 @@ import type {
   EnrolledCourse,
   LearningProgressResumeContextResponse,
 } from "@veolms/contracts";
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import type { NavigateTo } from "../../routing/navigation";
 import { GuestHomeLink } from "../guest/GuestHomeLink";
 import {
@@ -65,7 +65,7 @@ const leadLabels: Record<LearnerHeroIntent, string> = {
 const paneClasses = [
   "relative isolate overflow-hidden rounded-[1.125rem] text-(--text)",
   "bg-[color-mix(in_srgb,var(--main-surface,var(--surface))_66%,transparent)]",
-  "shadow-[0_20px_44px_-14px_rgb(0_0_0/0.5)] [:root[data-theme=light]_&]:shadow-[0_20px_44px_-16px_rgb(15_23_42/0.3)]",
+  "shadow-[inset_0_1px_0_rgb(255_255_255/0.09),0_14px_28px_-12px_rgb(0_0_0/0.45),0_30px_60px_-22px_rgb(0_0_0/0.6)] [:root[data-theme=light]_&]:shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_14px_28px_-12px_rgb(15_23_42/0.22),0_30px_60px_-22px_rgb(15_23_42/0.32)]",
   "@[50rem]/home:backdrop-blur-xl",
 ].join(" ");
 
@@ -75,7 +75,7 @@ const paneClasses = [
  * corner. Stacked, the lamp is in the picture under the pane, so the light
  * comes up from its bottom right corner instead.
  */
-const paneLampLightClasses = `${lampLightLayerClasses} @max-[50rem]/home:bg-[radial-gradient(118%_130%_at_100%_100%,rgb(255_190_120/0.4),rgb(255_190_120/0.2)_26%,rgb(255_190_120/0.08)_52%,transparent_78%)]`;
+const paneLampLightClasses = `${lampLightLayerClasses} @max-[50rem]/home:bg-[radial-gradient(118%_130%_at_100%_100%,color-mix(in_srgb,var(--lamp-frost)_22%,transparent),color-mix(in_srgb,var(--lamp-frost)_11%,transparent)_26%,color-mix(in_srgb,var(--lamp-frost)_4%,transparent)_52%,transparent_78%)]`;
 
 /**
  * The action is drawn as the Enter key of a keyboard, in the accent's
@@ -89,6 +89,12 @@ const paneLampLightClasses = `${lampLightLayerClasses} @max-[50rem]/home:bg-[rad
  */
 const enterKeyClasses = [
   "[--key-side:color-mix(in_srgb,var(--accent)_56%,black)]",
+  // An accent that is nearly black (the codex palette by day) has no darker
+  // shade left to stand on: its side would vanish into the cap. There the
+  // side is a slightly lighter shade of the same hue instead, so the key still reads
+  // as raised. The step is 1 only when the darkened accent falls under 0.22
+  // lightness, so every other palette keeps the side it has.
+  "supports-[color:oklch(from_white_l_c_h)]:[--key-side:oklch(from_color-mix(in_srgb,var(--accent)_56%,black)_calc(l_+_0.2_*_clamp(0,(0.22_-_l)_*_1000,1))_c_h)]",
   "mb-1 rounded-[0.625rem]!",
   "shadow-[inset_0_1px_0_rgb(255_255_255/0.5),inset_0_-1px_0_rgb(0_0_0/0.14),0_4px_0_var(--key-side),0_10px_16px_-6px_rgb(0_0_0/0.65)]!",
   "transition-[background-color,box-shadow,translate]! duration-75! motion-reduce:transition-none!",
@@ -110,6 +116,7 @@ export function LearnerResumeRow({
   pinned,
   onUnpin,
   onNavigatePage,
+  pinDrop,
 }: {
   course: EnrolledCourse;
   intent: LearnerHeroIntent;
@@ -122,6 +129,8 @@ export function LearnerResumeRow({
   onUnpin: () => void;
   /** For the course's name, which leads to the course's own page. */
   onNavigatePage: NavigateTo;
+  /** Laid over the row, and a little past it, while a course is dragged. */
+  pinDrop?: ReactNode;
 }) {
   const progress = course.progress ?? 0;
   // A course not started yet has no progress to speak of.
@@ -138,7 +147,7 @@ export function LearnerResumeRow({
     : `${totalLessons} ${totalLessons === 1 ? "lesson" : "lessons"}`;
 
   return (
-    <div className="@container/resume w-full @[50rem]/home:w-fit @[50rem]/home:max-w-[min(35rem,100%)] @[50rem]/home:[container-type:normal]">
+    <div className="@container/resume relative w-full @[50rem]/home:w-fit @[50rem]/home:max-w-[min(35rem,100%)] @[50rem]/home:[container-type:normal]">
       <div className={paneClasses}>
         <span aria-hidden="true" className={paneLampLightClasses} />
         {/* The whole row opens the course, so the pointer is a hand all over
@@ -252,6 +261,7 @@ export function LearnerResumeRow({
           </GuestHomeLink>
         </div>
       </div>
+      {pinDrop}
     </div>
   );
 }

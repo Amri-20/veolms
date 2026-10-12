@@ -1110,8 +1110,8 @@ export function LearningWorkspace({
     if (playbackBootstrapError.status === 403) {
       return {
         kind: "access",
-        message: "Get access to this course to watch this lesson.",
-        actionLabel: "Get access",
+        message: "Join the course to unlock this lesson and all the rest.",
+        actionLabel: "Unlock the course",
         onAction: onOpenCourseOverview,
       };
     }
