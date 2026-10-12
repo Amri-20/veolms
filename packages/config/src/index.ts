@@ -144,6 +144,18 @@ const serverConfigSchema = z.object({
     .max(3650)
     .default(7),
   /**
+   * How often, in hours, the API itself removes those uploads (the same
+   * work as `purge:discussion-uploads -- --apply`). 0, the default, leaves
+   * it off: nothing is removed unless an operator turns this on or runs the
+   * script. At most a week.
+   */
+  DISCUSSION_UPLOAD_PURGE_INTERVAL_HOURS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(168)
+    .default(0),
+  /**
    * TTL for the process-local per-request authentication cache (ms).
    * Bounds how long a role/MFA-factor change made OUTSIDE the session
    * repository — or on another instance — can be served stale. Session

@@ -80,6 +80,33 @@ pnpm --filter @veolms/api purge:discussion-uploads
 Webhook events (processed, >30 days) and processed outbox events are
 cleaned automatically by the in-process schedulers.
 
+### Discussion uploads: optional in-process purge
+
+Instead of scheduling `purge:discussion-uploads` externally, the API can run
+the same removal itself. It is **off by default**, because it deletes stored
+files:
+
+| Env                                       | Default | Notes                                                                                                                      |
+| ----------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `DISCUSSION_UPLOAD_PURGE_INTERVAL_HOURS`  | 0       | `0` = never runs. `1`–`168` = the API removes abandoned uploads 30 seconds after it starts and then every that many hours. |
+| `DISCUSSION_UPLOAD_ORPHAN_RETENTION_DAYS` | 7       | How old an unattached upload must be before either the script or the in-process purge may remove it.                       |
+
+What it removes is exactly what the script removes with `--apply`: uploads
+attached to no thread, reply or note, older than the retention days, and
+mentioned by no post, note, lesson or course text. At most 1000 uploads per
+run; the rest go on the next run. The row is kept, marked `deleted`.
+
+Each run logs one line with `job: "discussion-upload-retention"` and the
+counts (`examined`, `referenced`, `removable`, `removableBytes`, `skipped`,
+`failed`). The line is a warning when `failed > 0` (files that could not be
+removed; they are tried again next run). To see what a run would remove
+before turning it on, run the script without `--apply`.
+
+Every API instance runs its own timer; that is safe (an upload's row is
+claimed before its file is removed). In production the purge does not start
+without `STORAGE_ACCESS_KEY_ID` and `STORAGE_SECRET_ACCESS_KEY`, and says so
+in the log, for the same reason the script refuses `--apply` without them.
+
 ## Two-factor lockout (break-glass reset)
 
 Someone who has lost their passkey or authenticator app signs in with one of
@@ -119,3 +146,13 @@ step alone. Run it on the API host so it reads that environment's `.env`.
   has two concurrently-active (`initiated`/`processing`) payment rows —
   that duplication is the corruption it prevents; resolve such rows
   manually before migrating.
+- `20261013100000-shorten-legacy-user-names` and
+  `20261013110000-lowercase-user-emails` change account data and cannot be
+  undone. The first cuts usernames over 30 characters and display names over
+  100 (accounts that could not sign in or have their profile opened), so the
+  affected accounts get a new username and profile address. The second
+  lower-cases emails stored with capitals by an older Google/GitHub sign-in,
+  except where another account already holds the same address in another
+  spelling: those are left alone and need a person to decide which account
+  is the real one. Checks 5 and 6 in `docs/audit-pre-push-checks.sql` count
+  what each will touch and what will be left; run them first.
