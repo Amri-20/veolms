@@ -607,6 +607,32 @@ export function createOtpService({
     }
   }
 
+  /**
+   * Spends a code inside the caller's transaction, so the code and what it
+   * pays for are written together or not at all: a registration that fails
+   * while the account is being created leaves the code usable.
+   *
+   * The caller has already proven the code with assertOtpMatches, which is
+   * where a wrong guess is counted. A miss here means the code was used,
+   * replaced or ran out in the meantime, and nothing is written for it.
+   */
+  async function consumeOtpWithin(
+    transaction: Executor,
+    identifier: string,
+    identifierType: IdentifierType,
+    purpose: OtpPurpose,
+    code: string,
+  ): Promise<void> {
+    const consumed = await otpRepository.consumeMatchingActiveOtp(transaction, {
+      identifier,
+      identifierType,
+      purpose,
+      codeHash: hashToken(code),
+      now: new Date(),
+    });
+    if (!consumed) throw invalidCode(failureStatusFor(purpose));
+  }
+
   return {
     resolveOtpPurpose,
     sendOtp,
@@ -615,6 +641,7 @@ export function createOtpService({
     recordRefusedSend,
     assertOtpMatches,
     verifyAndConsumeOtp,
+    consumeOtpWithin,
   };
 }
 

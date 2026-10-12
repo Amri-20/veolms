@@ -11,6 +11,7 @@ import {
   DEFAULT_AVATAR_STYLE,
   DICEBEAR_BASE_URL,
   PUBLIC_PROFILE_USERNAME_MAX_LENGTH,
+  PUBLIC_PROFILE_USERNAME_MIN_LENGTH,
 } from "@veolms/contracts";
 import type { S3StorageService } from "@veolms/storage";
 import { sql, type Kysely } from "kysely";
@@ -18,6 +19,7 @@ import { sql, type Kysely } from "kysely";
 import { AppError } from "../../../lib/errors.ts";
 import {
   ADMIN_ROLE,
+  DISPLAY_NAME_MAX_LENGTH,
   STUDENT_ROLE,
   USERNAME_SUFFIX_ATTEMPTS,
 } from "../shared/auth.constants.ts";
@@ -50,8 +52,6 @@ const USER_AVATAR_RETENTION_LIMIT = 2;
 const DICEBEAR_ORIGIN = new URL(DICEBEAR_BASE_URL).origin;
 /** "_" and three digits, appended when the plain name is taken. */
 const USERNAME_SUFFIX_LENGTH = 4;
-/** The longest display name a response may carry (`authUserSchema`). */
-const DISPLAY_NAME_MAX_LENGTH = 100;
 
 /**
  * First path segments the web app and its hosting serve themselves. A profile
@@ -997,38 +997,51 @@ export function createAuthService({
       throw new AppError(400, "USERNAME_TAKEN", "Username is already taken.");
     }
 
-    if (hasBothChannels) {
-      await otpService.verifyAndConsumeOtp(
-        input.email!,
-        "email",
-        "email_verification",
-        input.emailCode!,
-      );
-      await otpService.verifyAndConsumeOtp(
-        input.phoneNo!,
-        "phone",
-        "phone_verification",
-        input.phoneCode!,
-      );
-    } else {
-      await otpService.verifyAndConsumeOtp(
-        input.identifier,
-        input.identifierType,
-        input.identifierType === "email"
-          ? "email_verification"
-          : "phone_verification",
-        input.code!,
-      );
-    }
+    // The code (or both) is spent in the transaction that creates the
+    // account. Spent before it, anything that then stopped the account being
+    // created (another registration taking the username a moment earlier,
+    // the second of two codes being used up in between) cost the visitor a
+    // code they had entered correctly, and a wait for the next one.
+    const consumeCodes = async (transaction: DatabaseExecutor) => {
+      if (hasBothChannels) {
+        await otpService.consumeOtpWithin(
+          transaction,
+          input.email!,
+          "email",
+          "email_verification",
+          input.emailCode!,
+        );
+        await otpService.consumeOtpWithin(
+          transaction,
+          input.phoneNo!,
+          "phone",
+          "phone_verification",
+          input.phoneCode!,
+        );
+      } else {
+        await otpService.consumeOtpWithin(
+          transaction,
+          input.identifier,
+          input.identifierType,
+          input.identifierType === "email"
+            ? "email_verification"
+            : "phone_verification",
+          input.code!,
+        );
+      }
+    };
 
-    const userId = await createUser({
-      email: input.email ?? null,
-      phoneNo: input.phoneNo ?? null,
-      username: input.username.toLowerCase(),
-      displayName: input.displayName,
-      emailVerified: Boolean(input.email),
-      phoneVerified: Boolean(input.phoneNo),
-    });
+    const userId = await createUser(
+      {
+        email: input.email ?? null,
+        phoneNo: input.phoneNo ?? null,
+        username: input.username.toLowerCase(),
+        displayName: input.displayName,
+        emailVerified: Boolean(input.email),
+        phoneVerified: Boolean(input.phoneNo),
+      },
+      consumeCodes,
+    );
     const user = await requireUser(userId);
     const session = await sessionService.establishSession(user, input.request);
 
@@ -1043,6 +1056,11 @@ export function createAuthService({
    * username. A provider login or an email's local part can be longer than
    * that, and an account created with such a name could not load its own
    * profile afterwards.
+   *
+   * Nor is it shorter than a profile address allows. A one- or two-letter
+   * provider login or email name ("al", "jo@example.com") is treated like a
+   * taken one and gets the suffix; kept as it was, the account's profile
+   * page could never be opened.
    */
   async function generateUniqueUsername(base: string): Promise<string> {
     const normalised =
@@ -1052,6 +1070,7 @@ export function createAuthService({
         .slice(0, PUBLIC_PROFILE_USERNAME_MAX_LENGTH) || "user";
 
     if (
+      normalised.length >= PUBLIC_PROFILE_USERNAME_MIN_LENGTH &&
       !isReservedUsername(normalised) &&
       !(await userRepository.usernameExists(database, normalised))
     ) {
@@ -1087,8 +1106,15 @@ export function createAuthService({
    * advisory lock. Counting users outside the transaction (or even inside it
    * under READ COMMITTED) lets two concurrent first-registrations both observe
    * an empty table and both be granted ownership of the platform.
+   *
+   * `withinTransaction` runs in that transaction once the account's rows are
+   * written, for work that must stand or fall with the account (spending the
+   * code a registration was made with). If it throws, no account is created.
    */
-  async function createUser(input: CreateUserInput): Promise<string> {
+  async function createUser(
+    input: CreateUserInput,
+    withinTransaction?: (transaction: DatabaseExecutor) => Promise<void>,
+  ): Promise<string> {
     const userId = crypto.randomUUID();
     // A provider (Google/GitHub) photo is downloaded into R2 and used as the
     // avatar; any failure there — or no provider photo at all — falls back to
@@ -1185,6 +1211,8 @@ export function createAuthService({
         }
 
         await userRepository.assignRole(trx, userId, roleId);
+
+        await withinTransaction?.(trx);
       });
     } catch (error) {
       if (providerAvatarStored && storage && input.avatarSource) {

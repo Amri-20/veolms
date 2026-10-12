@@ -1,4 +1,4 @@
--- Pre-push checks 3 and 4. Counts only: no row, name, email or number is
+-- Pre-push checks 3 to 6. Counts only: no row, name, email or number is
 -- returned. Run inside a read-only transaction, so nothing can be written
 -- even by mistake.
 begin transaction read only;
@@ -67,5 +67,42 @@ select
   count(*) filter (where phone_no is not null and phone_verified_at is null and email_verified_at is null) as keep_phone_sign_in_no_confirmed_email
 from users
 where is_deleted = false;
+
+-- ---------------------------------------------------------------- check 5
+-- Accounts whose email is stored with capital letters (created by a Google
+-- or GitHub sign-in before provider addresses were lower-cased). A typed
+-- address is lower-cased, so these cannot be found by it. Migration
+-- 20261013110000 lower-cases them, except where another account already
+-- holds the same address in another spelling: those are left as they are and
+-- need a person to decide which account is the real one. Deactivated
+-- accounts are counted too, because the address is unique across them.
+select
+  count(*) filter (where u.email <> lower(u.email)) as emails_with_capitals,
+  count(*) filter (
+    where u.email <> lower(u.email)
+      and exists (select 1 from users t where t.id <> u.id and t.email = lower(u.email))
+  ) as of_those_with_a_lower_case_twin,
+  count(*) filter (
+    where u.email <> lower(u.email)
+      and exists (select 1 from users t where t.id <> u.id and lower(t.email) = lower(u.email))
+  ) as left_untouched_by_the_migration,
+  count(*) filter (
+    where u.email <> lower(u.email)
+      and not exists (select 1 from users t where t.id <> u.id and lower(t.email) = lower(u.email))
+  ) as will_be_lower_cased
+from users u;
+
+-- ---------------------------------------------------------------- check 6
+-- Accounts whose username or display name is longer than a response allows
+-- (30 and 100 characters). Migration 20261013100000 shortens the stored
+-- values, which changes those accounts' usernames and so their profile
+-- address (which could not be opened before). Usernames under 3 characters
+-- are counted for information only: nothing changes them, and their profile
+-- page cannot be opened until the owner picks a longer one.
+select
+  count(*) filter (where char_length(username) > 30) as usernames_over_30_will_be_shortened,
+  count(*) filter (where char_length(display_name) > 100) as display_names_over_100_will_be_cut,
+  count(*) filter (where char_length(username) < 3) as usernames_under_3_not_changed
+from users;
 
 rollback;

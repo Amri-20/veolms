@@ -1,3 +1,6 @@
+import { PUBLIC_PROFILE_USERNAME_MAX_LENGTH } from "@veolms/contracts";
+
+import { DISPLAY_NAME_MAX_LENGTH } from "./auth.constants.ts";
 import type { MfaState, SessionUser, UserProfileFields } from "./auth.types.ts";
 import { toUserProfileFields } from "./auth.utils.ts";
 import { avatarSrcSetFromUrl, displayAvatarUrl } from "../../avatars/index.ts";
@@ -10,12 +13,21 @@ export function presentAvatar(avatarDataUrl: string | null) {
   };
 }
 
-/** The account fields shared by the login payload and the profile payload. */
+/**
+ * The account fields shared by the login payload and the profile payload.
+ *
+ * An account created before names were bounded on write can hold a longer
+ * username or display name than these responses allow. Sent as stored, every
+ * sign-in and every `/auth/me` for that account failed, so its owner could
+ * not even reach the profile form to shorten them. A migration shortens the
+ * stored values (20261013100000); this keeps such an account working where
+ * that has not run yet, and for a name the two count differently.
+ */
 function presentAccount(profile: UserProfileFields, roles: string[]) {
   return {
     id: profile.id,
-    username: profile.username,
-    displayName: profile.displayName,
+    username: profile.username.slice(0, PUBLIC_PROFILE_USERNAME_MAX_LENGTH),
+    displayName: profile.displayName.slice(0, DISPLAY_NAME_MAX_LENGTH),
     ...presentAvatar(profile.avatarDataUrl),
     bio: profile.bio,
     emailPublic: profile.emailPublic,

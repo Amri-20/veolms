@@ -126,6 +126,13 @@ const otpRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/auth/me/email/otp/send",
     {
+      // The same per-address limit as the mobile route above.
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: "1 minute",
+        },
+      },
       schema: {
         operationId: "sendEmailVerificationOtp",
         tags: ["Auth"],
@@ -152,6 +159,15 @@ const otpRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/auth/me/email/otp/verify",
     {
+      // As for the mobile code: a six-digit code space, and a wrong guess
+      // costs only one of three attempts on a code that can be requested
+      // again.
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: "1 minute",
+        },
+      },
       schema: {
         operationId: "verifyEmailAddress",
         tags: ["Auth"],
