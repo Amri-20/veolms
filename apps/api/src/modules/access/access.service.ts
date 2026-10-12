@@ -160,31 +160,47 @@ export function createAccessService(): AccessService {
         validUntil: params.validUntil,
       });
 
-      // Also sync enrollment record with admin_grant source
+      // The enrolment mirrors the grant as it now stands, not the request.
+      // The grant keeps what the learner already held (a longer or lifetime
+      // period, and the order that paid for it); writing the requested
+      // values here instead gave a lifetime buyer an enrolment that expired
+      // with a short manual grant, and detached it from its order. The
+      // course then left My Courses and could be bought a second time,
+      // while a refund of the first order revoked nothing.
+      const enrollment = {
+        order_id: grant.purchaseId ?? null,
+        status: "active" as const,
+        source:
+          grant.source === "purchase"
+            ? ("direct_purchase" as const)
+            : grant.source,
+        access_starts_at: new Date(grant.validFrom),
+        access_expires_at: grant.validUntil ? new Date(grant.validUntil) : null,
+        updated_at: now,
+      };
       await database
         .insertInto("enrollments")
         .values({
           id: crypto.randomUUID(),
           user_id: params.userId,
           course_id: params.courseId,
-          order_id: null,
-          status: "active",
-          source: "admin_grant",
-          access_starts_at: now,
-          access_expires_at: params.validUntil ?? null,
+          ...enrollment,
           created_at: now,
-          updated_at: now,
         })
-        .onConflict((oc) =>
-          oc.columns(["user_id", "course_id"]).doUpdateSet({
-            order_id: null,
-            status: "active",
-            source: "admin_grant",
-            access_starts_at: now,
-            access_expires_at: params.validUntil ?? null,
-            updated_at: now,
-          }),
-        )
+        .onConflict((oc) => {
+          // A grant that stayed with its order leaves the enrolment's own
+          // source as it was: "purchase" on the grant covers both a course
+          // bought alone and one bought in a bundle, and the enrolment is
+          // where that difference is kept.
+          const { source, ...withoutSource } = enrollment;
+          return oc
+            .columns(["user_id", "course_id"])
+            .doUpdateSet(
+              grant.source === "purchase"
+                ? withoutSource
+                : { ...withoutSource, source },
+            );
+        })
         .executeTakeFirst();
 
       return grant;
@@ -202,7 +218,14 @@ export function createAccessService(): AccessService {
         .where("id", "=", grantId)
         .executeTakeFirst();
 
-      if (!grant) return;
+      // Answered "revoked successfully" for an id that matched nothing.
+      if (!grant) {
+        throw new AppError(
+          404,
+          "ACCESS_GRANT_NOT_FOUND",
+          "Access grant not found.",
+        );
+      }
 
       await accessRepo.updateAccessGrantStatus(database, grantId, "revoked");
 

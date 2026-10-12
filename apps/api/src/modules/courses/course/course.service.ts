@@ -828,7 +828,10 @@ export function createCourseService({
       );
     }
 
-    await assertCategoryExists(updates.categoryId);
+    // The value checked is the value written below: `category` is an
+    // accepted alias, and checking `categoryId` alone let an unknown or a
+    // removed category through under the other name.
+    await assertCategoryExists(updates.categoryId ?? updates.category);
 
     if (updates.thumbnailMediaId) {
       const thumb = await mediaService.getMediaAsset(
