@@ -480,7 +480,9 @@ export function createMediaService({
           { mediaId: media.id, storageKey: media.storage_key },
           "[media-service] Probing video source with ffprobe to extract size and dimensions before dispatch",
         );
-        const probed = await probeVideoSource(presignedUrl);
+        const probed = await probeVideoSource(presignedUrl, {
+          onWarning: (message) => logger?.warn({ mediaId: media.id }, message),
+        });
         if (probed) {
           if (videoSize <= 0 && probed.sizeBytes > 0) {
             videoSize = probed.sizeBytes;
@@ -663,7 +665,9 @@ export function createMediaService({
         const presignedUrl = await services.storage.getPresignedGetUrl(
           media.storage_key,
         );
-        const probed = await probeVideoSource(presignedUrl);
+        const probed = await probeVideoSource(presignedUrl, {
+          onWarning: (message) => logger?.warn({ mediaId: media.id }, message),
+        });
         if (probed) {
           if (retryVideoSize <= 0 && probed.sizeBytes > 0) {
             retryVideoSize = probed.sizeBytes;
