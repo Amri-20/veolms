@@ -37,10 +37,15 @@ export const lampLightClasses = [
  * A pane this large also stands nearer the lamp than the actions do, so the
  * light never quite leaves it: its reach runs from 1 on a hero up to 1000px
  * wide down to 0.4 from 1540px on.
+ *
+ * On glass this dark the lamp's own amber reads as a stain, so the light is
+ * drawn as frost instead: white with a little of the theme's accent in it
+ * (`--lamp-frost`), and faint.
  */
 export const lampLightLayerClasses = [
   "[--lamp-reach:clamp(0.4,(1900_-_tan(atan2(100cqw,1px)))_/_900,1)]",
-  "pointer-events-none absolute inset-0 rounded-[inherit] bg-[radial-gradient(95%_125%_at_100%_0%,rgb(255_190_120/0.38),rgb(255_190_120/0.12)_34%,transparent_64%)] opacity-(--lamp-reach) transition-opacity duration-300 motion-reduce:transition-none",
+  "[--lamp-frost:color-mix(in_srgb,var(--accent)_22%,white)]",
+  "pointer-events-none absolute inset-0 rounded-[inherit] bg-[radial-gradient(95%_125%_at_100%_0%,color-mix(in_srgb,var(--lamp-frost)_20%,transparent),color-mix(in_srgb,var(--lamp-frost)_7%,transparent)_34%,transparent_64%)] opacity-(--lamp-reach) transition-opacity duration-300 motion-reduce:transition-none",
   "[[data-lamp=off]_&]:opacity-0",
   "[:root[data-theme=light]_&]:opacity-0 [:root[data-theme=light]_[data-lamp=on]_&]:opacity-[calc(var(--lamp-reach)*0.7)]",
 ].join(" ");

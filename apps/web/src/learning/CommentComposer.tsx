@@ -245,11 +245,23 @@ export function CommentComposer({
             className="flex shrink-0 items-center gap-1.5 bg-[color-mix(in_srgb,var(--surface)_84%,transparent)] px-2.5 py-2.5 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--text)_8%,transparent)] sm:gap-2 sm:px-3"
           >
             <DiscussionAvatar src={avatar} className="size-9 sm:size-10" />
-            {editorController && (
+            {editorController ? (
               <CommentFormattingToolbar
                 editor={editorController}
                 formattingState={formattingState}
               />
+            ) : (
+              // The formatting buttons need the editor, which loads a moment
+              // after the composer opens. Their place is kept meanwhile, so
+              // the next button stands at the far end from the first frame
+              // instead of beside the avatar.
+              <>
+                <span
+                  aria-hidden="true"
+                  className="h-6 w-px shrink-0 bg-[color-mix(in_srgb,var(--text)_10%,transparent)]"
+                />
+                <span aria-hidden="true" className="min-w-0 flex-1" />
+              </>
             )}
             <button
               type="button"

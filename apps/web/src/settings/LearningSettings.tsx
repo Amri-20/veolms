@@ -306,6 +306,14 @@ export function LearningSettings({
                 update({ keepCompletedLecturesVisible })
               }
             />
+            <LearningToggleRow
+              label="Number lessons across the whole course"
+              note="Keep counting from one section into the next instead of starting every section at 1."
+              checked={preferences.continuousLessonNumbering}
+              onChange={(continuousLessonNumbering) =>
+                update({ continuousLessonNumbering })
+              }
+            />
           </div>
         </section>
 

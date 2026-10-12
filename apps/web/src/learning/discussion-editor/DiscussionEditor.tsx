@@ -14,7 +14,17 @@ const DiscussionEditorImpl = lazy(() =>
 
 export function DiscussionEditor(props: DiscussionEditorProps) {
   return (
-    <Suspense fallback={null}>
+    // The editor's code arrives after the composer has opened. Until then
+    // its place is held at the size it will have (the caller's minimum
+    // height), so the composer does not open short and then grow.
+    <Suspense
+      fallback={
+        <div
+          aria-hidden="true"
+          className={`min-h-0 w-full ${props.className ?? ""}`}
+        />
+      }
+    >
       <DiscussionEditorImpl {...props} />
     </Suspense>
   );

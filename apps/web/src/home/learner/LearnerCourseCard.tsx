@@ -4,6 +4,7 @@ import { EyeIcon as Eye } from "@phosphor-icons/react/Eye";
 import { PaperPlaneTiltIcon as PaperPlaneTilt } from "@phosphor-icons/react/PaperPlaneTilt";
 import { PlayIcon as Play } from "@phosphor-icons/react/Play";
 import { PushPinIcon as PushPin } from "@phosphor-icons/react/PushPin";
+import { PushPinSlashIcon as PushPinSlash } from "@phosphor-icons/react/PushPinSlash";
 import type { EnrolledCourse } from "@veolms/contracts";
 import { useRef } from "react";
 import { CourseActionMenu, MenuAction } from "../../courses/CourseActionMenu";
@@ -14,6 +15,8 @@ import {
   getEnrolledCourseOverviewHref,
   VIEW_COURSE_CURRICULUM_HINT,
 } from "./learnerHomePlan";
+import { ALT_DRAG_TEXT_SELECT_CLASSES } from "../../courses/altDragTextSelect";
+import { getPinCourseDragProps } from "./pinCourseDrag";
 import { useIsCutOff } from "./useIsCutOff";
 
 const plural = (count: number, one: string, many: string) =>
@@ -42,6 +45,9 @@ const actionClasses =
  * In a single column (a phone) it is a row with a small thumbnail, so a few
  * courses fit on a screen; from two columns up it is the same card the
  * catalogue shows, thumbnail on top, as tall as the others in its row.
+ *
+ * The whole card can be dragged onto the home's hero to pin the course
+ * there; the menu does the same without a drag.
  */
 export function LearnerCourseCard({
   course,
@@ -50,7 +56,9 @@ export function LearnerCourseCard({
   menuOpen,
   setMenuOpen,
   onOpen,
+  pinned,
   onPin,
+  onUnpin,
   onNavigatePage,
 }: {
   course: EnrolledCourse;
@@ -61,8 +69,11 @@ export function LearnerCourseCard({
   menuOpen: boolean;
   setMenuOpen: (courseId: string | null) => void;
   onOpen: () => void;
+  /** The home's hero leads with this course because the learner pinned it. */
+  pinned: boolean;
   /** Makes this the course the home's hero leads with. */
   onPin: () => void;
+  onUnpin: () => void;
   onNavigatePage: NavigateTo;
 }) {
   const progress = course.progress ?? 0;
@@ -81,12 +92,13 @@ export function LearnerCourseCard({
 
   return (
     <article
+      {...getPinCourseDragProps(course.courseId)}
       aria-label={
         started
           ? `${course.courseTitle}, ${progress}% complete`
           : course.courseTitle
       }
-      className="group/card relative flex min-w-0 items-center gap-3.5 overflow-hidden rounded-2xl border border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) p-3 shadow-(--card-shadow) transition-[background-color,box-shadow] duration-200 hover:bg-(--card-surface-hover,var(--hover)) hover:shadow-(--card-hover-shadow) @lg/courses:flex-col @lg/courses:items-stretch @lg/courses:gap-0 @lg/courses:p-0"
+      className={`${ALT_DRAG_TEXT_SELECT_CLASSES} group/card relative flex min-w-0 items-center gap-3.5 overflow-hidden rounded-2xl border border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) p-3 shadow-(--card-shadow) transition-[background-color,box-shadow] duration-200 hover:bg-(--card-surface-hover,var(--hover)) hover:shadow-(--card-hover-shadow) @lg/courses:flex-col @lg/courses:items-stretch @lg/courses:gap-0 @lg/courses:p-0`}
     >
       <div className="relative aspect-video w-30 shrink-0 overflow-hidden rounded-lg bg-[#05070c] @lg/courses:w-auto @lg/courses:rounded-none">
         <LearnerCourseThumbnail course={course} priority={priority} />
@@ -121,7 +133,13 @@ export function LearnerCourseCard({
               ref={titleRef}
               title={titleCutOff ? course.courseTitle : undefined}
               onClick={
-                titleCutOff ? () => onNavigatePage(overviewHref) : undefined
+                titleCutOff
+                  ? () => {
+                      // A press that selected the name was not a click on it.
+                      if (window.getSelection()?.isCollapsed === false) return;
+                      onNavigatePage(overviewHref);
+                    }
+                  : undefined
               }
               className={`truncate text-[0.9375rem] leading-6 font-semibold tracking-[-0.015em] text-(--text) @lg/courses:text-base @lg/courses:leading-10 @2xl/courses:text-lg ${
                 titleCutOff ? "relative z-20 cursor-pointer" : ""
@@ -145,9 +163,9 @@ export function LearnerCourseCard({
             dataMenu=""
           >
             <MenuAction
-              Icon={PushPin}
-              label="Pin to Home"
-              onClick={() => closeThen(onPin)}
+              Icon={pinned ? PushPinSlash : PushPin}
+              label={pinned ? "Unpin from Home" : "Pin to Home"}
+              onClick={() => closeThen(pinned ? onUnpin : onPin)}
             />
             <MenuAction
               Icon={Eye}

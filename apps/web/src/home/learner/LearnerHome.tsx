@@ -23,7 +23,9 @@ import { GUEST_HOME_COURSES_PER_SECTION } from "../guestHomeLimits";
 import { getHomeTimeGreeting } from "../homeGreeting";
 import { LearnerCoursesSection } from "./LearnerCoursesSection";
 import { LearnerGoalScreen } from "./LearnerGoalScreen";
+import { LearnerHeroPinDrop } from "./LearnerHeroPinDrop";
 import { LearnerHomeHero } from "./LearnerHomeHero";
+import { useDraggedPinCourseId } from "./pinCourseDrag";
 import { pinHomeCourse, usePinnedHomeCourseId } from "./pinnedHomeCourse";
 import {
   getEnrolledCourseKey,
@@ -63,6 +65,7 @@ export function LearnerHome({
   onNavigatePage: NavigateTo;
 }) {
   const pinnedCourseId = usePinnedHomeCourseId();
+  const draggedCourseId = useDraggedPinCourseId();
   const plan = useMemo(
     () => planLearnerHome(enrolledCourses, pinnedCourseId),
     [enrolledCourses, pinnedCourseId],
@@ -128,10 +131,6 @@ export function LearnerHome({
         : "smooth",
     });
   };
-  // The hero already leads with one course; the list below is the others.
-  const otherCourses = plan.courses.filter(
-    (course) => course.courseId !== heroCourse.courseId,
-  );
 
   return (
     <div
@@ -152,6 +151,11 @@ export function LearnerHome({
             ? onNavigatePage(heroLessonPath)
             : openCourse(heroCourse)
         }
+        // A course card dragged from the list below is pinned by dropping
+        // it on the hero's own course card.
+        pinDrop={
+          draggedCourseId ? <LearnerHeroPinDrop onPin={pinHomeCourse} /> : null
+        }
         laptopScreen={
           <LearnerGoalScreen
             summary={summaryQuery.data}
@@ -164,22 +168,22 @@ export function LearnerHome({
       <div
         className={`grid min-w-0 pb-[clamp(1.75rem,3.6cqw,3rem)] ${guestHomeSectionGap} ${guestHomeGutter} ${guestHomeBlockStart}`}
       >
-        {otherCourses.length > 0 ? (
-          <LearnerCoursesSection
-            courses={otherCourses}
-            subtitle={
-              nothingStarted
-                ? "Start learning from your enrolled courses."
-                : "Continue learning from your enrolled courses."
-            }
-            courseMenu={courseCardActions.courseMenu}
-            setCourseMenu={courseCardActions.setCourseMenu}
-            getCourseHref={getCoursePlayerHref}
-            onOpenCourse={openCourse}
-            onPinCourse={pinCourse}
-            onNavigatePage={onNavigatePage}
-          />
-        ) : null}
+        <LearnerCoursesSection
+          courses={plan.courses}
+          subtitle={
+            nothingStarted
+              ? "Start learning from your enrolled courses."
+              : "Continue learning from your enrolled courses."
+          }
+          courseMenu={courseCardActions.courseMenu}
+          setCourseMenu={courseCardActions.setCourseMenu}
+          getCourseHref={getCoursePlayerHref}
+          onOpenCourse={openCourse}
+          pinnedCourseId={plan.heroPinned ? heroCourse.courseId : null}
+          onPinCourse={pinCourse}
+          onUnpinCourse={() => pinHomeCourse(null)}
+          onNavigatePage={onNavigatePage}
+        />
 
         {showExplore &&
         (publishedQuery.isLoading || coursesToExplore.length > 0) ? (

@@ -1,6 +1,7 @@
 import type { EnrolledCourse } from "@veolms/contracts";
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import type { NavigateTo } from "../../routing/navigation";
+import { useDailyQuote } from "../../services/quotes";
 import { HeroDesk } from "../guest/HeroDesk";
 import {
   guestHomeGutter,
@@ -11,13 +12,56 @@ import type { LearnerHeroIntent } from "./learnerHomePlan";
 import { LearnerResumeRow, type LearnerResume } from "./LearnerResumeRow";
 
 /**
- * The line the hero leaves the learner with. One for now; it is to be
- * picked from a list of them later.
+ * The line the hero leaves the learner with until the quote of the day has
+ * arrived, and the one it keeps when that cannot be loaded.
  */
-const heroQuote = {
+const fallbackQuote = {
   text: "The beautiful thing about learning is that nobody can take it away from you.",
   author: "B.B. King",
 };
+
+/**
+ * The author stands at the right end of the column, which is where a quote
+ * that fills its lines ends. A short quote is set in balanced lines that end
+ * well short of that, and the author would be left out on its own; so it is
+ * drawn in until its dash starts where the longest line of the quote ends.
+ * CSS cannot size anything to lines set that way, hence the measuring.
+ */
+function useAuthorBesideQuote(text: string) {
+  const quoteRef = useRef<HTMLQuoteElement>(null);
+  const captionRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    const quote = quoteRef.current;
+    const caption = captionRef.current;
+    if (!quote || !caption) return;
+
+    const place = () => {
+      const lines = document.createRange();
+      lines.selectNodeContents(quote);
+      const left = quote.getBoundingClientRect().left;
+      let quoteEnd = 0;
+      for (const line of lines.getClientRects()) {
+        quoteEnd = Math.max(quoteEnd, line.right - left);
+      }
+      const author = document.createRange();
+      author.selectNodeContents(caption);
+      const spare =
+        caption.clientWidth - quoteEnd - author.getBoundingClientRect().width;
+      caption.style.paddingRight =
+        quoteEnd > 0 && spare > 0 ? `${Math.floor(spare)}px` : "";
+    };
+
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(quote);
+    // The serif face arrives after the first paint and changes the lines.
+    void document.fonts.ready.then(place);
+    return () => observer.disconnect();
+  }, [text]);
+
+  return { quoteRef, captionRef };
+}
 
 /**
  * The band the picture gets on a page too narrow to show it beside the copy:
@@ -152,6 +196,7 @@ export function LearnerHomeHero({
   onUnpin,
   onNavigatePage,
   laptopScreen,
+  pinDrop,
 }: {
   /** "Good evening", by the hour. */
   timeGreeting: string;
@@ -168,7 +213,11 @@ export function LearnerHomeHero({
   onNavigatePage: NavigateTo;
   /** What the laptop in the picture shows (see `HeroDesk`). */
   laptopScreen: ReactNode;
+  /** Where a dragged course is dropped to pin it, while one is dragged. */
+  pinDrop: ReactNode;
 }) {
+  const quote = useDailyQuote().data ?? fallbackQuote;
+  const { quoteRef, captionRef } = useAuthorBesideQuote(quote.text);
   return (
     <HeroDesk
       labelledBy="learner-home-hero-title"
@@ -222,17 +271,24 @@ export function LearnerHomeHero({
                 long one grows downwards rather than across. Its size steps
                 up with the page at fixed widths; it does not scale with it. */}
               <figure className="min-w-0 @[50rem]/home:w-0 @[50rem]/home:min-w-full">
-                <blockquote className="font-serif text-lg leading-[1.3] text-balance text-slate-200 italic @[72rem]/home:text-xl @[90rem]/home:text-[1.375rem] [:root[data-theme=light]_&]:text-slate-700">
-                  “{heroQuote.text}”
+                <blockquote
+                  ref={quoteRef}
+                  className="font-serif text-lg leading-[1.3] text-balance text-slate-200 italic @[72rem]/home:text-xl @[90rem]/home:text-[1.375rem] [:root[data-theme=light]_&]:text-slate-700"
+                >
+                  “{quote.text}”
                 </blockquote>
-                <figcaption className="mt-1.5 flex items-center justify-end gap-2.5 text-[0.8125rem] leading-4 text-slate-400 [:root[data-theme=light]_&]:text-slate-600">
+                <figcaption
+                  ref={captionRef}
+                  className="mt-1.5 flex items-center justify-end gap-2.5 text-[0.8125rem] leading-4 text-slate-400 [:root[data-theme=light]_&]:text-slate-600"
+                >
                   <span aria-hidden="true" className="h-px w-6 bg-current/60" />
-                  {heroQuote.author}
+                  {quote.author}
                 </figcaption>
               </figure>
             </div>
 
             <LearnerResumeRow
+              pinDrop={pinDrop}
               course={course}
               intent={intent}
               resume={resume}

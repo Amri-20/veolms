@@ -105,6 +105,7 @@ export function VideoPlayerNotice({
           "absolute inset-0 grid place-items-center [container-type:size]",
           contentClassName,
         )}
+        data-video-player-notice-content=""
       >
         <div className="grid size-full place-items-center p-2 text-center text-white [@container_(min-height:10.5rem)]:p-4 [@container_(min-height:15rem)]:p-6">
           {/* 5.5rem: a 2.25rem corner control and its 0.5rem inset, each side. */}

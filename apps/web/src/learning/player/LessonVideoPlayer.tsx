@@ -201,6 +201,44 @@ export interface LessonVideoPlayerProps {
  * stands where the video would: a lesson that cannot play yet still shows
  * what it is, instead of an empty black screen.
  */
+/**
+ * A failed player shorter than this has no room for its controls and the
+ * message both: the top row, the timeline and the bottom row take 128px
+ * between them, and the message needs about 70.
+ */
+const FAILED_PLAYER_CONTROLS_MIN_HEIGHT = 200;
+
+/**
+ * Marks the player while it has failed and is too short for its controls
+ * (`data-learning-player-failed-small`). The player then shows only what
+ * went wrong and the way to try again. It is mounted with the failure's
+ * message, so the mark comes and goes with the failure; the size is
+ * measured, because a player is small for several reasons (a narrow
+ * column, a height the learner dragged it to) that no one rule knows.
+ */
+function FailedPlayerSizeMark() {
+  const probeRef = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const shell = probeRef.current?.closest<HTMLElement>(
+      "[data-learning-player-motion-surface]",
+    );
+    if (!shell) return undefined;
+    const update = () =>
+      shell.toggleAttribute(
+        "data-learning-player-failed-small",
+        shell.clientHeight < FAILED_PLAYER_CONTROLS_MIN_HEIGHT,
+      );
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(shell);
+    return () => {
+      observer.disconnect();
+      shell.removeAttribute("data-learning-player-failed-small");
+    };
+  }, []);
+  return <span ref={probeRef} hidden />;
+}
+
 function LessonPictureBackdrop({ src }: { src?: string }) {
   return (
     <div
@@ -944,7 +982,7 @@ export function LessonVideoPlayer({
           playbackAccessError.message
         : (playbackAccessError.title ??
           (playbackAccessError.kind === "access"
-            ? "Course access required"
+            ? "Ready to dive in?"
             : "Something went wrong"));
     return (
       <div
@@ -998,14 +1036,15 @@ export function LessonVideoPlayer({
           </PlayerThemeProvider>
         ) : null}
         {playbackAccessError &&
-        (presentation === "mini" || playbackAccessError.kind === "login") ? (
+        (presentation === "mini" || playbackAccessError.kind !== "retry") ? (
           // The mini window is a few lines tall: it says what is wrong in
           // one line and keeps the action, sized to fit, between the
           // window's tap-to-expand surface and its buttons. The longer
           // explanation and the link are the full player's.
           //
-          // Signing in is one line and one action at every size, so the
-          // full player uses the same notice for it, which fits itself to
+          // Signing in, and joining the course, are one line and one action
+          // at every size, so the full player uses the same notice for
+          // them, which fits itself to
           // the player's height: a smaller lock, then none, and smaller
           // type, before the action could be cut off.
           <VideoPlayerNotice
@@ -1029,7 +1068,7 @@ export function LessonVideoPlayer({
               playbackAccessError.onAction
                 ? {
                     label: playbackAccessError.actionLabel,
-                    prominent: playbackAccessError.kind === "login",
+                    prominent: playbackAccessError.kind !== "retry",
                     onSelect: playbackAccessError.onAction,
                   }
                 : undefined
@@ -1179,7 +1218,12 @@ export function LessonVideoPlayer({
             backdrop={false}
             // The lesson's own picture behind the message, as on the
             // surface that asks the learner to sign in.
-            background={<LessonPictureBackdrop src={media.thumbnailSrc} />}
+            background={
+              <>
+                <LessonPictureBackdrop src={media.thumbnailSrc} />
+                <FailedPlayerSizeMark />
+              </>
+            }
             // Under the controls' layer (z-30), so the picture behind the
             // message does not dim the controls that lie over it.
             backgroundClassName="z-20"
@@ -1205,6 +1249,9 @@ export function LessonVideoPlayer({
         // scaled as one picture while it minimizes, turns back or expands.
         // So the message is hidden for that stretch, as the surface with no
         // video hides what is on it, and under a finger too.
+        // A failed player too short for its controls drops them, and the
+        // message takes the whole of it (`FailedPlayerSizeMark`).
+        "data-learning-player-failed-small:[&_:is([data-video-player-control-layer],[data-player-bottom-corner-controls-layer],[data-player-timeline-wrap])]:invisible! data-learning-player-failed-small:[&_[data-video-player-notice-content]]:inset-0!",
         "[[data-learning-player-restore-phase=expanding]_&]:[&_[data-video-player-notice]]:invisible! [[data-learning-player-window-motion]_&]:[&_[data-video-player-notice]]:invisible! data-learning-player-controls-suppressed:[&_[data-video-player-notice]]:invisible!",
         // Wide touch screens keep the vertical swipe for the minimize
         // gesture, as phones do; only a mouse-first device hands vertical
