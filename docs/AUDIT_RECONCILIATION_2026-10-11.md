@@ -1,6 +1,6 @@
 # Audit reconciliation — 11 Oct 2026
 
-> **Read section 19 first.** It is the current status, written on 13 Oct 2026 after every "FIXED" below was re-checked against the code. Sections 2 to 9 are the picture on the morning of 11 Oct, before any fix, and are kept as the record of what was found. Sections 10 to 17 record the first round of fixes; twenty of their "FIXED" entries were wrong and are corrected in section 19.
+> **Read section 19 first, then `docs/AUDIT_REMAINING_CHECKLIST.md`.** Section 19 is the current status, written on 13 Oct 2026 after every "FIXED" below was re-checked against the code. Sections 2 to 9 are the picture on the morning of 11 Oct, before any fix, and are kept as the record of what was found. Sections 10 to 17 record the first round of fixes; twenty of their "FIXED" entries were wrong and are corrected in section 19.
 
 Reconciles the application audit of 9 Oct 2026 (findings S1–S16, C1–C13, A1–A7, F1–F18, B1–B9, P1–P5, X1–X6, R1–R6) against the code on `dev` at `8252933c`. Investigation only: no application code, migration, dependency or data was changed.
 
@@ -679,7 +679,7 @@ Security and money first.
 | `packages/video-player`            | 7, two React rules | The rules are turned off for the player, as they already are for the web app. **The code was not changed**; rewriting it needs a browser. |
 | `apps/web`                         | 5                  | 1 fixed. 4 remain: `CoursesPage.tsx` (2) and `DiscussionsWorkspace.tsx` (2).                                                              |
 
-`pnpm lint` therefore still fails, with 4 errors.
+At the end of 12 Oct `pnpm lint` still failed with those 4 errors. They were fixed on 13 Oct (19.9), and it now passes with 0 errors and 31 warnings.
 
 ### 19.7 Before pushing
 
@@ -704,3 +704,20 @@ Staging checks owed from this pass:
 | `backup/dev-2026-10-12-worktree-snapshot` | The same plus the then-uncommitted docs.                                                                                                                                                                                                                                                   |
 | `chore/integrate-origin-dev`              | `dev` with `origin/dev` merged (`d4f605b3`). The two conflicts were in `.env.example` (both blocks kept) and `auth/otp/otp.service.ts` (the test-account fixed code is resolved after the deactivated-account answer and stored inside the same lock and transaction as every other code). |
 | `fix/audit-recheck-c3-b2-oauth`           | The fixes of this section, one commit per area.                                                                                                                                                                                                                                            |
+
+### 19.9 After the merge into `dev`: 13 Oct 2026
+
+Everything in this section was merged into `dev`, and `origin/dev`, which had moved by three more commits, was merged in after it.
+
+**One audit fix was replaced by a product decision made on `origin/dev`.** Commit `dd0563bd` opens the discussions of any published lesson of a published course to every reader, signed in or not, with access or without. That replaces the rule added on 11 Oct for B2, under which a free but restricted course's lesson discussions needed a grant. The merge follows `origin/dev`: reading a lesson's own discussions is open. Posting, replying and reacting still need access, notes stay private, and a restricted course's discussions are still not offered outside their lesson (the discovery rule from 11 Oct is kept). So for B2: quizzes and checkout of a restricted free course are closed, and reading its lesson discussions is open by decision.
+
+**The other conflict** was in `routes/academy-layout.tsx`. Both sides had made "not found" win before the sidebar match; the helper that was replayed against the route tree was kept.
+
+**The last four ESLint errors are fixed**, with no change in behaviour:
+
+- `CoursesPage.tsx`: the long-press effect reaches two handlers declared after it through refs, as it already reached a third.
+- `DiscussionsWorkspace.tsx`: the card renderer uses the existing "is this the Q&A tab" value instead of comparing the tab again.
+
+**Checked on merged `dev`:** `tsc --noEmit` in every package; `eslint .` with 0 errors; 37 of 37 API tests; all 73 migrations on an empty database; the checkout, provider sign-in and sign-up checks over HTTP on a local database; the routing and session replays (same output as before the merge); and the price card and code boxes again in a desktop browser on the standalone pages.
+
+What is left is in `docs/AUDIT_REMAINING_CHECKLIST.md`.
