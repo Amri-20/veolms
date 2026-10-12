@@ -273,6 +273,11 @@ function VirtualizedCurriculumLessonRows(props: CurriculumLessonRowsProps) {
     paddingStart: compact ? 0 : LESSON_CARD_GAP,
     paddingEnd: compact ? 0 : LESSON_CARD_GAP,
     getItemKey: (index) => lessons[index]?.[0] ?? index,
+    // The list shares the panel's scroller with everything else in it. On
+    // taking hold of a scroller the virtualizer scrolls it to this offset,
+    // which is the top unless told otherwise: opening a section would send
+    // the whole panel back there.
+    initialOffset: () => scrollportRef.current?.scrollTop ?? 0,
     initialRect: { width: 1024, height: 768 },
     overscan: LESSON_LIST_OVERSCAN,
     rangeExtractor,
@@ -280,6 +285,23 @@ function VirtualizedCurriculumLessonRows(props: CurriculumLessonRowsProps) {
   });
   const virtualizerRef = useRef(virtualizer);
   virtualizerRef.current = virtualizer;
+  // When a card turns out taller or shorter than was assumed, the
+  // virtualizer moves the scroller by the difference if the card lies above
+  // what is on screen, so the lessons in view stay put. It judges "above"
+  // from where it believes the list starts, which is the panel's top until
+  // the list has been measured: a section opened further down the panel
+  // then looked as if it were above the screen, and opening it pulled the
+  // panel upwards. Where the card really is settles it.
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) => {
+    const scrollport = scrollportRef.current;
+    const list = listRef.current;
+    if (!scrollport || !list) return false;
+    const cardBottom =
+      list.getBoundingClientRect().top +
+      (item.start - virtualizer.options.scrollMargin) +
+      item.size;
+    return cardBottom <= scrollport.getBoundingClientRect().top;
+  };
   const virtualItems = virtualizer.getVirtualItems();
 
   useLayoutEffect(() => {

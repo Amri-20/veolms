@@ -1023,26 +1023,17 @@ html[data-app-hydrated="false"] .learning-workspace__main {
   background: color-mix(in srgb, var(--accent) 22%, var(--surface));
 }
 
-/* By night the panel is as dark as the page beside it (the canvas, with the
-   same faint glow of the accent from above), so the lessons and what is
-   picked out stand on it as lighter things: the heading of the open section
-   is the surface's own shade, a step up from the panel. */
+/* By night the panel has no background of its own: it shows the page's,
+   exactly as the lesson's own column beside it does under the video, so the
+   two are one shade. The lessons and what is picked out stand on it as
+   lighter things: the heading of an open section is the surface's shade. */
 :root:not([data-theme="light"])
   .learning-workspace__curriculum-column:has(
     > .learning-curriculum:not(.learning-curriculum--compact)
-  ) {
-  background: var(--canvas);
-}
-
+  ),
 :root:not([data-theme="light"])
   .learning-curriculum:not(.learning-curriculum--compact) {
-  background:
-    radial-gradient(
-      120% 60% at 30% 0%,
-      color-mix(in srgb, var(--accent) 9%, transparent),
-      transparent 70%
-    ),
-    var(--canvas);
+  background: transparent;
 }
 
 :root:not([data-theme="light"])

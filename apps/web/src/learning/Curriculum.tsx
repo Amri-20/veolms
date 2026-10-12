@@ -740,7 +740,14 @@ export function Curriculum({
                       ? currentSectionRef
                       : undefined
                   }
-                  className="learning-curriculum__section relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-(--learning-panel-border) after:content-['']"
+                  // The line between sections is a faint one in the panel,
+                  // where the headings are far apart; the mini player's
+                  // dense rows keep the panel's own border colour.
+                  className={`learning-curriculum__section relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:content-[''] ${
+                    hideHero
+                      ? "after:bg-(--learning-panel-border)"
+                      : "after:bg-[color-mix(in_srgb,var(--text)_7%,transparent)]"
+                  }`}
                   data-expanded={isOpen}
                 >
                   <button
