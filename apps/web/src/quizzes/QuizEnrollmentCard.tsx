@@ -9,6 +9,7 @@ import { Button } from "../components/Button";
 import { LoadingSpinnerIcon } from "../components/LoadingSpinner";
 import { productName } from "../routing/routeDescriptors";
 import { useCurrentUser } from "../services/auth";
+import { readCheckoutStartError } from "../services/payments/checkoutError";
 import {
   useCreateCheckoutOrder,
   useVerifyPayment,
@@ -242,10 +243,10 @@ export function QuizEnrollmentCard({
       rzp.open();
     } catch (err: unknown) {
       setIsProcessing(false);
+      // A refusal from the server is a plain object, not an `Error`; read
+      // the same way as the course checkout so its reason is shown.
       setErrorMessage(
-        err instanceof Error
-          ? err.message
-          : "Failed to initiate quiz enrollment.",
+        readCheckoutStartError(err, "Failed to initiate quiz enrollment."),
       );
     }
   };

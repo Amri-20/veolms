@@ -90,6 +90,7 @@ import { ShellDragSurface } from "./shell/ShellDragSurface";
 import { SidebarResizeReadout } from "./shell/SidebarResizeReadout";
 import { SidebarToggleIcon } from "./shell/SidebarToggleIcon";
 import { useCurrentUser, useSignOut } from "./services/auth";
+import { COURSE_CATALOGUE_SEARCH_SESSION_KEY } from "./store/accountBrowserState";
 import {
   authStore,
   useAuthIdentityHint,
@@ -1097,7 +1098,7 @@ export function CoursesPage({
   const [creatorEnrollmentFilter, setCreatorEnrollmentFilter] =
     useState<CourseEnrollmentFilter>("all");
   const [search, setSearch] = useSessionStorageState(
-    "veolms-course-catalogue-search",
+    COURSE_CATALOGUE_SEARCH_SESSION_KEY,
     "",
     isStoredString,
   );
@@ -1204,6 +1205,17 @@ export function CoursesPage({
   // same-page navigation after login; it is never persisted across reloads.
   const activeUser = authUserFetched && !authUserError ? authUser : storeUser;
   const isAuthenticated = Boolean(activeUser);
+  // The catalogue search belongs to whoever typed it. Its stored copy is
+  // forgotten when the session ends (`forgetAccountBrowserState`), but this
+  // page stays mounted through a session that ends without a reload, and
+  // went on filtering the next account's catalogue by it.
+  const activeUserId = activeUser?.id ?? null;
+  const searchOwnerIdRef = useRef(activeUserId);
+  useEffect(() => {
+    const previousOwnerId = searchOwnerIdRef.current;
+    searchOwnerIdRef.current = activeUserId;
+    if (previousOwnerId && previousOwnerId !== activeUserId) setSearch("");
+  }, [activeUserId, setSearch]);
   // The session has not been checked yet and nothing is remembered about the
   // account, so it is too early to offer "Login".
   const accountStatusUnknown =

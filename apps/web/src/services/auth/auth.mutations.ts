@@ -36,7 +36,7 @@ import {
   notePendingMfaLogin,
 } from "../../store/pendingMfaLogin";
 import { clearCoursePlayerSessions } from "../../learning/coursePlayerNavigation";
-import { forgetSessionTabs } from "../../routing/tabSessionState";
+import { forgetAccountBrowserState } from "../../store/accountBrowserState";
 import { authKeys } from "./auth.keys";
 import { updatePublicProfileCacheFromUser } from "./auth.queries";
 import { authService, type TotpSetupResponse } from "./auth.service";
@@ -108,7 +108,9 @@ function clearSignedOutState(queryClient: QueryClient) {
   authStore.clearAuth();
   resetRegisteredInteractionState();
   clearCoursePlayerSessions();
-  forgetSessionTabs();
+  // `clearAuth` above already does this for a tab it knew was signed in.
+  // Signing out says so outright, so it does not depend on that.
+  forgetAccountBrowserState();
   queryClient.setQueryData(authKeys.me(), null);
   queryClient.removeQueries({ queryKey: authKeys.me() });
   queryClient.removeQueries({ queryKey: authKeys.avatars() });

@@ -43,6 +43,13 @@ import {
   type CourseLifecycleStatus,
   type CourseRole,
 } from "./catalogue";
+import {
+  checkoutCourseItem,
+  describeCouponSaving,
+  isCouponTotalStale,
+  payableBeforeCoupon,
+  type AppliedCoupon,
+} from "./couponTotal";
 import { readCustomAmount } from "./customAmountEntry";
 import { toggleWishlistCourse, useCourseWishlisted } from "./wishlistStorage";
 import { CourseWishlistHeartButton } from "./CourseWishlistHeartButton";
@@ -57,6 +64,7 @@ import { useCourseOverview } from "../services/courses";
 import { useEnrolledCourses } from "../services/enrollments";
 import { getApiError } from "../lib/api-error";
 import {
+  readCheckoutStartError,
   useCheckoutPreview,
   useAwaitPaidOrder,
   useCreateCheckoutOrder,
@@ -266,21 +274,11 @@ function toOverviewPricingProps(
 
 type ContributionPresetId = "0" | "100" | "250" | "500" | "custom";
 
-function checkoutCourseItem(
-  courseId: string,
-  options: { isFree: boolean; amount: number; catalogPrice: number },
-) {
-  const includeCustom =
-    options.amount > 0 &&
-    (options.isFree || options.amount >= options.catalogPrice);
-  return {
-    itemType: "course" as const,
-    courseId,
-    ...(includeCustom ? { customAmount: options.amount } : {}),
-  };
-}
-
-function appliedCouponFromPreview(code: string, res: CheckoutPreviewResponse) {
+function appliedCouponFromPreview(
+  code: string,
+  res: CheckoutPreviewResponse,
+  pricedForAmount: number,
+): AppliedCoupon {
   const discountAmount = res.pricing.discountAmount;
   const currency = res.pricing.currency || "INR";
   const totalAmount = res.pricing.totalAmount;
@@ -299,6 +297,7 @@ function appliedCouponFromPreview(code: string, res: CheckoutPreviewResponse) {
     totalAmount,
     currency,
     discountLabel,
+    pricedForAmount,
   };
 }
 
@@ -578,13 +577,9 @@ function CourseHeroSection({
   const [couponCodeInput, setCouponCodeInput] = useState("");
   const [couponBusy, setCouponBusy] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
-  const [appliedCoupon, setAppliedCoupon] = useState<{
-    code: string;
-    discountAmount: number;
-    totalAmount: number;
-    currency: string;
-    discountLabel?: string;
-  } | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(
+    null,
+  );
 
   const courseCurrency = pricing?.currency ?? "INR";
   const currencySymbol = getCurrencySymbol(courseCurrency);
@@ -603,21 +598,28 @@ function CourseHeroSection({
     [course.id, isFree, voluntaryAmount, baseNumericPrice],
   );
 
-  const lastPreviewedAmount = useRef(voluntaryAmount);
+  // What a payment would charge before the coupon, and whether the coupon
+  // total on the card was worked out for it. Both are read during render, so
+  // the pay button is already held on the render that follows a change of
+  // amount; it does not wait for the effect below.
+  const payableAmount = payableBeforeCoupon(voluntaryAmount, baseNumericPrice);
+  const couponTotalIsStale =
+    !isFree && isCouponTotalStale(appliedCoupon, payableAmount);
+  const appliedCouponCode = appliedCoupon?.code;
+  // `preview` is a new object on every render, and starting the request
+  // causes a render. As a dependency it cancelled the effect's own request,
+  // so the answer was dropped and the old total stayed. The function is the
+  // same one for the life of the component.
+  const previewCheckout = preview.mutateAsync;
   useEffect(() => {
-    if (!appliedCoupon?.code || isFree) {
-      lastPreviewedAmount.current = voluntaryAmount;
-      return;
-    }
-    if (lastPreviewedAmount.current === voluntaryAmount) return;
-    lastPreviewedAmount.current = voluntaryAmount;
+    if (!appliedCouponCode || !couponTotalIsStale) return;
 
     let cancelled = false;
     const handle = window.setTimeout(async () => {
       try {
-        const res = await preview.mutateAsync({
+        const res = await previewCheckout({
           items: [checkoutItem],
-          couponCode: appliedCoupon.code,
+          couponCode: appliedCouponCode,
         });
         if (cancelled) return;
         if (res.couponValidation && !res.couponValidation.valid) {
@@ -628,11 +630,17 @@ function CourseHeroSection({
           );
           return;
         }
-        setAppliedCoupon(appliedCouponFromPreview(appliedCoupon.code, res));
+        setAppliedCoupon(
+          appliedCouponFromPreview(appliedCouponCode, res, payableAmount),
+        );
       } catch (err) {
         if (cancelled) return;
+        // The total for this amount is unknown. The coupon comes off so the
+        // button names a price that is known, and the reason is shown.
         setAppliedCoupon(null);
-        setCouponError(getApiError(err).message);
+        setCouponError(
+          `The coupon was removed because its total for this amount could not be worked out. ${getApiError(err).message}`,
+        );
       }
     }, 250);
 
@@ -640,7 +648,13 @@ function CourseHeroSection({
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [appliedCoupon?.code, checkoutItem, isFree, preview, voluntaryAmount]);
+  }, [
+    appliedCouponCode,
+    checkoutItem,
+    couponTotalIsStale,
+    payableAmount,
+    previewCheckout,
+  ]);
 
   const basePrice = pricing?.price ?? "Free";
   const displayPrice = appliedCoupon
@@ -663,10 +677,32 @@ function CourseHeroSection({
     voluntaryAmount > baseNumericPrice;
   const originalPrice = isPayingAbovePrice ? undefined : pricing?.originalPrice;
   const discount = isPayingAbovePrice ? undefined : pricing?.discount;
-  const displayDiscount = appliedCoupon
-    ? appliedCoupon.discountLabel ||
-      `${formatPriceWithCurrency(appliedCoupon.discountAmount, appliedCoupon.currency)} OFF`
-    : discount;
+  // With a coupon, what the total is compared with. On the buyer's own,
+  // higher amount the catalogue price and the coupon's "% OFF" are both the
+  // wrong comparison (see `describeCouponSaving`).
+  const couponSaving =
+    !isFree && appliedCoupon
+      ? describeCouponSaving(appliedCoupon, baseNumericPrice)
+      : null;
+  const struckThroughPrice =
+    !couponSaving || !appliedCoupon
+      ? originalPrice
+      : couponSaving.against === "catalogue"
+        ? basePrice
+        : couponSaving.against === "ownAmount"
+          ? formatPriceWithCurrency(
+              couponSaving.wasAmount,
+              appliedCoupon.currency,
+            )
+          : undefined;
+  const displayDiscount = !appliedCoupon
+    ? discount
+    : couponSaving?.against === "ownAmount"
+      ? `${formatPriceWithCurrency(couponSaving.savedAmount, appliedCoupon.currency)} OFF`
+      : couponSaving?.against === "nothing"
+        ? undefined
+        : appliedCoupon.discountLabel ||
+          `${formatPriceWithCurrency(appliedCoupon.discountAmount, appliedCoupon.currency)} OFF`;
   const perksList = inclusions ?? [
     "Full lifetime access",
     "Access on mobile & desktop",
@@ -691,8 +727,10 @@ function CourseHeroSection({
         return;
       }
 
-      lastPreviewedAmount.current = voluntaryAmount;
-      setAppliedCoupon(appliedCouponFromPreview(code, res));
+      // `payableAmount` is the amount this request was made for. If the
+      // buyer changed theirs while it was in flight, the total is stale on
+      // arrival and the effect above asks again.
+      setAppliedCoupon(appliedCouponFromPreview(code, res, payableAmount));
       setCouponInputOpen(false);
       setCouponCodeInput("");
     } catch (err) {
@@ -844,16 +882,12 @@ function CourseHeroSection({
 
       rzp.open();
     } catch (error) {
-      // The payment provider could not be reached or refused to start the
-      // order, so this attempt never reached the point of paying. Said
-      // plainly, with what matters most to the buyer.
-      const msg =
-        getApiError(error).code === "PAYMENT_GATEWAY_ERROR"
-          ? "Payments are unavailable right now. Nothing was charged for this attempt. Please try again in a little while."
-          : error && typeof error === "object" && "message" in error
-            ? String((error as { message: unknown }).message)
-            : "Checkout could not be started. Please retry.";
-      setPaymentError(msg);
+      setPaymentError(
+        readCheckoutStartError(
+          error,
+          "Checkout could not be started. Please retry.",
+        ),
+      );
       setIsPaymentBusy(false);
     }
   };
@@ -1043,6 +1077,26 @@ function CourseHeroSection({
       ctaDisabled = true;
       ctaOnClick = undefined;
     }
+
+    // The coupon total on the card belongs to an earlier amount, and the one
+    // for the amount now chosen has been asked for. Until it arrives the
+    // button names no price and takes no payment: a click here used to send
+    // the new amount under the old total. It ends when the new total
+    // arrives, or when the coupon comes off because it could not be had.
+    if (couponTotalIsStale) {
+      ctaDisabled = true;
+      ctaOnClick = undefined;
+      if (!isPaymentBusy) {
+        ctaLabel = "Updating total…";
+        ctaIcon = (
+          <CircleNotch
+            size="1.15em"
+            className="animate-spin shrink-0"
+            aria-hidden="true"
+          />
+        );
+      }
+    }
   }
 
   const handlePreviewClick = (event: MouseEvent<HTMLButtonElement>) => {
@@ -1161,11 +1215,9 @@ function CourseHeroSection({
                         : "Free"
                       : displayPrice}
                   </span>
-                  {(isFree
-                    ? originalPrice
-                    : originalPrice || appliedCoupon) && (
+                  {struckThroughPrice && (
                     <span className="text-(--muted) text-[1.05rem] font-medium line-through whitespace-nowrap">
-                      {!isFree && appliedCoupon ? basePrice : originalPrice}
+                      {struckThroughPrice}
                     </span>
                   )}
                   {(isFree ? originalPrice : true) && displayDiscount && (
@@ -1293,6 +1345,16 @@ function CourseHeroSection({
                   </p>
                 )}
               </div>
+            )}
+
+            {/* A coupon that came off by itself: the box above is closed then, so its reason would otherwise not be shown at all */}
+            {couponError && !couponInputOpen && !appliedCoupon && (
+              <p
+                role="alert"
+                className="m-0 text-xs text-rose-500 font-semibold px-1"
+              >
+                {couponError}
+              </p>
             )}
 
             {/* Pay What You Want / Voluntary Contribution for Free and Paid Courses */}
