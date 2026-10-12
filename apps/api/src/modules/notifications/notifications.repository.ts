@@ -11,6 +11,7 @@ import type {
 } from "@veolms/database";
 import { sql, type Kysely, type Selectable } from "kysely";
 import { exactCursorTimestamp } from "../../lib/keyset.ts";
+import { escapeLikePattern } from "../../lib/like-pattern.ts";
 
 export interface NotificationCursor {
   createdAt: Date;
@@ -64,7 +65,8 @@ export async function findNotifications(
     query = query.where("notifications.read_at", "is not", null);
   }
   if (input.search) {
-    const pattern = `%${input.search}%`;
+    // "%", "_" and "\" in the search are matched as typed.
+    const pattern = `%${escapeLikePattern(input.search)}%`;
     query = query.where((expression) =>
       expression.or([
         expression("notifications.title", "ilike", pattern),
