@@ -12,6 +12,7 @@ import type { AuthLogger, SessionUser } from "../shared/auth.types.ts";
 import { generatePkce, generateRandomToken } from "../shared/auth.utils.ts";
 import {
   fetchOauthProfile,
+  normalizeOauthProfile,
   verifyGoogleIdToken,
   verifyOauthState,
   type OauthProfile,
@@ -197,13 +198,17 @@ export function createOauthService({
 
   async function login(
     provider: OauthProviderName,
-    profile: OauthProfile,
+    providerProfile: OauthProfile,
     request: {
       ip: string;
       userAgent: string | null;
       existingSessionToken?: string | null;
     },
   ) {
+    // Every lookup and the account created below use the stored form of the
+    // address. The providers' own functions already return it that way; a
+    // profile can also reach here from a caller's own verifier.
+    const profile = normalizeOauthProfile(providerProfile);
     let user: SessionUser | undefined =
       await authService.findUserByOauthAccountIncludingDeleted(
         provider,
@@ -264,13 +269,16 @@ export function createOauthService({
 
   async function register(
     request: OauthRegisterRequest,
-    profile: OauthProfile,
+    providerProfile: OauthProfile,
     requestMeta: {
       ip: string;
       userAgent: string | null;
       existingSessionToken?: string | null;
     },
   ) {
+    // As in `login`: the stored form of the address, for the lookups and
+    // for the account created below.
+    const profile = normalizeOauthProfile(providerProfile);
     const provider: OauthProviderName = request.provider;
 
     if (
