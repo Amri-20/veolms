@@ -1,3 +1,4 @@
+import { OctopusIllustration } from "./components/OctopusIllustration";
 import { useEffect, useLayoutEffect, type ReactNode } from "react";
 import {
   isRouteErrorResponse,
@@ -33,6 +34,7 @@ import {
 import { QueryProvider } from "./providers/query-provider";
 import { ReadingModeEffects } from "./reading-mode/ReadingModeEffects";
 import { getSessionPresenceBootstrapScript } from "./store/sessionPresence";
+import { getLearnerStartedBootstrapScript } from "./home/learner/learnerCoursesSubtitle";
 import { getReadingModeBootstrapScript } from "./reading-mode/readingModePreferences";
 import {
   getControlRadiusBootstrapScript,
@@ -246,7 +248,7 @@ export function Layout({ children }: LayoutProps) {
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `${getSessionPresenceBootstrapScript()}${getSidebarShellBootstrapScript()}${getSidebarCollapsedMarkupBootstrapScript()}${getSidebarPresentationBootstrapScript()}${getLearningShellBootstrapScript()}${getLearningPlayerBootstrapScript()}`,
+            __html: `${getSessionPresenceBootstrapScript()}${getLearnerStartedBootstrapScript()}${getSidebarShellBootstrapScript()}${getSidebarCollapsedMarkupBootstrapScript()}${getSidebarPresentationBootstrapScript()}${getLearningShellBootstrapScript()}${getLearningPlayerBootstrapScript()}`,
           }}
         />
         <Meta />
@@ -399,6 +401,12 @@ export function ErrorBoundary() {
   return (
     <main className="grid min-h-dvh place-items-center bg-(--canvas) px-6 text-(--text)">
       <div className="max-w-md text-center">
+        {isStaleBuild ? null : (
+          <OctopusIllustration
+            kind={isNotFound ? "not-found" : "went-wrong"}
+            className="mx-auto mb-6 h-36 w-auto"
+          />
+        )}
         <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
         <p className="mt-2 text-sm text-(--muted)">{message}</p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">

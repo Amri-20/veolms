@@ -45,9 +45,14 @@ html[data-app-hydrated="false"] .learning-workspace__main {
   transition: none;
 }
 
+/* The column is looked for exactly where it is, two levels down (inside the
+   pane that clips it), not anywhere under the lesson: asked the wide way,
+   the browser goes through every lesson in the course content to answer,
+   each time the grid is re-styled, which a drag of the pane's edge does on
+   every frame. */
 @media (min-width: 1081px) {
   .learning-workspace__main:has(
-    .learning-workspace__curriculum-column:not(.is-collapsed)
+    > * > .learning-workspace__curriculum-column:not(.is-collapsed)
   ) {
     --learning-scrollbar-separator-width: 12px;
     --learning-scrollbar-edge-bleed: 1px;
@@ -59,7 +64,7 @@ html[data-app-hydrated="false"] .learning-workspace__main {
     .courses-main-frame:has(+ .floating-scrollbar--learning-page.is-visible)
     > .courses-main--learning
     .learning-workspace__main:has(
-      .learning-workspace__curriculum-column:not(.is-collapsed)
+      > * > .learning-workspace__curriculum-column:not(.is-collapsed)
     ) {
     --learning-lesson-edge-extension: calc(
       var(--learning-scrollbar-separator-width) +
@@ -68,7 +73,7 @@ html[data-app-hydrated="false"] .learning-workspace__main {
   }
 
   .learning-workspace__main:has(
-      .learning-workspace__curriculum-column:not(.is-collapsed)
+      > * > .learning-workspace__curriculum-column:not(.is-collapsed)
     )
     > .learning-workspace__lesson-column {
     width: calc(100% + var(--learning-lesson-edge-extension));
@@ -238,7 +243,10 @@ html[data-app-hydrated="false"] .learning-workspace__main {
    split is moving. The video remains live; only its decorative glow yields
    until the pointer is released, then the existing opacity transition returns. */
 .courses-app--resizing .learning-persistent-player--full .ambient-canvas,
-.courses-app:has(.learning-workspace.is-curriculum-resizing)
+.courses-app:is(
+    [data-learning-split-dragging],
+    :has(.learning-workspace.is-curriculum-resizing)
+  )
   .learning-persistent-player--full
   .ambient-canvas {
   opacity: 0;

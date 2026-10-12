@@ -1,15 +1,21 @@
-import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { isEditingShortcutTarget } from "../../keyboardShortcuts";
 import { HeroLampSoundToggle } from "./HeroLampSoundToggle";
 import { HeroLaptopPower, useHeroLaptopPower } from "./HeroLaptopPower";
 import { HeroLaptopPowerSpot } from "./HeroLaptopPowerSpot";
 import { HeroLaptopScreen } from "./HeroLaptopScreen";
+import { HeroPicture, heroSceneClasses } from "./HeroPicture";
 import {
   guestHeroDayImage,
   guestHeroDayLampOnImage,
   guestHeroImage,
   guestHeroLampOffImage,
-  type GuestHeroPicture,
 } from "./guestHeroImage";
 import {
   playLampSwitchSound,
@@ -49,44 +55,94 @@ const DEFAULT_PICTURE_POSITION =
 export const heroPictureBandFade =
   "before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:bg-[linear-gradient(to_bottom,#050915_0,rgb(5_9_21/0.55)_14%,transparent_34%,transparent_76%,#050915_100%)] [:root[data-theme=light]_&]:before:bg-[linear-gradient(to_bottom,#f4ecdf_0,rgb(244_236_223/0.6)_14%,transparent_34%,transparent_76%,#f4ecdf_100%)]";
 
-/** One of the hero's stacked pictures, in its phone and wide crops. */
-function HeroPicture({
-  picture,
-  position,
-  className,
-  priority = false,
-  imageRef,
+/**
+ * The laptop's screen and its power, laid onto the laptop in the picture.
+ *
+ * Where the laptop is has to be measured, and is measured again on every
+ * frame while the hero changes size (the sidebar being dragged). That is why
+ * this is a component of its own: each measurement renders only this, and
+ * not the hero and everything it says, which made such a drag lag.
+ */
+function HeroLaptop({
+  pictureRef,
+  children,
 }: {
-  picture: GuestHeroPicture;
-  position: string;
-  className: string;
-  /** The picture the page is first painted with. */
-  priority?: boolean;
-  imageRef?: Ref<HTMLImageElement>;
+  pictureRef: RefObject<HTMLImageElement | null>;
+  children: ReactNode;
 }) {
+  const laptop = useHeroLaptopScreen(pictureRef);
+  const laptopPower = useHeroLaptopPower();
   return (
-    <picture>
-      <source
-        media={picture.phone.media}
-        srcSet={picture.phone.srcSet}
-        sizes={picture.phone.sizes}
-        width={picture.phone.width}
-        height={picture.phone.height}
+    <>
+      <HeroLaptopScreen transform={laptop.transform}>
+        <HeroLaptopPower
+          power={laptopPower.power}
+          onSwitchOn={laptopPower.switchOn}
+        >
+          {children}
+        </HeroLaptopPower>
+      </HeroLaptopScreen>
+      {laptop.powerSpot ? (
+        <HeroLaptopPowerSpot
+          spot={laptop.powerSpot}
+          isOn={laptopPower.power !== "off"}
+          onToggle={laptopPower.toggle}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The lamp's switch, held over the lamp in the picture, and the mute button
+ * that can be called up beside it. Like the laptop it follows a measurement
+ * that changes on every frame of a resize, and is a component of its own
+ * for the same reason (see `HeroLaptop`).
+ */
+function HeroLampSwitch({
+  pictureRef,
+  action,
+  onToggle,
+  onShowSoundToggle,
+  soundToggle,
+}: {
+  pictureRef: RefObject<HTMLImageElement | null>;
+  /** What a press will do, for the switch's name and tooltip. */
+  action: string;
+  onToggle: () => void;
+  onShowSoundToggle: () => void;
+  soundToggle: {
+    visible: boolean;
+    muted: boolean;
+    onToggle: () => void;
+    onHold: () => void;
+    onRelease: () => void;
+  };
+}) {
+  const lampHotspot = useHeroLampHotspot(pictureRef);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onToggle}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onShowSoundToggle();
+        }}
+        aria-label={action}
+        title={`${action} (Shift+L)`}
+        aria-keyshortcuts="Shift+L"
+        style={lampHotspot}
+        // Until it has been measured it holds the corner the lamp hangs in
+        // (on a phone, where the picture is further down, it waits instead).
+        className={`absolute z-10 cursor-pointer rounded-b-[45%] outline-none ${
+          lampHotspot ? "" : "top-0 right-0 hidden h-12 w-14 sm:block"
+        }`}
       />
-      <img
-        ref={imageRef}
-        src={picture.wide.src}
-        srcSet={picture.wide.srcSet}
-        sizes={picture.wide.sizes}
-        width={picture.wide.width}
-        height={picture.wide.height}
-        alt=""
-        loading={priority ? "eager" : "lazy"}
-        fetchPriority={priority ? "high" : undefined}
-        decoding="async"
-        className={`absolute inset-x-0 top-0 h-full w-full object-cover ${position} ${className}`}
-      />
-    </picture>
+      {lampHotspot ? (
+        <HeroLampSoundToggle lamp={lampHotspot} {...soundToggle} />
+      ) : null}
+    </>
   );
 }
 
@@ -130,9 +186,6 @@ export function HeroDesk({
 }) {
   const [lampOverride, setLampOverride] = useState<LampOverride>();
   const litPictureRef = useRef<HTMLImageElement>(null);
-  const lampHotspot = useHeroLampHotspot(litPictureRef);
-  const laptop = useHeroLaptopScreen(litPictureRef);
-  const laptopPower = useHeroLaptopPower();
 
   // The switch's sound can be muted from a button that shows beside the lamp
   // for a moment when the lamp is right-clicked (a long press on touch).
@@ -288,54 +341,24 @@ export function HeroDesk({
     <section
       aria-labelledby={labelledBy}
       data-lamp={lampOverride}
-      className={`relative isolate flex flex-col overflow-clip bg-[#050915] text-white [:root[data-theme=light]_&]:bg-[#f4ecdf] [:root[data-theme=light]_&]:text-slate-900 ${className}`}
+      className={`${heroSceneClasses} ${className}`}
     >
       {laptopScreen ? (
-        <>
-          <HeroLaptopScreen transform={laptop.transform}>
-            <HeroLaptopPower
-              power={laptopPower.power}
-              onSwitchOn={laptopPower.switchOn}
-            >
-              {laptopScreen}
-            </HeroLaptopPower>
-          </HeroLaptopScreen>
-          {laptop.powerSpot ? (
-            <HeroLaptopPowerSpot
-              spot={laptop.powerSpot}
-              isOn={laptopPower.power !== "off"}
-              onToggle={laptopPower.toggle}
-            />
-          ) : null}
-        </>
+        <HeroLaptop pictureRef={litPictureRef}>{laptopScreen}</HeroLaptop>
       ) : null}
-      <button
-        type="button"
-        onClick={toggleLamp}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          showSoundToggle();
+      <HeroLampSwitch
+        pictureRef={litPictureRef}
+        action={lampAction}
+        onToggle={toggleLamp}
+        onShowSoundToggle={showSoundToggle}
+        soundToggle={{
+          visible: soundToggleVisible,
+          muted: soundMuted,
+          onToggle: toggleSoundMuted,
+          onHold: holdSoundToggle,
+          onRelease: releaseSoundToggle,
         }}
-        aria-label={lampAction}
-        title={`${lampAction} (Shift+L)`}
-        aria-keyshortcuts="Shift+L"
-        style={lampHotspot}
-        // Until it has been measured it holds the corner the lamp hangs in
-        // (on a phone, where the picture is further down, it waits instead).
-        className={`absolute z-10 cursor-pointer rounded-b-[45%] outline-none ${
-          lampHotspot ? "" : "top-0 right-0 hidden h-12 w-14 sm:block"
-        }`}
       />
-      {lampHotspot ? (
-        <HeroLampSoundToggle
-          lamp={lampHotspot}
-          visible={soundToggleVisible}
-          muted={soundMuted}
-          onToggle={toggleSoundMuted}
-          onHold={holdSoundToggle}
-          onRelease={releaseSoundToggle}
-        />
-      ) : null}
 
       <div
         aria-hidden="true"

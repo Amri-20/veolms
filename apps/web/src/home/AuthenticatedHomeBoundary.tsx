@@ -1,9 +1,9 @@
 import type { LearningCourse } from "../StudentPages";
 import { lazy, Suspense, type ReactNode } from "react";
-import { LoadingSpinnerIcon } from "../components/LoadingSpinner";
 import type { NavigateTo } from "../routing/navigation";
 import { useEnrolledCourses } from "../services/enrollments";
 import type { GuestHomeCourseCardActions } from "./guest/GuestHomeCourseSection";
+import { LearnerHomeShell } from "./learner/LearnerHomeSkeleton";
 
 const LearnerHome = lazy(() =>
   import("./learner/LearnerHome").then((module) => ({
@@ -19,11 +19,17 @@ interface AuthenticatedHomeBoundaryProps {
   /** What the home's course cards need from the page shell. */
   courseCardActions: GuestHomeCourseCardActions;
   /**
-   * Rendered while enrollments load and while the lazy learner home chunk
-   * resolves, instead of the spinner states. The shell passes the seeded
-   * guest home here so a signed-in load swaps content exactly once
-   * (guest home -> learner home) rather than flashing spinners in between,
-   * which scored large layout shifts in Lighthouse.
+   * The session check has not answered yet, but this browser was signed in
+   * last time. The learner's home is put up at once, with placeholders
+   * where the learner's own things go, and nothing of theirs is asked for
+   * until the session is confirmed.
+   */
+  sessionPending?: boolean;
+  /**
+   * Rendered while enrollments load, in place of the learner's home with
+   * its placeholders. The shell passes the seeded guest home here when that
+   * is what is already on screen (someone who has just signed in), so the
+   * page swaps content exactly once (guest home -> learner home).
    */
   pendingContent?: ReactNode;
   /**
@@ -61,19 +67,6 @@ function HomeState({
   );
 }
 
-function HomeLoadingState() {
-  return (
-    <div
-      className="flex min-h-[clamp(18rem,40vh,28rem)] items-center justify-center gap-2.5 px-4 py-6 text-center text-[0.88rem] font-[550] text-(--muted)"
-      role="status"
-      aria-busy="true"
-    >
-      <LoadingSpinnerIcon size={22} />
-      <span>Preparing your Home…</span>
-    </div>
-  );
-}
-
 function HomeEnrollmentErrorState({
   isRetrying,
   onRetry,
@@ -104,14 +97,18 @@ export function AuthenticatedHomeBoundary({
   onNavigatePage,
   learnerName,
   courseCardActions,
+  sessionPending = false,
   pendingContent,
   notEnrolledContent,
 }: AuthenticatedHomeBoundaryProps) {
-  const enrollmentQuery = useEnrolledCourses();
-  const enrollmentData = enrollmentQuery.data;
+  const enrollmentQuery = useEnrolledCourses({ enabled: !sessionPending });
+  const enrollmentData = sessionPending ? undefined : enrollmentQuery.data;
 
-  if (enrollmentData === undefined) {
-    if (enrollmentQuery.isError) {
+  if (!sessionPending) {
+    if (
+      enrollmentQuery.isError &&
+      (enrollmentData === undefined || enrollmentData.courses.length === 0)
+    ) {
       return (
         <HomeEnrollmentErrorState
           isRetrying={enrollmentQuery.isFetching}
@@ -120,26 +117,24 @@ export function AuthenticatedHomeBoundary({
       );
     }
 
-    return <>{pendingContent ?? <HomeLoadingState />}</>;
+    if (enrollmentData === undefined && pendingContent) {
+      return <>{pendingContent}</>;
+    }
+
+    if (enrollmentData?.courses.length === 0) {
+      return <>{notEnrolledContent}</>;
+    }
   }
 
-  if (enrollmentQuery.isError && enrollmentData.courses.length === 0) {
-    return (
-      <HomeEnrollmentErrorState
-        isRetrying={enrollmentQuery.isFetching}
-        onRetry={() => void enrollmentQuery.refetch()}
-      />
-    );
-  }
-
-  if (enrollmentData.courses.length === 0) {
-    return <>{notEnrolledContent}</>;
-  }
-
+  // The learner's home is the same element from the moment the page opens
+  // until its courses are on it: it puts up its own placeholders while the
+  // session and the courses are on their way, so the hero's picture is
+  // drawn once and stays. The shell stands in only while its code loads.
   return (
-    <Suspense fallback={pendingContent ?? <HomeLoadingState />}>
+    <Suspense fallback={<LearnerHomeShell learnerName={learnerName} />}>
       <LearnerHome
-        enrolledCourses={enrollmentData.courses}
+        enrolledCourses={enrollmentData?.courses}
+        sessionPending={sessionPending}
         learnerName={learnerName}
         courseCardActions={courseCardActions}
         onOpenCourse={onOpenCourse}

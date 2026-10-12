@@ -18,6 +18,12 @@ import {
   VIEW_COURSE_CURRICULUM_HINT,
   type LearnerHeroIntent,
 } from "./learnerHomePlan";
+import {
+  resumePaneClasses,
+  resumeRowBoxClasses,
+  resumeRowContentClasses,
+  resumeThumbnailClasses,
+} from "./learnerHeroLayout";
 import { useEnterKeyAction } from "./useEnterKeyAction";
 import { useIsCutOff } from "./useIsCutOff";
 
@@ -34,40 +40,6 @@ const leadLabels: Record<LearnerHeroIntent, string> = {
   next: "Up next",
   review: "Completed",
 };
-
-/**
- * The course is a thin row on a frosted surface: its thumbnail, what to do
- * and where the learner is, the course's title over its progress, and the
- * one action. The surface is the theme's own ground, the page's below the
- * hero, let through by a third, so it is dark with light words by night and
- * light with dark words by day. It has no border and no edge of any kind: a
- * soft shadow under it is all that sets it off the picture. While the lamp
- * is on, its warm light falls on the surface too.
- *
- * Beside the picture (a page 50rem or wider) the row blurs the desk behind
- * it and is only as wide as what is in it, so the action stands just past
- * the end of the title; a long title is cut off with an ellipsis once the
- * row would pass 35rem, or the room the hero has for it. Stacked, the row
- * takes the page's width, and nothing lies behind it but the hero's plain
- * ground, so it is not blurred.
- *
- * The row lies in one line beside the picture, and wherever it is 28rem
- * wide or more. Narrower than that on a stacked page (a phone) the title
- * may take two lines and the action a line of its own, at full width.
- * Beside the picture on a page under 56rem, where the hero has little room
- * for the row and no height to spare, it keeps to one line and gives up its
- * thumbnail for the title instead.
- *
- * A row sized by what is in it cannot also be measured by what is in it, so
- * beside the picture it is not a container, and everything there is chosen
- * by the page's width alone.
- */
-const paneClasses = [
-  "relative isolate overflow-hidden rounded-[1.125rem] text-(--text)",
-  "bg-[color-mix(in_srgb,var(--main-surface,var(--surface))_66%,transparent)]",
-  "shadow-[inset_0_1px_0_rgb(255_255_255/0.09),0_14px_28px_-12px_rgb(0_0_0/0.45),0_30px_60px_-22px_rgb(0_0_0/0.6)] [:root[data-theme=light]_&]:shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_14px_28px_-12px_rgb(15_23_42/0.22),0_30px_60px_-22px_rgb(15_23_42/0.32)]",
-  "@[50rem]/home:backdrop-blur-xl",
-].join(" ");
 
 /**
  * The lamp's light on the pane, while the lamp is on. Beside the picture
@@ -103,7 +75,7 @@ const enterKeyClasses = [
 ].join(" ");
 
 /**
- * The course the hero leads with, as a row (see `paneClasses`). The whole
+ * The course the hero leads with, as a row (see `resumePaneClasses`). The whole
  * row opens the course at the lesson to carry on with, and so does the
  * Enter key.
  */
@@ -147,8 +119,8 @@ export function LearnerResumeRow({
     : `${totalLessons} ${totalLessons === 1 ? "lesson" : "lessons"}`;
 
   return (
-    <div className="@container/resume relative w-full @[50rem]/home:w-fit @[50rem]/home:max-w-[min(35rem,100%)] @[50rem]/home:[container-type:normal]">
-      <div className={paneClasses}>
+    <div className={resumeRowBoxClasses}>
+      <div className={resumePaneClasses}>
         <span aria-hidden="true" className={paneLampLightClasses} />
         {/* The whole row opens the course, so the pointer is a hand all over
             it. This lies under the words, which let the pointer through to
@@ -161,8 +133,8 @@ export function LearnerResumeRow({
           className="absolute inset-0 rounded-[inherit]"
         />
 
-        <div className="pointer-events-none relative z-10 flex flex-wrap items-center gap-x-3.5 gap-y-3 p-3 @[28rem]/resume:flex-nowrap @[50rem]/home:flex-nowrap @[50rem]/home:p-2.5">
-          <span className="block h-15 w-26 shrink-0 overflow-hidden rounded-[0.625rem] @[50rem]/home:@max-[56rem]/home:hidden">
+        <div className={`pointer-events-none ${resumeRowContentClasses}`}>
+          <span className={resumeThumbnailClasses}>
             <LearnerCourseThumbnail course={course} priority />
           </span>
 

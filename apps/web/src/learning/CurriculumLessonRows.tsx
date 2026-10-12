@@ -1,26 +1,11 @@
-import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
-import {
-  memo,
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
+import { memo } from "react";
+import type { RefObject } from "react";
 import { CheckIcon as Check } from "@phosphor-icons/react/Check";
 import { CircleIcon as Circle } from "@phosphor-icons/react/Circle";
 import type { LessonResource } from "@veolms/contracts";
 import type { Lesson } from "./courseContent";
 import { CurriculumLessonCard } from "./CurriculumLessonCard";
 
-const VIRTUALIZED_LESSON_THRESHOLD = 50;
-const LESSON_ROW_ESTIMATED_SIZE = 46;
-// Cards grow with their title, so a virtualized list measures each one. This
-// is only the height assumed for a card before it has been measured.
-const LESSON_CARD_ESTIMATED_SIZE = 86;
-const LESSON_CARD_GAP = 8;
-const LESSON_LIST_OVERSCAN = 8;
 const LESSON_PROGRESS_COMPLETE_THRESHOLD = 99.5;
 
 interface CurriculumLessonButtonProps {
@@ -33,8 +18,8 @@ interface CurriculumLessonButtonProps {
   onSelectLesson: (lessonNumber: number) => void;
   onClose?: () => void;
   activeLessonRef?: RefObject<HTMLButtonElement | null>;
-  virtualIndex?: number;
-  onVirtualizedKeyDown?: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
+  /** Extra classes for the row itself (how it behaves off screen). */
+  className?: string;
 }
 
 const CurriculumLessonButton = memo(function CurriculumLessonButton({
@@ -46,8 +31,7 @@ const CurriculumLessonButton = memo(function CurriculumLessonButton({
   onSelectLesson,
   onClose,
   activeLessonRef,
-  virtualIndex,
-  onVirtualizedKeyDown,
+  className = "",
 }: CurriculumLessonButtonProps) {
   const [number, title, duration, status] = lesson;
   const completed =
@@ -61,14 +45,12 @@ const CurriculumLessonButton = memo(function CurriculumLessonButton({
       disabled={!isAvailable}
       title={isAvailable ? undefined : "Log in to watch this lecture"}
       aria-label={isAvailable ? undefined : `${title} (log in to watch)`}
-      data-curriculum-lesson-index={virtualIndex}
-      onKeyDown={onVirtualizedKeyDown}
       onClick={() => {
         if (!isAvailable) return;
         onSelectLesson(number);
         onClose?.();
       }}
-      className={`learning-curriculum__lesson ${isActive ? "is-active" : ""} ${!isAvailable ? "cursor-not-allowed opacity-50" : ""}`}
+      className={`${className} learning-curriculum__lesson ${isActive ? "is-active" : ""} ${!isAvailable ? "cursor-not-allowed opacity-50" : ""}`}
     >
       {completed ? (
         <span
@@ -124,7 +106,6 @@ interface CurriculumLessonRowsProps {
   sectionId: number;
   sectionTitle: string;
   lessons: readonly Lesson[];
-  forceVirtualized?: boolean;
   selectedLesson: number;
   lessonProgress: Readonly<Record<number, number>>;
   onSelectLesson: (lessonNumber: number) => void;
@@ -133,8 +114,6 @@ interface CurriculumLessonRowsProps {
   lockedLessonNumbers?: ReadonlySet<number>;
   onClose?: () => void;
   activeLessonRef: RefObject<HTMLButtonElement | null>;
-  scrollportRef: RefObject<HTMLElement | null>;
-  layoutRevision: number;
   /** The mini player's playlist keeps the dense single-line rows. */
   compact?: boolean;
   /**
@@ -152,40 +131,80 @@ interface CurriculumLessonRowsProps {
   portalContainer?: RefObject<HTMLElement | null>;
 }
 
-export function CurriculumLessonRows(props: CurriculumLessonRowsProps) {
-  if (
-    !props.forceVirtualized &&
-    props.lessons.length < VIRTUALIZED_LESSON_THRESHOLD
-  ) {
-    const rows = props.lessons.map((lesson) => (
-      <CurriculumLesson key={lesson[0]} rows={props} lesson={lesson} />
-    ));
-    return props.compact ? (
-      <>{rows}</>
-    ) : (
-      // The cards stand in from the panel by as much as the section
-      // heading above them does (its 14px), on both sides.
-      <div className="flex flex-col gap-2 px-3.5 py-2">{rows}</div>
-    );
-  }
+/**
+ * Every lesson of the section is in the page; none is added or taken away
+ * as the panel scrolls, so scrolling is the browser's own and costs no
+ * script. What keeps a long course cheap is `content-visibility`: a lesson
+ * off screen is not laid out or painted until it comes near, and holds its
+ * place meanwhile at the height it was last seen with (or the usual one).
+ *
+ * The lesson being played is left out of that: the containment would cut
+ * off the shadow it casts.
+ */
+const CARD_HEIGHT = 86;
+const CARD_GAP = 8;
+const OFFSCREEN_CARD_CLASSES =
+  "[content-visibility:auto] [contain-intrinsic-size:auto_86px]";
+const OFFSCREEN_ROW_CLASSES =
+  "[content-visibility:auto] [contain-intrinsic-size:auto_46px]";
 
-  return <VirtualizedCurriculumLessonRows {...props} />;
-}
+/**
+ * It is kept from rendering again unless something of its own changes: the
+ * panel renders for many reasons that are none of a section's business (a
+ * drag of its edge, another section opening), and a long course has several
+ * hundred lessons to go through each time.
+ */
+export const CurriculumLessonRows = memo(function CurriculumLessonRows(
+  props: CurriculumLessonRowsProps,
+) {
+  const offscreenClasses = props.compact
+    ? OFFSCREEN_ROW_CLASSES
+    : OFFSCREEN_CARD_CLASSES;
+  // The classes go on the lesson's own element: a wrapper for each would
+  // be one more element per lesson for every style pass to walk.
+  const rows = props.lessons.map((lesson) => (
+    <CurriculumLesson
+      key={lesson[0]}
+      rows={props}
+      lesson={lesson}
+      className={
+        lesson[0] === props.selectedLesson ? undefined : offscreenClasses
+      }
+    />
+  ));
+  if (props.compact) return <>{rows}</>;
+
+  const count = props.lessons.length;
+  return (
+    // The cards stand in from the panel by as much as the section heading
+    // above them does (its 14px), on both sides.
+    //
+    // The whole list is skipped too while the section is off screen, so a
+    // change to the panel's width lays out the sections in view and passes
+    // over the rest as one box each. Until it has been seen it stands at
+    // the height its lessons usually come to. A different number of
+    // lessons (a search) starts it afresh: the height it was last seen
+    // with would no longer be its own.
+    <div
+      key={count}
+      className="flex flex-col gap-2 px-3.5 py-2 [content-visibility:auto]"
+      style={{
+        containIntrinsicBlockSize: `auto ${count * (CARD_HEIGHT + CARD_GAP) + CARD_GAP}px`,
+      }}
+    >
+      {rows}
+    </div>
+  );
+});
 
 interface CurriculumLessonProps {
   rows: CurriculumLessonRowsProps;
   lesson: Lesson;
-  virtualIndex?: number;
-  onVirtualizedKeyDown?: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
+  className?: string;
 }
 
 /** A lesson in whichever presentation the list uses. */
-function CurriculumLesson({
-  rows,
-  lesson,
-  virtualIndex,
-  onVirtualizedKeyDown,
-}: CurriculumLessonProps) {
+function CurriculumLesson({ rows, lesson, className }: CurriculumLessonProps) {
   const number = lesson[0];
   const isActive = rows.selectedLesson === number;
   const shared = {
@@ -197,8 +216,7 @@ function CurriculumLesson({
     onSelectLesson: rows.onSelectLesson,
     onClose: rows.onClose,
     activeLessonRef: isActive ? rows.activeLessonRef : undefined,
-    virtualIndex,
-    onVirtualizedKeyDown,
+    className,
   };
 
   if (rows.compact) return <CurriculumLessonButton {...shared} />;
@@ -214,176 +232,6 @@ function CurriculumLesson({
       onOpenQuiz={rows.onOpenLessonQuiz}
       portalContainer={rows.portalContainer}
     />
-  );
-}
-
-function VirtualizedCurriculumLessonRows(props: CurriculumLessonRowsProps) {
-  const {
-    sectionId,
-    sectionTitle,
-    lessons,
-    selectedLesson,
-    isLessonAvailable,
-    scrollportRef,
-    layoutRevision,
-    compact = false,
-  } = props;
-  const listRef = useRef<HTMLDivElement>(null);
-  const pendingFocusIndexRef = useRef<number | null>(null);
-  const [scrollMargin, setScrollMargin] = useState(0);
-  const activeIndex = useMemo(
-    () => lessons.findIndex(([number]) => number === selectedLesson),
-    [lessons, selectedLesson],
-  );
-  const rangeExtractor = useCallback(
-    (range: Parameters<typeof defaultRangeExtractor>[0]) => {
-      const indices = new Set(defaultRangeExtractor(range));
-      indices.add(0);
-      indices.add(lessons.length - 1);
-      if (activeIndex >= 0) indices.add(activeIndex);
-      return [...indices].sort((left, right) => left - right);
-    },
-    [activeIndex, lessons.length],
-  );
-
-  useLayoutEffect(() => {
-    const scrollport = scrollportRef.current;
-    const list = listRef.current;
-    if (!scrollport || !list) return;
-
-    const nextScrollMargin = Math.max(
-      0,
-      list.getBoundingClientRect().top -
-        scrollport.getBoundingClientRect().top +
-        scrollport.scrollTop,
-    );
-    setScrollMargin((current) =>
-      Math.abs(current - nextScrollMargin) > 1 ? nextScrollMargin : current,
-    );
-  }, [layoutRevision, scrollportRef, sectionId]);
-
-  // TanStack Virtual exposes a mutable virtualizer API by design.
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const virtualizer = useVirtualizer({
-    count: lessons.length,
-    getScrollElement: () => scrollportRef.current,
-    estimateSize: () =>
-      compact ? LESSON_ROW_ESTIMATED_SIZE : LESSON_CARD_ESTIMATED_SIZE,
-    gap: compact ? 0 : LESSON_CARD_GAP,
-    paddingStart: compact ? 0 : LESSON_CARD_GAP,
-    paddingEnd: compact ? 0 : LESSON_CARD_GAP,
-    getItemKey: (index) => lessons[index]?.[0] ?? index,
-    // The list shares the panel's scroller with everything else in it. On
-    // taking hold of a scroller the virtualizer scrolls it to this offset,
-    // which is the top unless told otherwise: opening a section would send
-    // the whole panel back there.
-    initialOffset: () => scrollportRef.current?.scrollTop ?? 0,
-    initialRect: { width: 1024, height: 768 },
-    overscan: LESSON_LIST_OVERSCAN,
-    rangeExtractor,
-    scrollMargin,
-  });
-  const virtualizerRef = useRef(virtualizer);
-  virtualizerRef.current = virtualizer;
-  // When a card turns out taller or shorter than was assumed, the
-  // virtualizer moves the scroller by the difference if the card lies above
-  // what is on screen, so the lessons in view stay put. It judges "above"
-  // from where it believes the list starts, which is the panel's top until
-  // the list has been measured: a section opened further down the panel
-  // then looked as if it were above the screen, and opening it pulled the
-  // panel upwards. Where the card really is settles it.
-  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) => {
-    const scrollport = scrollportRef.current;
-    const list = listRef.current;
-    if (!scrollport || !list) return false;
-    const cardBottom =
-      list.getBoundingClientRect().top +
-      (item.start - virtualizer.options.scrollMargin) +
-      item.size;
-    return cardBottom <= scrollport.getBoundingClientRect().top;
-  };
-  const virtualItems = virtualizer.getVirtualItems();
-
-  useLayoutEffect(() => {
-    const pendingFocusIndex = pendingFocusIndexRef.current;
-    if (pendingFocusIndex === null) return;
-    const target = listRef.current?.querySelector<HTMLButtonElement>(
-      `[data-curriculum-lesson-index="${pendingFocusIndex}"]`,
-    );
-    if (!target) return;
-    pendingFocusIndexRef.current = null;
-    target.focus();
-  }, [virtualItems]);
-
-  const handleVirtualizedTab = useCallback(
-    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-      if (event.key !== "Tab") return;
-      const currentIndex = Number(
-        event.currentTarget.dataset.curriculumLessonIndex,
-      );
-      if (!Number.isInteger(currentIndex)) return;
-
-      const direction = event.shiftKey ? -1 : 1;
-      let nextIndex = currentIndex + direction;
-      while (
-        nextIndex >= 0 &&
-        nextIndex < lessons.length &&
-        !(isLessonAvailable?.(lessons[nextIndex]![0]) ?? true)
-      ) {
-        nextIndex += direction;
-      }
-      if (nextIndex < 0 || nextIndex >= lessons.length) return;
-      const nextButton = listRef.current?.querySelector(
-        `[data-curriculum-lesson-index="${nextIndex}"]`,
-      );
-      if (nextButton && !nextButton.hasAttribute("disabled")) return;
-
-      event.preventDefault();
-      pendingFocusIndexRef.current = nextIndex;
-      virtualizerRef.current.scrollToIndex(nextIndex, { align: "auto" });
-    },
-    [isLessonAvailable, lessons],
-  );
-
-  return (
-    <div
-      ref={listRef}
-      className="relative w-full"
-      role="list"
-      aria-label={`Section ${sectionId}: ${sectionTitle} lessons`}
-      data-curriculum-virtualized-lessons
-      data-section-id={sectionId}
-      data-section-title={sectionTitle}
-      data-lesson-count={lessons.length}
-      style={{ height: `${virtualizer.getTotalSize()}px` }}
-    >
-      {virtualItems.map((virtualItem) => {
-        const lesson = lessons[virtualItem.index];
-        if (!lesson) return null;
-        return (
-          <div
-            key={lesson[0]}
-            ref={compact ? undefined : virtualizer.measureElement}
-            className={`absolute top-0 ${compact ? "inset-x-0" : "inset-x-3.5"}`}
-            role="listitem"
-            aria-posinset={virtualItem.index + 1}
-            aria-setsize={lessons.length}
-            data-index={virtualItem.index}
-            style={{
-              height: compact ? `${LESSON_ROW_ESTIMATED_SIZE}px` : undefined,
-              transform: `translateY(${virtualItem.start - scrollMargin}px)`,
-            }}
-          >
-            <CurriculumLesson
-              rows={props}
-              lesson={lesson}
-              virtualIndex={virtualItem.index}
-              onVirtualizedKeyDown={handleVirtualizedTab}
-            />
-          </div>
-        );
-      })}
-    </div>
   );
 }
 

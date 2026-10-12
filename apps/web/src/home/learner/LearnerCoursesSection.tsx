@@ -1,7 +1,9 @@
 import type { EnrolledCourse } from "@veolms/contracts";
+import type { ReactNode } from "react";
 import type { NavigateTo } from "../../routing/navigation";
 import { GuestHomeSectionHeader } from "../guest/GuestHomeSectionHeader";
 import { LearnerCourseCard } from "./LearnerCourseCard";
+import { learnerCourseGridClasses } from "./LearnerHomeSkeleton";
 
 /**
  * The most the section ever shows: two rows of four on a large monitor. The
@@ -11,14 +13,6 @@ import { LearnerCourseCard } from "./LearnerCourseCard";
  */
 const MAX_COURSES = 8;
 const FEWEST_SHOWN = 4;
-
-const courseGridClasses = [
-  "grid grid-cols-1 gap-3",
-  "@max-lg/courses:[&>*:nth-child(n+5)]:hidden",
-  "@lg/courses:grid-cols-2 @lg/courses:gap-4 @lg/courses:@max-[100rem]/courses:[&>*:nth-child(n+7)]:hidden",
-  "@2xl/courses:grid-cols-3 @2xl/courses:gap-5",
-  "@[100rem]/courses:grid-cols-4",
-].join(" ");
 
 /**
  * All of the learner's enrolled courses, the one the hero leads with among
@@ -38,7 +32,7 @@ export function LearnerCoursesSection({
   onNavigatePage,
 }: {
   courses: readonly EnrolledCourse[];
-  subtitle: string;
+  subtitle: ReactNode;
   /** The id of the course whose menu is open, held by the page shell. */
   courseMenu: string | null;
   setCourseMenu: (courseId: string | null) => void;
@@ -65,7 +59,7 @@ export function LearnerCoursesSection({
         }
         onNavigatePage={onNavigatePage}
       />
-      <div className={`mt-5 ${courseGridClasses}`}>
+      <div className={`mt-5 ${learnerCourseGridClasses}`}>
         {courses.slice(0, MAX_COURSES).map((course, index) => (
           <LearnerCourseCard
             key={course.courseId}
