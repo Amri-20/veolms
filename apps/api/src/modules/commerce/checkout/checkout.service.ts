@@ -322,12 +322,22 @@ export function createCheckoutService({
     // continue the earlier order at the earlier amount, so the gateway asked
     // for a sum other than the one on the button. Such an order is closed
     // instead, which frees the coupon for the order created below.
+    //
+    // The same goes for an order without a coupon. It used to be left
+    // open next to the new one: a buyer who changed the amount had two
+    // unpaid orders for one course, each with a gateway order that could be
+    // paid, and one who clicked Pay again got a further order every time.
+    // Now there is one open order per buyer and set of items. The gateway
+    // order of a closed one cannot be withdrawn, so a payment may still
+    // arrive for it; that is honoured as for any expired order (see
+    // markOrderPaidIfPending) and shows as a paid order staff can refund.
     const supersededOrderIds: string[] = [];
-    if (pricing.couponId) {
-      const pendingOrders = await orderRepo.listPendingOrdersUsingCoupon(
-        database,
-        { couponId: pricing.couponId, userId: user.id, now },
-      );
+    let resumableOrder: OrderRow | undefined;
+    const pendingOrders = await orderRepo.listPendingOrdersForUser(database, {
+      userId: user.id,
+      now,
+    });
+    if (pendingOrders.length > 0) {
       const wanted = pricing.items
         .map((it) => itemKey(it.itemType, it.itemId))
         .sort()
@@ -349,13 +359,22 @@ export function createCheckoutService({
           .join("|");
         if (held !== wanted) continue;
         if (
+          !resumableOrder &&
           pendingOrder.total_amount === pricing.totalAmount &&
-          pendingOrder.currency === pricing.currency
+          pendingOrder.currency === pricing.currency &&
+          pendingOrder.coupon_id === (pricing.couponId ?? null)
         ) {
-          return await resumeExistingOrder(pendingOrder, user);
+          resumableOrder = pendingOrder;
+          continue;
         }
         supersededOrderIds.push(pendingOrder.id);
       }
+    }
+    if (resumableOrder) {
+      // Any other open order for these items is an older attempt at the
+      // same purchase; only the one being continued stays open.
+      await orderRepo.expirePendingOrders(database, supersededOrderIds, now);
+      return await resumeExistingOrder(resumableOrder, user);
     }
 
     const expiresAt = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour order expiry

@@ -412,7 +412,11 @@ export function createPricingService({
     // A course bought on its own next to a bundle that already contains it
     // would be paid for twice. Checked once every item is known to be on
     // sale, so the answer says nothing about an unpublished course.
+    //
+    // The same holds between bundles: two bundles that share a course were
+    // each charged in full for the one enrolment in that course.
     const requestedCourseIds = new Set(courseIds);
+    const bundledCourseIds = new Set<string>();
     for (const bundleId of bundleIds) {
       const included = itemCourseMap.get(bundleId) ?? [];
       if (included.some((courseId) => requestedCourseIds.has(courseId))) {
@@ -420,6 +424,12 @@ export function createPricingService({
           "A course in this request is already part of a bundle in the same request.",
         );
       }
+      if (included.some((courseId) => bundledCourseIds.has(courseId))) {
+        throw CommerceErrors.PRICE_CALCULATION_FAILED(
+          "Two bundles in this request contain the same course.",
+        );
+      }
+      for (const courseId of included) bundledCourseIds.add(courseId);
     }
 
     // 3. Process Coupon if provided

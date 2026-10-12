@@ -93,7 +93,19 @@ export class RazorpayPaymentGateway implements PaymentGateway {
           "Payment gateway request timed out",
         );
       }
-      throw err;
+      // Anything else fetch rejects with is the network's doing: the name
+      // did not resolve, the connection was refused or it dropped. Rethrown
+      // as it was, it carried no gateway code, so checkout answered a plain
+      // 500 and the buyer was not told that payments were unavailable. A
+      // 5xx, like the timeout: the request may or may not have arrived, so
+      // the outcome is unknown and isDefinitiveGatewayRejection stays false.
+      const unreachable = new AppError(
+        502,
+        "PAYMENT_GATEWAY_ERROR",
+        "Payment gateway could not be reached",
+      );
+      unreachable.cause = err;
+      throw unreachable;
     }
 
     if (!response.ok) {

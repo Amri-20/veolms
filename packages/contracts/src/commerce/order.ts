@@ -727,7 +727,11 @@ export type OrderStatsQuery = z.infer<typeof orderStatsQuerySchema>;
 export const orderStatsResponseSchema = z.strictObject({
   /** Gross of successful orders minus partial refunds on those orders. */
   netRevenue: z.number().int(),
-  /** Sum of after_commission_amount for paid / partially_refunded (excludes fully refunded). */
+  /**
+   * What was kept from paid / partially_refunded orders (fully refunded ones
+   * excluded): an order's stored after_commission_amount where it has one,
+   * otherwise its total less the refunds processed against it.
+   */
   totalEarnings: z.number().int().nonnegative().default(0),
   /** Count of successful orders (`paid` + `partially_refunded`) only. */
   totalOrders: z.number().int().nonnegative(),
