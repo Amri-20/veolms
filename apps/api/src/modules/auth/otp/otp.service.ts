@@ -21,6 +21,7 @@ import {
   OTP_TTL_MINUTES,
   OTP_TTL_MS,
   OTP_USER_DAILY_LIMIT,
+  STUDENT_ROLE,
 } from "../shared/auth.constants.ts";
 import type { IdentifierType, OtpPurpose } from "../shared/auth.types.ts";
 import type { Executor } from "../shared/repository.types.ts";
@@ -242,7 +243,42 @@ export function createOtpService({
       await sendDeactivatedAccountNotice(identifier, identifierType, requester);
       return;
     }
-    await sendOtpWithPurpose(identifier, identifierType, purpose, requester);
+    const fixedCode = await resolveTestLoginCode(identifier, identifierType);
+    await sendOtpWithPurpose(
+      identifier,
+      identifierType,
+      purpose,
+      requester,
+      fixedCode,
+    );
+  }
+
+  /**
+   * The fixed code of a shared test account (TEST_LOGIN_ACCOUNTS), or null
+   * when the identifier is an ordinary one. The pair is public by design, so
+   * an account holding any role other than student never gets it and falls
+   * back to an emailed code: a mistyped address in the setting must not open
+   * a staff account. A deactivated account never reaches this: it is
+   * answered by the notice above and gets no code at all.
+   */
+  async function resolveTestLoginCode(
+    identifier: string,
+    identifierType: IdentifierType,
+  ): Promise<string | null> {
+    if (identifierType !== "email") return null;
+    const fixedCode = config.TEST_LOGIN_ACCOUNTS.get(identifier);
+    if (!fixedCode) return null;
+
+    const user = await userRepository.findUserStatusByIdentifier(
+      database,
+      identifier,
+      identifierType,
+    );
+    if (user) {
+      const roles = await userRepository.listUserRoleNames(database, user.id);
+      if (roles.some((role) => role !== STUDENT_ROLE)) return null;
+    }
+    return fixedCode;
   }
 
   /**
@@ -354,10 +390,11 @@ export function createOtpService({
     identifierType: IdentifierType,
     purpose: OtpPurpose,
     requester: OtpRequester = {},
+    fixedCode: string | null = null,
   ): Promise<void> {
     if (identifierType === "phone") assertSmsDestinationAllowed(identifier);
 
-    const code = crypto.randomInt(100_000, 1_000_000).toString();
+    const code = fixedCode ?? crypto.randomInt(100_000, 1_000_000).toString();
     const otpId = crypto.randomUUID();
 
     // The allowance checks, retiring the previous code and storing the new
@@ -369,13 +406,19 @@ export function createOtpService({
         transaction,
       );
 
-      await assertOtpSendAllowed(
-        transaction,
-        identifier,
-        identifierType,
-        purpose,
-        requester,
-      );
+      // A test account is shared, so its testers would spend each other's
+      // resend window and daily allowance; nothing is delivered for it
+      // either. Its code is still retired and stored under the lock, so
+      // there is one live code for it like for any other address.
+      if (!fixedCode) {
+        await assertOtpSendAllowed(
+          transaction,
+          identifier,
+          identifierType,
+          purpose,
+          requester,
+        );
+      }
 
       const now = new Date();
       await otpRepository.retireOutstandingOtps(transaction, {
@@ -396,6 +439,8 @@ export function createOtpService({
         requesterUserId: requester.userId,
       });
     });
+
+    if (fixedCode) return;
 
     const delivery =
       identifierType === "email"
@@ -562,6 +607,32 @@ export function createOtpService({
     }
   }
 
+  /**
+   * Spends a code inside the caller's transaction, so the code and what it
+   * pays for are written together or not at all: a registration that fails
+   * while the account is being created leaves the code usable.
+   *
+   * The caller has already proven the code with assertOtpMatches, which is
+   * where a wrong guess is counted. A miss here means the code was used,
+   * replaced or ran out in the meantime, and nothing is written for it.
+   */
+  async function consumeOtpWithin(
+    transaction: Executor,
+    identifier: string,
+    identifierType: IdentifierType,
+    purpose: OtpPurpose,
+    code: string,
+  ): Promise<void> {
+    const consumed = await otpRepository.consumeMatchingActiveOtp(transaction, {
+      identifier,
+      identifierType,
+      purpose,
+      codeHash: hashToken(code),
+      now: new Date(),
+    });
+    if (!consumed) throw invalidCode(failureStatusFor(purpose));
+  }
+
   return {
     resolveOtpPurpose,
     sendOtp,
@@ -570,6 +641,7 @@ export function createOtpService({
     recordRefusedSend,
     assertOtpMatches,
     verifyAndConsumeOtp,
+    consumeOtpWithin,
   };
 }
 

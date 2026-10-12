@@ -1,5 +1,11 @@
 import { useRef } from "react";
 import type { ClipboardEvent, KeyboardEvent } from "react";
+import {
+  OTP_CODE_LENGTH,
+  applyOtpCodeEntry,
+  fillOtpCodeFrom,
+  type OtpCodeChange,
+} from "./otpCodeEntry";
 
 export interface OtpCodeInputProps {
   value: string;
@@ -11,7 +17,7 @@ export interface OtpCodeInputProps {
   autoFocus?: boolean;
 }
 
-const CODE_LENGTH = 6;
+const CODE_LENGTH = OTP_CODE_LENGTH;
 const FIELD_ID_PREFIX = "auth-otp-digit";
 const POSITIONS: readonly number[] = [0, 1, 2, 3, 4, 5];
 const NON_DIGITS = /\D/g;
@@ -29,15 +35,6 @@ export function OtpCodeInput({
 
   const moveFocus = (position: number) => {
     inputs.current[position]?.focus();
-  };
-
-  const writeDigit = (position: number, digit: string) => {
-    onChange(
-      (value.slice(0, position) + digit + value.slice(position + 1)).slice(
-        0,
-        CODE_LENGTH,
-      ),
-    );
   };
 
   const clearDigit = (position: number) => {
@@ -71,14 +68,9 @@ export function OtpCodeInput({
     }
   };
 
-  const fillFrom = (position: number, digits: string) => {
-    const filled =
-      digits.length === CODE_LENGTH
-        ? digits
-        : (value.slice(0, position) + digits).slice(0, CODE_LENGTH);
-
-    onChange(filled);
-    moveFocus(Math.min(filled.length, CODE_LENGTH - 1));
+  const applyChange = (change: OtpCodeChange) => {
+    onChange(change.value);
+    moveFocus(change.focus);
   };
 
   const pasteCode = (
@@ -95,23 +87,23 @@ export function OtpCodeInput({
     }
 
     event.preventDefault();
-    fillFrom(position, digits);
+    applyChange(fillOtpCodeFrom(value, position, digits));
   };
 
-  const changeDigit = (position: number, entry: string) => {
-    const digits = entry.replace(NON_DIGITS, "").slice(0, CODE_LENGTH);
+  // The boxes have no `maxLength`: with one, the browser cut a code inserted
+  // in one go (offered by the keyboard from a text message, or by an input
+  // method) down to its first digit before it got here. A box can therefore
+  // report several characters; `applyOtpCodeEntry` says what they mean.
+  const changeDigit = (
+    position: number,
+    entry: string,
+    caret: number | null,
+  ) => {
+    const change = applyOtpCodeEntry(value, position, entry, caret);
 
-    if (digits === "") {
-      return;
+    if (change) {
+      applyChange(change);
     }
-
-    if (digits.length > 1) {
-      fillFrom(position, digits);
-      return;
-    }
-
-    writeDigit(position, digits);
-    moveFocus(position + 1);
   };
 
   return (
@@ -137,8 +129,13 @@ export function OtpCodeInput({
               disabled={disabled}
               id={fieldId}
               inputMode="numeric"
-              maxLength={1}
-              onChange={(event) => changeDigit(position, event.target.value)}
+              onChange={(event) =>
+                changeDigit(
+                  position,
+                  event.target.value,
+                  event.target.selectionStart,
+                )
+              }
               onFocus={(event) => event.target.select()}
               onKeyDown={(event) => pressKey(event, position)}
               onPaste={(event) => pasteCode(event, position)}

@@ -13,6 +13,12 @@ export const CommerceErrors = {
       "COURSE_ALREADY_OWNED",
       `You are already enrolled in "${title}".`,
     ),
+  COURSE_ACCESS_RESTRICTED: (title: string) =>
+    new AppError(
+      403,
+      "COURSE_ACCESS_RESTRICTED",
+      `"${title}" is open only to learners who have been given access. It cannot be enrolled in from here.`,
+    ),
   ENROLLMENT_NOT_FOUND: () =>
     new AppError(
       404,

@@ -2,6 +2,7 @@ import { sql } from "kysely";
 import type { ExpressionBuilder } from "kysely";
 import type { Database, DatabaseExecutor } from "@veolms/database";
 import { exactCursorTimestamp, isCursorUuid } from "../../lib/keyset.ts";
+import { escapeLikePattern } from "../../lib/like-pattern.ts";
 
 export type StudentsExecutor = DatabaseExecutor;
 
@@ -238,7 +239,8 @@ export async function listStudentsPaginated(
   if (options.search) {
     const cleanSearch = options.search.replace(/^@+/, "").trim();
     if (cleanSearch) {
-      const term = `%${cleanSearch}%`;
+      // "%", "_" and "\" in the search are matched as typed.
+      const term = `%${escapeLikePattern(cleanSearch)}%`;
       query = query.where((eb) =>
         eb.or([
           eb("u.display_name", "ilike", term),
@@ -351,7 +353,8 @@ export async function countTotalStudents(
   if (options.search) {
     const cleanSearch = options.search.replace(/^@+/, "").trim();
     if (cleanSearch) {
-      const term = `%${cleanSearch}%`;
+      // "%", "_" and "\" in the search are matched as typed.
+      const term = `%${escapeLikePattern(cleanSearch)}%`;
       query = query.where((eb) =>
         eb.or([
           eb("u.display_name", "ilike", term),

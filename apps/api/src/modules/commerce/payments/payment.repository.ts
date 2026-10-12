@@ -70,6 +70,27 @@ export async function findPaymentByGatewayPaymentId(
     .executeTakeFirst();
 }
 
+/**
+ * The manual payment recorded under a transfer reference, if there is one.
+ * `gatewayPaymentId` is the normalised id (`manual_pay_` plus the reference
+ * with no whitespace, in upper case). The stored id is compared the same
+ * way, so a payment verified before references were normalised, which holds
+ * the reference as it was typed, is found too.
+ */
+export async function findManualPaymentByReference(
+  database: Executor,
+  gatewayPaymentId: string,
+) {
+  return await database
+    .selectFrom("payments")
+    .select("id")
+    .where("gateway_provider", "=", "manual")
+    .where(
+      sql<boolean>`upper(regexp_replace(gateway_payment_id, '[[:space:]]+', '', 'g')) = upper(${gatewayPaymentId})`,
+    )
+    .executeTakeFirst();
+}
+
 export async function insertPayment(
   database: Executor,
   values: {
@@ -199,8 +220,8 @@ export async function reinitializePaymentIfNotFinal(
  * Closes whatever gateway payment an order still has open, when the order
  * has been settled some other way. The row stops being treated as a payment
  * in progress; a capture that still arrives for it is not lost (a failed
- * payment can be claimed) and is refused loudly, because its order is
- * already paid.
+ * payment can be claimed): it is recorded as a surplus payment, because its
+ * order is already paid (see surplus-payment.ts).
  */
 export async function closeOpenPaymentsForOrder(
   database: Executor,

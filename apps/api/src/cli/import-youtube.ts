@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- an operator CLI: the terminal is its output */
 import crypto from "node:crypto";
 import readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";

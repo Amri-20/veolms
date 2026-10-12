@@ -342,6 +342,11 @@ export interface LearningPreferences {
   continueWithNextIncomplete: boolean;
   automaticallyMoveNextSection: boolean;
   keepCompletedLecturesVisible: boolean;
+  /**
+   * Lessons are numbered straight through the course instead of from 1
+   * again in every section.
+   */
+  continuousLessonNumbering: boolean;
 }
 
 export const LEARNING_PREFERENCES_KEY = "veolms-learning-preferences";
@@ -381,6 +386,7 @@ export const LEARNING_PREFERENCE_DEFAULTS: LearningPreferences = {
   continueWithNextIncomplete: true,
   automaticallyMoveNextSection: true,
   keepCompletedLecturesVisible: true,
+  continuousLessonNumbering: false,
 };
 
 export const LEARNING_REMINDER_DAYS: readonly (readonly [
@@ -715,6 +721,8 @@ export const readLearningPreferences = (): LearningPreferences => {
         typeof storedPreferences.resumeFromLastPosition === "boolean"
           ? storedPreferences.resumeFromLastPosition
           : LEARNING_PREFERENCE_DEFAULTS.resumeFromLastPosition,
+      continuousLessonNumbering:
+        storedPreferences.continuousLessonNumbering === true,
       videoPlayerTheme: normalizeVideoPlayerTheme(
         storedPreferences.videoPlayerTheme,
       ),

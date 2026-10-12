@@ -2935,9 +2935,13 @@ export function DiscussionsWorkspace({
                               ? "No notes found"
                               : "No notes yet"
                             : isCommentsTab
-                              ? "No comments match these filters"
+                              ? hasClearableDiscussionFilters
+                                ? "No comments match these filters"
+                                : "No comments yet"
                               : isMentionsTab
-                                ? "No mentions match these filters"
+                                ? hasClearableDiscussionFilters
+                                  ? "No mentions match these filters"
+                                  : "No mentions yet"
                                 : isFollowingTab
                                   ? query.trim() || selectedCourseId !== "all"
                                     ? "No followed discussions found"
@@ -2955,9 +2959,13 @@ export function DiscussionsWorkspace({
                           {isNotesTab
                             ? "Try clearing a filter or choosing another course."
                             : isCommentsTab
-                              ? "Try clearing a filter or choosing another course."
-                              : isMentionsTab
+                              ? hasClearableDiscussionFilters
                                 ? "Try clearing a filter or choosing another course."
+                                : "Comments on lessons will appear here."
+                              : isMentionsTab
+                                ? hasClearableDiscussionFilters
+                                  ? "Try clearing a filter or choosing another course."
+                                  : "Mentions of you will appear here."
                                 : isFollowingTab
                                   ? "Try clearing a filter or choosing another course."
                                   : isBookmarksTab

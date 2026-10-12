@@ -24,6 +24,7 @@ import { UsersThreeIcon as UsersThree } from "@phosphor-icons/react/UsersThree";
 import { Fragment, type ReactNode } from "react";
 import { getCourseRouteKey } from "./catalogue";
 import type { Course, CourseRole } from "./catalogue";
+import { ALT_DRAG_TEXT_SELECT_CLASSES } from "./altDragTextSelect";
 import { CourseActionMenu, MenuAction, MenuDivider } from "./CourseActionMenu";
 import { CourseCardThumbnail } from "./CourseCardThumbnail";
 import { CourseThumbnailPlaceholder } from "./CourseThumbnailPlaceholder";
@@ -212,7 +213,7 @@ export function CourseCard({
 
   return (
     <article
-      className={`group relative min-w-0 overflow-hidden rounded-2xl border transition-[background-color,box-shadow,opacity,border-color] duration-200 ${
+      className={`${ALT_DRAG_TEXT_SELECT_CLASSES} group relative min-w-0 overflow-hidden rounded-2xl border transition-[background-color,box-shadow,opacity,border-color] duration-200 ${
         isDeleting
           ? "border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) opacity-60 pointer-events-none select-none"
           : "border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) shadow-(--card-shadow) hover:bg-(--card-surface-hover,var(--hover)) hover:shadow-(--card-hover-shadow)"

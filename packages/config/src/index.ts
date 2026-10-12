@@ -144,6 +144,18 @@ const serverConfigSchema = z.object({
     .max(3650)
     .default(7),
   /**
+   * How often, in hours, the API itself removes those uploads (the same
+   * work as `purge:discussion-uploads -- --apply`). 0, the default, leaves
+   * it off: nothing is removed unless an operator turns this on or runs the
+   * script. At most a week.
+   */
+  DISCUSSION_UPLOAD_PURGE_INTERVAL_HOURS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(168)
+    .default(0),
+  /**
    * TTL for the process-local per-request authentication cache (ms).
    * Bounds how long a role/MFA-factor change made OUTSIDE the session
    * repository — or on another instance — can be served stale. Session
@@ -214,6 +226,44 @@ const serverConfigSchema = z.object({
     .min(0)
     .max(1_000_000)
     .default(200),
+
+  /**
+   * Shared test accounts that sign in with a fixed code instead of an emailed
+   * one, as comma-separated `email:code` pairs (for example
+   * "tester1@example.com:482913,tester2@example.com:771204"). Anyone who
+   * knows a pair can sign in as that account, so list only addresses kept
+   * for testing. Unset disables the feature.
+   */
+  TEST_LOGIN_ACCOUNTS: z
+    .string()
+    .optional()
+    .transform((value, context) => {
+      const accounts = new Map<string, string>();
+      const pairs = (value ?? "")
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      for (const pair of pairs) {
+        const separator = pair.lastIndexOf(":");
+        const email = pair.slice(0, separator).trim().toLowerCase();
+        const code = pair.slice(separator + 1).trim();
+        if (
+          separator < 1 ||
+          !z.email().safeParse(email).success ||
+          !/^\d{6}$/u.test(code) ||
+          accounts.has(email)
+        ) {
+          context.addIssue({
+            code: "custom",
+            message:
+              'Expected comma-separated "email:code" pairs with a six-digit code and no repeated email, such as "tester1@example.com:482913".',
+          });
+          return z.NEVER;
+        }
+        accounts.set(email, code);
+      }
+      return accounts;
+    }),
 
   /**
    * Enables the `mock_<email>` OAuth short-circuit, which skips both the

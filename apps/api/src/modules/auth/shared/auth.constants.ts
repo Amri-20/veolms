@@ -95,3 +95,6 @@ export const STUDENT_ROLE = "student";
 
 /** Bounded so a pathological username prefix cannot spin indefinitely. */
 export const USERNAME_SUFFIX_ATTEMPTS = 10;
+
+/** The longest display name a response may carry (`authUserSchema`). */
+export const DISPLAY_NAME_MAX_LENGTH = 100;

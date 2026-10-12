@@ -42,6 +42,16 @@ export async function insertAccessGrant(
     updated_at?: Date;
   },
 ) {
+  // True for an existing row that is live, was paid for by an order, and is
+  // being granted again without one.
+  const keepsPayingOrder = sql<boolean>`(
+    excluded.order_id is null
+    and access_grants.order_id is not null
+    and access_grants.status = 'active'
+    and (access_grants.valid_until is null
+         or access_grants.valid_until > now())
+  )`;
+
   return await database
     .insertInto("access_grants")
     .values(values)
@@ -64,11 +74,26 @@ export async function insertAccessGrant(
       // bought again (alone or inside a bundle) under a fixed-duration
       // access rule. A lapsed row (revoked, or past its end date) simply
       // takes the new validity.
+      //
+      // A second exception: a grant made without an order (a manual grant)
+      // never takes a live grant away from the order that paid for it. It
+      // used to null `order_id` and relabel the row `admin_grant`, so a
+      // later refund of that order revoked nothing. A live row that belongs
+      // to an order keeps its order, source and start date; only its end
+      // date can move, and only later.
       oc.columns(["user_id", "course_id"]).doUpdateSet({
-        order_id: values.order_id ?? null,
+        order_id: sql<string | null>`case
+          when ${keepsPayingOrder} then access_grants.order_id
+          else excluded.order_id
+        end`,
         status: values.status,
-        source: values.source,
-        valid_from: values.valid_from ?? new Date(),
+        source: sql<
+          typeof values.source
+        >`case when ${keepsPayingOrder} then access_grants.source else excluded.source end`,
+        valid_from: sql<Date>`case
+          when ${keepsPayingOrder} then access_grants.valid_from
+          else ${values.valid_from ?? new Date()}
+        end`,
         valid_until: sql<Date | null>`case
           when access_grants.status <> 'active'
             or (access_grants.valid_until is not null

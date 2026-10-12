@@ -20,11 +20,23 @@ const QUICK_FILL_SCALE_DELTA = 0.08;
 const ZOOM_FEEDBACK_DURATION_MS = 1_800;
 const ZOOM_TRANSITION_DURATION_MS = 220;
 const POINTER_TOUCH_DEDUPE_MS = 90;
-// Mouse: a press on the picture that is dragged zooms about the point that
-// was pressed; with Shift held, it pans a zoomed picture instead. The drag
-// has to start before the press would count as a long press, which belongs
-// to the gesture surface, and it ends when the pointer leaves the player.
+// Mouse: a press on the picture with Shift held, dragged, pans a zoomed
+// picture. (A plain drag used to zoom; it was too easy to do by accident
+// and is gone. A mouse or trackpad zooms with Control held, see below.) The
+// drag has to start before the press would count as a long press, which
+// belongs to the gesture surface, and it ends when the pointer leaves the
+// player.
 const MOUSE_DRAG_START_WINDOW_MS = 450;
+// Control held, then a pinch on a trackpad (or a turn of a mouse's wheel)
+// over the picture, zooms the picture. A pinch with no key held is the
+// browser's own zoom of the whole page and is left to it. The browser
+// reports both as a wheel event marked "ctrl", so the key itself is watched.
+/** The zoom is multiplied by e to the power of this, per pixel of wheel. */
+const CONTROL_WHEEL_ZOOM_PER_PX = 0.01;
+/** One notch of a mouse wheel counts as no more than this many pixels. */
+const CONTROL_WHEEL_MAX_STEP_PX = 40;
+/** The gesture is over once the wheel has been still for this long. */
+const CONTROL_WHEEL_IDLE_MS = 220;
 /** Dragging this far from the pressed point doubles the zoom. */
 const MOUSE_ZOOM_DRAG_PX_PER_DOUBLING = 120;
 
@@ -347,6 +359,99 @@ export function usePlayerZoomGestures(
     [clearFeedbackTimer, clearTransitionTimer],
   );
 
+  useEffect(() => {
+    let controlHeld = false;
+    let active = false;
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    const end = () => {
+      if (idleTimer !== null) clearTimeout(idleTimer);
+      idleTimer = null;
+      if (!active) return;
+      active = false;
+      finishGesture();
+      controller.setControlsVisible(true);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key !== "Control") return;
+      controlHeld = event.type === "keydown";
+      if (!controlHeld) end();
+    };
+    const handleBlur = () => {
+      controlHeld = false;
+      end();
+    };
+    const handleWheel = (event: WheelEvent) => {
+      if (!controlHeld || !event.ctrlKey) return;
+      const target = event.target;
+      const surface =
+        target instanceof Element
+          ? target.closest<HTMLElement>("[data-player-zoom-surface]")
+          : null;
+      if (!surface) return;
+      // Ours: the page is not to zoom or scroll under it.
+      event.preventDefault();
+      const step =
+        event.deltaY *
+        (event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 16
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? 120
+            : 1);
+      const distance = Math.max(
+        -CONTROL_WHEEL_MAX_STEP_PX,
+        Math.min(CONTROL_WHEEL_MAX_STEP_PX, step),
+      );
+      if (distance === 0) return;
+      if (!active) {
+        active = true;
+        beginVisualFeedback();
+      }
+      // The point of the picture under the pointer stays under it.
+      const zoom = controller.getSnapshot().ui.zoom;
+      const geometry = getGeometry(surface);
+      const local = getLocalPoint(surface, {
+        x: event.clientX,
+        y: event.clientY,
+      });
+      const contentX =
+        (local.x - geometry.containerWidth / 2 - zoom.panX) / zoom.scale;
+      const contentY =
+        (local.y - geometry.containerHeight / 2 - zoom.panY) / zoom.scale;
+      const scale = clampPlayerZoom(
+        zoom.scale * Math.exp(-distance * CONTROL_WHEEL_ZOOM_PER_PX),
+      );
+      const pan = clampPlayerPan(
+        {
+          x: local.x - geometry.containerWidth / 2 - contentX * scale,
+          y: local.y - geometry.containerHeight / 2 - contentY * scale,
+        },
+        scale,
+        geometry,
+      );
+      controller.setZoomState({
+        feedbackVisible: true,
+        gestureActive: true,
+        panX: pan.x,
+        panY: pan.y,
+        scale,
+        transitioning: false,
+      });
+      if (idleTimer !== null) clearTimeout(idleTimer);
+      idleTimer = setTimeout(end, CONTROL_WHEEL_IDLE_MS);
+    };
+    window.addEventListener("keydown", handleKey);
+    window.addEventListener("keyup", handleKey);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      if (idleTimer !== null) clearTimeout(idleTimer);
+      window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("keyup", handleKey);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("wheel", handleWheel);
+    };
+  }, [beginVisualFeedback, controller, finishGesture]);
+
   // Shift over the picture offers the pan: an open hand, closed from the
   // moment the picture is pressed until it is let go. Set on the surface
   // itself, and as important, because host pages give buttons a cursor of
@@ -431,7 +536,8 @@ export function usePlayerZoomGestures(
     const onSurface =
       event.target instanceof Element &&
       event.target.closest("[data-player-zoom-surface]") !== null;
-    if (event.button !== 0 || !onSurface) return false;
+    // Only the pan is a drag now; without Shift a press is a click.
+    if (event.button !== 0 || !onSurface || !event.shiftKey) return false;
     const press = {
       pointerId: event.pointerId,
       pressedAt: Date.now(),

@@ -12,6 +12,10 @@ import {
 } from "./modules/commerce/webhooks/payment-event.queue.ts";
 import { CommerceFulfillmentScheduler } from "./modules/commerce/fulfillment/fulfillment.scheduler.ts";
 import { LearningReminderWorker } from "./modules/learning-progress/learning-reminder.worker.ts";
+import { findIdsMentionedInCourseContent } from "./modules/courses/curriculum/course-content-reference.service.ts";
+import { createDiscussionUploadStore } from "./modules/discussion-uploads/index.ts";
+import { createAttachmentsRepository } from "./modules/learning/discussions/attachments/attachments.repository.ts";
+import { createAttachmentsService } from "./modules/learning/discussions/attachments/attachments.service.ts";
 import { createNotificationProcessor } from "./modules/notifications/index.ts";
 import { getDatabasePoolMetrics } from "@veolms/database";
 import * as webhookRepo from "./modules/commerce/webhooks/webhook.repository.ts";
@@ -78,6 +82,11 @@ export function registerBackgroundJobs(
   const stopHeartbeat =
     config.OPS_HEARTBEAT_SECONDS > 0 ? startOpsHeartbeat(app, database) : null;
 
+  const stopDiscussionUploadPurge =
+    config.DISCUSSION_UPLOAD_PURGE_INTERVAL_HOURS > 0
+      ? startDiscussionUploadPurge(app, database, services)
+      : null;
+
   app.addHook("onClose", async () => {
     await paymentEventQueue.stop?.();
     // Awaited so an in-flight reconciliation cycle finishes before the
@@ -85,10 +94,114 @@ export function registerBackgroundJobs(
     await fulfillmentScheduler.stop();
     await learningReminderWorker.stop();
     await stopNotificationLoop?.();
+    await stopDiscussionUploadPurge?.();
     stopHeartbeat?.();
   });
 
   return paymentEventQueue;
+}
+
+const DISCUSSION_UPLOAD_PURGE_JOB = "discussion-upload-retention";
+const DISCUSSION_UPLOAD_PURGE_FIRST_RUN_MS = 30_000;
+/** The most uploads one run removes; the script's own default. */
+const DISCUSSION_UPLOAD_PURGE_LIMIT = 1000;
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Removes discussion uploads that were never attached to a post, on a timer.
+ *
+ * The work is the `purge:discussion-uploads` script's (jobs/
+ * discussion-upload-retention.ts) with `--apply`, under the same rules: an
+ * upload goes only when it is unattached, older than
+ * DISCUSSION_UPLOAD_ORPHAN_RETENTION_DAYS, and mentioned by no post, note,
+ * lesson or course text. Nothing scheduled that script, so those uploads
+ * were kept for good.
+ *
+ * Off unless DISCUSSION_UPLOAD_PURGE_INTERVAL_HOURS is set: this deletes
+ * stored files, so an operator turns it on. Each API instance runs its own
+ * timer. That is safe: an upload's row is marked removed first, and only
+ * while it is still unattached, so two instances cannot both take one.
+ *
+ * Returns an async stop function that waits for a run under way, or null
+ * when the job was not started.
+ */
+function startDiscussionUploadPurge(
+  app: FastifyInstance,
+  database: Kysely<Database>,
+  services: AppServices,
+): (() => Promise<void>) | null {
+  // As in the script: without storage credentials the upload store works on
+  // the local disk only, and a deployment would record uploads as removed
+  // while their files stayed in the bucket.
+  if (
+    config.NODE_ENV === "production" &&
+    !(config.STORAGE_ACCESS_KEY_ID && config.STORAGE_SECRET_ACCESS_KEY)
+  ) {
+    app.log.warn(
+      { job: DISCUSSION_UPLOAD_PURGE_JOB },
+      "Discussion upload purge not started: it needs the object storage credentials (STORAGE_ACCESS_KEY_ID, STORAGE_SECRET_ACCESS_KEY)",
+    );
+    return null;
+  }
+
+  const attachments = createAttachmentsService(
+    createAttachmentsRepository(),
+    createDiscussionUploadStore(services.storage),
+    services.storage,
+  );
+  const intervalHours = config.DISCUSSION_UPLOAD_PURGE_INTERVAL_HOURS;
+  const retentionDays = config.DISCUSSION_UPLOAD_ORPHAN_RETENTION_DAYS;
+  let stopped = false;
+  let activeCycle: Promise<void> | null = null;
+
+  const runCycle = () => {
+    if (stopped || activeCycle) return;
+    const cycle = (async () => {
+      try {
+        const result = await attachments.purgeAbandonedUploads(database, {
+          olderThan: new Date(Date.now() - retentionDays * 24 * HOUR_MS),
+          apply: true,
+          limit: DISCUSSION_UPLOAD_PURGE_LIMIT,
+          findReferencedElsewhere: (attachmentIds) =>
+            findIdsMentionedInCourseContent(database, attachmentIds),
+        });
+        // `failed` uploads could not be removed; they are tried again on
+        // the next run.
+        app.log[result.failed > 0 ? "warn" : "info"](
+          { job: DISCUSSION_UPLOAD_PURGE_JOB, retentionDays, ...result },
+          "Discussion upload purge complete",
+        );
+      } catch (error) {
+        app.log.error(
+          { err: error, job: DISCUSSION_UPLOAD_PURGE_JOB },
+          "Discussion upload purge failed",
+        );
+      }
+    })().finally(() => {
+      activeCycle = null;
+    });
+    activeCycle = cycle;
+  };
+
+  app.log.info(
+    { job: DISCUSSION_UPLOAD_PURGE_JOB, intervalHours, retentionDays },
+    "Starting discussion upload purge (set DISCUSSION_UPLOAD_PURGE_INTERVAL_HOURS=0 to disable)",
+  );
+  // First run shortly after startup, off the boot hot path.
+  const initialTimer = setTimeout(
+    runCycle,
+    DISCUSSION_UPLOAD_PURGE_FIRST_RUN_MS,
+  );
+  initialTimer.unref();
+  const timer = setInterval(runCycle, intervalHours * HOUR_MS);
+  timer.unref();
+
+  return async () => {
+    stopped = true;
+    clearTimeout(initialTimer);
+    clearInterval(timer);
+    await activeCycle;
+  };
 }
 
 /**

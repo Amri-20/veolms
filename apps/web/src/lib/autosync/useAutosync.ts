@@ -119,11 +119,14 @@ export function useAutosync<TValue, TServerValue = TValue>({
     }
   }, []);
 
-  const setValueInternally = useCallback((nextValue: TValue) => {
-    valueVersionRef.current += 1;
-    valueRef.current = nextValue;
-    setValue(nextValue);
-  }, []);
+  const setValueInternally = useCallback(
+    (nextValue: TValue) => {
+      valueVersionRef.current += 1;
+      valueRef.current = nextValue;
+      setValue(nextValue);
+    },
+    [setValue],
+  );
 
   const flush = useCallback(async (): Promise<void> => {
     clearTimers();

@@ -622,27 +622,26 @@
   overflow-y: auto;
 }
 
+/* The sidebar's menus fade in where they stand. They used to grow into
+   place from a slightly smaller size as well, which moved every icon and
+   word in them by a pixel or two just after they opened. */
 @keyframes reading-mode-quick-menu-in {
   from {
     opacity: 0;
-    transform: translateY(4px) scale(0.985);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 
 @keyframes sidebar-quick-menu-in {
   from {
     opacity: 0;
-    transform: translateX(-4px) scale(0.985);
   }
 
   to {
     opacity: 1;
-    transform: translateX(0) scale(1);
   }
 }
 

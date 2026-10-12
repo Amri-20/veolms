@@ -828,7 +828,10 @@ export function createCourseService({
       );
     }
 
-    await assertCategoryExists(updates.categoryId);
+    // The value checked is the value written below: `category` is an
+    // accepted alias, and checking `categoryId` alone let an unknown or a
+    // removed category through under the other name.
+    await assertCategoryExists(updates.categoryId ?? updates.category);
 
     if (updates.thumbnailMediaId) {
       const thumb = await mediaService.getMediaAsset(
@@ -1026,7 +1029,12 @@ export function createCourseService({
    */
   async function getCourseOverviewData(
     courseIdOrSlug: string,
-    user?: { id: string; roles?: string[] },
+    user?: {
+      id: string;
+      roles?: string[];
+      /** Answer as for a learner: see `LEARNER_VIEW_HEADER`. */
+      learnerView?: boolean;
+    },
   ): Promise<CourseOverviewResponse> {
     const isUuid =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -1054,7 +1062,10 @@ export function createCourseService({
     }
 
     const courseId = course.id;
-    const viewerManagesCourse = isOwner || isAdmin;
+    // Its creator and an admin are shown the course as they manage it,
+    // unless they are in their Student view. Whether they may open a draft
+    // at all was settled above and does not depend on the view.
+    const viewerManagesCourse = (isOwner || isAdmin) && !user?.learnerView;
 
     const [
       category,

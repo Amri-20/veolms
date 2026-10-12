@@ -22,6 +22,7 @@ import {
   withWriteTransaction,
 } from "../shared/discussion.mentions.ts";
 import {
+  containsPattern,
   createdAtIdDescSql,
   decodeDiscussionCursor,
   encodeDiscussionCursor,
@@ -984,7 +985,7 @@ export function createThreadsService(
         }
 
         if (query.search) {
-          const pattern = `%${query.search.toLowerCase()}%`;
+          const pattern = containsPattern(query.search);
           notesQuery = notesQuery.where((eb) =>
             eb.or([
               eb(sql`lower(n.title)`, "like", pattern),

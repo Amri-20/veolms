@@ -25,6 +25,8 @@ const LESSON_PROGRESS_COMPLETE_THRESHOLD = 99.5;
 
 interface CurriculumLessonButtonProps {
   lesson: Lesson;
+  /** The number the lesson is shown with (see `lessonNumberBase`). */
+  displayNumber: number;
   progress: number;
   isActive: boolean;
   isAvailable: boolean;
@@ -37,6 +39,7 @@ interface CurriculumLessonButtonProps {
 
 const CurriculumLessonButton = memo(function CurriculumLessonButton({
   lesson,
+  displayNumber,
   progress,
   isActive,
   isAvailable,
@@ -78,7 +81,7 @@ const CurriculumLessonButton = memo(function CurriculumLessonButton({
         <span
           className="learning-curriculum__lesson-progress"
           role="progressbar"
-          aria-label={`Lecture ${number} progress`}
+          aria-label={`Lecture ${displayNumber} progress`}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(progress)}
@@ -108,7 +111,9 @@ const CurriculumLessonButton = memo(function CurriculumLessonButton({
           className="learning-curriculum__lesson-status learning-curriculum__lesson-status--todo"
         />
       )}
-      <span className="learning-curriculum__lesson-number">{number}.</span>
+      <span className="learning-curriculum__lesson-number">
+        {displayNumber}.
+      </span>
       <span className="min-w-0 flex-1 truncate">{title}</span>
       <span className="learning-curriculum__lesson-duration">{duration}</span>
     </button>
@@ -132,6 +137,13 @@ interface CurriculumLessonRowsProps {
   layoutRevision: number;
   /** The mini player's playlist keeps the dense single-line rows. */
   compact?: boolean;
+  /**
+   * What is taken off a lesson's number in the course to give the number
+   * it is shown with: 0 when lessons are numbered straight through the
+   * course, or one less than the section's first lesson when every section
+   * starts again at 1.
+   */
+  lessonNumberBase?: number;
   lessonResources?: ReadonlyMap<number, readonly LessonResource[]>;
   resourceCourseKey?: string;
   quizLessonNumbers?: ReadonlySet<number>;
@@ -151,7 +163,9 @@ export function CurriculumLessonRows(props: CurriculumLessonRowsProps) {
     return props.compact ? (
       <>{rows}</>
     ) : (
-      <div className="flex flex-col gap-2 p-2">{rows}</div>
+      // The cards stand in from the panel by as much as the section
+      // heading above them does (its 14px), on both sides.
+      <div className="flex flex-col gap-2 px-3.5 py-2">{rows}</div>
     );
   }
 
@@ -176,6 +190,7 @@ function CurriculumLesson({
   const isActive = rows.selectedLesson === number;
   const shared = {
     lesson,
+    displayNumber: number - (rows.lessonNumberBase ?? 0),
     progress: getLessonProgress(rows.lessonProgress, lesson),
     isActive,
     isAvailable: rows.isLessonAvailable?.(number) ?? true,
@@ -258,6 +273,11 @@ function VirtualizedCurriculumLessonRows(props: CurriculumLessonRowsProps) {
     paddingStart: compact ? 0 : LESSON_CARD_GAP,
     paddingEnd: compact ? 0 : LESSON_CARD_GAP,
     getItemKey: (index) => lessons[index]?.[0] ?? index,
+    // The list shares the panel's scroller with everything else in it. On
+    // taking hold of a scroller the virtualizer scrolls it to this offset,
+    // which is the top unless told otherwise: opening a section would send
+    // the whole panel back there.
+    initialOffset: () => scrollportRef.current?.scrollTop ?? 0,
     initialRect: { width: 1024, height: 768 },
     overscan: LESSON_LIST_OVERSCAN,
     rangeExtractor,
@@ -265,6 +285,23 @@ function VirtualizedCurriculumLessonRows(props: CurriculumLessonRowsProps) {
   });
   const virtualizerRef = useRef(virtualizer);
   virtualizerRef.current = virtualizer;
+  // When a card turns out taller or shorter than was assumed, the
+  // virtualizer moves the scroller by the difference if the card lies above
+  // what is on screen, so the lessons in view stay put. It judges "above"
+  // from where it believes the list starts, which is the panel's top until
+  // the list has been measured: a section opened further down the panel
+  // then looked as if it were above the screen, and opening it pulled the
+  // panel upwards. Where the card really is settles it.
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) => {
+    const scrollport = scrollportRef.current;
+    const list = listRef.current;
+    if (!scrollport || !list) return false;
+    const cardBottom =
+      list.getBoundingClientRect().top +
+      (item.start - virtualizer.options.scrollMargin) +
+      item.size;
+    return cardBottom <= scrollport.getBoundingClientRect().top;
+  };
   const virtualItems = virtualizer.getVirtualItems();
 
   useLayoutEffect(() => {
@@ -327,7 +364,7 @@ function VirtualizedCurriculumLessonRows(props: CurriculumLessonRowsProps) {
           <div
             key={lesson[0]}
             ref={compact ? undefined : virtualizer.measureElement}
-            className={`absolute top-0 ${compact ? "inset-x-0" : "inset-x-2"}`}
+            className={`absolute top-0 ${compact ? "inset-x-0" : "inset-x-3.5"}`}
             role="listitem"
             aria-posinset={virtualItem.index + 1}
             aria-setsize={lessons.length}

@@ -37,11 +37,15 @@ export const otpVerifyRequestSchema = z
     path: ["email"],
   });
 
+// An international number is at most "+" and 15 digits: 16 characters. That
+// is what first-admin setup and the code service accept, and what the
+// responses allow for a stored number; capped at 15 here, a 15-digit number
+// entered at setup could never be confirmed from the profile.
 const phoneNumberSchema = z
   .string()
   .trim()
   .min(8, "Phone number is too short")
-  .max(15, "Phone number is too long")
+  .max(16, "Phone number is too long")
   .regex(
     /^\+?[0-9\s().-]+$/,
     "Phone number can contain digits, spaces, and + ( ) - only",

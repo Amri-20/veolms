@@ -9,6 +9,11 @@ import { recordCouponRedemptionForPaidOrder } from "../coupons/coupon-redemption
 import * as cartRepo from "../cart/cart.repository.ts";
 import { createCourseAccessService } from "../shared/course-access.service.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
+import {
+  SURPLUS_CAPTURE_ERROR_CODE,
+  describeSurplusCapture,
+  isOrderAlreadyPaid,
+} from "./surplus-payment.ts";
 
 export interface FinalizePaymentParams {
   /** Internal payment record id */
@@ -23,8 +28,12 @@ export interface FinalizePaymentResult {
   /**
    * "finalized"  — This caller won the race and completed all side-effects.
    * "already_captured" — Another path already captured this payment; nothing to do.
+   * "recorded_as_surplus" — The gateway took this money for an order that had
+   *   already been paid another way. The payment is recorded as captured and
+   *   marked (see surplus-payment.ts); the order, its coupon and its access
+   *   were not touched.
    */
-  outcome: "finalized" | "already_captured";
+  outcome: "finalized" | "already_captured" | "recorded_as_surplus";
   orderId?: string;
   enrollmentCount?: number;
 }
@@ -74,6 +83,7 @@ export function createPaymentReconciliationService({
     const now = new Date();
     let enrolledCourseIds: string[] = [];
     let orderId: string | undefined;
+    let recordedAsSurplus = false;
 
     await database.transaction().execute(async (trx) => {
       // ── Concurrency gate ────────────────────────────────────────────────
@@ -143,9 +153,37 @@ export function createPaymentReconciliationService({
         // a settled state (cancelled/paid/partially_refunded/refunded) that
         // markOrderPaidIfPending refuses to overwrite. Proceeding past this
         // point would grant access/enrollment for money attached to an order
-        // that's cancelled or already refunded. Abort the whole transaction
-        // — the payment claim rolls back too — so this gets caught and
-        // retried/investigated instead of silently fulfilling.
+        // that's cancelled or already refunded.
+        //
+        // If the order was paid another way (staff verified a manual
+        // transfer, and the buyer then completed the gateway payment too),
+        // the gateway has this money and it will not change its mind.
+        // Throwing here was retried until the event was dead-lettered and
+        // left no record of the money at all. The claim and the captured
+        // attempt above are kept and the payment is marked as surplus:
+        // nothing below runs, so the order, its coupon and its access are
+        // exactly as they were. Read again rather than trusting `order`,
+        // which may predate the change that made the update miss.
+        const settled = await orderRepo.findOrderById(trx, order.id);
+        if (settled && isOrderAlreadyPaid(settled.status)) {
+          await paymentRepo.transitionPaymentStatus(
+            trx,
+            paymentId,
+            "captured",
+            ["captured"],
+            {
+              error_code: SURPLUS_CAPTURE_ERROR_CODE,
+              error_description: describeSurplusCapture(order.order_number),
+              updated_at: now,
+            },
+          );
+          recordedAsSurplus = true;
+          return;
+        }
+
+        // Any other settled state (cancelled, failed): abort the whole
+        // transaction — the payment claim rolls back too — so this gets
+        // caught and retried/investigated instead of silently fulfilling.
         throw new Error(
           `finalizeSuccessfulPayment: order ${order.id} is not in a fulfillable ` +
             `status (was "${order.status}") — refusing to grant access for payment ${paymentId}`,
@@ -206,6 +244,10 @@ export function createPaymentReconciliationService({
     // If orderId was never set, the claim returned undefined → already captured
     if (!orderId) {
       return { outcome: "already_captured" };
+    }
+
+    if (recordedAsSurplus) {
+      return { outcome: "recorded_as_surplus", orderId };
     }
 
     return {

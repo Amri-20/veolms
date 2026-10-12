@@ -116,10 +116,12 @@ export function createBundleService({
   /**
    * A slug stays taken after its bundle is deleted (the row is kept), and
    * two requests can pass the slug check at once. Both reach the unique
-   * index, and both are the same refusal the check gives.
+   * index, and both are the same refusal the check gives. Only the slug's
+   * own index: any other unique violation is not about the slug, and is left
+   * for the error handler's general answer.
    */
   function slugTakenOr(error: unknown, slug: string): unknown {
-    if (!isUniqueViolation(error)) return error;
+    if (!isUniqueViolation(error, "course_bundles_slug_key")) return error;
     return new AppError(
       409,
       "BUNDLE_SLUG_EXISTS",

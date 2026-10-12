@@ -13,6 +13,11 @@ import {
 import * as orderRepository from "../orders/order.repository.ts";
 import { createPaymentReconciliationService } from "../payments/payment-reconciliation.service.ts";
 import * as paymentRepository from "../payments/payment.repository.ts";
+import {
+  SURPLUS_CAPTURE_ERROR_CODE,
+  applySurplusRefund,
+  isOrderAlreadyPaid,
+} from "../payments/surplus-payment.ts";
 import * as refundRepository from "../refunds/refund.repository.ts";
 import { createCourseAccessService } from "../shared/course-access.service.ts";
 import * as webhookRepository from "../webhooks/webhook.repository.ts";
@@ -112,6 +117,19 @@ export function createPaymentWorker({
     });
 
     await webhookRepository.markWebhookEventProcessed(database, event.eventId);
+    if (result.outcome === "recorded_as_surplus") {
+      // Logged as an error on purpose: someone has to return this money.
+      log?.error(
+        {
+          paymentId: payment.id,
+          orderId: result.orderId,
+          gatewayPaymentId: event.gatewayPaymentId,
+          amount: payment.amount,
+          currency: payment.currency,
+        },
+        "Gateway payment captured for an order that was already paid; recorded as a surplus payment, nothing granted. Refund it from the gateway dashboard",
+      );
+    }
     log?.info(
       {
         outcome: result.outcome,
@@ -205,7 +223,7 @@ export function createPaymentWorker({
       return { status: "skipped" as const };
     }
 
-    const payment = await paymentRepository.findPaymentByGatewayPaymentId(
+    let payment = await paymentRepository.findPaymentByGatewayPaymentId(
       database,
       event.gatewayPaymentId,
     );
@@ -222,7 +240,19 @@ export function createPaymentWorker({
             event.gatewayOrderId,
           )
         : undefined;
-      if (pending && pending.status !== "captured") {
+      if (!pending || pending.status === "captured") {
+        return { status: "skipped" as const };
+      }
+      // Unless the order was paid another way in the meantime. Then the
+      // capture this refund belongs to is a surplus payment whose own event
+      // never arrived (or was dead-lettered before surplus payments were
+      // recorded), and waiting for it only dead-letters the refund as well.
+      // A refund proves the capture, so it is recorded here first.
+      payment = await recordSurplusCaptureKnownByItsRefund(
+        pending,
+        event.gatewayPaymentId,
+      );
+      if (!payment) {
         log?.warn(
           { gatewayOrderId: event.gatewayOrderId },
           "Refund event arrived before its payment was recorded as captured; will retry",
@@ -231,7 +261,15 @@ export function createPaymentWorker({
           `Refund ${event.gatewayRefundId} arrived before the capture of gateway order ${event.gatewayOrderId} was recorded`,
         );
       }
-      return { status: "skipped" as const };
+    }
+
+    if (payment.error_code === SURPLUS_CAPTURE_ERROR_CODE) {
+      return await handleSurplusRefund(
+        event,
+        payment,
+        event.gatewayRefundId,
+        log,
+      );
     }
 
     const order = await orderRepository.findOrderById(
@@ -340,6 +378,103 @@ export function createPaymentWorker({
       "Refund processed successfully",
     );
     return { status: "processed" as const, orderId: order.id };
+  }
+
+  type PaymentRow = NonNullable<
+    Awaited<ReturnType<typeof paymentRepository.findPaymentById>>
+  >;
+
+  /**
+   * Records, as a surplus payment, a capture that is only known from a
+   * refund of it. Only for a payment row whose order has already been paid
+   * another way; returns nothing otherwise, and the caller keeps waiting for
+   * the capture as before.
+   */
+  async function recordSurplusCaptureKnownByItsRefund(
+    pending: PaymentRow,
+    gatewayPaymentId: string,
+  ): Promise<PaymentRow | undefined> {
+    const order = await orderRepository.findOrderById(
+      database,
+      pending.order_id,
+    );
+    if (!order || !isOrderAlreadyPaid(order.status)) return undefined;
+
+    // The same path a capture event takes. For an order that is already
+    // paid it can only record the payment as surplus or leave it alone.
+    await reconciliation.finalizeSuccessfulPayment({
+      paymentId: pending.id,
+      gatewayPaymentId,
+      paymentMethod: pending.payment_method,
+    });
+    const recorded = await paymentRepository.findPaymentByGatewayPaymentId(
+      database,
+      gatewayPaymentId,
+    );
+    return recorded?.error_code === SURPLUS_CAPTURE_ERROR_CODE
+      ? recorded
+      : undefined;
+  }
+
+  /**
+   * A refund of a surplus payment (see surplus-payment.ts). The money goes
+   * back to the buyer and the order is none of its business: its status, its
+   * access and its own refunds stay as they are. The refund is noted on the
+   * payment row, which becomes `refunded` once the whole amount is back.
+   */
+  async function handleSurplusRefund(
+    event: NormalizedPaymentEvent,
+    payment: PaymentRow,
+    gatewayRefundId: string,
+    log?: FastifyBaseLogger,
+  ) {
+    const now = new Date();
+    const refundAmount = event.amount ?? payment.amount;
+    let status: string = payment.status;
+
+    await database.transaction().execute(async (transaction) => {
+      // The order lock every refund path takes, so two refunds of the same
+      // payment cannot both read the description before either writes it.
+      await orderRepository.findOrderByIdForUpdate(
+        transaction,
+        payment.order_id,
+      );
+      const current = await paymentRepository.findPaymentById(
+        transaction,
+        payment.id,
+      );
+      // Already returned in full: a repeat of an event handled earlier.
+      if (!current || current.status !== "captured") {
+        status = current?.status ?? status;
+        return;
+      }
+
+      const next = applySurplusRefund(current, {
+        gatewayRefundId,
+        amount: refundAmount,
+        currency: event.currency ?? current.currency,
+      });
+      await paymentRepository.transitionPaymentStatus(
+        transaction,
+        current.id,
+        next.status,
+        ["captured"],
+        { error_description: next.errorDescription, updated_at: now },
+      );
+      status = next.status;
+    });
+
+    await webhookRepository.markWebhookEventProcessed(database, event.eventId);
+    log?.info(
+      {
+        paymentId: payment.id,
+        orderId: payment.order_id,
+        refundAmount,
+        paymentStatus: status,
+      },
+      "Refund of a surplus payment recorded; the order was not changed",
+    );
+    return { status: "processed" as const, orderId: payment.order_id };
   }
 
   return { processPaymentJob };

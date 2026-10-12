@@ -135,6 +135,9 @@ export function PlaybackRateSlider({
               tabIndex={-1}
               aria-checked={playbackRatesMatch(rate, playbackRate)}
               aria-label={formatPlaybackRate(rate)}
+              // A speed is often tried and changed again, so picking one
+              // leaves the menu open, as the slider beside it does.
+              data-menu-keep-open=""
               className={classNames(
                 "h-11 !min-h-11 w-full min-w-0 rounded-full px-1 text-xs font-semibold tabular-nums text-(--video-player-menu-text) transition-[background-color,color] duration-150 hover:bg-[color-mix(in_srgb,var(--video-player-menu-text,#fff)_16%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--video-player-menu-text) sm:h-8 sm:!min-h-8",
                 mobileInteraction && "!h-11 !min-h-11",

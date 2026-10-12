@@ -108,13 +108,18 @@ export function adaptOrderToOrderHistoryItem(
   const isNoCostOrder =
     order.totalAmount === 0 ||
     paymentSummary?.provider.toLowerCase() === "free";
+  // No summary means the provider named no method, not that nothing was
+  // paid: a completed order, or one since refunded, was paid for, and used
+  // to read "No payment taken". Only an order that failed took nothing.
   const paymentBrand = isNoCostOrder
     ? "No payment needed"
     : paymentSummary
       ? paymentSummary.provider
       : status === "processing"
         ? "Awaiting payment"
-        : "No payment taken";
+        : status === "completed" || status === "refunded"
+          ? "Payment received"
+          : "No payment taken";
   const paymentLabel =
     isNoCostOrder ||
     !paymentSummary ||

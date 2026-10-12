@@ -52,17 +52,26 @@ export function useHeroLampHotspot(
       const { crop, picture, boxWidth, boxHeight, scale, offsetX, offsetY } =
         measureHeroPicture(image, phoneQuery.matches);
       const lamp = lampInPicture[crop];
+      // The target is placed in the hero, which on a phone is not the box
+      // the picture is positioned in.
+      const origin = heroPictureOrigin(image);
+      // A hero may draw the picture's box wider than itself, to hold the
+      // scene further right. What is past the hero's edge cannot be seen
+      // or pressed, so the target is held to the part that can.
+      const visibleWidth = hero
+        ? Math.min(boxWidth, hero.clientWidth - origin.left)
+        : boxWidth;
 
       // Where the lamp is, held inside the hero.
       let left = clamp(
         offsetX + lamp.left * picture.width * scale - HOTSPOT_MARGIN_PX,
         0,
-        boxWidth,
+        visibleWidth,
       );
       let right = clamp(
         offsetX + lamp.right * picture.width * scale + HOTSPOT_MARGIN_PX,
         0,
-        boxWidth,
+        visibleWidth,
       );
       let top = clamp(
         offsetY + lamp.top * picture.height * scale - HOTSPOT_MARGIN_PX,
@@ -79,16 +88,13 @@ export function useHeroLampHotspot(
       // target back to its minimum from the edge it was cut off at.
       if (right - left < MIN_HOTSPOT_WIDTH_PX) {
         left = Math.max(0, right - MIN_HOTSPOT_WIDTH_PX);
-        right = Math.min(boxWidth, left + MIN_HOTSPOT_WIDTH_PX);
+        right = Math.min(visibleWidth, left + MIN_HOTSPOT_WIDTH_PX);
       }
       if (bottom - top < MIN_HOTSPOT_HEIGHT_PX) {
         bottom = Math.min(boxHeight, top + MIN_HOTSPOT_HEIGHT_PX);
         top = Math.max(0, bottom - MIN_HOTSPOT_HEIGHT_PX);
       }
 
-      // The target is placed in the hero, which on a phone is not the box
-      // the picture is positioned in.
-      const origin = heroPictureOrigin(image);
       setStyle({
         left: origin.left + left,
         top: origin.top + top,

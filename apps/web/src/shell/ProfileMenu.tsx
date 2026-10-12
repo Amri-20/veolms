@@ -134,6 +134,9 @@ interface ProfileMenuProps {
   onLogout: () => void;
 }
 
+/** How long the closing slide takes (`profile-menu-slide-shut`). */
+const PROFILE_MENU_SHUT_MS = 260;
+
 export function ProfileMenu({
   role,
   allowedRoles,
@@ -152,6 +155,20 @@ export function ProfileMenu({
   onToggleSidebar,
   onLogout,
 }: ProfileMenuProps) {
+  // The closing slide is played by a menu marked as having been open. The
+  // mark comes off once that slide is over: left on, the slide played again
+  // every time the sidebar was expanded, since the collapsed sidebar turns
+  // the animation off and expanding it turns it back on.
+  const [hasOpened, setHasOpened] = useState(false);
+  if (isOpen && !hasOpened) setHasOpened(true);
+  useEffect(() => {
+    if (isOpen || !hasOpened) return undefined;
+    const timer = window.setTimeout(
+      () => setHasOpened(false),
+      PROFILE_MENU_SHUT_MS + 60,
+    );
+    return () => window.clearTimeout(timer);
+  }, [hasOpened, isOpen]);
   const selectRole = (nextRole: CourseRole) => {
     onRoleChange(nextRole);
     onClose();
@@ -197,6 +214,9 @@ export function ProfileMenu({
       aria-hidden={!isOpen ? true : undefined}
       inert={!isOpen ? true : undefined}
       data-open={isOpen ? "true" : "false"}
+      // A menu that has been open may play its closing; one that has never
+      // been opened must not (see `.profile-menu--animated` in courses.css).
+      data-has-opened={hasOpened ? "" : undefined}
     >
       {identity ? (
         <ProfileMenuIdentity

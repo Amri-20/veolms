@@ -10,6 +10,11 @@ import {
 import { isReactRouterBuildRequest } from "./react-router-build";
 import { shouldFollowMfaRequired } from "../store/pendingMfaLogin";
 import { setApiClient } from "@veolms/web-core";
+import {
+  LEARNER_VIEW_HEADER,
+  LEARNER_VIEW_HEADER_VALUE,
+} from "@veolms/contracts";
+import { isLearnerView } from "./learner-view";
 
 export { getApiError, type ApiError };
 
@@ -343,6 +348,10 @@ async function request<T>(
 
   const requestUrl = buildRequestUrl(url, config.params);
   const headers = new Headers(config.headers);
+  // A managing account in its Student view asks to be answered as a learner.
+  if (isLearnerView()) {
+    headers.set(LEARNER_VIEW_HEADER, LEARNER_VIEW_HEADER_VALUE);
+  }
   let body: BodyInit | undefined;
   if (data !== undefined) {
     if (typeof FormData !== "undefined" && data instanceof FormData) {

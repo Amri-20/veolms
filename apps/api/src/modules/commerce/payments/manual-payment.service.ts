@@ -169,8 +169,13 @@ export function createManualPaymentService({
       // A reference that already paid for an order cannot pay for another.
       // This used to reach the unique column and fail as a 500, leaving a
       // request that could be neither verified nor understood.
+      //
+      // Looked up without regard to spacing or letter case on the stored
+      // side as well: payments verified before references were normalised
+      // hold the reference as it was typed, and an exact match let such a
+      // reference be verified a second time.
       if (
-        await paymentRepo.findPaymentByGatewayPaymentId(
+        await paymentRepo.findManualPaymentByReference(
           database,
           gatewayPaymentId,
         )
@@ -288,7 +293,11 @@ export function createManualPaymentService({
         .catch((error: unknown) => {
           // Two requests with one reference verified at the same moment:
           // the second meets the unique column after passing the check.
-          if (isUniqueViolation(error)) throw referenceAlreadyUsed();
+          // Only that column: any other unique violation in this
+          // transaction is not about the reference.
+          if (isUniqueViolation(error, "payments_gateway_payment_id_key")) {
+            throw referenceAlreadyUsed();
+          }
           throw error;
         });
     } else {
