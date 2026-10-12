@@ -23,24 +23,12 @@ export interface PublicLessonDiscussionSqlAliases {
   pricing: string;
 }
 
-export function isPublicLessonDiscussion(input: {
-  courseStatus: string;
-  isPublished: boolean;
-  isPreview: boolean;
-  pricingType: string | null;
-}): boolean {
-  return (
-    input.courseStatus === "published" &&
-    input.isPublished &&
-    (input.isPreview || input.pricingType === "free")
-  );
-}
-
 /**
- * The anonymous lesson discussion visibility rule shared by lesson reads and
- * public discovery queries. Anonymous discussion content is readable only
- * when the course is published, the lesson is published and not deleted, the
- * section is not deleted, and the course is free or the lesson is previewable.
+ * The visibility rule of public discovery queries (discussions shown outside
+ * their lesson, such as a home page's popular ones): the course is published,
+ * the lesson is published and not deleted, the section is not deleted, and
+ * the course is free or the lesson is previewable. Reading a lesson's own
+ * discussions is wider than this, see `assertCanReadLesson`.
  */
 export function publicLessonDiscussionPredicate({
   course,
@@ -82,7 +70,6 @@ export function createLessonDiscussionAccess(options?: {
       const lesson = await db
         .selectFrom("course_lessons")
         .innerJoin("courses", "courses.id", "course_lessons.course_id")
-        .leftJoin("course_pricing", "course_pricing.course_id", "courses.id")
         .innerJoin(
           "course_sections",
           "course_sections.id",
@@ -91,8 +78,6 @@ export function createLessonDiscussionAccess(options?: {
         .select([
           "courses.status as courseStatus",
           "courses.creator_id as courseCreatorId",
-          "course_pricing.pricing_type as pricingType",
-          "course_lessons.is_preview as isPreview",
           "course_lessons.is_published as isPublished",
         ])
         .where("course_lessons.id", "=", lessonId)
@@ -124,21 +109,12 @@ export function createLessonDiscussionAccess(options?: {
         return { canReadPrivateState: true, canModerate: false };
       }
 
-      // Keep lesson-level discussion reads aligned with playback: published
-      // free courses and explicitly previewed lessons are public.
-      if (
-        isPublicLessonDiscussion({
-          courseStatus: lesson.courseStatus,
-          isPublished: lesson.isPublished,
-          isPreview: lesson.isPreview,
-          pricingType: lesson.pricingType,
-        })
-      ) {
-        return { canReadPrivateState: false, canModerate: false };
-      }
-
-      if (!actor) throw DiscussionErrors.unauthorized();
-      throw DiscussionErrors.courseAccessDenied();
+      // Anyone may read the discussions of a published lesson of a published
+      // course, signed in or not, with access to the course or without. They
+      // are read-only to such a reader: taking part (posting, replying,
+      // reacting) is checked where it happens and still needs access, and
+      // private state such as notes stays with those who have it.
+      return { canReadPrivateState: false, canModerate: false };
     },
   };
 }
