@@ -128,6 +128,7 @@ export function presentCurriculum({
   resources,
   mediaById,
   omitResourceMedia = false,
+  omitLessonDescriptions = false,
 }: {
   sections: readonly SectionRow[];
   lessons: readonly LessonRow[];
@@ -135,6 +136,11 @@ export function presentCurriculum({
   mediaById: ReadonlyMap<string, MediaRow>;
   /** Leaves every resource's file details out, whatever `mediaById` holds. */
   omitResourceMedia?: boolean;
+  /**
+   * Sends every lesson's description as null. The key stays: a web build
+   * that still reads it from here must go on parsing the response.
+   */
+  omitLessonDescriptions?: boolean;
 }): CourseSection[] {
   return sections.map((section) => ({
     id: section.id,
@@ -145,7 +151,7 @@ export function presentCurriculum({
       .map((lesson) => ({
         id: lesson.id,
         title: lesson.title,
-        description: lesson.description,
+        description: omitLessonDescriptions ? null : lesson.description,
         contentType: lesson.content_type,
         contentMediaId: lesson.content_media_id,
         durationSeconds: getLessonDurationSeconds(lesson, mediaById),

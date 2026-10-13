@@ -82,6 +82,16 @@ const serverConfigSchema = z.object({
    */
   API_RESPONSE_DELAY_MS: z.coerce.number().int().min(0).max(60_000).default(0),
   API_PUBLIC_URL: z.string().optional(),
+  /**
+   * Whether the course overview carries every lesson's description. The
+   * lesson page reads the open lesson's description from its own endpoint
+   * and only falls back to the overview's. Set to false once no browser is
+   * still running a web build from before that endpoint: each lesson then
+   * goes out with a null description, and the overview shrinks by the size
+   * of all of them. The editor is not affected.
+   */
+  COURSE_OVERVIEW_LESSON_DESCRIPTIONS:
+    booleanEnvironmentValueSchema.default(true),
   COURSE_STATIC_REFRESH_GITHUB_TOKEN: z.string().optional(),
   COURSE_STATIC_REFRESH_REPOSITORY: z.string().optional(),
   COURSE_STATIC_REFRESH_REF: z.string().min(1).default("development"),

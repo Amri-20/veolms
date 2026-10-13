@@ -629,6 +629,15 @@ export function createCurriculumService({
     return await curriculumRepo.findLessonById(database, lessonId, courseId);
   }
 
+  /** A live lesson of a live section: its description and publish state. */
+  async function findLiveLessonDescription(lessonId: string, courseId: string) {
+    return await curriculumRepo.findLiveLessonDescription(
+      database,
+      lessonId,
+      courseId,
+    );
+  }
+
   return {
     getCourseAndVerifyOwner,
     createCourseSection,
@@ -646,6 +655,7 @@ export function createCurriculumService({
     listResourcesByCourseId,
     listOrderedLessonsByCourseId,
     findLessonById,
+    findLiveLessonDescription,
   };
 }
 

@@ -15,6 +15,8 @@ import {
   courseEditorDataResponseSchema,
   myCoursesListResponseSchema,
   courseOverviewSchema,
+  lessonDescriptionParamsSchema,
+  lessonDescriptionResponseSchema,
   courseDeleteResponseSchema,
   courseStaticPageRefreshStatusResponseSchema,
 } from "@veolms/contracts";
@@ -222,6 +224,34 @@ const courseRoutes: RoutePlugin = async (app, options) => {
       ],
     },
     controller.getCourseOverview,
+  );
+
+  app.get(
+    "/courses/:courseId/lessons/:lessonId/description",
+    {
+      schema: {
+        operationId: "getLessonDescription",
+        tags: ["Courses"],
+        summary: "Get one lesson's description",
+        description:
+          "Returns the description of a lesson the course overview lists for this viewer: a published lesson of a published course for anyone, and any lesson for the course's creator or an admin. Any other lesson is not found.",
+        params: lessonDescriptionParamsSchema,
+        response: {
+          200: jsonResponse(
+            "The lesson's description.",
+            lessonDescriptionResponseSchema,
+          ),
+          404: errorResponse("No such course or lesson for this viewer."),
+          403: errorResponse("MFA step-up required."),
+        },
+      },
+      // The same optional session as the overview.
+      preHandler: [
+        ctx.middleware.authenticate,
+        ctx.middleware.requireMfaVerifiedIfAuthenticated,
+      ],
+    },
+    controller.getLessonDescription,
   );
 
   // --- Course Authoring Basics ---
