@@ -1,6 +1,12 @@
 import type { DatabaseExecutor as Executor } from "@veolms/database";
 import type { ManualPaymentStatus } from "@veolms/database";
 
+/**
+ * What a verified transfer's payment id starts with; the rest is the
+ * buyer's reference without spaces, in upper case.
+ */
+export const MANUAL_PAYMENT_ID_PREFIX = "manual_pay_";
+
 export async function findManualPaymentRequestById(
   database: Executor,
   requestId: string,

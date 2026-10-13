@@ -3,7 +3,7 @@ import { formatCurrency, formatOrderDate } from "./orderHelpers";
 
 /**
  * The words the Orders screen shows for one payment that staff have to
- * refund by hand. Kept apart from the component, and free of React, so the
+ * return by hand. Kept apart from the component, and free of React, so the
  * wording for each kind of entry can be read and replayed on its own.
  */
 export interface NeedsRefundLines {
@@ -12,6 +12,8 @@ export interface NeedsRefundLines {
   courseTitle: string;
   /** What has to go back, formatted: "₹600". */
   amount: string;
+  /** What that amount is: "Amount", or "Order total" for a transfer. */
+  amountLabel: string;
   /** "₹100 already refunded", when part of it has gone back. */
   refundedNote: string | null;
   /** What happened, in one sentence. */
@@ -22,31 +24,73 @@ export interface NeedsRefundLines {
   orderNumber: string;
   /** What that order is to this entry: "Order to refund", "Order". */
   orderLabel: string;
-  /** The gateway's id for the payment, when there is one to look up. */
-  gatewayPaymentId: string | null;
-  /** "Paid Oct 13, 2026 at 5:44 AM". */
-  paidOn: string;
+  /**
+   * What to look the money up by, when there is something: the gateway's
+   * id for the payment, or the reference the buyer gave for a transfer.
+   */
+  reference: string | null;
+  /** What that is called: "Payment ID", "Reference". */
+  referenceLabel: string;
+  /** "Paid Oct 13, 2026 at 5:44 AM"; "Reported ..." for a transfer. */
+  when: string;
 }
 
 function withHash(orderNumber: string): string {
   return orderNumber.startsWith("#") ? orderNumber : `#${orderNumber}`;
 }
 
+function onDate(verb: string, value: string | Date): string {
+  const { dateStr, timeStr } = formatOrderDate(value);
+  return timeStr ? `${verb} ${dateStr} at ${timeStr}` : `${verb} ${dateStr}`;
+}
+
+/** How the buyer said they paid, as it reads inside a sentence. */
+function transferName(paymentMethod: string): string {
+  if (paymentMethod === "upi") return "a UPI payment";
+  if (paymentMethod === "bank_transfer") return "a bank transfer";
+  return "a transfer";
+}
+
 export function describeNeedsRefundEntry(
   entry: NeedsRefundEntry,
 ): NeedsRefundLines {
-  const { dateStr, timeStr } = formatOrderDate(entry.paidAt);
-  const shared = {
+  const buyerAndCourse = {
     buyerName: entry.buyer.name,
     buyerEmail: entry.buyer.email,
     courseTitle: entry.courseTitle || "Course order",
     amount: formatCurrency(entry.amount, entry.currency),
+  };
+
+  // Money the platform never recorded: there is no payment to refund and
+  // nothing has gone back that it could know of. What staff have is the
+  // reference the buyer gave, and the request to close when they are done.
+  if (entry.kind === "manual_transfer_for_paid_order") {
+    const orderNumber = withHash(entry.order.orderNumber);
+    return {
+      ...buyerAndCourse,
+      amountLabel: "Order total",
+      refundedNote: null,
+      reason: `The learner reported ${transferName(entry.paymentMethod)} for order ${orderNumber}, and the order was then paid another way. Nothing was granted for the transfer.`,
+      action:
+        "Check your bank account for this transfer. If it arrived, return it to the learner outside the platform. Then reject this request.",
+      orderNumber,
+      orderLabel: "Order",
+      reference: entry.transactionReference,
+      referenceLabel: "Reference",
+      when: onDate("Reported", entry.submittedAt),
+    };
+  }
+
+  const shared = {
+    ...buyerAndCourse,
+    amountLabel: "Amount",
     refundedNote:
       entry.refundedAmount > 0
         ? `${formatCurrency(entry.refundedAmount, entry.currency)} already refunded`
         : null,
-    gatewayPaymentId: entry.gatewayPaymentId,
-    paidOn: timeStr ? `Paid ${dateStr} at ${timeStr}` : `Paid ${dateStr}`,
+    reference: entry.gatewayPaymentId,
+    referenceLabel: "Payment ID",
+    when: onDate("Paid", entry.paidAt),
   };
 
   if (entry.kind === "surplus_payment") {

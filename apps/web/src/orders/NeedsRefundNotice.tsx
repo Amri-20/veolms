@@ -7,6 +7,7 @@ import {
   describeNeedsRefundEntry,
   needsRefundHeadline,
 } from "./needsRefundHelpers";
+import { RejectTransferRequestAction } from "./RejectTransferRequestAction";
 
 export interface NeedsRefundNoticeProps {
   /** The payments to refund by hand; nothing is rendered for an empty list. */
@@ -24,8 +25,10 @@ const rowDividerClass =
 /**
  * Shown at the top of the staff Orders screen only while there is money to
  * return by hand: a gateway payment taken for an order that was already
- * paid, or a course a learner paid for twice. Nothing here acts on its own;
- * it says what happened and what to do, and opens the order.
+ * paid, a course a learner paid for twice, or a transfer a learner reported
+ * for an order that was then paid another way. Nothing here acts on its
+ * own; it says what happened and what to do, and opens the order. The one
+ * thing it does itself is close a reported transfer, when staff ask it to.
  */
 export const NeedsRefundNotice = memo(function NeedsRefundNotice({
   entries,
@@ -62,7 +65,7 @@ export const NeedsRefundNotice = memo(function NeedsRefundNotice({
           </h2>
           <p className="mt-0.5 text-xs leading-5 text-(--muted)">
             Nothing here is refunded automatically. Each one leaves this list
-            once its money has gone back.
+            once its money has gone back or its request is closed.
             {hasMore ? " The newest are shown first." : ""}
           </p>
         </div>
@@ -94,11 +97,20 @@ export const NeedsRefundNotice = memo(function NeedsRefundNotice({
                 <p className="mt-1 text-xs font-semibold leading-5 text-(--text)">
                   {lines.action}
                 </p>
+                {entry.kind === "manual_transfer_for_paid_order" && (
+                  <div className="mt-2">
+                    <RejectTransferRequestAction
+                      requestId={entry.id}
+                      orderNumber={lines.orderNumber}
+                      setNotice={setNotice}
+                    />
+                  </div>
+                )}
               </div>
 
               <dl className="shrink-0 space-y-1.5 text-xs lg:w-80">
                 <div className="flex items-center justify-between gap-3">
-                  <dt className="text-(--muted)">Amount</dt>
+                  <dt className="text-(--muted)">{lines.amountLabel}</dt>
                   <dd className="text-right">
                     <span className="font-mono text-sm font-bold text-(--text)">
                       {lines.amount}
@@ -132,21 +144,21 @@ export const NeedsRefundNotice = memo(function NeedsRefundNotice({
                   </dd>
                 </div>
 
-                {lines.gatewayPaymentId && (
+                {lines.reference && (
                   <div className="flex items-center justify-between gap-3">
-                    <dt className="text-(--muted)">Payment ID</dt>
+                    <dt className="text-(--muted)">{lines.referenceLabel}</dt>
                     <dd className="flex min-w-0 items-center gap-1.5 font-mono text-(--text)">
                       <span className="max-w-[180px] truncate">
-                        {lines.gatewayPaymentId}
+                        {lines.reference}
                       </span>
                       <button
                         type="button"
                         onClick={() =>
-                          handleCopy(lines.gatewayPaymentId!, "Payment ID")
+                          handleCopy(lines.reference!, lines.referenceLabel)
                         }
                         className="rounded p-0.5 text-(--muted) hover:text-(--text) cursor-pointer"
-                        title="Copy Payment ID"
-                        aria-label="Copy Payment ID"
+                        title={`Copy ${lines.referenceLabel}`}
+                        aria-label={`Copy ${lines.referenceLabel}`}
                       >
                         <Copy size={13} aria-hidden="true" />
                       </button>
@@ -157,7 +169,7 @@ export const NeedsRefundNotice = memo(function NeedsRefundNotice({
                 <div className="flex items-center justify-between gap-3">
                   <dt className="sr-only">When</dt>
                   <dd className="ml-auto text-[11px] text-(--muted)">
-                    {lines.paidOn}
+                    {lines.when}
                   </dd>
                 </div>
               </dl>

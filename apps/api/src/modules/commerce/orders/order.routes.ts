@@ -101,7 +101,7 @@ const orderRoutes: RoutePlugin = async (app, options) => {
         tags: ["Commerce - Orders"],
         summary: "List payments that need a manual refund",
         description:
-          "Returns, newest first, the money staff have to return by hand: gateway payments captured for an order that was already paid another way (kind surplus_payment, refundable only from the gateway dashboard), and later orders of a buyer who paid twice for the same course (kind duplicate_purchase, the later order is the one to refund). Read-only: nothing is refunded and no access changes. Amounts are in minor units.",
+          "Returns, newest first, the money staff have to return by hand: gateway payments captured for an order that was already paid another way (kind surplus_payment, refundable only from the gateway dashboard), later orders of a buyer who paid twice for the same course (kind duplicate_purchase, the later order is the one to refund), and transfers a buyer reported for an order that was then paid another way and that are still waiting for review (kind manual_transfer_for_paid_order, to be checked at the bank, returned outside the platform if they arrived, and rejected). Read-only: nothing is refunded and no access changes. Amounts are in minor units.",
         querystring: needsRefundListQuerySchema,
         response: {
           200: jsonResponse(

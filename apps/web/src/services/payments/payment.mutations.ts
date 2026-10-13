@@ -4,8 +4,10 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
+import type { ManualPaymentRequest } from "@veolms/contracts";
 import type { ApiError } from "../../lib/api-error";
 import { courseKeys } from "../courses/courses.keys";
+import { orderKeys } from "../orders/orders.keys";
 import { ordersService } from "../orders/orders.service";
 import { quizKeys } from "../quizzes/quizzes.keys";
 import { paymentService } from "./payment.service";
@@ -44,6 +46,32 @@ export function useVerifyPayment() {
     mutationFn: paymentService.verify,
     onSuccess: async () => {
       await invalidateAfterPurchase(queryClient);
+    },
+  });
+}
+
+/**
+ * Staff reject a transfer a buyer reported: the one answer the Orders
+ * screen gives, for a request whose order was paid another way. The list
+ * of payments needing a manual refund is read again before this settles,
+ * so the entry is gone by the time the button stops waiting.
+ */
+export function useRejectManualPayment() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    ManualPaymentRequest,
+    ApiError,
+    { requestId: string; adminNotes?: string }
+  >({
+    mutationFn: ({ requestId, adminNotes }) =>
+      paymentService.reviewManualPayment(requestId, {
+        action: "reject",
+        adminNotes,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: orderKeys.needsRefund(),
+      });
     },
   });
 }
