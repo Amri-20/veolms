@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { LearningHistoryResponse } from "@veolms/contracts";
 
 import { learningGoalKeys } from "./learning-goals.keys";
 import { learningGoalsService } from "./learning-goals.service";
@@ -28,17 +29,18 @@ export function useUpdateProgressSharing() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: learningGoalsService.updateSharing,
-    onSuccess: async () => {
-      // Every range of the learner's history says whether it is shared,
-      // and the list of members who share has gained or lost them.
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: learningGoalKeys.histories(),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: learningGoalKeys.community(),
-        }),
-      ]);
+    onSuccess: async ({ shared }) => {
+      // Every range of the learner's own history says whether it is
+      // shared. They are told at once rather than fetched again: until a
+      // fetch came back the switch would show what it showed before.
+      queryClient.setQueriesData<LearningHistoryResponse>(
+        { queryKey: learningGoalKeys.histories() },
+        (history) => (history?.isOwn ? { ...history, shared } : history),
+      );
+      // The list of members who share has gained or lost them.
+      await queryClient.invalidateQueries({
+        queryKey: learningGoalKeys.community(),
+      });
     },
   });
 }
