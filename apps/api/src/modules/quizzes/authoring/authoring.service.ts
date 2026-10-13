@@ -597,6 +597,12 @@ export function createAuthoringService(options: QuizServiceOptions) {
         .map((a) => a.lesson_id)
         .filter((id): id is string => Boolean(id));
       if (lessonIds.length > 0) {
+        // The lesson stays published; it just no longer has the quiz. There
+        // is no lesson type for "no video and no quiz", so it becomes a
+        // video lesson with no media. The learner's lesson page reads that
+        // from the course overview (`contentMediaId: null`): it says the
+        // lesson has no video, asks for no playback, and counts the lesson
+        // finished when it is opened, so the course can still reach 100%.
         await trx
           .updateTable("course_lessons")
           .set({ content_type: "video", updated_at: new Date() })

@@ -10,6 +10,8 @@ import type {
   OrderDirectRefundRequest,
   RefundResult,
   OrderView,
+  NeedsRefundListQueryInput,
+  NeedsRefundListResponse,
 } from "@veolms/contracts";
 
 /** `view` decides the response shape, so each list function fixes its own. */
@@ -36,6 +38,19 @@ export const ordersService = {
 
   getOrderStats: (params?: OrderStatsQuery): Promise<OrderStatsResponse> => {
     return api.get<OrderStatsResponse>("/orders/stats", { params });
+  },
+
+  /**
+   * Money staff have to return by hand: surplus gateway payments and
+   * duplicate purchases, newest first. Needs the same permission as the
+   * admin orders list.
+   */
+  listNeedsRefund: (
+    params?: NeedsRefundListQueryInput,
+  ): Promise<NeedsRefundListResponse> => {
+    return api.get<NeedsRefundListResponse>("/orders/needs-refund", {
+      params,
+    });
   },
 
   getOrder: (orderId: string, view?: OrderView): Promise<OrderResponse> => {

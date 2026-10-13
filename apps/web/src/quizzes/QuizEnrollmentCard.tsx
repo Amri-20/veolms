@@ -11,9 +11,14 @@ import { productName } from "../routing/routeDescriptors";
 import { useCurrentUser } from "../services/auth";
 import { readCheckoutStartError } from "../services/payments/checkoutError";
 import {
+  useAwaitPaidOrder,
   useCreateCheckoutOrder,
   useVerifyPayment,
 } from "../services/payments/payment.mutations";
+import {
+  PAYMENT_BEING_CONFIRMED_MESSAGE,
+  paymentConfirmationDelayedMessage,
+} from "../services/payments/paymentConfirmation";
 import { quizKeys } from "../services/quizzes/quizzes.keys";
 import { useQuizPricingPreview } from "../services/quizzes/quizzes.queries";
 import {
@@ -74,9 +79,15 @@ export function QuizEnrollmentCard({
     null,
   );
   const verify = useVerifyPayment();
+  const awaitPaidOrder = useAwaitPaidOrder();
+  const paymentConfirmationRef = useRef<AbortController | null>(null);
+  useEffect(() => () => paymentConfirmationRef.current?.abort(), []);
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [confirmationNotice, setConfirmationNotice] = useState<string | null>(
+    null,
+  );
 
   const preview = pricingPreviewQuery.data;
 
@@ -152,6 +163,42 @@ export function QuizEnrollmentCard({
 
   const isFree = pricingType === "free";
 
+  /** Access is in place: refresh what the page knows and hand over. */
+  const finishEnrollment = async () => {
+    await queryClient.invalidateQueries({ queryKey: quizKeys.all });
+    await pricingPreviewQuery.refetch();
+    setIsProcessing(false);
+    onEnrolled();
+  };
+
+  /**
+   * The gateway has taken the payment but this page could not confirm it.
+   * The server still marks the order paid from the gateway's webhook or its
+   * recovery cycle, so the card waits for that, as the course page does,
+   * and keeps the pay button out of reach meanwhile.
+   */
+  const confirmPaidOrder = async (orderId: string) => {
+    paymentConfirmationRef.current?.abort();
+    const confirmation = new AbortController();
+    paymentConfirmationRef.current = confirmation;
+
+    setErrorMessage(null);
+    setConfirmationNotice(PAYMENT_BEING_CONFIRMED_MESSAGE);
+    setIsProcessing(true);
+
+    const paid = await awaitPaidOrder(orderId, confirmation.signal);
+    if (confirmation.signal.aborted) return;
+    paymentConfirmationRef.current = null;
+
+    setConfirmationNotice(null);
+    if (paid) {
+      await finishEnrollment();
+      return;
+    }
+    setIsProcessing(false);
+    setErrorMessage(paymentConfirmationDelayedMessage("quiz"));
+  };
+
   const handleEnrollment = async () => {
     setIsProcessing(true);
     setErrorMessage(null);
@@ -185,10 +232,7 @@ export function QuizEnrollmentCard({
       // page: access is granted, and reopening the gateway would only show
       // an error for an order that is complete.
       if (!order.gateway || order.order.status === "paid") {
-        await queryClient.invalidateQueries({ queryKey: quizKeys.all });
-        await pricingPreviewQuery.refetch();
-        setIsProcessing(false);
-        onEnrolled();
+        await finishEnrollment();
         return;
       }
 
@@ -220,21 +264,22 @@ export function QuizEnrollmentCard({
               gatewayPaymentId: response.razorpay_payment_id,
               gatewaySignature: response.razorpay_signature,
             });
-            await queryClient.invalidateQueries({ queryKey: quizKeys.all });
-            await pricingPreviewQuery.refetch();
-            setIsProcessing(false);
-            onEnrolled();
-          } catch (err: unknown) {
-            setIsProcessing(false);
-            setErrorMessage(
-              err instanceof Error
-                ? err.message
-                : "Payment verification failed. Please contact support.",
-            );
+            await finishEnrollment();
+          } catch {
+            // The gateway has taken the payment; only our confirmation call
+            // failed. This used to read "Payment verification failed.
+            // Please contact support." every time (the rejection is a plain
+            // object, so the `instanceof Error` test never matched), which
+            // told a learner who had been charged that they had not paid.
+            await confirmPaidOrder(order.order.id);
           }
         },
         modal: {
           ondismiss: () => {
+            // A payment that went through is being confirmed; the gateway
+            // closing its own window afterwards is not a cancellation.
+            const confirmation = paymentConfirmationRef.current;
+            if (confirmation && !confirmation.signal.aborted) return;
             setIsProcessing(false);
           },
         },
@@ -319,6 +364,14 @@ export function QuizEnrollmentCard({
               </dd>
             </div>
           </dl>
+        ) : null}
+
+        {confirmationNotice ? (
+          <div className="mt-4">
+            <QuizNotice tone="caution" role="status">
+              {confirmationNotice}
+            </QuizNotice>
+          </div>
         ) : null}
 
         {errorMessage ? (

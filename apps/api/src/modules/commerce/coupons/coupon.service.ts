@@ -336,8 +336,11 @@ export function createCouponService({
       })
       .catch((error: unknown) => {
         // Two requests creating the same code at once both pass the check
-        // above; the second is the same refusal, not a server error.
-        if (isUniqueViolation(error)) {
+        // above; the second is the same refusal, not a server error. Only
+        // the code's own unique rule: any other unique violation is not
+        // about the code, and is left for the error handler's general
+        // answer instead of being reported as a code that is taken.
+        if (isUniqueViolation(error, "coupons_code_key")) {
           throw new AppError(
             409,
             "COUPON_CODE_ALREADY_EXISTS",

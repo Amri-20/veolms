@@ -16,10 +16,15 @@ import type { AuthenticatedRequestContext } from "./auth.types.ts";
  *   effect immediately IN THIS PROCESS regardless of which feature
  *   performed the write (the MFA feature writes via the repository, not
  *   the session service).
- * - Changes that bypass the session repository (role grants, TOTP/passkey
- *   enrolment elsewhere, writes from OTHER instances) become visible when
- *   the entry expires — bounded by the TTL. Set the TTL to 0 to disable
- *   caching entirely.
+ * - Every write to the account itself in authentication.service.ts (profile
+ *   and username, avatar, email and phone verification, deactivation)
+ *   evicts the user's entries once it has committed, as removing a factor
+ *   does in mfa.service.ts. The entry holds the user row that `/auth/me`
+ *   answers from, so a write that skips this is served stale to its own
+ *   author until the entry expires.
+ * - Changes that bypass both (role grants, writes made by the CLI or from
+ *   OTHER instances) become visible when the entry expires — bounded by the
+ *   TTL. Set the TTL to 0 to disable caching entirely.
  */
 const MAX_ENTRIES = 5_000;
 

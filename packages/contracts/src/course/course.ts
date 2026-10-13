@@ -748,6 +748,20 @@ export const courseOverviewSchema = z.object({
   includes: z
     .array(courseIncludeItemSchema.pick({ text: true, position: true }))
     .optional(),
+  /**
+   * Whether someone may take this course for themselves: enrol in it when it
+   * is free, or buy it when it is sold. False only for a course that is
+   * access-restricted and has no price to pay. Checkout refuses such a
+   * course (`COURSE_ACCESS_RESTRICTED`) and it is entered only by a grant
+   * from staff, so a client must not offer enrolment in it. A restricted
+   * course that is sold is true: buying it is how it is entered.
+   *
+   * It describes the course, not the viewer: it is the same for a visitor, a
+   * learner and the course's creator, and someone who already holds the
+   * course keeps their access whatever it says. Absent from a response
+   * built before the field existed; read that as true.
+   */
+  canSelfEnroll: z.boolean().optional(),
   stats: z.object({
     totalSections: z.number().int().nonnegative(),
     totalLessons: z.number().int().nonnegative(),

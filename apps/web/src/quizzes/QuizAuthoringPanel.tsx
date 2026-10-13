@@ -69,6 +69,11 @@ import {
   type QuizBuilderOptionDraft,
 } from "./quizBuilderDraft";
 import { QuizAuthoringLoadingSkeleton } from "./QuizAuthoringLoadingSkeleton";
+import {
+  accountScopedStorageKey,
+  readAccountScopedItem,
+} from "../store/accountScopedStorage";
+import { useAuthStore } from "../store/auth.store";
 
 interface Props {
   courseId?: string;
@@ -295,9 +300,20 @@ export function QuizAuthoringPanel({
   const [draftQuestions, setDraftQuestions] = useState<
     QuizBuilderQuestionDraft[]
   >([]);
-  const draftStorageKey = useMemo(
+  // The unsaved quiz is kept in this browser under the author's account. It
+  // used to be one entry for the whole browser, so the next account to open
+  // the builder on a shared browser was handed the previous one's quiz.
+  const draftAccountId = useAuthStore((state) => state.user?.id) ?? null;
+  const unscopedDraftStorageKey = useMemo(
     () => browserDraftStorageKey({ courseId, lessonId }),
     [courseId, lessonId],
+  );
+  const draftStorageKey = useMemo(
+    () =>
+      draftAccountId
+        ? accountScopedStorageKey(draftAccountId, unscopedDraftStorageKey)
+        : null,
+    [draftAccountId, unscopedDraftStorageKey],
   );
   const browserDraftHydratedRef = useRef(Boolean(initialQuizId));
   const [prompt, setPrompt] = useState("");
@@ -410,9 +426,17 @@ export function QuizAuthoringPanel({
     browserDraftHydratedRef.current = true;
     let savedDraft: QuizBuilderBrowserDraft | null = null;
     try {
-      savedDraft = parseQuizBuilderBrowserDraft(
-        window.localStorage.getItem(draftStorageKey),
-      );
+      // A draft saved before drafts were per account is taken over by the
+      // first account to open this builder (see readAccountScopedItem).
+      savedDraft = draftAccountId
+        ? parseQuizBuilderBrowserDraft(
+            readAccountScopedItem(
+              window.localStorage,
+              draftAccountId,
+              unscopedDraftStorageKey,
+            ),
+          )
+        : null;
     } catch {
       // The in-memory editor remains usable when browser storage is unavailable.
     }
@@ -431,10 +455,10 @@ export function QuizAuthoringPanel({
     setAvailableFrom(savedDraft.assignment.availableFrom);
     setAvailableUntil(savedDraft.assignment.availableUntil);
     setFeedbackMode(savedDraft.assignment.feedbackMode);
-  }, [draftStorageKey, initialQuizId, lessonTitle]);
+  }, [draftAccountId, initialQuizId, lessonTitle, unscopedDraftStorageKey]);
 
   useEffect(() => {
-    if (!browserDraftHydratedRef.current || quizId) return;
+    if (!browserDraftHydratedRef.current || quizId || !draftStorageKey) return;
 
     const draft: QuizBuilderBrowserDraft = {
       title: quizTitle,
@@ -560,7 +584,9 @@ export function QuizAuthoringPanel({
     resetEditor();
     setDraftQuestions([]);
     try {
-      window.localStorage.removeItem(draftStorageKey);
+      if (draftStorageKey) {
+        window.localStorage.removeItem(draftStorageKey);
+      }
     } catch {
       // Nothing to clear when browser storage is unavailable.
     }
@@ -723,7 +749,9 @@ export function QuizAuthoringPanel({
             setCreateSaveStatus("saved");
             setDetailsSaveStatus("saved");
             try {
-              window.localStorage.removeItem(draftStorageKey);
+              if (draftStorageKey) {
+                window.localStorage.removeItem(draftStorageKey);
+              }
             } catch {
               // Nothing to clear when browser storage is unavailable.
             }

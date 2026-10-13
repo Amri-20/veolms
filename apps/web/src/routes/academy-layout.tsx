@@ -131,6 +131,7 @@ import {
   getNavigationMatch,
   resolveActiveRouteSection,
 } from "../routing/activeRouteSection";
+import { NO_VIDEO_NOTICE } from "../learning/lessonWithoutVideo";
 import {
   getDestinationPath,
   getMatchedRouteDescriptor,
@@ -1240,15 +1241,23 @@ export default function AcademyLayout() {
                   actionLabel: "Unlock the course",
                   onAction: openPersistentPlayerCourseOverview,
                 }
-              : {
-                  kind: "retry" as const,
-                  message: "We couldn't prepare this video.",
-                  actionLabel: "Retry",
-                  onAction: () =>
-                    selectPersistentMiniPlayerLessonRef.current(lessonNumber, {
-                      retry: true,
-                    }),
-                };
+              : bootstrapError?.code === "MEDIA_NOT_FOUND"
+                ? // The lesson has no video (its quiz was removed, say).
+                  // That is not a failure and there is nothing to retry;
+                  // the lesson page says the same.
+                  NO_VIDEO_NOTICE
+                : {
+                    kind: "retry" as const,
+                    message: "We couldn't prepare this video.",
+                    actionLabel: "Retry",
+                    onAction: () =>
+                      selectPersistentMiniPlayerLessonRef.current(
+                        lessonNumber,
+                        {
+                          retry: true,
+                        },
+                      ),
+                  };
 
         const withError: PersistentLearningPlayerRegistration = {
           ...active,

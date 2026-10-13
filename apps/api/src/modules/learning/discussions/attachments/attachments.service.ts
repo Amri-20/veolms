@@ -30,6 +30,11 @@ import {
   type DiscussionActor,
 } from "../shared/discussion.access.ts";
 import { getAttachmentDimensionFields } from "../shared/discussion-attachment-metadata.ts";
+import { withWriteTransaction } from "../shared/discussion.mentions.ts";
+import {
+  exceedsUploadQuota,
+  supersededUploadFileName,
+} from "./attachment-upload-rules.ts";
 import { fetchSafeHtml, extractLinkMetadata } from "./attachments.preview.ts";
 import type {
   AttachmentRecord,
@@ -105,6 +110,7 @@ export interface AttachmentsService {
     attachmentId: string,
     userId: string,
     file: IncomingAttachmentFile,
+    logger?: AttachmentUploadLogger,
   ): Promise<UploadedAttachment>;
 
   completeUpload(
@@ -185,6 +191,14 @@ function dailyUploadQuotaBytes(actor: DiscussionActor): number {
     ? config.DISCUSSION_UPLOAD_DAILY_QUOTA_STAFF_MB
     : config.DISCUSSION_UPLOAD_DAILY_QUOTA_MB;
   return megabytes * BYTES_PER_MEGABYTE;
+}
+
+/**
+ * The request logger, as far as an upload needs it: a place to record a
+ * stored file that could not be tidied away, which the caller is not told.
+ */
+export interface AttachmentUploadLogger {
+  warn(details: object, message: string): void;
 }
 
 /**
@@ -269,7 +283,11 @@ export function createAttachmentsService(
    * Refuses an upload once the account has used its allowance for the last
    * 24 hours. `incomingBytes` is the size the client declared, where it
    * declared one; a streamed upload has no size until it is stored, so it
-   * is let through while any allowance is left and counted afterwards.
+   * is let through while any allowance is left (0 bytes here) and counted
+   * at its real size by `recordUploadWithinQuota` once stored.
+   *
+   * On its own this is only an early answer: it reads a total that a
+   * request arriving at the same moment does not see yet.
    */
   async function assertWithinUploadQuota(
     db: DatabaseExecutor,
@@ -284,13 +302,39 @@ export function createAttachmentsService(
       actor.userId,
       new Date(Date.now() - UPLOAD_QUOTA_WINDOW_MS),
     );
-    if (usedBytes >= quotaBytes || usedBytes + incomingBytes > quotaBytes) {
+    if (exceedsUploadQuota(usedBytes, incomingBytes, quotaBytes)) {
       throw httpError(
         429,
         "UPLOAD_QUOTA_EXCEEDED",
         "You have reached your upload limit for today. Please try again tomorrow.",
       );
     }
+  }
+
+  /**
+   * Counts the allowance and records the upload under it as one step per
+   * account, at the size given (the declared size of a slot, the stored
+   * size of a streamed file). Done as two steps, a burst of requests each
+   * read the total before any of them had recorded its upload, and all of
+   * them went through: twelve at once took several times the allowance.
+   * Refused with the same answer as `assertWithinUploadQuota`, and nothing
+   * is recorded.
+   */
+  async function recordUploadWithinQuota(
+    db: DatabaseExecutor,
+    actor: DiscussionActor,
+    attachment: Parameters<AttachmentsRepository["createAttachment"]>[1],
+  ): Promise<void> {
+    if (dailyUploadQuotaBytes(actor) <= 0) {
+      await attachmentsRepo.createAttachment(db, attachment);
+      return;
+    }
+
+    await withWriteTransaction(db, async (trx) => {
+      await attachmentsRepo.lockOwnerUploadAllowance(trx, actor.userId);
+      await assertWithinUploadQuota(trx, actor, attachment.fileSize);
+      await attachmentsRepo.createAttachment(trx, attachment);
+    });
   }
 
   async function resolveLinkPreview(url: string): Promise<LinkPreviewResponse> {
@@ -422,7 +466,7 @@ export function createAttachmentsService(
         input.fileSize,
       );
 
-      await attachmentsRepo.createAttachment(db, {
+      await recordUploadWithinQuota(db, actor, {
         id,
         ownerId: actor.userId,
         kind,
@@ -443,7 +487,7 @@ export function createAttachmentsService(
       return { attachmentId: id, uploadUrl };
     },
 
-    async uploadFile(db, attachmentId, userId, file) {
+    async uploadFile(db, attachmentId, userId, file, logger) {
       if (!isSupportedDiscussionUploadMimeType(file.mimetype)) {
         throw httpError(
           415,
@@ -559,6 +603,27 @@ export function createAttachmentsService(
       } catch (error) {
         await uploadStore.remove(sanitizedName);
         throw error;
+      }
+
+      // The record now points at the file just stored. If bytes were also
+      // put at the address the slot was opened with, under another name,
+      // nothing points at them any more: they go now, because the clean-up
+      // job works from the records and would never find them. The upload
+      // has succeeded either way, so a failure here is recorded, not
+      // returned.
+      const supersededName = supersededUploadFileName(
+        existing.storageKey,
+        discussionUploadStorageKey(sanitizedName),
+      );
+      if (supersededName) {
+        try {
+          await uploadStore.removeOrThrow(supersededName);
+        } catch (error) {
+          logger?.warn(
+            { err: error, attachmentId, storageKey: existing.storageKey },
+            "Could not remove the file an upload slot was first given",
+          );
+        }
       }
 
       const updated = await attachmentsRepo.findAttachmentById(
@@ -704,8 +769,11 @@ export function createAttachmentsService(
       }
       const fileUrl = discussionUploadPublicUrl(sanitizedName);
 
+      // The size is known now, so this is where the file is counted. One
+      // that takes the account past its allowance is refused like a slot
+      // declared at that size would have been, and the catch removes it.
       try {
-        await attachmentsRepo.createAttachment(db, {
+        await recordUploadWithinQuota(db, actor, {
           id,
           ownerId: actor.userId,
           kind,

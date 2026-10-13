@@ -35,6 +35,8 @@ export interface FinalizePaymentResult {
    */
   outcome: "finalized" | "already_captured" | "recorded_as_surplus";
   orderId?: string;
+  /** The order's buyer. Set with `orderId`. */
+  userId?: string;
   enrollmentCount?: number;
 }
 
@@ -83,9 +85,25 @@ export function createPaymentReconciliationService({
     const now = new Date();
     let enrolledCourseIds: string[] = [];
     let orderId: string | undefined;
+    let userId: string | undefined;
     let recordedAsSurplus = false;
 
     await database.transaction().execute(async (trx) => {
+      // ── Lock order: the order row first, then the payment row ───────────
+      // Manual verification (manual-payment.service.ts) writes the order
+      // and then closes its open gateway payment. This path used to claim
+      // the payment and then write the order, so when both ran for one
+      // order at the same moment each held the row the other needed and
+      // Postgres ended one of them with 40P01 (deadlock detected). Taking
+      // the order's row lock before anything else makes the two wait for
+      // each other instead: whichever is second sees what the first did
+      // (the order already paid) and takes its normal branch below. The
+      // refund paths take the same lock first.
+      const target = await paymentRepo.findPaymentById(trx, paymentId);
+      if (target) {
+        await orderRepo.findOrderByIdForUpdate(trx, target.order_id);
+      }
+
       // ── Concurrency gate ────────────────────────────────────────────────
       // Atomically claim the payment. Only one concurrent caller wins.
       // The UPDATE is conditional on the payment not yet being captured,
@@ -127,6 +145,7 @@ export function createPaymentReconciliationService({
             `payment as captured with no fulfillment`,
         );
       }
+      userId = order.user_id;
 
       // 1. Record successful payment attempt
       const attemptCount = await paymentRepo.countPaymentAttempts(
@@ -247,12 +266,13 @@ export function createPaymentReconciliationService({
     }
 
     if (recordedAsSurplus) {
-      return { outcome: "recorded_as_surplus", orderId };
+      return { outcome: "recorded_as_surplus", orderId, userId };
     }
 
     return {
       outcome: "finalized",
       orderId,
+      userId,
       enrollmentCount: enrolledCourseIds.length,
     };
   }

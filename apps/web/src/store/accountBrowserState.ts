@@ -13,12 +13,21 @@ import { forgetSessionTabs } from "../routing/tabSessionState";
  *
  * Only state that is cheap to lose and wrong to hand on is listed here.
  * Unsaved writing is deliberately not: the lesson-editor drafts
- * (`veolms:lesson-editor-draft:`), the quiz-builder drafts
- * (`veolms:quiz-builder:draft:`) and the discussion drafts stay, because a
- * session that expires in the middle of writing must not take the text with
- * it. The last-opened lesson of a course (`veolms-last-lesson-`) stays too:
+ * (`veolms:lesson-editor-draft:`), the quiz-builder drafts and the
+ * discussion drafts stay, because a session that expires in the middle of
+ * writing must not take the text with it.
+ *
+ * The quiz-builder drafts are no longer handed on either: each is kept under
+ * its author's account (`veolms-account-v1:<user>:veolms:quiz-builder:draft:…`,
+ * see `accountScopedStorage.ts`), and a draft saved under the old
+ * browser-wide key is moved to the first account that opens that builder.
+ *
+ * The last-opened lesson of a course (`veolms-last-lesson-`) stays as well:
  * it is what brings the same learner back to their lesson after signing in
- * again.
+ * again. It is read while a lesson address is being settled, before the
+ * session check has said who is signed in, so it cannot be keyed by account
+ * the way the drafts are. It is handed on to nobody else instead: see
+ * `claimLastOpenedLessons`.
  */
 
 /** The course catalogue's search box (`CoursesPage`). */
@@ -67,6 +76,41 @@ function removeMatchingKeys(
     if (key !== null && shouldRemove(key)) keys.push(key);
   }
   for (const key of keys) storage.removeItem(key);
+}
+
+const LAST_OPENED_LESSON_KEY_PREFIX = "veolms-last-lesson-";
+/** Whose the remembered lessons are. Not under the prefix above. */
+const LAST_OPENED_LESSON_OWNER_KEY = "veolms-resume-owner";
+
+/**
+ * Called when an account is known to be signed in. The remembered
+ * last-opened lessons belong to the account that was signed in when they
+ * were written. The same account signing in again keeps them. A different
+ * account does not inherit them: they are removed, and from then on the
+ * entries are that account's. Lessons opened while signed out, with no owner
+ * recorded, go to the first account that signs in, which is the person who
+ * was just browsing.
+ */
+export function claimLastOpenedLessons(
+  accountId: string,
+  storage: Pick<
+    Storage,
+    "getItem" | "setItem" | "removeItem" | "key" | "length"
+  > | null = typeof window === "undefined" ? null : window.localStorage,
+): void {
+  if (!storage) return;
+  try {
+    const owner = storage.getItem(LAST_OPENED_LESSON_OWNER_KEY);
+    if (owner === accountId) return;
+    if (owner !== null) {
+      removeMatchingKeys(storage as Storage, (key) =>
+        key.startsWith(LAST_OPENED_LESSON_KEY_PREFIX),
+      );
+    }
+    storage.setItem(LAST_OPENED_LESSON_OWNER_KEY, accountId);
+  } catch {
+    // Local storage can be unavailable in privacy-restricted contexts.
+  }
 }
 
 export function forgetAccountBrowserState(): void {

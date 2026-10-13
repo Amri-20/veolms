@@ -20,7 +20,8 @@ import type { OrderStatus, PaymentStatus } from "@veolms/database";
  * order may still be refunded and what the academy has earned, and neither
  * figure includes this money.
  *
- * To list the ones still to be returned:
+ * The ones still to be returned are on the staff Orders screen
+ * (`GET /orders/needs-refund`, orders/needs-refund.service.ts), which reads:
  *   select * from payments
  *   where error_code = 'CAPTURED_AFTER_ORDER_PAID' and status = 'captured';
  */
@@ -45,9 +46,13 @@ export function describeSurplusCapture(orderNumber: string): string {
 /** One line per refund, in a form `refundedSoFar` can read back. */
 const REFUND_NOTE = /Refund (\S+) of (\d+) /gu;
 
-function refundedSoFar(description: string): number {
+/**
+ * How much of a surplus payment the gateway has reported as refunded, in
+ * minor units: the sum of the refunds noted in its description.
+ */
+export function refundedSoFar(description: string | null): number {
   let total = 0;
-  for (const match of description.matchAll(REFUND_NOTE)) {
+  for (const match of (description ?? "").matchAll(REFUND_NOTE)) {
     total += Number(match[2]);
   }
   return total;
