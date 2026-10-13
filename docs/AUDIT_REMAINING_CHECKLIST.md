@@ -74,13 +74,13 @@ Updated 14 Oct 2026, after the fifth round. The full record is `docs/AUDIT_RECON
 Pushing `dev` deploys the API and the web together.
 
 - [ ] Confirm the deploy finished and these four migrations ran: `20261013100000-shorten-legacy-user-names`, `20261013110000-lowercase-user-emails`, `20261013120000-create-order-item-courses` and `20261014100000-create-wishlist-items`.
-- [ ] Run the count file on the production database. It only counts, and writes nothing:
+- [x] Run the count file on the production database. Done by the owner on 14 Oct: every count is 0. It only counts, and writes nothing:
 
   ```bash
   psql "$PRODUCTION_DATABASE_URL" -x -f docs/audit-pre-push-checks.sql
   ```
 
-- [ ] If check 5 shows any accounts sharing an email in different letter case, send me the numbers. I will report on them and not merge anything.
+- [x] Check 5 (accounts sharing an email in different letter case): 0 found. Nothing to merge.
 - [ ] Check the server's `TRUST_PROXY` value (section 18 of the report says which value fits which setup).
 - [ ] Check that every address people sign in from is in `WEB_URL` or `CORS_ORIGINS`.
 
@@ -125,7 +125,7 @@ Four of the seven from the last round are fixed. These are left.
 
 - [ ] **A buyer can still pay twice.** Cannot be fixed in code: the gateway cannot withdraw an order it already gave the buyer. It is flagged for staff.
 - [ ] **Bundle orders paid before 13 Oct** are not compared course by course. Cannot be fixed: what they contained when sold was never recorded.
-- [ ] **Accounts that share an email in different letter case.** Waiting for the count from check 5 on production. I have no production access, so I need the output or a dump file.
+- [x] **Accounts that share an email in different letter case.** Closed on 14 Oct: the production count is 0.
 - [ ] **Refund requests have no staff screen in the web.** Approving one works through the API only. See section C.
 
 ## E. Put off because it needs a browser or new API work
