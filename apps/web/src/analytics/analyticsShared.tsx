@@ -5,6 +5,7 @@ import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { FunnelSimpleIcon as FunnelSimple } from "@phosphor-icons/react/FunnelSimple";
 import { LightbulbIcon as Lightbulb } from "@phosphor-icons/react/Lightbulb";
 import { EmptyState, SectionHeading } from "../components/analytics/StatTiles";
+import { formatTrendDate } from "./trendDate";
 
 export const surfaceClass =
   "rounded-[14px] sm:rounded-[22px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface,var(--surface)) text-(--text) shadow-(--card-shadow,var(--surface-depth-shadow))";
@@ -84,12 +85,7 @@ export function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
 }
 
-export function formatTrendDate(date: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-  }).format(new Date(date));
-}
+export { formatTrendDate };
 
 export function toChartData(points: Array<{ date: string; value: number }>) {
   return points.map((point) => ({

@@ -1,4 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import type {
   AssignQuizRequest,
   CreateQuizQuestionRequest,
@@ -103,18 +107,37 @@ export function useStartQuizAttempt() {
     },
   });
 }
+type SubmittedQuizResult = Awaited<ReturnType<typeof quizzesService.submit>>;
+type CachedQuizAttempt = Awaited<ReturnType<typeof quizzesService.getAttempt>>;
+
+/**
+ * What the cache is told once an attempt has been handed in.
+ *
+ * The attempt is closed from here on, and the server refuses to read a
+ * closed attempt as one in progress. Asking for it again (it is still on
+ * screen when the answer arrives) only produced that refusal, so the cached
+ * attempt is marked with the status the result carries instead. Anything
+ * that opens it later sees at once that it is closed and shows the result,
+ * which is cached here too.
+ */
+export function applySubmittedQuizAttempt(
+  qc: QueryClient,
+  result: SubmittedQuizResult,
+): void {
+  qc.setQueryData(quizKeys.result(result.attemptId), result);
+  qc.setQueryData<CachedQuizAttempt>(
+    quizKeys.attempt(result.attemptId),
+    (attempt) => (attempt ? { ...attempt, status: result.status } : attempt),
+  );
+  void qc.invalidateQueries({ queryKey: quizKeys.mineAssignments() });
+  void qc.invalidateQueries({ queryKey: quizKeys.history() });
+}
+
 export function useSubmitQuizAttempt() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: quizzesService.submit,
-    onSuccess: (result) => {
-      qc.setQueryData(quizKeys.result(result.attemptId), result);
-      void qc.invalidateQueries({
-        queryKey: quizKeys.attempt(result.attemptId),
-      });
-      void qc.invalidateQueries({ queryKey: quizKeys.mineAssignments() });
-      void qc.invalidateQueries({ queryKey: quizKeys.history() });
-    },
+    onSuccess: (result) => applySubmittedQuizAttempt(qc, result),
   });
 }
 export function useAssignQuiz() {

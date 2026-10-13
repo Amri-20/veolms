@@ -772,3 +772,36 @@ export const getRouteMeta = (
     description: descriptor.description,
   };
 };
+
+/** What the client has fetched about the course a course page shows. */
+export interface LoadedCourseTitles {
+  courseTitle?: string | null;
+  /** The lesson being studied; used on the learning page only. */
+  lessonTitle?: string | null;
+}
+
+/**
+ * The tab title of a course page (its overview or a lesson) from what the
+ * client holds now. `getRouteMeta` can only name a course the document was
+ * built with, so most course pages were titled "Course"; once the course
+ * has been fetched its own name is used, and a lesson page leads with the
+ * lesson's name. Until then, and for an address that is not a course page
+ * after all, the title is exactly the one `getRouteMeta` gives.
+ */
+export const getCourseDocumentTitle = (
+  routeId: "learning" | "course-overview",
+  params: RouteParams,
+  pathname: string,
+  matches: readonly (RouteMetaMatch | undefined)[] | undefined,
+  loaded: LoadedCourseTitles,
+): string => {
+  const courseTitle = loaded.courseTitle?.trim();
+  if (!courseTitle || getEffectiveRouteId(routeId, pathname) !== routeId) {
+    return getRouteMeta(routeId, params, pathname, matches).title;
+  }
+  const lessonTitle =
+    routeId === "learning" ? loaded.lessonTitle?.trim() : undefined;
+  return [lessonTitle, courseTitle, productName]
+    .filter(Boolean)
+    .join(" \u00B7 ");
+};
