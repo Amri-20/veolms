@@ -102,7 +102,7 @@ export function OverviewTab({ data }: { data: AnalyticsOverviewResponse }) {
         />
       </section>
 
-      <ChartSection title="Revenue Trend" description="Net revenue per day">
+      <ChartSection title="Revenue Trend" description="Net revenue per UTC day">
         <TrendChart
           data={toRevenueChartData(overview.revenueTrend, currency)}
           valueFormatter={(value) => formatChartCurrency(value, currency)}

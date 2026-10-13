@@ -69,6 +69,8 @@ const DiscussionThreadPanel = lazy(() =>
     default: module.DiscussionThreadPanel,
   })),
 );
+import { DiscussionEmptyState } from "./DiscussionEmptyState";
+import { DiscussionLoadError } from "./DiscussionLoadError";
 import {
   DESCRIPTION_SURFACE_BASE,
   LessonDescription,
@@ -3764,6 +3766,14 @@ function ThreadSurface({
   const compactComposerScrollHidden =
     mobileBottomNavigation && mobileBottomNavigationHidden;
   const [composerMode, setComposerMode] = useState<ComposerMode>("collapsed");
+  // The empty list offers to start what its filter shows: a question under
+  // Q&As, a note under Notes. It offers nothing to someone who cannot post
+  // here, or cannot post that kind.
+  const emptyStateKind = entryFilter === "all" ? null : entryFilter;
+  const canStartFromEmptyState =
+    canParticipate &&
+    enabledKinds.length > 0 &&
+    (emptyStateKind === null || enabledKinds.includes(emptyStateKind));
   const [
     mobileComposerCollapsedSnapPoint,
     setMobileComposerCollapsedSnapPoint,
@@ -3815,6 +3825,12 @@ function ThreadSurface({
     setMobileComposerViewportHeight(geometry.visualViewportHeight);
     setComposerMode("mobile");
   }, [getMobileComposerViewportGeometry]);
+
+  const startFromEmptyState = () => {
+    if (emptyStateKind) onEntryKindChange(emptyStateKind);
+    if (isPhone) openMobileComposer();
+    else setComposerMode("desktop");
+  };
 
   useEffect(() => {
     setComposerMode((current: ComposerMode) => {
@@ -4315,45 +4331,19 @@ function ThreadSurface({
   ) : entryFilter === "note" && isNotesLoading && entries.length === 0 ? (
     discussionLoadingContent
   ) : entryFilter === "note" && isNotesError && entries.length === 0 ? (
-    <div
-      className="flex min-h-0 flex-1 flex-col items-center justify-center py-12 text-center"
-      data-testid="learning-notes-error"
-    >
-      <p className="font-semibold text-(--text)">Failed to load notes</p>
-      <p className="mx-auto mt-1 max-w-md text-sm text-(--muted)">
-        There was a problem loading your notes for this lesson.
-      </p>
-      {onRetryNotes && (
-        <button
-          type="button"
-          onClick={onRetryNotes}
-          className="mt-3 inline-flex items-center rounded-lg bg-(--surface) px-3 py-1.5 text-xs font-semibold text-(--text) shadow-sm ring-1 ring-inset ring-[color-mix(in_srgb,var(--text)_14%,transparent)] hover:bg-(--hover)"
-        >
-          Retry
-        </button>
-      )}
-    </div>
+    <DiscussionLoadError
+      subject="your notes"
+      testId="learning-notes-error"
+      onRetry={onRetryNotes}
+    />
   ) : entryFilter !== "note" && isThreadsLoading && entries.length === 0 ? (
     discussionLoadingContent
   ) : entryFilter !== "note" && isThreadsError && entries.length === 0 ? (
-    <div
-      className="flex min-h-0 flex-1 flex-col items-center justify-center py-12 text-center"
-      data-testid="learning-threads-error"
-    >
-      <p className="font-semibold text-(--text)">Failed to load discussions</p>
-      <p className="mx-auto mt-1 max-w-md text-sm text-(--muted)">
-        There was a problem loading the discussion for this lesson.
-      </p>
-      {onRetryThreads && (
-        <button
-          type="button"
-          onClick={onRetryThreads}
-          className="mt-3 inline-flex items-center rounded-lg bg-(--surface) px-3 py-1.5 text-xs font-semibold text-(--text) shadow-sm ring-1 ring-inset ring-[color-mix(in_srgb,var(--text)_14%,transparent)] hover:bg-(--hover)"
-        >
-          Retry
-        </button>
-      )}
-    </div>
+    <DiscussionLoadError
+      subject="the discussion"
+      testId="learning-threads-error"
+      onRetry={onRetryThreads}
+    />
   ) : (
     <>
       <DiscussionVirtualFeed
@@ -4414,17 +4404,15 @@ function ThreadSurface({
         </p>
       )}
       {entries.length === 0 && (
-        <div className="py-12 text-center">
-          <p className="font-semibold text-(--text)">
-            No {entryFilter === "all" ? "entries" : getFilterName(entryFilter)}{" "}
-            yet
-          </p>
-          {availableFilters.some(([val]) => val === "all") && (
-            <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-(--muted)">
-              Choose All to return to the full lesson discussion.
-            </p>
-          )}
-        </div>
+        <DiscussionEmptyState
+          filter={entryFilter}
+          mine={feedView === "mine"}
+          canReturnToAll={
+            entryFilter !== "all" &&
+            availableFilters.some(([val]) => val === "all")
+          }
+          onStart={canStartFromEmptyState ? startFromEmptyState : undefined}
+        />
       )}
     </>
   );
@@ -4803,9 +4791,3 @@ function usePhoneComposerLayout() {
 
   return isPhone;
 }
-
-const getFilterName = (filter: Exclude<DiscussionEntryFilter, "all">) => {
-  if (filter === "question") return "Q&As";
-  if (filter === "note") return "notes";
-  return "comments";
-};

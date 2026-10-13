@@ -12,6 +12,8 @@ import type {
   OrderView,
   NeedsRefundListQueryInput,
   NeedsRefundListResponse,
+  RefundRequest,
+  ReviewRefundRequest,
 } from "@veolms/contracts";
 
 /** `view` decides the response shape, so each list function fixes its own. */
@@ -76,5 +78,20 @@ export const ordersService = {
     payload: OrderDirectRefundRequest,
   ): Promise<RefundResult> => {
     return api.post<RefundResult>(`/orders/${orderId}/refund`, payload);
+  },
+
+  /**
+   * Approves or rejects a learner's refund request (admins only). Approving
+   * issues the refund; for an order paid by manual transfer the payload
+   * carries `outsideRefund`, and the refund is recorded in the same step.
+   */
+  reviewRefundRequest: (
+    requestId: string,
+    payload: ReviewRefundRequest,
+  ): Promise<RefundRequest> => {
+    return api.post<RefundRequest>(
+      `/refund-requests/${encodeURIComponent(requestId)}/review`,
+      payload,
+    );
   },
 };

@@ -40,6 +40,10 @@ import {
   LessonPlayerMinimizeControl,
   type CourseLessonsSecondPressHoldProps,
 } from "./LessonPlayerControls";
+import {
+  LessonReadingStage,
+  lessonReadingShellClasses,
+} from "./LessonReadingStage";
 import { MiniPlayerWindowControls } from "./MiniPlayerControls";
 import type { LearningMiniPlayerRequest } from "./learningMiniPlayerTypes";
 import {
@@ -186,6 +190,11 @@ export interface LessonVideoPlayerProps {
     title?: string;
     /** A way out to another page, shown under the action. */
     link?: { label: string; href: string };
+    /**
+     * A reading lesson's text (Markdown). The full player shows it where the
+     * video would be, in place of the title and message.
+     */
+    article?: string;
   } | null;
   /** Prevents the fallback media source from loading before protected bootstrap resolves. */
   playbackBootstrapPending?: boolean;
@@ -1045,6 +1054,8 @@ export function LessonVideoPlayer({
     const isPlainGate =
       playbackAccessError?.kind === "retry" ||
       playbackAccessError?.kind === "notice";
+    const reading =
+      presentation === "full" ? playbackAccessError?.article : undefined;
     const gateTitle = !playbackAccessError
       ? ""
       : playbackAccessError.kind === "login"
@@ -1074,6 +1085,7 @@ export function LessonVideoPlayer({
           // Under a finger the surface is moved by the gesture itself, which
           // sets no mark on the host; it says so here instead.
           minimizeGesture.controlsSuppressed && "*:invisible!",
+          reading && lessonReadingShellClasses,
         )}
         data-learning-playback-gate={playbackAccessError?.kind ?? "pending"}
         data-learning-player-motion-surface=""
@@ -1093,7 +1105,10 @@ export function LessonVideoPlayer({
         {playbackAccessError && !isPlainGate && media.thumbnailSrc ? (
           <LessonPictureBackdrop src={media.thumbnailSrc} />
         ) : null}
-        {presentation === "full" && onMinimize ? (
+        {reading ? <LessonReadingStage article={reading} /> : null}
+        {/* A reading has nothing that would go on playing in the small
+            player, so it offers no button to send it there. */}
+        {presentation === "full" && onMinimize && !reading ? (
           <LessonPlayerMinimizeControl
             icon={<MinimizeIcon size={22} />}
             onMinimize={minimizePlayerFromControl}
@@ -1147,7 +1162,7 @@ export function LessonVideoPlayer({
                 : undefined
             }
           />
-        ) : (
+        ) : reading ? null : (
           <div className="pointer-events-none absolute inset-0 grid place-items-center p-6 text-center text-white">
             {isPending ? (
               <VideoLoadingSpinner />

@@ -2,8 +2,14 @@ import { memo, useState } from "react";
 import { CircleNotchIcon as CircleNotch } from "@phosphor-icons/react/CircleNotch";
 import { getApiError } from "../lib/api-error";
 import { useRejectManualPayment } from "../services/payments";
+import { ASK_ADMIN_TO_REJECT_TRANSFER } from "./needsRefundHelpers";
 
 export interface RejectTransferRequestActionProps {
+  /**
+   * Whether the viewer may reject transfer requests (admins only). Anyone
+   * else is told to ask an admin, in the button's place.
+   */
+  canReject: boolean;
   /** The manual payment request to reject. */
   requestId: string;
   /** The order it was reported for, as the row shows it: "#ORD-...". */
@@ -35,12 +41,13 @@ const labelClass = "text-[11px] font-semibold";
  * changes nothing else: the order, its payment and the learner's access
  * stay as they are.
  *
- * Both states are one row of the same height, on purpose: the orders table
+ * Every state is one row of the same height, on purpose: the orders table
  * below is positioned from its measured distance to the top of the page,
  * and that is only measured again when the number of entries changes.
  */
 export const RejectTransferRequestAction = memo(
   function RejectTransferRequestAction({
+    canReject,
     requestId,
     orderNumber,
     adminNotes,
@@ -63,6 +70,14 @@ export const RejectTransferRequestAction = memo(
         );
       }
     };
+
+    if (!canReject) {
+      return (
+        <p className={`flex h-7 items-center text-(--muted) ${labelClass}`}>
+          {ASK_ADMIN_TO_REJECT_TRANSFER}
+        </p>
+      );
+    }
 
     if (!confirming) {
       return (

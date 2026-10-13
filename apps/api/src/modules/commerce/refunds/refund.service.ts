@@ -474,6 +474,7 @@ export function createRefundService({
           } else if (targetItem) {
             // Partial item-specific refund: revoke access specifically for this item
             await courseAccessService.revokeAccessForOrderItem(trx, order, {
+              id: targetItem.id,
               item_type: targetItem.item_type,
               course_id: targetItem.course_id,
               bundle_id: targetItem.bundle_id,

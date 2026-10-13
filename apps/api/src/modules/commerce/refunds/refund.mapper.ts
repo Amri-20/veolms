@@ -20,8 +20,15 @@ export function toRefundResult(refund: Refund): RefundResult {
   };
 }
 
-/** A refund request as staff reviewing it see it. */
-export function toRefundRequestContract(r: RefundRequestRow): RefundRequest {
+/**
+ * A refund request as staff reviewing it see it. `paidByManualTransfer`
+ * tells them the approval records a refund they made themselves, and so
+ * needs the reference of that transfer.
+ */
+export function toRefundRequestContract(
+  r: RefundRequestRow,
+  paidByManualTransfer: boolean,
+): RefundRequest {
   return {
     id: r.id,
     orderId: r.order_id,
@@ -32,6 +39,7 @@ export function toRefundRequestContract(r: RefundRequestRow): RefundRequest {
     resolvedAt: r.resolved_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    paidByManualTransfer,
   };
 }
 

@@ -1,6 +1,6 @@
 # What is left after the audit: checklist
 
-Updated 13 Oct 2026, after the third round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 22. This file is the short list to work from. Tick a box when it is done.
+Updated 13 Oct 2026, after the fourth round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 23. This file is the short list to work from. Tick a box when it is done.
 
 ## Done in phases 1 to 3 (13 Oct)
 
@@ -38,6 +38,21 @@ Updated 13 Oct 2026, after the third round. The full record is `docs/AUDIT_RECON
 - [x] A bank transfer reported for a cancelled or failed order is on the staff refund list.
 - [x] The catalogue card shows the true progress percent.
 
+## Done in the fourth round (13 Oct)
+
+- [x] Refunding one item of a bundle acts on what was sold, also when the bundle was edited later.
+- [x] Approving a learner's refund request on a bank-transfer order takes the transfer reference in the same step. API only: see section D.
+- [x] Staff who cannot reject a transfer request see "Ask an admin to reject this request." instead of a button that refuses.
+- [x] `level: "all_levels"` on the direct course update clears the level.
+- [x] Local file store: two uploads with one name no longer lose the file.
+- [x] Purchase History filters and searches on the server, over all purchases (F2).
+- [x] The tab title shows the course and the lesson (F17).
+- [x] Analytics trend label shows the right day (F18).
+- [x] No extra request after sign-out (A6).
+- [x] No wasted request after a quiz is handed in (F8).
+- [x] A moderator's delete removes the reply's mentions (B5c).
+- [x] The whole app was run in a browser against a local API. Wrong addresses, the restricted course, the amount box, sign-up at phone size, free enrolment, Purchase History, the staff refund notice, the bank-transfer refund dialog and the Reject button were seen working.
+
 ## A. Right after each push
 
 Pushing `dev` deploys the API and the web together.
@@ -55,7 +70,7 @@ Pushing `dev` deploys the API and the web together.
 
 ## B. Try these on staging or a real device
 
-None of this could be tried from here.
+The first, third and ninth were seen in a local browser run in the fourth round. They are worth one more look on staging. The rest could not be tried from here.
 
 - [ ] Course price card in the real app: type `199.50`, `50`, `-100`, `1e5`, `abc`. Then apply a coupon and change the amount.
 - [ ] Sign in with a code that arrives by SMS, on an iPhone and on an Android phone.
@@ -73,42 +88,35 @@ None of this could be tried from here.
 
 ## C. Decisions only you can make
 
+- [ ] **A screen for refund requests.** The web has no page where staff see and approve a learner's refund request. The API is ready. Build it?
 - [ ] **Downloads (S3).** Should the "allow downloads" setting on a course be enforced? It is stored today and does nothing.
 - [ ] **Archived courses (B1).** Should people who bought a course keep access after it is archived?
 - [ ] **Sale price 0 (B7).** Should a sale price of 0 make a paid course free without asking?
 - [ ] **Per-creator payment gateways (C4).** Build it, or remove the endpoints?
 - [ ] **Dashboard numbers (F5).** Which definition of progress and of net revenue is the official one?
 - [ ] **Upload clean-up (S16).** Turn it on? Set `DISCUSSION_UPLOAD_PURGE_INTERVAL_HOURS=24`. It is off by default.
-- [ ] **API tests.** `apps/api` has a `test` script again (94 tests). Keep it?
-- [ ] **A learner's own refund request on a bank-transfer order.** Approving it is still refused; staff use Refund Order instead. Should approving it also ask for the transfer reference?
+- [ ] **API tests.** `apps/api` has a `test` script again (98 tests). Keep it?
 
 ## D. Bugs still open
 
-Most important first.
+Four of the seven from the last round are fixed. These are left.
 
-- [ ] **A buyer can still pay twice.** The old gateway order cannot be withdrawn. It is flagged for staff; nothing can stop it.
-- [ ] **Refunding one item of a bundle that was edited after the sale** acts on the bundle's contents today, not as sold. The new record makes a fix possible.
-- [ ] **Bundle orders paid before 13 Oct** are not compared course by course. What they contained when sold was never recorded.
-- [ ] **Accounts that share an email in different letter case** were left alone. Wait for the count from check 5.
-- [ ] **`level: "all_levels"` on the direct course update** does not clear the level. The web does not use that endpoint.
-- [ ] **Local file store only:** two uploads with the same name at once can lose the file. Real storage is not affected.
-- [ ] **The Reject button needs the admin role**, but staff with billing access can see the row. They get a refusal message.
+- [ ] **A buyer can still pay twice.** Cannot be fixed in code: the gateway cannot withdraw an order it already gave the buyer. It is flagged for staff.
+- [ ] **Bundle orders paid before 13 Oct** are not compared course by course. Cannot be fixed: what they contained when sold was never recorded.
+- [ ] **Accounts that share an email in different letter case.** Waiting for the count from check 5 on production. I have no production access, so I need the output or a dump file.
+- [ ] **Refund requests have no staff screen in the web.** Approving one works through the API only. See section C.
 
 ## E. Put off because it needs a browser or new API work
 
-Phase 4. Waiting for a safe way to run the web app in a browser.
+Phase 4. The app now runs in a local browser, so these can be worked through.
 
 - [ ] **A2.** Login page shows nothing while it checks the session.
-- [ ] **A6.** One extra request after sign-out.
-- [ ] **F2.** Purchase History filters only the purchases already loaded.
-- [ ] **F7, F8.** Wasted requests on a locked lesson and after a quiz is submitted.
+- [ ] **F7.** Wasted requests on a locked lesson.
 - [ ] **F10.** Wishlist is saved in the browser only.
 - [ ] **F11.** Six copies of the Ctrl+K shortcut code.
 - [ ] **F13, F14.** Guest edge cases; a filter that sometimes resets.
-- [ ] **F17.** Page titles and share tags.
-- [ ] **F18.** Analytics trend label shows the wrong day near midnight.
-- [ ] **B5c.** A moderator's delete leaves mentions behind.
-- [ ] **B8, B9.** Direct course update skips version checks; validation runs before permission checks.
+- [ ] **F17, the rest.** Share tags still do not follow the course.
+- [ ] **B8, the rest, and B9.** Direct course update skips version checks; validation runs before permission checks.
 - [ ] **C10.4.** Two payment statuses that nothing ever sets.
 - [ ] **P1.** Course overview sends every lesson description. Needs three releases to change safely.
 - [ ] **P2.** Stylesheet loading. Needs Lighthouse on a production build.
@@ -120,7 +128,7 @@ Phase 4. Waiting for a safe way to run the web app in a browser.
 
 Phase 5.
 
-- [ ] **Video player lint.** Two React rules are switched off for `packages/video-player` instead of fixing 7 places. Fixing them changes playback code and needs a browser.
+- [ ] **Video player lint.** Two React rules are switched off for `packages/video-player` instead of fixing 7 places. Fixing them changes playback code.
 - [ ] **31 lint warnings** remain. `pnpm lint` passes with 0 errors.
-- [ ] **No full browser run of the app.** The web build reads the root `.env`, so it was never built here. Single screens were tried on standalone pages instead.
+- [ ] **Production build of the web.** It reads the root `.env`, so it was never built here. The dev server was used instead.
 - [ ] **Memory regression suite.** `apps/web/AGENTS.md` asks for one before every web commit. It does not exist.

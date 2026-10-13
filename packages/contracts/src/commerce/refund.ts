@@ -70,6 +70,12 @@ export const refundRequestSchema = z.strictObject({
   resolvedAt: z.string().or(z.date()).nullable().optional(),
   createdAt: z.string().or(z.date()),
   updatedAt: z.string().or(z.date()),
+  /**
+   * Whether the order was paid by manual bank or UPI transfer. Approving
+   * such a request moves no money: staff return it themselves and the
+   * approval must carry `outsideRefund` with the reference of that transfer.
+   */
+  paidByManualTransfer: z.boolean().optional(),
 });
 export type RefundRequest = z.infer<typeof refundRequestSchema>;
 
@@ -96,6 +102,12 @@ export const reviewRefundRequestSchema = z.strictObject({
   action: z.enum(["approve", "reject"]),
   adminNotes: z.string().max(500).optional(),
   preserveAccess: z.boolean().default(false),
+  /**
+   * With `approve` only, and only for an order paid by manual transfer,
+   * where it is required: the reference of the transfer staff sent the money
+   * back by. Refused for any other order, and when rejecting.
+   */
+  outsideRefund: outsideRefundSchema.optional(),
 });
 export type ReviewRefundRequest = z.infer<typeof reviewRefundRequestSchema>;
 

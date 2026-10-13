@@ -14,6 +14,8 @@ import {
 } from "@veolms/contracts/commerce/money";
 import { formatCurrency, getCurrencySymbol } from "./orderHelpers";
 import {
+  OUTSIDE_REFUND_EXPLANATION,
+  OUTSIDE_REFUND_REFERENCE_LABEL,
   OUTSIDE_REFUND_REFERENCE_MAX_LENGTH,
   isPaidByManualTransfer,
   toOutsideRefundInput,
@@ -216,10 +218,7 @@ export const OrderRefundModal = memo(function OrderRefundModal({
                 <span className="block font-semibold text-(--text)">
                   This order was paid by manual transfer.
                 </span>
-                <span className="block mt-1">
-                  No money is moved by the app. Send the refund to the student
-                  yourself, then record it here.
-                </span>
+                <span className="block mt-1">{OUTSIDE_REFUND_EXPLANATION}</span>
               </div>
             )}
 
@@ -318,7 +317,7 @@ export const OrderRefundModal = memo(function OrderRefundModal({
                   htmlFor="refund-reference"
                   className="block text-[0.78rem] font-semibold text-(--text-secondary) mb-1.5"
                 >
-                  Transfer Reference
+                  {OUTSIDE_REFUND_REFERENCE_LABEL}
                 </label>
                 <input
                   id="refund-reference"

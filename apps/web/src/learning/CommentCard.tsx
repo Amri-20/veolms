@@ -572,7 +572,12 @@ export const CommentCard = React.memo(function CommentCard({
                   >
                     ·
                   </span>
-                  <span className="text-xs text-(--muted) sm:text-sm">
+                  {/* The date alone is shown; the pointer brings up the
+                      full moment it was written, to the second. */}
+                  <span
+                    className="text-xs text-(--muted) sm:text-sm"
+                    title={getFullTimestamp(comment.createdAt)}
+                  >
                     {comment.time}
                   </span>
                   <span
@@ -1711,4 +1716,19 @@ export async function shareDiscussionEntry(
     }
     return false;
   }
+}
+
+/**
+ * The moment an entry was written, in full and to the second, in the
+ * reader's own locale and time zone: what the pointer shows over the short
+ * date. Nothing when the entry carries no time or one that cannot be read.
+ */
+function getFullTimestamp(createdAt: string | number | undefined) {
+  if (createdAt === undefined) return undefined;
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toLocaleString(undefined, {
+    dateStyle: "long",
+    timeStyle: "medium",
+  });
 }

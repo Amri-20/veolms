@@ -504,6 +504,8 @@ interface CoursesPageProps {
   ) => void;
   onNavigatePage: NavigateTo;
   onNavigateBack?: () => void;
+  /** The menu page `onNavigateBack` returns to, as the menu names it. */
+  navigateBackSection?: string;
   onExitSettings?: () => void;
   showPageBackButton?: boolean;
   cataloguePathname?: string;
@@ -1025,6 +1027,7 @@ export function CoursesPage({
   onOpenCourse,
   onNavigatePage,
   onNavigateBack,
+  navigateBackSection,
   onExitSettings,
   showPageBackButton = false,
   cataloguePathname = "/courses",
@@ -5082,6 +5085,7 @@ export function CoursesPage({
             onNavigateCourses={
               onNavigateBack ?? (() => onNavigatePage("/courses"))
             }
+            backSection={onNavigateBack ? navigateBackSection : "Courses"}
             onNavigatePage={onNavigatePage}
             role={role}
           />
