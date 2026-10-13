@@ -1159,6 +1159,7 @@ export function CoursesPage({
   );
   const debouncedSearch = useDebounce(search, DEFAULT_DEBOUNCE_DELAY_MS);
   const [statusFilter, setStatusFilter] = useState<CourseStatusFilter>("all");
+  const filterOwnerRef = useRef<string | null>(null);
   const [sort, setSort] = useState<CourseSort>("latest");
   const wishlisted = useWishlistIds();
   const [storedPreferencesReady, setStoredPreferencesReady] = useState(false);
@@ -2001,8 +2002,15 @@ export function CoursesPage({
       return;
     localStorage.setItem(getWorkspaceRoleStorageKey(activeUser?.id), role);
     setCourseMenu(null);
-    setCreatorEnrollmentFilter("all");
-    setStatusFilter("all");
+    // The list filters belong to an account in one workspace view. They are
+    // cleared when that changes, not when the creator opens the course
+    // editor and comes back.
+    const filterOwner = `${activeUser?.id ?? ""}|${role}|${effectiveRole}`;
+    if (filterOwnerRef.current !== filterOwner) {
+      filterOwnerRef.current = filterOwner;
+      setCreatorEnrollmentFilter("all");
+      setStatusFilter("all");
+    }
     if (page === "home")
       setActiveSection(
         effectiveRole === "creator" && !isAdmin ? "Dashboard" : "Home",

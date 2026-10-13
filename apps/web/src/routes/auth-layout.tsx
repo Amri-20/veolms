@@ -1,8 +1,10 @@
 import type { Route } from "./+types/auth-layout";
 import "../auth/auth.css";
 import "../styles/components/toast-notification.css";
-import { Outlet, redirect } from "react-router";
+import type { ReactNode } from "react";
+import { redirect } from "react-router";
 import { useAuthAppearance } from "../auth/useAuthAppearance";
+import { AppLoadingScreen } from "../bootstrap/AppLoadingScreen";
 import { queryClient } from "../lib/query-client";
 import { loginDialogBody } from "../routing/prerenderedBodies";
 import { AuthRouteGuard } from "../routing/RouteGuards";
@@ -68,20 +70,37 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
 
 clientLoader.hydrate = true as const;
 
-export default function AuthLayout() {
-  useAuthAppearance();
-
+function AuthPageFrame({ children }: { children: ReactNode }) {
   return (
     <div className="auth-page">
       <div className="auth-page__container">
-        <div className="auth-page__form-column">
-          <AuthRouteGuard />
-        </div>
+        <div className="auth-page__form-column">{children}</div>
       </div>
 
       <p className="auth-page__footer">
         <span>&copy; 2026 {productName}. All rights reserved.</span>
       </p>
     </div>
+  );
+}
+
+// Shown while the loader above waits for the session check, and built into
+// the prerendered auth pages, so they paint this instead of an empty canvas.
+// It is the same loading card the route guard shows once it takes over.
+export function HydrateFallback() {
+  return (
+    <AuthPageFrame>
+      <AppLoadingScreen variant="embedded" />
+    </AuthPageFrame>
+  );
+}
+
+export default function AuthLayout() {
+  useAuthAppearance();
+
+  return (
+    <AuthPageFrame>
+      <AuthRouteGuard />
+    </AuthPageFrame>
   );
 }
