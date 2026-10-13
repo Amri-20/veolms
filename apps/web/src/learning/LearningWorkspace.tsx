@@ -101,7 +101,7 @@ import {
   QuizAttemptPanel,
   QuizStageMessage,
 } from "../quizzes/QuizAttemptPanel";
-import { useCourseOverview } from "../services/courses";
+import { useCourseOverview, useLessonDescription } from "../services/courses";
 import { useCurrentUser } from "../services/auth";
 import { useEnrolledCourses } from "../services/enrollments";
 import { useCourseQuizAssignments } from "../services/quizzes/quizzes.queries";
@@ -109,6 +109,7 @@ import { ExamIcon as Exam } from "@phosphor-icons/react/Exam";
 import { adaptCourseOverviewToCurriculum } from "./courseCurriculumAdapter";
 import {
   getCachedVideoPlaybackBootstrap,
+  getRefusedVideoPlaybackBootstrap,
   getVideoPlaybackBootstrap,
   refreshVideoPlaybackToken,
   PLAYBACK_BOOTSTRAP_LIMIT_MS,
@@ -771,9 +772,17 @@ export function LearningWorkspace({
     curriculumLessonsById.get(selectedLesson) ||
     firstCurriculumLesson ||
     fallbackEmptyLesson;
+  const [playbackBootstrapError, setPlaybackBootstrapError] =
+    useState<VideoPlaybackBootstrapError | null>(null);
+  // The server has just refused this account the lesson's video because it
+  // has no access to the course. It refuses the course's quizzes on the same
+  // grounds, and its progress too when the course is sold or restricted, so
+  // neither is asked for only to be told so again.
+  const courseAccessRefused =
+    playbackBootstrapError?.code === "COURSE_ACCESS_DENIED";
   const courseQuizAssignments = useCourseQuizAssignments(
     courseOverview?.course.id,
-    { enabled: isAuthenticated },
+    { enabled: isAuthenticated && !courseAccessRefused },
   );
   const [activeLessonView, setActiveLessonView] = useState<"video" | "quiz">(
     initialLessonView,
@@ -963,8 +972,6 @@ export function LearningWorkspace({
         lessonNumber: selectedLesson,
       });
     });
-  const [playbackBootstrapError, setPlaybackBootstrapError] =
-    useState<VideoPlaybackBootstrapError | null>(null);
   const [playbackBootstrapAttempt, setPlaybackBootstrapAttempt] = useState(0);
   const playbackRequestKeyRef = useRef<string | null>(null);
   const refreshPlaybackToken = useCallback(async () => {
@@ -1014,9 +1021,42 @@ export function LearningWorkspace({
     : courseQuizAssignments.data === undefined
       ? undefined
       : false;
+  const overviewLesson = adaptedCurriculum?.lessonsByNumber.get(selectedLesson);
+  // The open lesson's description comes from its own request. The overview's
+  // copy is shown until that answers, and kept if it fails; once the
+  // overview stops carrying descriptions, this is the only source.
+  const lessonDescriptionQuery = useLessonDescription(
+    courseOverview?.course.id,
+    overviewLesson?.id,
+  );
+  const fetchedLessonDescription = lessonDescriptionQuery.data;
   // The lesson as the course lists it: what the stage is planned from, and
   // where a reading lesson's text comes from.
-  const stageLesson = adaptedCurriculum?.lessonsByNumber.get(selectedLesson);
+  const stageLesson = useMemo(() => {
+    if (
+      !overviewLesson ||
+      !fetchedLessonDescription ||
+      fetchedLessonDescription.lessonId !== overviewLesson.id ||
+      fetchedLessonDescription.description ===
+        (overviewLesson.description ?? null)
+    ) {
+      return overviewLesson;
+    }
+    return {
+      ...overviewLesson,
+      description: fetchedLessonDescription.description,
+    };
+  }, [fetchedLessonDescription, overviewLesson]);
+  // An overview with no description on any lesson may be one that no longer
+  // carries them, so the open lesson's is not known until its request ends.
+  const overviewCarriesLessonDescriptions = useMemo(() => {
+    for (const lesson of adaptedCurriculum?.lessonsByNumber.values() ?? []) {
+      if (lesson.description) return true;
+    }
+    return false;
+  }, [adaptedCurriculum]);
+  const isLessonDescriptionPending =
+    lessonDescriptionQuery.isLoading && !overviewCarriesLessonDescriptions;
   const lessonStagePlan = useMemo(() => {
     const course = courseOverview?.course;
     const holdsCourse = enrolledCoursesQuery.isFetched
@@ -1087,6 +1127,19 @@ export function LearningWorkspace({
     if (cached) {
       setPlaybackBootstrap(cached);
       setPlaybackBootstrapError(null);
+      return;
+    }
+
+    // An answer the preload or an earlier run of this effect was just given.
+    // Taken here rather than from the promise below, so the refusal never
+    // leaves the page for a moment in between.
+    const refused = getRefusedVideoPlaybackBootstrap({
+      courseSlug,
+      lessonNumber: selectedLesson,
+    });
+    if (refused) {
+      setPlaybackBootstrap(null);
+      setPlaybackBootstrapError(refused);
       return;
     }
 
@@ -1404,7 +1457,13 @@ export function LearningWorkspace({
       courseKey: courseOverview?.course.slug,
       userId,
       lessonIdsByNumber,
-      enabled: Boolean(courseOverview?.course.slug),
+      enabled:
+        Boolean(courseOverview?.course.slug) &&
+        !(
+          courseAccessRefused &&
+          (courseOverview?.pricing?.pricingType === "paid" ||
+            courseOverview?.canSelfEnroll === false)
+        ),
     });
   // Handed to the persistent player so progress is still recorded while it
   // plays as the mini player, after this page has unmounted.
@@ -1608,10 +1667,7 @@ export function LearningWorkspace({
     );
     if (video && !video.paused) video.pause();
   }, [appliedPlayerHeight]);
-  const selectedLessonRecord = useMemo(() => {
-    if (!adaptedCurriculum) return null;
-    return adaptedCurriculum.lessonsByNumber.get(selectedLesson) ?? null;
-  }, [adaptedCurriculum, selectedLesson]);
+  const selectedLessonRecord = stageLesson ?? null;
   const selectedLessonDescription = selectedLessonRecord?.description ?? null;
   const selectedLessonReading = getLessonReading(selectedLessonRecord);
   const courseId = courseOverview?.course.id;
@@ -3177,13 +3233,17 @@ export function LearningWorkspace({
         <section className="learning-workspace__lesson-column">
           <div
             ref={playerWrapRef}
-            // Above phone width the video stays at the top of the page while
-            // the title and description scroll away beneath it. (On a phone
-            // the page does not scroll; the area under the video does.) The
-            // player itself is positioned on this slot, so it follows. The
-            // slot sits above the page that scrolls behind it, so the strip
-            // that resizes the video is never covered.
-            className={`learning-workspace__player-wrap ${stickyPlayer ? "min-[641px]:sticky! min-[641px]:top-0 min-[641px]:z-40" : ""}`}
+            // Above phone width a video at its full height scrolls away with
+            // the page. Once the viewer has resized it (the grip, or the
+            // title on a touch screen) it stays at the top while the title
+            // and description scroll away beneath it. (On a phone the page
+            // does not scroll; the area under the video does.) The grip marks
+            // the slot inside while it is dragged, before the new height is
+            // saved, so the rule reads that mark. The player itself is
+            // positioned on this slot, so it follows. The slot sits above the
+            // page that scrolls behind it, so the strip that resizes the
+            // video is never covered.
+            className={`learning-workspace__player-wrap ${stickyPlayer ? "min-[641px]:z-40 min-[641px]:has-[[data-learning-player-shortened]]:sticky! min-[641px]:has-[[data-learning-player-shortened]]:top-0" : ""}`}
             data-learning-player-motion-target=""
           >
             {showingQuiz ? (
@@ -3358,6 +3418,7 @@ export function LearningWorkspace({
                   }
                   isLessonDescriptionLoading={
                     (isApiRoute && isCourseOverviewLoading) ||
+                    isLessonDescriptionPending ||
                     isLearningBootstrapLoading
                   }
                   interactionCapabilities={interactionCapabilities}

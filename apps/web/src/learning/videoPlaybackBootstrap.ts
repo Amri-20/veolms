@@ -9,6 +9,7 @@ import type {
 const loadVideoPlaybackSchemas = () =>
   import("@veolms/contracts/video-playback");
 import { endSessionIfUnauthorized, getApiBaseUrl } from "../lib/api-client";
+import { authStore } from "../store/auth.store";
 
 const API_BASE_URL = getApiBaseUrl();
 const CDN_URL = import.meta.env.VITE_CDN_URL || "/cdn";
@@ -16,6 +17,42 @@ const CDN_URL = import.meta.env.VITE_CDN_URL || "/cdn";
 const bootstrapRequests = new Map<string, Promise<VideoPlaybackBootstrap>>();
 const bootstrapCache = new Map<string, VideoPlaybackBootstrap>();
 const playbackTokenRequests = new Map<string, Promise<VideoPlaybackToken>>();
+
+/**
+ * How long a "log in first" or "no access" answer is kept. A locked lesson
+ * is asked for by the document-start preload, by the lesson page when it
+ * mounts, and again when the session check answers; the server only repeated
+ * itself each time. Kept this briefly, the answer covers those and is gone
+ * well before anyone could have bought the course and come back.
+ */
+const PLAYBACK_REFUSAL_MEMORY_MS = 5_000;
+
+interface RefusedBootstrap {
+  promise: Promise<VideoPlaybackBootstrap>;
+  error: VideoPlaybackBootstrapError;
+  /** The account known to this page when the server refused, if any. */
+  viewerId: string | null;
+  expiresAt: number;
+}
+
+const refusedBootstraps = new Map<string, RefusedBootstrap>();
+
+const currentViewerId = () => authStore.getState().user?.id ?? null;
+
+function refusalStillStands(refused: RefusedBootstrap): boolean {
+  if (Date.now() >= refused.expiresAt) return false;
+  const viewerId = currentViewerId();
+  if (viewerId === refused.viewerId) return true;
+  // Only a signed-in account is told "no access". When that came back before
+  // the session check had said who is signed in, the account now known is
+  // the one the server meant. Any other change (a log-in after "log in
+  // first", a log-out, another account) asks afresh.
+  return (
+    refused.error.status === 403 &&
+    refused.viewerId === null &&
+    viewerId !== null
+  );
+}
 
 export class VideoPlaybackBootstrapError extends Error {
   readonly status: number;
@@ -284,17 +321,34 @@ export function getVideoPlaybackBootstrap(
   const existing = bootstrapRequests.get(key);
   if (existing) return existing;
 
+  const refused = refusedBootstraps.get(key);
+  if (refused) {
+    if (refusalStillStands(refused)) return refused.promise;
+    refusedBootstraps.delete(key);
+  }
+
   const promise = withinPlaybackBootstrapLimit(requestBootstrap(options));
   bootstrapRequests.set(key, promise);
   void promise
     .then((bootstrap) => {
       bootstrapCache.set(key, bootstrap);
     })
-    .catch(() => {
+    .catch((error: unknown) => {
       if (bootstrapRequests.get(key) === promise) {
         bootstrapRequests.delete(key);
       }
       bootstrapCache.delete(key);
+      if (
+        error instanceof VideoPlaybackBootstrapError &&
+        (error.status === 401 || error.status === 403)
+      ) {
+        refusedBootstraps.set(key, {
+          promise,
+          error,
+          viewerId: currentViewerId(),
+          expiresAt: Date.now() + PLAYBACK_REFUSAL_MEMORY_MS,
+        });
+      }
     });
   return promise;
 }
@@ -305,8 +359,17 @@ export function getCachedVideoPlaybackBootstrap(
   return bootstrapCache.get(requestKey(options)) ?? null;
 }
 
+/** The server's refusal of this lesson, while it is still being kept. */
+export function getRefusedVideoPlaybackBootstrap(
+  options: VideoPlaybackBootstrapRequest,
+): VideoPlaybackBootstrapError | null {
+  const refused = refusedBootstraps.get(requestKey(options));
+  return refused && refusalStillStands(refused) ? refused.error : null;
+}
+
 export function clearVideoPlaybackBootstrapCache(): void {
   bootstrapRequests.clear();
+  refusedBootstraps.clear();
   playbackTokenRequests.clear();
   bootstrapCache.clear();
 }

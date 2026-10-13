@@ -11,9 +11,11 @@ import type {
   CourseListResponse,
   CourseOverviewResponse,
   CourseSummary,
+  LessonDescriptionResponse,
   CoursePricingSummary,
   ManagedCourseSummary,
 } from "@veolms/contracts";
+import { config } from "../../../config.ts";
 import { AppError } from "../../../lib/errors.ts";
 import type { AppServices } from "../../../services/index.ts";
 import {
@@ -53,6 +55,11 @@ import { createMediaService, type MediaService } from "../../media/index.ts";
 import { resolveAliasedBasicsUpdate } from "./basics-aliased-field.ts";
 import { resolveBasicsCategoryUpdate } from "./basics-category.ts";
 import { resolveDetailsLevelUpdate } from "./details-level.ts";
+import {
+  isLessonListedInOverview,
+  resolveOverviewVisibility,
+  type OverviewViewer,
+} from "./overview-visibility.ts";
 import {
   getLessonDurationSeconds,
   presentAccessRule,
@@ -296,6 +303,8 @@ export interface CourseServiceOptions {
   includesService?: IncludesService;
   mediaService?: MediaService;
   deletionService?: CourseDeletionService;
+  /** See `COURSE_OVERVIEW_LESSON_DESCRIPTIONS`. */
+  overviewLessonDescriptions?: boolean;
 }
 
 export function createCourseService({
@@ -311,6 +320,7 @@ export function createCourseService({
     database,
     storage: services.storage,
   }),
+  overviewLessonDescriptions = config.COURSE_OVERVIEW_LESSON_DESCRIPTIONS,
 }: CourseServiceOptions) {
   async function toPublicCourseSummary(row: PublicCourseSummaryRow) {
     const totalDurationSeconds = resolveTotalDurationSeconds(
@@ -1061,23 +1071,13 @@ export function createCourseService({
       throw new AppError(404, "COURSE_NOT_FOUND", "Course not found.");
     }
 
-    const isOwner = Boolean(user && user.id === course.creator_id);
-    const isAdmin = Boolean(
-      user && user.roles && user.roles.includes(ADMIN_ROLE),
-    );
-    if (course.status !== "published") {
-      // Drafts are visible to their creator and to admins only — another
-      // instructor's role does not open someone else's unpublished course.
-      if (!isOwner && !isAdmin) {
-        throw new AppError(404, "COURSE_NOT_FOUND", "Course not published.");
-      }
+    const visibility = resolveOverviewVisibility(course, user);
+    if (!visibility.mayOpen) {
+      throw new AppError(404, "COURSE_NOT_FOUND", "Course not published.");
     }
 
     const courseId = course.id;
-    // Its creator and an admin are shown the course as they manage it,
-    // unless they are in their Student view. Whether they may open a draft
-    // at all was settled above and does not depend on the view.
-    const viewerManagesCourse = (isOwner || isAdmin) && !user?.learnerView;
+    const viewerManagesCourse = visibility.managesCourse;
 
     const [
       category,
@@ -1110,9 +1110,9 @@ export function createCourseService({
     // Learners get published lessons only, and only the sections that still
     // have one: an unpublished section's title is not theirs to see. Lesson
     // order is untouched, so lesson numbers stay what they were.
-    const lessons = viewerManagesCourse
-      ? allLessons
-      : allLessons.filter((lesson) => lesson.is_published);
+    const lessons = allLessons.filter((lesson) =>
+      isLessonListedInOverview(lesson, visibility),
+    );
     const lessonIds = new Set(lessons.map((lesson) => lesson.id));
     const sections = viewerManagesCourse
       ? allSections
@@ -1193,6 +1193,7 @@ export function createCourseService({
         // The map also holds every lesson's own media, and a resource can
         // point at one of those.
         omitResourceMedia: !viewerMayDownloadResources,
+        omitLessonDescriptions: !overviewLessonDescriptions,
       }),
       pricing: pricing
         ? {
@@ -1227,6 +1228,35 @@ export function createCourseService({
         totalDurationSeconds,
       },
     };
+  }
+
+  /**
+   * One lesson's description, for the viewers the overview lists that lesson
+   * for and nobody else: the overview is where the lesson page used to read
+   * it, so the two must agree.
+   */
+  async function getLessonDescription(
+    courseId: string,
+    lessonId: string,
+    user?: OverviewViewer,
+  ): Promise<LessonDescriptionResponse> {
+    const course = await courseRepo.findCourseById(database, courseId);
+    const visibility = course
+      ? resolveOverviewVisibility(course, user)
+      : undefined;
+    if (!course || !visibility?.mayOpen) {
+      throw new AppError(404, "COURSE_NOT_FOUND", "Course not found.");
+    }
+
+    const lesson = await curriculumService.findLiveLessonDescription(
+      lessonId,
+      course.id,
+    );
+    if (!lesson || !isLessonListedInOverview(lesson, visibility)) {
+      throw new AppError(404, "LESSON_NOT_FOUND", "Lesson not found.");
+    }
+
+    return { lessonId: lesson.id, description: lesson.description };
   }
 
   /**
@@ -1285,6 +1315,15 @@ export function createCourseService({
   }
 
   /**
+   * Id and slug of the published courses among those named (each by id or
+   * slug): what a learner may be told exists. For lists that only name
+   * courses, such as a wishlist.
+   */
+  async function listPublishedCourseRefs(courseIdsOrSlugs: readonly string[]) {
+    return courseRepo.findPublishedCourseRefs(database, courseIdsOrSlugs);
+  }
+
+  /**
    * Owner, status, access type and pricing type of a course addressed by id
    * or slug, in one query, for services that decide access themselves.
    */
@@ -1310,14 +1349,40 @@ export function createCourseService({
    * were guarded by a route permission only, so anyone holding that
    * permission could change ANY course. They go through the same ownership
    * gate as every other course mutation.
+   *
+   * Thumbnail and details accept the course `version` the caller last read.
+   * When it is sent, a course that has changed since is refused with the
+   * same 409 as the basics form; a caller that sends none is not checked.
    */
+  function assertDirectUpdateVersion(
+    course: { version: number },
+    expectedVersion: number | undefined,
+  ) {
+    if (expectedVersion !== undefined && course.version !== expectedVersion) {
+      throw new AppError(
+        409,
+        "OPTIMISTIC_LOCK_CONFLICT",
+        "Course has been updated by another action. Please reload.",
+      );
+    }
+  }
+
   async function updateCourseThumbnail(
     courseId: string,
     creatorId: string,
     userRoles: readonly string[] | undefined,
-    payload: { thumbnailUrl: string; thumbnailMediaId?: string | null },
+    payload: {
+      thumbnailUrl: string;
+      thumbnailMediaId?: string | null;
+      version?: number;
+    },
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    const course = await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+    );
+    assertDirectUpdateVersion(course, payload.version);
 
     // Same rule as updateCourseBasics: the asset must be an image the caller
     // owns. Unchecked, any media id could be attached here — and a media
@@ -1342,10 +1407,17 @@ export function createCourseService({
       }
     }
 
-    await courseRepo.updateCourseDirect(database, courseId, {
-      thumbnail_url: payload.thumbnailUrl,
-      thumbnail_media_id: payload.thumbnailMediaId ?? null,
-    });
+    const updateResult = await courseRepo.updateCourseDirect(
+      database,
+      courseId,
+      {
+        thumbnail_url: payload.thumbnailUrl,
+        thumbnail_media_id: payload.thumbnailMediaId ?? null,
+      },
+      payload.version,
+    );
+    // A write that landed between the read above and this one.
+    if (payload.version !== undefined) assertOptimisticUpdate(updateResult);
 
     const updated = await courseRepo.findCourseById(database, courseId);
     return await formatCourseDto(updated!);
@@ -1362,9 +1434,15 @@ export function createCourseService({
       language?: string;
       level?: "beginner" | "intermediate" | "advanced" | "all_levels";
       categoryId?: string | null;
+      version?: number;
     },
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    const course = await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+    );
+    assertDirectUpdateVersion(course, payload.version);
     await assertCategoryExists(payload.categoryId);
 
     const updates: Record<string, unknown> = {};
@@ -1379,7 +1457,13 @@ export function createCourseService({
     const difficulty = resolveDetailsLevelUpdate(payload.level);
     if (difficulty !== undefined) updates.difficulty = difficulty;
 
-    await courseRepo.updateCourseDirect(database, courseId, updates);
+    const updateResult = await courseRepo.updateCourseDirect(
+      database,
+      courseId,
+      updates,
+      payload.version,
+    );
+    if (payload.version !== undefined) assertOptimisticUpdate(updateResult);
     const updated = await courseRepo.findCourseById(database, courseId);
     return await formatCourseDto(updated!);
   }
@@ -1419,10 +1503,12 @@ export function createCourseService({
     archiveCourse,
     getCourseEditorData,
     getCourseOverviewData,
+    getLessonDescription,
     deleteCourse,
     findLessonById,
     findCourseById,
     listCourseCardsByIds,
+    listPublishedCourseRefs,
     findCourseAccessByIdOrSlug,
   };
 }

@@ -684,6 +684,32 @@ export async function deleteAssignmentsByQuizId(
     .execute();
 }
 
+/** Turns a quiz lesson back into a video lesson; other lessons are left alone. */
+export async function revertQuizLessonToVideo(
+  database: DatabaseExecutor,
+  lessonId: string,
+) {
+  await database
+    .updateTable("course_lessons")
+    .set({ content_type: "video", updated_at: new Date() })
+    .where("id", "=", lessonId)
+    .where("content_type", "=", "quiz")
+    .execute();
+}
+
+/** As `revertQuizLessonToVideo`, for several lessons in one statement. */
+export async function revertQuizLessonsToVideo(
+  database: DatabaseExecutor,
+  lessonIds: string[],
+) {
+  await database
+    .updateTable("course_lessons")
+    .set({ content_type: "video", updated_at: new Date() })
+    .where("id", "in", lessonIds)
+    .where("content_type", "=", "quiz")
+    .execute();
+}
+
 /** The learner's most recent attempts, newest first, for their history. */
 export async function listAttemptHistory(
   database: DatabaseExecutor,

@@ -3,6 +3,7 @@ import type { CartItemInput, CartResponse, CartItem } from "@veolms/contracts";
 import type { Executor } from "../shared/repository.types.ts";
 import { CommerceErrors } from "../shared/commerce.errors.ts";
 import { AppError } from "../../../lib/errors.ts";
+import { coverageOf, coverageOverlaps } from "../shared/open-orders.ts";
 import * as cartRepo from "./cart.repository.ts";
 import * as courseRepo from "../../courses/course/course.repository.ts";
 import * as bundleRepo from "../bundles/bundle.repository.ts";
@@ -199,7 +200,33 @@ export function createCartService({
       items: [item],
     });
 
-    // 3. Persist item to cart
+    // 3. A course already in the cart, on its own or inside a bundle, would
+    //    be paid for twice. Checkout refuses such a cart; refusing it here
+    //    says so while the buyer can still see which item it was.
+    const cartItems = await cartRepo.listCartItemsByCartId(database, cart.id);
+    const bundleCourses = await bundleRepo.listBundleCoursesForBundleIds(
+      database,
+      [
+        ...cartItems.flatMap((it) => (it.bundle_id ? [it.bundle_id] : [])),
+        ...(item.bundleId ? [item.bundleId] : []),
+      ],
+    );
+    const adding = coverageOf(
+      [{ itemType: item.itemType, itemId: item.courseId ?? item.bundleId }],
+      bundleCourses,
+    );
+    const inCart = coverageOf(
+      cartItems.map((it) => ({
+        itemType: it.item_type,
+        itemId: it.course_id ?? it.bundle_id,
+      })),
+      bundleCourses,
+    );
+    if (coverageOverlaps(adding, inCart)) {
+      throw CommerceErrors.CART_ITEMS_OVERLAP();
+    }
+
+    // 4. Persist item to cart
     await cartRepo.insertCartItem(database, {
       id: crypto.randomUUID(),
       cart_id: cart.id,

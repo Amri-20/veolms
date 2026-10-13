@@ -1,6 +1,6 @@
 # Audit reconciliation — 11 Oct 2026
 
-> **Read sections 19 to 23 first, then `docs/AUDIT_REMAINING_CHECKLIST.md`.** Section 19 is the current status of the audit findings and sections 20 to 23 the bug-fix rounds that followed. Section 19 was written on 13 Oct 2026 after every "FIXED" below was re-checked against the code. Sections 2 to 9 are the picture on the morning of 11 Oct, before any fix, and are kept as the record of what was found. Sections 10 to 17 record the first round of fixes; twenty of their "FIXED" entries were wrong and are corrected in section 19.
+> **Read sections 19 to 27 first, then `docs/AUDIT_REMAINING_CHECKLIST.md`.** Section 19 is the current status of the audit findings and sections 20 to 27 the bug-fix rounds that followed. Section 19 was written on 13 Oct 2026 after every "FIXED" below was re-checked against the code. Sections 2 to 9 are the picture on the morning of 11 Oct, before any fix, and are kept as the record of what was found. Sections 10 to 17 record the first round of fixes; twenty of their "FIXED" entries were wrong and are corrected in section 19.
 
 Reconciles the application audit of 9 Oct 2026 (findings S1–S16, C1–C13, A1–A7, F1–F18, B1–B9, P1–P5, X1–X6, R1–R6) against the code on `dev` at `8252933c`. Investigation only: no application code, migration, dependency or data was changed.
 
@@ -882,3 +882,148 @@ A phone-sized window is not a phone. The SMS one-tap fill on a real iPhone and a
 - `GET /orders` accepts `statuses` (comma-separated) and, for a learner, `search`.
 - The refund-request review endpoint accepts `outsideRefund`, and each refund request carries `paidByManualTransfer`.
 - No new migration this round.
+
+## 24. Fifth round: phases 4 and 5, and Razorpay test mode: 14 Oct 2026
+
+On `fix/audit-round-5`, after `origin/dev` (Progress page, learning history) was merged into `dev` with no conflicts and round 4 was pushed.
+
+**How it was verified.** As in sections 20 to 23. Whole tree: `tsc --noEmit` in every package, `eslint .` with 0 errors and 23 warnings (was 31), 103 of 103 API tests, all 76 migrations on an empty database, and on a database that already had the 13 Oct migrations. The app was run in a browser against a local API again.
+
+**Not verified:** a real phone, real object storage, production data, a completed Razorpay payment (see 24.3).
+
+### 24.1 Put-off items
+
+| Item                                                | Status                 | What changed                                                                                                                                                                                                                                                                                                                                                                     | What is left                                                                                                          |
+| --------------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| F10 Wishlist                                        | FIXED, seen in the app | New table `wishlist_items`, API (`GET /wishlist`, `PUT` and `DELETE /wishlist/:courseId`, `POST /wishlist/import`) and the web reads and saves a signed-in learner's wishlist on the server. What the browser had saved is sent to the account once. Guests keep the browser list. Seen: a guest's saved course moved to the account at sign-in; add and remove while signed in. | The 500-course cap and the rollback on a server error were not exercised.                                             |
+| B9 Validation before permission                     | FIXED                  | The session and role guards a route starts with run before validation, from one hook. Permission guards that look a resource up by id still run after validation. Signed out: 400 became 401 on 139 routes. Wrong role: 400 became 403 on 38. No other change across 253 routes.                                                                                                 | A signed-in caller on a route guarded only by a permission still gets 400 before 403, on purpose.                     |
+| B8 (rest) Version check on the direct course update | FIXED                  | `PATCH /courses/:id/details` and `/thumbnail` take an optional `version` and refuse a stale one with 409. Callers that send none behave as before.                                                                                                                                                                                                                               | The web does not use these endpoints.                                                                                 |
+| F7 Wasted requests on a locked lesson               | FIXED, replayed        | A refused playback bootstrap is kept for 5 seconds instead of being asked again by each caller (3 requests became 1). Progress and quiz requests are not sent for a lesson the viewer was refused.                                                                                                                                                                               | The page-level part was not seen in a browser.                                                                        |
+| F13 Guest on `/courses/enrolled`                    | FIXED, seen in the app | Says "Log in to see your courses" with a Log in button, instead of "No courses found".                                                                                                                                                                                                                                                                                           | `/wishlist` as a guest was checked by reading and is not a bug.                                                       |
+| F11 Shortcut copies                                 | FIXED, seen in the app | Five copies became one hook. `/` and Ctrl+K focus the search box on Purchase History.                                                                                                                                                                                                                                                                                            | The sixth copy, on Notifications, is unchanged. Ctrl+K on a Mac does nothing on Courses and Discussions; Cmd+K works. |
+| P3 (rest) Quiz timer                                | FIXED, replayed        | Only the countdown redraws each second. In a 90-second quiz the panel drew 96 times before and 2 after. Auto-submit time is identical.                                                                                                                                                                                                                                           | Not seen in a browser.                                                                                                |
+| P3 Notifications poll                               | NOT A BUG              | It already stops while the tab is hidden and refetches when shown. Replayed with the installed library.                                                                                                                                                                                                                                                                          | —                                                                                                                     |
+| X2 Accent text contrast                             | FIXED, computed        | 17 of 32 palette and mode combinations failed 4.5:1 on at least one background. The accent text colour moved the smallest step that passes, same hue. 0 fail now.                                                                                                                                                                                                                | Colours were computed, not looked at. Places that use the accent fill colour directly as text are not covered.        |
+| R5 Unused `axios`                                   | FIXED                  | Removed from two packages, the Vite config and the lockfile.                                                                                                                                                                                                                                                                                                                     | —                                                                                                                     |
+| Video player lint                                   | FIXED                  | The package-wide switch-off is gone. Five places fixed with the same behaviour; two lines keep a one-line disable with the reason.                                                                                                                                                                                                                                               | Playback was not watched in a browser.                                                                                |
+| Lint warnings                                       | PARTLY                 | 31 became 23. The rest need a behaviour change or come from a library notice.                                                                                                                                                                                                                                                                                                    | —                                                                                                                     |
+| C10.4 Unused payment statuses                       | NO CHANGE NEEDED       | `payments.status = 'refunded'` is now written for a surplus payment. Writing it on an ordinary full refund would break three readers. `orders.status = 'payment_processing'` has no writer and every reader treats it like `pending`.                                                                                                                                            | —                                                                                                                     |
+| F14 Filter that resets                              | NOT REPRODUCED         | One candidate found: the Courses status filter goes back to "All" when a creator returns from the course editor. Not changed, because it was not reproduced.                                                                                                                                                                                                                     | Owner to say whether that is the reported bug.                                                                        |
+| A2 Blank login page while the session is checked    | HELD BACK              | A fix was written and not committed. `apps/web/AGENTS.md` says to leave the initial loading unchanged, and the result cannot be seen in the dev server.                                                                                                                                                                                                                          | Owner decision. The patch is saved outside the repository.                                                            |
+
+### 24.2 Still put off
+
+P1 (three releases), P2 (needs Lighthouse on a production build), R1 to R4 (large refactors), the rest of F17 (share tags), and the refund-requests screen (skipped by the owner for now).
+
+### 24.3 Razorpay test mode
+
+Run against a local database with the test keys, loaded alone from the environment file. The keys were checked to be test keys before use.
+
+- Order creation works: Razorpay returned a test order for the right amount.
+- `POST /payments/verify` with a made-up signature: 400, order stays pending.
+- Webhook with a wrong signature: 400, order stays pending.
+- A refund that Razorpay refuses: 502, the order stays paid and a failed refund row is recorded.
+
+**Not done:** a real declined payment, a real successful payment and a real refund. Razorpay's checkout screen does not draw inside the browser used here, as a pop-up or as a full page. This needs a person with a normal browser, on staging.
+
+**Behaviour changes to know.**
+
+- One new migration: `20261014100000-create-wishlist-items`. It only creates a table.
+- Signed-out API callers get 401 where they used to get 400 for a bad request.
+- Accent text is slightly darker in light themes and lighter in dark themes on 17 palette and mode combinations. The default dark theme goes from `#7193ff` to `#92acff`.
+- A signed-in learner's wishlist hearts fill once the server answers, not instantly.
+
+## 25. Sixth round: two owner answers, the production counts and the Razorpay test: 14 Oct 2026
+
+On `fix/audit-round-6`.
+
+**The owner's answers.**
+
+12. Apply the fix for the blank login page while the session is checked (A2).
+13. The filter that resets (F14) is the Courses status filter going back to "All" after the course editor.
+
+| Item                      | Status                 | What changed                                                                                                                                                                                                                                                                                  | What is left                                                                                            |
+| ------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| A2 Blank login page       | FIXED, not seen        | The auth layout has its own loading state: the auth page frame with the loading card, shown while the session is checked on `/login`, `/register`, `/mfa-setup` and `/auth/callback`. Before, these pages were an empty canvas until the check answered. The root loading state is untouched. | It only shows in a production build; the dev server ignores it. Look at `/login` once after the deploy. |
+| F14 Courses filter resets | FIXED, seen in the app | The status and enrolment filters were cleared every time the page or section changed. They are now cleared only when the account or the workspace view changes. Seen: "Published" picked, course editor opened, back to Courses, still "Published".                                           | —                                                                                                       |
+| Twin-email accounts       | CLOSED                 | The owner ran `docs/audit-pre-push-checks.sql` on production on 14 Oct. Every count is 0, including accounts sharing an email in different letter case.                                                                                                                                       | —                                                                                                       |
+| Razorpay test purchase    | CONFIRMED BY THE OWNER | The owner tested in a normal browser with the test keys: a declined payment, a successful payment and a refund. All three worked.                                                                                                                                                             | —                                                                                                       |
+
+## 26. Seventh round: what was left of phases 4 and 5: 14 Oct 2026
+
+On `fix/audit-round-7`, after the owner asked for the remaining items.
+
+**How it was verified.** As before. Whole tree: `tsc --noEmit` in every package, `eslint .` with 0 errors and 12 warnings (was 23), 109 of 109 API tests. The app was run in a browser against a local API for the share tags and the lesson description.
+
+| Item                                         | Status                                     | What changed                                                                                                                                                                                                                                                                                                                                                                                                                                      | What is left                                                                                                                                                                                                                          |
+| -------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1 Overview carries every lesson description | STEPS 1 AND 2 DONE, STEP 3 BEHIND A SWITCH | New `GET /courses/:courseId/lessons/:lessonId/description`, with the same access rule as the overview. The lesson page reads from it and shows the overview's copy until it answers. `COURSE_OVERVIEW_LESSON_DESCRIPTIONS=false` makes the overview send each description as null. For 40 lessons: 72,532 bytes before, 11,381 with the switch off. With the switch at its default the overview is byte-identical to before.                      | **The owner turns the switch off one release later**, once browsers have the new web build. Until then the payload is unchanged. With it off, a reading lesson shows "This lesson has no video" for a moment before its text arrives. |
+| R4 Queries inside services                   | FIXED for every module in scope            | 79 query call sites moved into repositories with identical SQL and the same transaction objects. 608 requests across every endpoint of those modules give identical responses before and after. 94 call sites before, 15 after.                                                                                                                                                                                                                   | Left: the reminder worker (3) and the OTP locks (2), which no endpoint can prove; the health ping (1); commerce (8) and courses (1), out of scope.                                                                                    |
+| F17 (rest) Share tags                        | FIXED on the client, seen in the app       | The course overview page had no share tags. Description, `og:title`, `og:description`, `og:image`, `og:url` and the canonical link now describe the course once it is loaded and are put back on leaving. The prerendered page gets the description and the og tags too. The hook was never switched on for the overview route (it tested for the wrong route kind), which is why section 23 saw the title only from the prerendered data; fixed. | The prerendered page has no `og:url` or canonical: the build does not know the site origin. Share crawlers that do not run scripts get title, description and image only. Closing it needs a site-origin build variable.              |
+| F11 (rest) Shortcut                          | FIXED, replayed                            | Notifications uses the shared hook. Ctrl+K on a Mac and Cmd+K elsewhere focus search when no text field has the focus. 32 key cases replayed, 3 changed, none inside a text field.                                                                                                                                                                                                                                                                | Not tried on a Mac.                                                                                                                                                                                                                   |
+| Lint warnings                                | 23 to 12                                   | Eleven fixed with the same behaviour.                                                                                                                                                                                                                                                                                                                                                                                                             | Five are library notices. Seven need a behaviour change: `ThemedSelect`, `ToastNotification`, `DiscussionThreadPanel`, `LessonVideoPlayer`, `academy-layout`, and two in `learning.tsx`.                                              |
+
+### 26.1 Not done, and why
+
+| Item                           | Why                                                                                                                                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P2 Stylesheet loading          | Needs Lighthouse on a production build. The web build reads the root `.env`, which is not read here.                                                                                     |
+| R1 Very large files            | Splitting `CourseCreatePage.tsx` (15,586 lines) and four others has no behaviour to gain and needs a browser pass on every screen it touches. Waiting for an explicit go from the owner. |
+| R2 Direct imports              | A refactor across the web app with the same risk. Waiting for the same go.                                                                                                               |
+| R3 Inline styles and plain CSS | `apps/web/AGENTS.md` says not to migrate CSS unrelated to a task.                                                                                                                        |
+| Owner decisions                | S3 downloads, B1 archived courses, B7 sale price 0, C4 per-creator gateways, F5 dashboard numbers, S16 upload clean-up, the refund-requests screen.                                      |
+
+### 26.2 Found while moving the queries, not fixed
+
+These are observations for the owner, each with a file to look at.
+
+1. `learning-progress.service.ts` (about line 336): a published course with no pricing row lets any signed-in learner read its progress, while playback and discussions answer 403 for the same learner. Every course created through the app has a pricing row, so this may only affect seeded data.
+2. `discussion.access.ts` (about lines 264 to 274): a deleted or hidden thread answers 404 with code `NOT_FOUND`; an unknown id answers `THREAD_NOT_FOUND`. One condition for the client, two codes.
+3. Three files import another module's private repository instead of its `index.ts`: `discussion.access.ts`, `discussions-feed.service.ts`, `learning-progress.service.ts`.
+4. `attachments.service.ts` (about line 694): when storage cannot be reached, completing an upload answers 500 rather than a named error. Seen only without storage credentials.
+
+**Behaviour changes to know.**
+
+- No new migration.
+- Each lesson opened makes one extra small request.
+- The description of a prerendered course page changes from "Course overview for … on ProCodrr." to the course's short description.
+- New optional setting: `COURSE_OVERVIEW_LESSON_DESCRIPTIONS` (see `.env.example`).
+
+## 27. One account cannot pay twice: 14 Oct 2026
+
+On `fix/no-double-payment`.
+
+**The owner's decision.**
+
+14. A buyer must not be able to buy the same course twice through one account, or pay twice. Prevention before money moves; still no automatic refunds.
+
+**What already held.** An owned course was refused. One open order per buyer and identical set of items. One gateway order per order while nothing changed.
+
+**How it was verified.** One script of 22 scenarios, run on the code before and after, with the real services and a stand-in gateway, on the owner's demo database (not Docker, not production). Whole tree: `tsc --noEmit`, `eslint .` with 0 errors, 133 of 133 API tests (24 new).
+
+| Gap                                                                        | Before                                                                                   | After                                                                                                                                                        |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The amount or coupon is changed while the first checkout may still be open | A second gateway order was handed out. Paying both: **2 captured payments**.             | Refused with `CHECKOUT_IN_PROGRESS` until the first checkout window has closed. 1 captured payment.                                                          |
+| A course, then a bundle that holds it (or the other way round, or a cart)  | Two open orders. Paying both: **2 captured payments**.                                   | Refused while the first is in checkout. Afterwards the older order is closed before the new one is made.                                                     |
+| A bundle holding a course the buyer already owns                           | Sold unless the buyer owned all of its courses: **2 captured payments** for that course. | Refused with `BUNDLE_CONTAINS_OWNED_COURSE`, also when an open bundle order is resumed. A cart refuses an item that overlaps one already in it.              |
+| A bank transfer reported, then Pay                                         | A gateway order was handed out beside the pending transfer: 2 ways to pay one order.     | Every gateway path for that purchase is refused with `MANUAL_PAYMENT_PENDING` until staff verify or reject the transfer. After a rejection, Pay works again. |
+| Checkout open, then a transfer reported                                    | Accepted.                                                                                | Refused with `CHECKOUT_IN_PROGRESS` until the window has closed.                                                                                             |
+| Two requests at the same instant from two devices                          | 2 open orders, 2 gateway orders.                                                         | 1 open order, 1 gateway order. The check and the creation run under one lock per buyer.                                                                      |
+
+**How the window works.** The web tells the gateway to close its checkout after 10 minutes (`CHECKOUT_WINDOW_SECONDS`). The API counts an order as in checkout for 12 minutes after the gateway order was last handed to the buyer. Opening checkout again for the same amount returns the same order and restarts the 12 minutes. No migration.
+
+**What a buyer will notice.**
+
+- After pressing Pay, they cannot change the amount or coupon for that purchase, or buy something that overlaps it, for up to 12 minutes. This holds even if they closed the payment window themselves, because the server cannot know it was closed. Paying the same amount works at once.
+- A bundle cannot be bought by someone who owns one of its courses.
+- While a reported transfer waits for staff, the buyer cannot pay for that purchase another way. A transfer left unanswered keeps that buyer blocked.
+
+**What still cannot be stopped.** The app cannot refuse money at the bank. These stay on the staff refund list:
+
+1. A payment completed on an old gateway order after the 12 minutes: a UPI request approved very late, or a tab still running a web build from before this release.
+2. Two captures by the provider for one gateway order.
+3. The same person buying through two different accounts.
+
+Only an automatic refund of the extra payment would make these cost the buyer nothing. The owner has declined that so far.
+
+**Not verified.** That Razorpay honours the checkout timeout (its checkout cannot be driven from here). The messages on the price card in a browser. The two older refund scripts could not be rerun as written: their set-up creates two overlapping open orders for one buyer, which is now refused; the refund code itself was not changed.

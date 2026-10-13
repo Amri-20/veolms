@@ -15,6 +15,7 @@ import {
 import { toMinorUnits } from "../shared/currency.ts";
 import { isUniqueViolation } from "../shared/db-errors.ts";
 import * as paymentRepo from "./payment.repository.ts";
+import * as manualPaymentRepo from "./manual-payment.repository.ts";
 import * as orderRepo from "../orders/order.repository.ts";
 import { createPaymentReconciliationService } from "./payment-reconciliation.service.ts";
 import { toPaymentProvider } from "./payment.mapper.ts";
@@ -66,6 +67,12 @@ export interface PaymentService {
       keyId?: string;
     };
   }>;
+  /**
+   * Notes that a payment's gateway order was returned to the buyer again
+   * without going through initializePayment, so the time it was last handed
+   * out stays true (see shared/open-orders.ts).
+   */
+  recordCheckoutHandOut(paymentId: string): Promise<void>;
   verifyPayment(
     userId: string,
     input: VerifyPaymentRequest,
@@ -112,6 +119,21 @@ export function createPaymentService({
     }
     if (new Date(order.expires_at) < new Date()) {
       throw CommerceErrors.ORDER_EXPIRED();
+    }
+    // A transfer the buyer reported for this order is with staff. Paying
+    // through the gateway as well would pay for it twice. An order written
+    // a moment ago cannot have one.
+    if (
+      !knownOrder &&
+      (await manualPaymentRepo.findPendingManualPaymentRequestByOrderId(
+        database,
+        orderId,
+      ))
+    ) {
+      const items = await orderRepo.listOrderItems(database, orderId);
+      throw CommerceErrors.MANUAL_PAYMENT_PENDING(
+        items.map((item) => item.title_snapshot).join(", "),
+      );
     }
 
     // 1. Check if a payment record already exists for this order
@@ -408,6 +430,7 @@ export function createPaymentService({
 
   return {
     initializePayment,
+    recordCheckoutHandOut: recordPaymentAttempt,
     verifyPayment,
   };
 }

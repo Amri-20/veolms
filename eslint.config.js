@@ -56,18 +56,6 @@ export default [
     },
   },
   {
-    // The player keeps the latest selector and its controller in refs that
-    // are read while rendering, and opens a menu from an effect. These are
-    // the two rules the web app above already has off for the same patterns.
-    // Rewriting them is a change to playback that has to be watched in a
-    // browser, so it is not done to satisfy the linter.
-    files: ["packages/video-player/src/**/*.{ts,tsx}"],
-    rules: {
-      "react-hooks/refs": "off",
-      "react-hooks/set-state-in-effect": "off",
-    },
-  },
-  {
     // Type-aware linting for the API only. These three rules each map to a
     // class of defect that reached this codebase: untyped provider payloads,
     // a fire-and-forget send whose rejection could take the process down, and

@@ -29,6 +29,19 @@ export async function findManualPaymentRequestByOrderId(
     .executeTakeFirst();
 }
 
+/** A transfer reported for the order that staff have not answered yet. */
+export async function findPendingManualPaymentRequestByOrderId(
+  database: Executor,
+  orderId: string,
+) {
+  return await database
+    .selectFrom("manual_payment_requests")
+    .select("id")
+    .where("order_id", "=", orderId)
+    .where("status", "=", "pending")
+    .executeTakeFirst();
+}
+
 export async function listManualPaymentRequestsByUser(
   database: Executor,
   userId: string,

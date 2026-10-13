@@ -329,16 +329,8 @@ export function createLearningProgressService({
     if (isOwner || isAdmin) return course;
 
     const [accessRule, pricing] = await Promise.all([
-      database
-        .selectFrom("course_access_rules")
-        .select("access_type")
-        .where("course_id", "=", course.id)
-        .executeTakeFirst(),
-      database
-        .selectFrom("course_pricing")
-        .select("pricing_type")
-        .where("course_id", "=", course.id)
-        .executeTakeFirst(),
+      learningProgressRepository.findCourseAccessType(database, course.id),
+      learningProgressRepository.findCoursePricingType(database, course.id),
     ]);
 
     const requiresGrant =

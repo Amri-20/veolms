@@ -535,20 +535,83 @@ export async function findOrderByIdempotencyKey(
 }
 
 /**
- * A buyer's unpaid, unexpired orders, newest first: the ones a new checkout
- * for the same items either continues or replaces.
+ * Serializes one buyer's checkouts for the rest of the transaction, so two
+ * requests arriving together cannot both find no open order and each create
+ * one.
  */
-export async function listPendingOrdersForUser(
+export async function lockBuyerCheckout(
+  transaction: Executor,
+  userId: string,
+): Promise<void> {
+  await sql`select pg_advisory_xact_lock(hashtext(${`veolms:checkout:${userId}`}))`.execute(
+    transaction,
+  );
+}
+
+/**
+ * A buyer's orders that a payment may still arrive for, newest first:
+ *
+ *  - unpaid and not past their deadline;
+ *  - unpaid or expired, with a bank transfer reported and not yet answered
+ *    by staff (verifying it pays the order even after it expired);
+ *  - unpaid or expired, whose gateway order was handed to the buyer since
+ *    `handedOutSince`, so a payment window for it may still be open.
+ *
+ * `checkout_handed_out_at` is the last time the gateway order was returned
+ * to the buyer: every hand-out records a payment attempt.
+ */
+export async function listOrdersAwaitingPayment(
   database: Executor,
-  input: { userId: string; now: Date },
+  input: { userId: string; now: Date; handedOutSince: Date },
 ) {
   return await database
-    .selectFrom("orders")
-    .selectAll()
-    .where("user_id", "=", input.userId)
-    .where("status", "=", "pending")
-    .where("expires_at", ">", input.now)
-    .orderBy("created_at", "desc")
+    .selectFrom("orders as o")
+    .selectAll("o")
+    .select((eb) => [
+      eb
+        .selectFrom("payment_attempts as a")
+        .innerJoin("payments as p", "p.id", "a.payment_id")
+        .select((sub) => sub.fn.max("a.created_at").as("at"))
+        .whereRef("p.order_id", "=", "o.id")
+        .where("p.gateway_provider", "not in", ["free", "manual"])
+        .as("checkout_handed_out_at"),
+      eb
+        .exists(
+          eb
+            .selectFrom("manual_payment_requests as m")
+            .select("m.id")
+            .whereRef("m.order_id", "=", "o.id")
+            .where("m.status", "=", "pending"),
+        )
+        .as("manual_payment_pending"),
+    ])
+    .where("o.user_id", "=", input.userId)
+    .where("o.status", "in", ["pending", "payment_processing", "expired"])
+    .where((eb) =>
+      eb.or([
+        eb.and([
+          eb("o.status", "=", "pending"),
+          eb("o.expires_at", ">", input.now),
+        ]),
+        eb.exists(
+          eb
+            .selectFrom("manual_payment_requests as m")
+            .select("m.id")
+            .whereRef("m.order_id", "=", "o.id")
+            .where("m.status", "=", "pending"),
+        ),
+        eb.exists(
+          eb
+            .selectFrom("payment_attempts as a")
+            .innerJoin("payments as p", "p.id", "a.payment_id")
+            .select("a.id")
+            .whereRef("p.order_id", "=", "o.id")
+            .where("p.gateway_provider", "not in", ["free", "manual"])
+            .where("a.created_at", ">", input.handedOutSince),
+        ),
+      ]),
+    )
+    .orderBy("o.created_at", "desc")
     .execute();
 }
 

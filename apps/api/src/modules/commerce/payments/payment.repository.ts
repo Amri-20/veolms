@@ -263,6 +263,25 @@ export async function closeOpenPaymentsForOrder(
     .execute();
 }
 
+/**
+ * The last time an order's gateway order was returned to the buyer. Every
+ * hand-out records an attempt, so this is the newest attempt on the order's
+ * gateway payment; undefined when it never had one.
+ */
+export async function findLastCheckoutHandOutAt(
+  database: Executor,
+  orderId: string,
+): Promise<Date | undefined> {
+  const row = await database
+    .selectFrom("payment_attempts as a")
+    .innerJoin("payments as p", "p.id", "a.payment_id")
+    .select((eb) => eb.fn.max("a.created_at").as("at"))
+    .where("p.order_id", "=", orderId)
+    .where("p.gateway_provider", "not in", ["free", "manual"])
+    .executeTakeFirst();
+  return row?.at ?? undefined;
+}
+
 /** Attempts recorded so far; the next attempt's number is this plus one. */
 export async function countPaymentAttempts(
   database: Executor,

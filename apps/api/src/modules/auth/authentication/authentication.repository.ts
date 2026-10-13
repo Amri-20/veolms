@@ -1,5 +1,6 @@
 import type { Executor } from "../shared/repository.types.ts";
 import type { UserAvatarSource } from "@veolms/database";
+import { sql } from "kysely";
 
 export function findUserById(database: Executor, userId: string) {
   return database
@@ -227,6 +228,26 @@ export async function countUsers(database: Executor): Promise<number> {
     .executeTakeFirst();
 
   return Number(row?.count ?? 0);
+}
+
+/**
+ * Serializes account creation for the rest of the transaction, so two
+ * sign-ups cannot both see an empty platform.
+ */
+export async function lockUserBootstrap(transaction: Executor): Promise<void> {
+  await sql`select pg_advisory_xact_lock(hashtext('veolms:user-bootstrap'))`.execute(
+    transaction,
+  );
+}
+
+/** Serializes changes to one user's avatar for the rest of the transaction. */
+export async function lockUserAvatar(
+  transaction: Executor,
+  userId: string,
+): Promise<void> {
+  await sql`select pg_advisory_xact_lock(hashtext(${`veolms:user-avatar:${userId}`}))`.execute(
+    transaction,
+  );
 }
 
 export interface InsertUserInput {

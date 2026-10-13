@@ -126,6 +126,38 @@ export interface ModerationRepository {
     courseId?: string | null,
   ): Promise<number>;
 
+  /** What a report is about and who filed it. */
+  findReportTarget(
+    db: DatabaseExecutor,
+    reportId: string,
+  ): Promise<
+    | {
+        course_id: string | null;
+        target_type: EngagementTargetType;
+        target_id: string;
+        reporter_id: string;
+      }
+    | undefined
+  >;
+
+  listPendingReportsForTarget(
+    db: DatabaseExecutor,
+    targetType: EngagementTargetType,
+    targetId: string,
+  ): Promise<Array<{ id: string; reporter_id: string }>>;
+
+  /** Closes every pending report on the target with the given outcome. */
+  resolvePendingReportsForTarget(
+    db: DatabaseExecutor,
+    input: {
+      targetType: EngagementTargetType;
+      targetId: string;
+      status: ReportStatus;
+      reviewedByUserId: string;
+      actionTaken: string;
+    },
+  ): Promise<void>;
+
   /** The user a suspension would apply to, with their highest role. */
   findSuspensionTarget(
     db: DatabaseExecutor,
@@ -289,6 +321,39 @@ export function createModerationRepository(): ModerationRepository {
           updated_at: new Date(),
         })
         .where("id", "=", reportId)
+        .execute();
+    },
+
+    async findReportTarget(db, reportId) {
+      return db
+        .selectFrom("learning_reports")
+        .select(["course_id", "target_type", "target_id", "reporter_id"])
+        .where("id", "=", reportId)
+        .executeTakeFirst();
+    },
+
+    async listPendingReportsForTarget(db, targetType, targetId) {
+      return db
+        .selectFrom("learning_reports")
+        .select(["id", "reporter_id"])
+        .where("target_type", "=", targetType)
+        .where("target_id", "=", targetId)
+        .where("status", "=", "pending")
+        .execute();
+    },
+
+    async resolvePendingReportsForTarget(db, input) {
+      await db
+        .updateTable("learning_reports")
+        .set({
+          status: input.status,
+          reviewed_by_user_id: input.reviewedByUserId,
+          action_taken: input.actionTaken,
+          updated_at: new Date(),
+        })
+        .where("target_type", "=", input.targetType)
+        .where("target_id", "=", input.targetId)
+        .where("status", "=", "pending")
         .execute();
     },
 

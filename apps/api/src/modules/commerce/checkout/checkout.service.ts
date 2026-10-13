@@ -1,21 +1,32 @@
 import crypto from "node:crypto";
-import type {
-  CheckoutPreviewRequest,
-  CheckoutPreviewResponse,
-  CreateCheckoutOrderRequest,
-  CreateCheckoutOrderResponse,
-  PaymentGateway,
+import {
+  CHECKOUT_WINDOW_SECONDS,
+  type CheckoutPreviewRequest,
+  type CheckoutPreviewResponse,
+  type CreateCheckoutOrderRequest,
+  type CreateCheckoutOrderResponse,
+  type PaymentGateway,
+  type PricingCalculation,
 } from "@veolms/contracts";
-import type { Database } from "@veolms/database";
+import type { Database, DatabaseExecutor as Executor } from "@veolms/database";
 import type { Kysely } from "kysely";
 import { AppError } from "../../../lib/errors.ts";
 import { CommerceErrors } from "../shared/commerce.errors.ts";
 import { isUniqueViolation } from "../shared/db-errors.ts";
+import {
+  CHECKOUT_WINDOW_GRACE_SECONDS,
+  checkoutSecondsLeft,
+  coverageOf,
+  coverageOverlaps,
+  decideOpenOrders,
+  sameItems,
+} from "../shared/open-orders.ts";
 import * as bundleRepo from "../bundles/bundle.repository.ts";
 import * as couponRepo from "../coupons/coupon.repository.ts";
 import * as enrollmentRepo from "../enrollments/enrollment.repository.ts";
 import * as orderRepo from "../orders/order.repository.ts";
 import * as paymentRepo from "../payments/payment.repository.ts";
+import * as manualPaymentRepo from "../payments/manual-payment.repository.ts";
 import {
   createPricingService,
   type PricingService,
@@ -166,14 +177,18 @@ export function createCheckoutService({
           throw CommerceErrors.COURSE_ALREADY_OWNED(item.title_snapshot);
         }
       } else if (item.item_type === "bundle" && item.bundle_id) {
-        const courseIds = bundleCourses
-          .filter((row) => row.bundle_id === item.bundle_id)
-          .map((row) => row.course_id);
-        if (
-          courseIds.length > 0 &&
-          courseIds.every((courseId) => owned.has(courseId))
-        ) {
+        const courses = bundleCourses.filter(
+          (row) => row.bundle_id === item.bundle_id,
+        );
+        const ownedCourses = courses.filter((row) => owned.has(row.course_id));
+        if (courses.length > 0 && ownedCourses.length === courses.length) {
           throw CommerceErrors.BUNDLE_ALL_COURSES_OWNED(item.title_snapshot);
+        }
+        if (ownedCourses.length > 0) {
+          throw CommerceErrors.BUNDLE_CONTAINS_OWNED_COURSE(
+            item.title_snapshot,
+            ownedCourses.map((row) => row.course_title),
+          );
         }
       }
     }
@@ -268,6 +283,23 @@ export function createCheckoutService({
         };
       }
 
+      if (!isFreeOrder && existingOrder.status === "pending") {
+        // A transfer the buyer reported for this order is with staff;
+        // paying through the gateway as well would pay for it twice.
+        if (
+          await manualPaymentRepo.findPendingManualPaymentRequestByOrderId(
+            database,
+            existingOrder.id,
+          )
+        ) {
+          throw CommerceErrors.MANUAL_PAYMENT_PENDING(
+            await orderTitle(existingOrder.id),
+          );
+        }
+        // The buyer is about to open a payment window for it again.
+        await paymentService.recordCheckoutHandOut(payment.id);
+      }
+
       return {
         order,
         gateway: isFreeOrder
@@ -309,9 +341,107 @@ export function createCheckoutService({
     };
   }
 
-  /** Order-independent identity of a line item, for comparing item sets. */
-  const itemKey = (itemType: string, itemId: string | null | undefined) =>
-    `${itemType}:${itemId ?? ""}`;
+  /** What an order is for, as the buyer knows it. */
+  async function orderTitle(orderId: string, executor: Executor = database) {
+    const items = await orderRepo.listOrderItems(executor, orderId);
+    return items.map((item) => item.title_snapshot).join(", ");
+  }
+
+  /**
+   * What a new checkout does about the buyer's other unpaid orders: which
+   * one it continues, which it closes first. Throws when one of them may
+   * still be paid (see decideOpenOrders). Run under the buyer's checkout
+   * lock, so the answer still holds when the new order is written.
+   */
+  async function settleOpenOrders(
+    trx: Executor,
+    userId: string,
+    pricing: PricingCalculation,
+    now: Date,
+  ): Promise<{ resumableOrder?: OrderRow; supersededOrderIds: string[] }> {
+    const openOrders = await orderRepo.listOrdersAwaitingPayment(trx, {
+      userId,
+      now,
+      handedOutSince: new Date(
+        now.getTime() -
+          (CHECKOUT_WINDOW_SECONDS + CHECKOUT_WINDOW_GRACE_SECONDS) * 1000,
+      ),
+    });
+    if (openOrders.length === 0) return { supersededOrderIds: [] };
+
+    const openItems = await orderRepo.listOrderItemsByOrderIds(
+      trx,
+      openOrders.map((openOrder) => openOrder.id),
+    );
+    const bundleIds = new Set<string>();
+    for (const it of pricing.items) {
+      if (it.itemType === "bundle") bundleIds.add(it.itemId);
+    }
+    for (const it of openItems) {
+      if (it.item_type === "bundle" && it.bundle_id) {
+        bundleIds.add(it.bundle_id);
+      }
+    }
+    const bundleCourses = await bundleRepo.listBundleCoursesForBundleIds(trx, [
+      ...bundleIds,
+    ]);
+    const wanted = coverageOf(pricing.items, bundleCourses);
+
+    const decision = decideOpenOrders(
+      openOrders.map((openOrder) => {
+        const held = coverageOf(
+          openItems
+            .filter((it) => it.order_id === openOrder.id)
+            .map((it) => ({
+              itemType: it.item_type,
+              itemId: it.course_id ?? it.bundle_id ?? it.quiz_pricing_id,
+            })),
+          bundleCourses,
+        );
+        const isOpen =
+          openOrder.status === "pending" &&
+          new Date(openOrder.expires_at) > now;
+        return {
+          id: openOrder.id,
+          isOpen,
+          sameItems: sameItems(held, wanted),
+          overlaps: coverageOverlaps(held, wanted),
+          sameTerms:
+            openOrder.total_amount === pricing.totalAmount &&
+            openOrder.currency === pricing.currency &&
+            openOrder.coupon_id === (pricing.couponId ?? null),
+          manualPaymentPending: Boolean(openOrder.manual_payment_pending),
+          checkoutSecondsLeft: checkoutSecondsLeft(
+            {
+              handedOutAt: openOrder.checkout_handed_out_at,
+              createdAt: openOrder.created_at,
+              totalAmount: openOrder.total_amount,
+              isOpen,
+            },
+            now,
+          ),
+        };
+      }),
+    );
+
+    if (decision.kind === "manual_payment_pending") {
+      throw CommerceErrors.MANUAL_PAYMENT_PENDING(
+        await orderTitle(decision.orderId, trx),
+      );
+    }
+    if (decision.kind === "checkout_in_progress") {
+      throw CommerceErrors.CHECKOUT_IN_PROGRESS(
+        await orderTitle(decision.orderId, trx),
+        decision.secondsLeft,
+      );
+    }
+    return {
+      resumableOrder: openOrders.find(
+        (openOrder) => openOrder.id === decision.resumeOrderId,
+      ),
+      supersededOrderIds: decision.supersedeOrderIds,
+    };
+  }
 
   /**
    * Full order creation pipeline with recalculation, snapshots, idempotency, and gateway order creation.
@@ -375,59 +505,19 @@ export function createCheckoutService({
     // for a sum other than the one on the button. Such an order is closed
     // instead, which frees the coupon for the order created below.
     //
-    // The same goes for an order without a coupon. It used to be left
-    // open next to the new one: a buyer who changed the amount had two
-    // unpaid orders for one course, each with a gateway order that could be
-    // paid, and one who clicked Pay again got a further order every time.
-    // Now there is one open order per buyer and set of items. The gateway
-    // order of a closed one cannot be withdrawn, so a payment may still
-    // arrive for it; that is honoured as for any expired order (see
+    // There is one payable order per buyer for any course or quiz pass: an
+    // unpaid order that shares something with this request (the same items
+    // at another amount, or a bundle holding a course asked for here) is
+    // closed first. The gateway order of a closed one cannot be withdrawn,
+    // so it is only closed once no payment window for it can still be open
+    // and no transfer reported for it is waiting for staff; until then this
+    // request is refused (see settleOpenOrders). A payment that arrives for
+    // a closed order all the same is honoured as for any expired order (see
     // markOrderPaidIfPending) and shows as a paid order staff can refund.
-    const supersededOrderIds: string[] = [];
-    let resumableOrder: OrderRow | undefined;
-    const pendingOrders = await orderRepo.listPendingOrdersForUser(database, {
-      userId: user.id,
-      now,
-    });
-    if (pendingOrders.length > 0) {
-      const wanted = pricing.items
-        .map((it) => itemKey(it.itemType, it.itemId))
-        .sort()
-        .join("|");
-      const pendingItems = await orderRepo.listOrderItemsByOrderIds(
-        database,
-        pendingOrders.map((pendingOrder) => pendingOrder.id),
-      );
-      for (const pendingOrder of pendingOrders) {
-        const held = pendingItems
-          .filter((it) => it.order_id === pendingOrder.id)
-          .map((it) =>
-            itemKey(
-              it.item_type,
-              it.course_id ?? it.bundle_id ?? it.quiz_pricing_id,
-            ),
-          )
-          .sort()
-          .join("|");
-        if (held !== wanted) continue;
-        if (
-          !resumableOrder &&
-          pendingOrder.total_amount === pricing.totalAmount &&
-          pendingOrder.currency === pricing.currency &&
-          pendingOrder.coupon_id === (pricing.couponId ?? null)
-        ) {
-          resumableOrder = pendingOrder;
-          continue;
-        }
-        supersededOrderIds.push(pendingOrder.id);
-      }
-    }
-    if (resumableOrder) {
-      // Any other open order for these items is an older attempt at the
-      // same purchase; only the one being continued stays open.
-      await orderRepo.expirePendingOrders(database, supersededOrderIds, now);
-      return await resumeExistingOrder(resumableOrder, user);
-    }
+    //
+    // Decided inside the transaction of step 3, under the buyer's checkout
+    // lock: decided before it, two requests arriving together both found
+    // nothing open and each created an order.
 
     const expiresAt = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour order expiry
     const orderId = crypto.randomUUID();
@@ -435,9 +525,9 @@ export function createCheckoutService({
     const isFreeCheckout = pricing.totalAmount === 0;
 
     // 3. Database Transaction Boundary for Order + Order Items Snapshots
-    let createdOrder: Awaited<ReturnType<typeof insertOrderWithItems>>;
+    let outcome: Awaited<ReturnType<typeof insertOrderWithItems>>;
     try {
-      createdOrder = await insertOrderWithItems();
+      outcome = await insertOrderWithItems();
     } catch (err) {
       // Two concurrent checkouts with the same idempotency key can both
       // miss the pre-check in step 1 (it runs before either insert
@@ -459,9 +549,17 @@ export function createCheckoutService({
 
     async function insertOrderWithItems() {
       return await database.transaction().execute(async (trx) => {
+        await orderRepo.lockBuyerCheckout(trx, user.id);
+        const { resumableOrder, supersededOrderIds } = await settleOpenOrders(
+          trx,
+          user.id,
+          pricing,
+          now,
+        );
         // Before the coupon's limits are counted, so the earlier order's hold
         // is not counted against this one.
         await orderRepo.expirePendingOrders(trx, supersededOrderIds, now);
+        if (resumableOrder) return { resumableOrder };
 
         // Reserve the coupon use. The limits used to be checked only against
         // redemptions, which are written when an order is PAID — so any
@@ -560,12 +658,14 @@ export function createCheckoutService({
           });
         }
 
-        return {
-          ...orderRow,
-          initialPaymentId,
-        };
+        return { createdOrder: { ...orderRow, initialPaymentId } };
       });
     }
+
+    if (outcome.resumableOrder) {
+      return await resumeExistingOrder(outcome.resumableOrder, user);
+    }
+    const { createdOrder } = outcome;
 
     // 4. Handle Free Orders vs Paid Gateway Orders
     if (isFreeCheckout && createdOrder.initialPaymentId) {

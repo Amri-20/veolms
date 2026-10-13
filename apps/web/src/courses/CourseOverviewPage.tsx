@@ -16,6 +16,7 @@ import { Heart } from "@phosphor-icons/react/Heart";
 import { Play } from "@phosphor-icons/react/Play";
 import { ShoppingBag } from "@phosphor-icons/react/ShoppingBag";
 import {
+  CHECKOUT_WINDOW_SECONDS,
   MAX_VOLUNTARY_AMOUNT,
   type Category,
   type CheckoutPreviewResponse,
@@ -42,7 +43,7 @@ import {
   resolveCourseEnrollmentOffer,
 } from "./courseEnrollmentOffer";
 import { readCustomAmount } from "./customAmountEntry";
-import { toggleWishlistCourse, useCourseWishlisted } from "./wishlistStorage";
+import { useCourseWishlisted, useToggleWishlistCourse } from "../wishlist";
 import type { CourseSection } from "../learning/courseContent";
 import { getCoursePlayerPath } from "../learning/coursePlayerNavigation";
 import type { NavigateTo } from "../routing/navigation";
@@ -677,6 +678,9 @@ function CoursePurchaseSection({
             ? `Support Creator - ${course.title}`
             : course.title,
         order_id: order.gateway.gatewayOrderId,
+        // The window closes itself, so a payment cannot be completed in it
+        // long after the server has let the buyer start another one.
+        timeout: CHECKOUT_WINDOW_SECONDS,
         prefill: {
           name: user.displayName || user.username,
           email: user.email,
@@ -1653,6 +1657,7 @@ function CourseOverviewContent({
     [course?.id, course?.slug, courseSlug],
   );
   const wishlisted = useCourseWishlisted(wishlistTarget);
+  const toggleWishlistCourse = useToggleWishlistCourse();
 
   // As in the course content beside a lesson: any number of sections may be
   // open, and opening or closing one moves nothing. The section opens where
@@ -1680,7 +1685,7 @@ function CourseOverviewContent({
       if (isReadOnlyPreview || !wishlistTarget.id) return;
       toggleWishlistCourse(wishlistTarget);
     },
-    [isReadOnlyPreview, wishlistTarget],
+    [isReadOnlyPreview, toggleWishlistCourse, wishlistTarget],
   );
 
   const trailerMediaId =

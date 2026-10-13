@@ -4,6 +4,8 @@ import type {
   LearningNoteTable,
 } from "@veolms/database";
 import type {
+  AttachmentKind,
+  AttachmentStatus,
   DiscussionVisibility,
   ListLearningNotesQuery,
   UpdateLearningNoteRequest,
@@ -69,6 +71,26 @@ export type NoteFilterOptions = ListLearningNotesQuery & {
   accessibleCourseIds?: readonly string[];
   ids?: readonly string[];
 };
+
+/** The attachment columns a note response is built from. */
+export interface NoteAttachmentRow {
+  id: string;
+  kind: AttachmentKind;
+  file_name: string;
+  storage_key: string;
+  file_url: string;
+  mime_type: string;
+  file_size: number;
+  metadata: unknown;
+}
+
+/** What decides whether an upload may be linked to a note. */
+export interface AttachmentLinkCandidateRow {
+  id: string;
+  owner_id: string;
+  status: AttachmentStatus;
+  target_id: string | null;
+}
 
 // Kysely represents a `"learning_notes as n"` aliased query with the alias
 // added as its own entry on the DB generic, not the bare table name.
@@ -174,6 +196,55 @@ export interface NotesRepository {
 
   /** Moderation: make the note private and stop it being shared again. */
   holdPrivate(db: DatabaseExecutor, noteId: string): Promise<void>;
+
+  /** The uploads named by a note request, whoever owns them. */
+  listAttachmentLinkCandidates(
+    db: DatabaseExecutor,
+    attachmentIds: string[],
+  ): Promise<AttachmentLinkCandidateRow[]>;
+
+  /** Links the given uploads to the note if still ready and unattached. */
+  linkAttachmentsToNote(
+    db: DatabaseExecutor,
+    attachmentIds: string[],
+    noteId: string,
+  ): Promise<void>;
+
+  /** Ready attachments of one note, in upload order. */
+  listReadyNoteAttachments(
+    db: DatabaseExecutor,
+    noteId: string,
+  ): Promise<NoteAttachmentRow[]>;
+
+  /** Ready attachments of several notes, in upload order. */
+  listReadyAttachmentsOfNotes(
+    db: DatabaseExecutor,
+    noteIds: string[],
+  ): Promise<Array<NoteAttachmentRow & { target_id: string | null }>>;
+
+  findNoteLike(
+    db: DatabaseExecutor,
+    userId: string,
+    noteId: string,
+  ): Promise<{ id: string } | undefined>;
+
+  findNoteBookmark(
+    db: DatabaseExecutor,
+    userId: string,
+    noteId: string,
+  ): Promise<{ id: string } | undefined>;
+
+  listNoteLikes(
+    db: DatabaseExecutor,
+    userId: string,
+    noteIds: string[],
+  ): Promise<Array<{ target_id: string }>>;
+
+  listNoteBookmarks(
+    db: DatabaseExecutor,
+    userId: string,
+    noteIds: string[],
+  ): Promise<Array<{ note_id: string | null }>>;
 }
 
 function applyNoteFilters<O>(
@@ -443,6 +514,105 @@ export function createNotesRepository(): NotesRepository {
           updated_at: new Date(),
         })
         .where("id", "=", noteId)
+        .execute();
+    },
+
+    async listAttachmentLinkCandidates(db, attachmentIds) {
+      return db
+        .selectFrom("learning_attachments")
+        .select(["id", "owner_id", "status", "target_id"])
+        .where("id", "in", attachmentIds)
+        .execute();
+    },
+
+    async linkAttachmentsToNote(db, attachmentIds, noteId) {
+      await db
+        .updateTable("learning_attachments")
+        .set({ target_type: "note", target_id: noteId })
+        .where("id", "in", attachmentIds)
+        // Held to the same conditions as the caller's check, so an upload
+        // removed or attached elsewhere in between is not attached here.
+        .where("status", "=", "ready")
+        .where("target_id", "is", null)
+        .execute();
+    },
+
+    async listReadyNoteAttachments(db, noteId) {
+      return db
+        .selectFrom("learning_attachments")
+        .select([
+          "id",
+          "kind",
+          "file_name",
+          "storage_key",
+          "file_url",
+          "mime_type",
+          "file_size",
+          "metadata",
+        ])
+        .where("target_type", "=", "note")
+        .where("target_id", "=", noteId)
+        .where("status", "=", "ready")
+        .orderBy("created_at", "asc")
+        .execute();
+    },
+
+    async listReadyAttachmentsOfNotes(db, noteIds) {
+      return db
+        .selectFrom("learning_attachments")
+        .select([
+          "id",
+          "target_id",
+          "kind",
+          "file_name",
+          "storage_key",
+          "file_url",
+          "mime_type",
+          "file_size",
+          "metadata",
+        ])
+        .where("target_type", "=", "note")
+        .where("target_id", "in", noteIds)
+        .where("status", "=", "ready")
+        .orderBy("created_at", "asc")
+        .execute();
+    },
+
+    async findNoteLike(db, userId, noteId) {
+      return db
+        .selectFrom("learning_likes")
+        .select("id")
+        .where("user_id", "=", userId)
+        .where("target_type", "=", "note")
+        .where("target_id", "=", noteId)
+        .executeTakeFirst();
+    },
+
+    async findNoteBookmark(db, userId, noteId) {
+      return db
+        .selectFrom("learning_bookmarks")
+        .select("id")
+        .where("user_id", "=", userId)
+        .where("note_id", "=", noteId)
+        .executeTakeFirst();
+    },
+
+    async listNoteLikes(db, userId, noteIds) {
+      return db
+        .selectFrom("learning_likes")
+        .select("target_id")
+        .where("user_id", "=", userId)
+        .where("target_type", "=", "note")
+        .where("target_id", "in", noteIds)
+        .execute();
+    },
+
+    async listNoteBookmarks(db, userId, noteIds) {
+      return db
+        .selectFrom("learning_bookmarks")
+        .select("note_id")
+        .where("user_id", "=", userId)
+        .where("note_id", "in", noteIds)
         .execute();
     },
 

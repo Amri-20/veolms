@@ -734,25 +734,122 @@ interface RouteMetaMatch {
   loaderData?: unknown;
 }
 
+/** What a course page's head tags say about its course. */
+export interface CourseHeadDetails {
+  slug: string;
+  title: string;
+  shortDescription?: string | null;
+  thumbnailUrl?: string | null;
+}
+
+/** A head tag, in the shape a route's `meta` export returns. */
+export type HeadTagDescriptor =
+  | { name: string; content: string }
+  | { property: string; content: string }
+  | { tagName: "link"; rel: "canonical"; href: string };
+
 /**
- * The name to put in a course page's title. The real one is used when the
- * data this document was built with already holds it — the prerendered
- * overview of this course, or the first catalogue page; nothing is fetched
- * for a title. Any other course gets no name: every unknown course used to
- * be titled "UI/UX Design Mastery", a demo course.
+ * The course the data this document was built with already holds — the
+ * prerendered overview of this course, or the first catalogue page. Nothing
+ * is fetched for a head tag.
+ */
+const getRouteCourse = (
+  courseSlug: string | undefined,
+  matches: readonly (RouteMetaMatch | undefined)[] | undefined,
+): CourseHeadDetails | undefined => {
+  if (!courseSlug) return undefined;
+  const pageData = matches?.find((match) => match?.id === "root")
+    ?.loaderData as AcademyStaticPageData | null | undefined;
+  return [
+    pageData?.courseOverview?.course,
+    ...(pageData?.publishedCoursePage?.courses ?? []),
+  ].find((course) => course?.slug === courseSlug || course?.id === courseSlug);
+};
+
+/**
+ * The name to put in a course page's title: the real one when the document
+ * was built with it. Any other course gets no name: every unknown course
+ * used to be titled "UI/UX Design Mastery", a demo course.
  */
 const getRouteCourseTitle = (
   courseSlug: string | undefined,
   matches: readonly (RouteMetaMatch | undefined)[] | undefined,
-): string | undefined => {
-  if (!courseSlug) return undefined;
-  const pageData = matches?.find((match) => match?.id === "root")
-    ?.loaderData as AcademyStaticPageData | null | undefined;
-  const loadedCourse = [
-    pageData?.courseOverview?.course,
-    ...(pageData?.publishedCoursePage?.courses ?? []),
-  ].find((course) => course?.slug === courseSlug || course?.id === courseSlug);
-  return loadedCourse?.title.trim() || getDemoCourseTitle(courseSlug);
+): string | undefined =>
+  getRouteCourse(courseSlug, matches)?.title.trim() ||
+  (courseSlug ? getDemoCourseTitle(courseSlug) : undefined);
+
+const getCourseOverviewDescription = (
+  title: string | undefined,
+  shortDescription?: string | null,
+): string =>
+  shortDescription?.trim() ||
+  (title
+    ? `Course overview for ${title} on ${productName}.`
+    : `Course overview on ${productName}.`);
+
+const toAbsoluteUrl = (value: string, origin?: string): string | undefined => {
+  try {
+    return new URL(value, origin).href;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * The description and share tags of a course's overview page. The page's
+ * address (`og:url` and the canonical link) is included only when `origin`
+ * is given: a page built ahead of time does not know the site it will be
+ * served from. A picture is included only when its address is complete.
+ */
+export const getCourseHeadTags = (
+  course: CourseHeadDetails,
+  origin?: string,
+): HeadTagDescriptor[] => {
+  const title = course.title.trim();
+  const description = getCourseOverviewDescription(
+    title,
+    course.shortDescription,
+  );
+  const tags: HeadTagDescriptor[] = [
+    { name: "description", content: description },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+  ];
+  const thumbnailUrl = course.thumbnailUrl?.trim();
+  const imageUrl = thumbnailUrl
+    ? toAbsoluteUrl(thumbnailUrl, origin)
+    : undefined;
+  if (imageUrl) tags.push({ property: "og:image", content: imageUrl });
+  if (origin) {
+    const url = `${origin}/courses/${encodeURIComponent(course.slug)}/overview`;
+    tags.push(
+      { property: "og:url", content: url },
+      { tagName: "link", rel: "canonical", href: url },
+    );
+  }
+  return tags;
+};
+
+/**
+ * The share tags a route's `meta` adds to what `getRouteMeta` gives: those
+ * of the course, on the overview of a course this document was built with.
+ */
+export const getRouteShareTags = (
+  routeId: string | undefined,
+  params: RouteParams = {},
+  pathname: string,
+  matches?: readonly (RouteMetaMatch | undefined)[],
+): HeadTagDescriptor[] => {
+  if (
+    routeId === undefined ||
+    getEffectiveRouteId(routeId, pathname) !== "course-overview"
+  ) {
+    return [];
+  }
+  const course = getRouteCourse(params.courseSlug, matches);
+  return course
+    ? getCourseHeadTags(course).filter((tag) => !("name" in tag))
+    : [];
 };
 
 export const getRouteMeta = (
@@ -780,9 +877,10 @@ export const getRouteMeta = (
     const title = getRouteCourseTitle(params.courseSlug, matches);
     return {
       title: `${title ?? "Course"} · ${productName}`,
-      description: title
-        ? `Course overview for ${title} on ${productName}.`
-        : `Course overview on ${productName}.`,
+      description: getCourseOverviewDescription(
+        title,
+        getRouteCourse(params.courseSlug, matches)?.shortDescription,
+      ),
     };
   }
 

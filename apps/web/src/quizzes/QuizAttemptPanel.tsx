@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircleIcon as CheckCircle } from "@phosphor-icons/react/CheckCircle";
-import { ClockIcon as Clock } from "@phosphor-icons/react/Clock";
 import { WarningCircleIcon as WarningCircle } from "@phosphor-icons/react/WarningCircle";
 import type { QuizResult } from "@veolms/contracts";
 import { Button } from "../components/Button";
@@ -23,6 +22,8 @@ import {
   useSubmitQuizAttempt,
 } from "../services/quizzes/quizzes.mutations";
 import { QuizAttemptFooter } from "./attempt/QuizAttemptFooter";
+import { QuizCountdownChip } from "./attempt/QuizCountdownChip";
+import { useQuizClock, useQuizTimeExpired } from "./attempt/quizCountdown";
 import { QuizPreviousAttemptsView } from "./attempt/QuizPreviousAttemptsView";
 import { QuizProgressRail } from "./attempt/QuizProgressRail";
 import { QuizQuestionView } from "./attempt/QuizQuestionView";
@@ -39,7 +40,6 @@ import { QuizStageMessage } from "./attempt/QuizStageMessage";
 import { QuizSubmitDialog } from "./attempt/QuizSubmitDialog";
 import {
   answeredQuestionCount,
-  formatQuizRemainingTime,
   hasAnsweredEveryQuestion,
   hasRefusedAnswer,
   isQuestionAnswered,
@@ -133,7 +133,6 @@ export function QuizAttemptPanel({
   }, [assignmentId, activeAttemptId, attemptId, result]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
   const expiryRefreshRef = useRef<string | null>(null);
   const start = useStartQuizAttempt();
   const {
@@ -295,12 +294,9 @@ export function QuizAttemptPanel({
     setStartConfirmed(true);
     setAttemptId(null);
   }, [attemptGone, attemptId, discardAutosync, resetStart]);
-  useEffect(() => {
-    if (!attempt?.expiresAt) return undefined;
-    setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, [attempt?.expiresAt]);
+  // Ticks once a second, but outside this component's state: only the
+  // countdown is drawn again each second, and this panel when time runs out.
+  const quizClock = useQuizClock(attempt?.expiresAt);
 
   // Counted against the server's clock: a device clock that is a few
   // minutes off used to end the quiz early or show time that was not there.
@@ -309,11 +305,7 @@ export function QuizAttemptPanel({
     attemptQuery.dataUpdatedAt,
   );
   const expiresAtMs = attempt?.expiresAt ? Date.parse(attempt.expiresAt) : null;
-  const remainingSeconds =
-    expiresAtMs === null
-      ? null
-      : Math.max(0, Math.ceil((expiresAtMs - (now + clockOffsetMs)) / 1_000));
-  const timeExpired = remainingSeconds === 0;
+  const timeExpired = useQuizTimeExpired(quizClock, expiresAtMs, clockOffsetMs);
 
   const submitAttempt = submit.mutateAsync;
   useEffect(() => {
@@ -583,25 +575,12 @@ export function QuizAttemptPanel({
         {/* A quiz without a time limit shows no clock: a pill that only
             ever said "No time limit" was not telling the learner anything
             they could act on. */}
-        {remainingSeconds === null ? null : (
-          <QuizStatusChip
-            tone={
-              timeExpired
-                ? "negative"
-                : remainingSeconds <= 60
-                  ? "caution"
-                  : "neutral"
-            }
-            icon={<Clock size={14} weight="bold" aria-hidden="true" />}
-          >
-            {/* A timer, not a live region: announcing every second would
-                talk over the question. */}
-            <span role="timer" aria-label="Time remaining">
-              {timeExpired
-                ? "Time expired"
-                : formatQuizRemainingTime(remainingSeconds)}
-            </span>
-          </QuizStatusChip>
+        {expiresAtMs === null ? null : (
+          <QuizCountdownChip
+            clock={quizClock}
+            expiresAtMs={expiresAtMs}
+            clockOffsetMs={clockOffsetMs}
+          />
         )}
         <QuizStatusChip
           tone={answersUnsaved ? "caution" : "neutral"}

@@ -19,9 +19,15 @@ import type { DiscussionFormattingState } from "./discussion-editor/commands";
 import { DISCUSSION_ATTACHMENTS_ENABLED } from "./discussion-editor/image-storage";
 
 interface CommentFormattingToolbarProps {
-  editor: DiscussionEditorController;
+  /**
+   * `null` while the editor is not in place yet. The buttons are shown all
+   * the same, so the toolbar does not appear late; pressing one then asks
+   * for the editor instead of formatting.
+   */
+  editor: DiscussionEditorController | null;
   formattingState: DiscussionFormattingState;
   attachmentsEnabled?: boolean;
+  onEditorNeeded?: () => void;
 }
 
 export function hasCommentToolbarOverflow(
@@ -35,12 +41,19 @@ export function CommentFormattingToolbar({
   editor,
   formattingState,
   attachmentsEnabled = true,
+  onEditorNeeded,
 }: CommentFormattingToolbarProps) {
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const scrollportRef = useRef<HTMLDivElement>(null);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false);
+
+  const withEditor =
+    (action: (ready: DiscussionEditorController) => void) => () => {
+      if (editor) action(editor);
+      else onEditorNeeded?.();
+    };
 
   const openLinkEditor = () => {
     setLinkUrl(formattingState.linkUrl);
@@ -49,23 +62,23 @@ export function CommentFormattingToolbar({
 
   const applyLink = () => {
     const href = normalizeLink(linkUrl);
-    if (!href) editor.removeLink();
-    else editor.applyLink(href);
+    if (!href) editor?.removeLink();
+    else editor?.applyLink(href);
     setLinkOpen(false);
-    editor.focus();
+    editor?.focus();
   };
 
   const removeLink = () => {
-    editor.removeLink();
+    editor?.removeLink();
     setLinkOpen(false);
-    editor.focus();
+    editor?.focus();
   };
 
   const handleAttachment = async (event: ChangeEvent<HTMLInputElement>) => {
     const [file] = Array.from(event.target.files ?? []);
     event.target.value = "";
     if (!file) return;
-    await editor.attach(file);
+    await editor?.attach(file);
   };
 
   useEffect(() => {
@@ -113,7 +126,7 @@ export function CommentFormattingToolbar({
             event.preventDefault();
             event.stopPropagation();
             setLinkOpen(false);
-            editor.focus();
+            editor?.focus();
           }}
         >
           <input
@@ -162,7 +175,7 @@ export function CommentFormattingToolbar({
           label="Undo"
           mobileOnly
           disabled={!formattingState.canUndo}
-          onClick={() => editor.undo()}
+          onClick={withEditor((ready) => ready.undo())}
         >
           <ArrowCounterClockwise size={17} />
         </ToolbarButton>
@@ -170,28 +183,28 @@ export function CommentFormattingToolbar({
           label="Redo"
           mobileOnly
           disabled={!formattingState.canRedo}
-          onClick={() => editor.redo()}
+          onClick={withEditor((ready) => ready.redo())}
         >
           <ArrowClockwise size={17} />
         </ToolbarButton>
         <ToolbarButton
           label="Highlight"
           active={formattingState.highlight}
-          onClick={() => editor.toggleHighlight()}
+          onClick={withEditor((ready) => ready.toggleHighlight())}
         >
           <Highlighter size={17} />
         </ToolbarButton>
         <ToolbarButton
           label="Add or edit link"
           active={formattingState.link}
-          onClick={openLinkEditor}
+          onClick={withEditor(openLinkEditor)}
         >
           <LinkSimple size={17} />
         </ToolbarButton>
         {attachmentsEnabled && DISCUSSION_ATTACHMENTS_ENABLED && (
           <ToolbarButton
             label="Attach file"
-            onClick={() => attachmentInputRef.current?.click()}
+            onClick={withEditor(() => attachmentInputRef.current?.click())}
           >
             <Paperclip size={17} />
           </ToolbarButton>
@@ -199,28 +212,28 @@ export function CommentFormattingToolbar({
         <ToolbarButton
           label="Bold"
           active={formattingState.bold}
-          onClick={() => editor.toggleBold()}
+          onClick={withEditor((ready) => ready.toggleBold())}
         >
           <TextB size={17} weight="bold" />
         </ToolbarButton>
         <ToolbarButton
           label="Italic"
           active={formattingState.italic}
-          onClick={() => editor.toggleItalic()}
+          onClick={withEditor((ready) => ready.toggleItalic())}
         >
           <TextItalic size={17} />
         </ToolbarButton>
         <ToolbarButton
           label="Inline code"
           active={formattingState.code}
-          onClick={() => editor.toggleInlineCode()}
+          onClick={withEditor((ready) => ready.toggleInlineCode())}
         >
           <Code size={17} />
         </ToolbarButton>
         <ToolbarButton
           label="Code block"
           active={formattingState.codeBlock}
-          onClick={() => editor.toggleCodeBlock()}
+          onClick={withEditor((ready) => ready.toggleCodeBlock())}
         >
           <CodeBlock size={17} />
         </ToolbarButton>

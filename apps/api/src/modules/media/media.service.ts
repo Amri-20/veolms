@@ -1136,18 +1136,8 @@ export function createMediaService({
         courseIdOrSlug,
       );
     const course = await (isUuid
-      ? database
-          .selectFrom("courses")
-          .select(["id", "creator_id", "status"])
-          .where("id", "=", courseIdOrSlug)
-          .where("deleted_at", "is", null)
-          .executeTakeFirst()
-      : database
-          .selectFrom("courses")
-          .select(["id", "creator_id", "status"])
-          .where("slug", "=", courseIdOrSlug)
-          .where("deleted_at", "is", null)
-          .executeTakeFirst());
+      ? mediaRepo.findPlaybackCourseById(database, courseIdOrSlug)
+      : mediaRepo.findPlaybackCourseBySlug(database, courseIdOrSlug));
 
     if (!course) {
       throw new AppError(404, "COURSE_NOT_FOUND", "Course not found.");
@@ -1644,11 +1634,11 @@ export function createMediaService({
       await mediaRepo.updateMediaAssetStatus(database, job.video_id, "ready");
 
       if (durationSeconds) {
-        await database
-          .updateTable("media_assets")
-          .set({ duration_seconds: durationSeconds, updated_at: new Date() })
-          .where("id", "=", job.video_id)
-          .execute();
+        await mediaRepo.updateMediaAssetDuration(
+          database,
+          job.video_id,
+          durationSeconds,
+        );
       }
 
       await mediaRepo.insertVideoOutput(database, {
@@ -1729,16 +1719,7 @@ export function createMediaService({
             ? body.progressPercent
             : 50;
 
-      await database
-        .updateTable("video_jobs")
-        .set({
-          status: "processing",
-          progress_percent: progressPercent,
-          updated_at: new Date(),
-        })
-        .where("id", "=", job.id)
-        .where("status", "not in", ["completed", "failed", "cancelled"])
-        .execute();
+      await mediaRepo.markVideoJobProcessing(database, job.id, progressPercent);
       return { success: true, status: "processing", jobId: job.id };
     }
 

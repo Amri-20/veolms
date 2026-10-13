@@ -70,10 +70,7 @@ import {
   getStudentCataloguePathForEnrollmentFilter,
   isStudentCatalogueFilterSubpath,
 } from "./courses/catalogueRoutes";
-import {
-  toggleWishlistCourse,
-  useWishlistIds,
-} from "./courses/wishlistStorage";
+import { useToggleWishlistCourse, useWishlistIds } from "./wishlist";
 import { CourseCatalogueLoadingSkeleton } from "./courses/CourseCatalogueSkeleton";
 import type {
   Course,
@@ -176,6 +173,7 @@ import { learningProgressKeys } from "./services/learning-progress";
 import { mediaKeys } from "./services/media";
 
 import {
+  SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MIN_WIDTH,
   applySidebarShellToDocument,
   clampSidebarMaxWidth,
@@ -1168,6 +1166,7 @@ export function CoursesPage({
   );
   const debouncedSearch = useDebounce(search, DEFAULT_DEBOUNCE_DELAY_MS);
   const [statusFilter, setStatusFilter] = useState<CourseStatusFilter>("all");
+  const filterOwnerRef = useRef<string | null>(null);
   const [sort, setSort] = useState<CourseSort>("latest");
   const wishlisted = useWishlistIds();
   const [storedPreferencesReady, setStoredPreferencesReady] = useState(false);
@@ -2010,8 +2009,15 @@ export function CoursesPage({
       return;
     localStorage.setItem(getWorkspaceRoleStorageKey(activeUser?.id), role);
     setCourseMenu(null);
-    setCreatorEnrollmentFilter("all");
-    setStatusFilter("all");
+    // The list filters belong to an account in one workspace view. They are
+    // cleared when that changes, not when the creator opens the course
+    // editor and comes back.
+    const filterOwner = `${activeUser?.id ?? ""}|${role}|${effectiveRole}`;
+    if (filterOwnerRef.current !== filterOwner) {
+      filterOwnerRef.current = filterOwner;
+      setCreatorEnrollmentFilter("all");
+      setStatusFilter("all");
+    }
     if (page === "home")
       setActiveSection(
         effectiveRole === "creator" && !isAdmin ? "Dashboard" : "Home",
@@ -3180,9 +3186,7 @@ export function CoursesPage({
     ],
   );
 
-  const toggleWishlist = (course: Course) => {
-    toggleWishlistCourse(course);
-  };
+  const toggleWishlist = useToggleWishlistCourse();
 
   const resetCatalogue = () => {
     setSearch("");
@@ -4008,6 +4012,13 @@ export function CoursesPage({
     const nextWidth = clampSidebarWidth(value, sidebarMaxWidth);
     setSidebarWidth(nextWidth);
     localStorage.setItem("veolms-sidebar-width", String(Math.round(nextWidth)));
+  };
+
+  // Removing the saved width, rather than saving the default, lets a later
+  // change of the default reach this browser.
+  const resetSidebarWidth = () => {
+    setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
+    localStorage.removeItem("veolms-sidebar-width");
   };
 
   const createSidebarGesture = ({
@@ -5033,6 +5044,8 @@ export function CoursesPage({
             onSidebarPreferencesChange={setSidebarPreferences}
             sidebarMode={renderedSidebarMode}
             onSidebarModeChange={setSidebarMode}
+            sidebarWidthIsDefault={sidebarWidth === SIDEBAR_DEFAULT_WIDTH}
+            onSidebarWidthReset={resetSidebarWidth}
           />
         </Suspense>
       );
@@ -5301,6 +5314,7 @@ export function CoursesPage({
           role={effectiveRole}
           isAdmin={isAdmin}
           currentUserId={activeUser?.id}
+          signedOut={authUserFetched && !activeUser}
           isLoading={isLoadingCourses}
           hasLoadError={isCourseCatalogueLoadError}
           onRetryLoad={() => {

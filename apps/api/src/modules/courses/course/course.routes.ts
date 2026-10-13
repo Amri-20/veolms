@@ -15,6 +15,8 @@ import {
   courseEditorDataResponseSchema,
   myCoursesListResponseSchema,
   courseOverviewSchema,
+  lessonDescriptionParamsSchema,
+  lessonDescriptionResponseSchema,
   courseDeleteResponseSchema,
   courseStaticPageRefreshStatusResponseSchema,
 } from "@veolms/contracts";
@@ -224,6 +226,34 @@ const courseRoutes: RoutePlugin = async (app, options) => {
     controller.getCourseOverview,
   );
 
+  app.get(
+    "/courses/:courseId/lessons/:lessonId/description",
+    {
+      schema: {
+        operationId: "getLessonDescription",
+        tags: ["Courses"],
+        summary: "Get one lesson's description",
+        description:
+          "Returns the description of a lesson the course overview lists for this viewer: a published lesson of a published course for anyone, and any lesson for the course's creator or an admin. Any other lesson is not found.",
+        params: lessonDescriptionParamsSchema,
+        response: {
+          200: jsonResponse(
+            "The lesson's description.",
+            lessonDescriptionResponseSchema,
+          ),
+          404: errorResponse("No such course or lesson for this viewer."),
+          403: errorResponse("MFA step-up required."),
+        },
+      },
+      // The same optional session as the overview.
+      preHandler: [
+        ctx.middleware.authenticate,
+        ctx.middleware.requireMfaVerifiedIfAuthenticated,
+      ],
+    },
+    controller.getLessonDescription,
+  );
+
   // --- Course Authoring Basics ---
 
   app.post(
@@ -333,11 +363,15 @@ const courseRoutes: RoutePlugin = async (app, options) => {
             .enum(["beginner", "intermediate", "advanced", "all_levels"])
             .optional(),
           categoryId: z.string().uuid().optional().nullable(),
+          // The course version the caller last read. When sent, the update
+          // is refused if the course has changed since.
+          version: z.number().int().positive().optional(),
         }),
         response: {
           200: jsonResponse("Course details updated", courseSchema),
           403: errorResponse("Forbidden - not permitted"),
           404: errorResponse("Course not found"),
+          409: errorResponse("Optimistic lock conflict"),
         },
       },
       preHandler: ctx.authorize("course.details.update", "course"),
@@ -357,12 +391,14 @@ const courseRoutes: RoutePlugin = async (app, options) => {
           .object({
             thumbnailUrl: z.string().url().max(2048),
             thumbnailMediaId: z.string().uuid().optional().nullable(),
+            version: z.number().int().positive().optional(),
           })
           .strict(),
         response: {
           200: jsonResponse("Course thumbnail updated", courseSchema),
           403: errorResponse("Forbidden - not permitted"),
           404: errorResponse("Course not found"),
+          409: errorResponse("Optimistic lock conflict"),
         },
       },
       preHandler: ctx.authorize("course.thumbnail.update", "course"),

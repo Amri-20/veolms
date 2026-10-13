@@ -9,6 +9,15 @@ export const courseKeys = {
   overviews: () => [...courseKeys.all, "overview"] as const,
   overview: (idOrSlug: string) =>
     [...courseKeys.overviews(), idOrSlug] as const,
+  // Under the overviews: whatever makes a course overview stale (a
+  // curriculum edit, signing in or out) makes a lesson's description stale.
+  lessonDescription: (courseId: string, lessonId: string) =>
+    [
+      ...courseKeys.overviews(),
+      courseId,
+      "lesson-description",
+      lessonId,
+    ] as const,
   editor: (id: string) => [...courseKeys.all, "editor", id] as const,
   preview: (id: string) => [...courseKeys.all, "preview", id] as const,
   validation: (id: string) => [...courseKeys.all, "validation", id] as const,

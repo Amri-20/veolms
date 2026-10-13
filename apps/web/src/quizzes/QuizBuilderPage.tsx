@@ -26,7 +26,10 @@ export function QuizBuilderPage({ quizId, onNavigatePage }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
 
-  const rawCourses = coursesQuery.data?.courses ?? [];
+  const rawCourses = useMemo(
+    () => coursesQuery.data?.courses ?? [],
+    [coursesQuery.data?.courses],
+  );
 
   const filteredCourses = useMemo(() => {
     if (!searchQuery.trim()) return rawCourses;

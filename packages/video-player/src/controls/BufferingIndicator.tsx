@@ -89,10 +89,14 @@ export function BufferingIndicator({
   );
   const visibleRef = useRef(visible);
   const holdForFirstFrameRef = useRef(false);
-  visibleRef.current = visible;
-  if (playInFlight) {
-    holdForFirstFrameRef.current = true;
-  }
+  // Declared before the effect below, so on every commit it has already
+  // run when that effect reads these refs.
+  useEffect(() => {
+    visibleRef.current = visible;
+    if (playInFlight) {
+      holdForFirstFrameRef.current = true;
+    }
+  });
 
   useEffect(() => {
     if (waitingForMedia) {

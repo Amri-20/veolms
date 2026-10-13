@@ -20,6 +20,28 @@ export type LearningProgressRow = Awaited<
   ReturnType<typeof listUserCourseProgress>
 >[number];
 
+export function findCourseAccessType(
+  database: LearningProgressExecutor,
+  courseId: string,
+) {
+  return database
+    .selectFrom("course_access_rules")
+    .select("access_type")
+    .where("course_id", "=", courseId)
+    .executeTakeFirst();
+}
+
+export function findCoursePricingType(
+  database: LearningProgressExecutor,
+  courseId: string,
+) {
+  return database
+    .selectFrom("course_pricing")
+    .select("pricing_type")
+    .where("course_id", "=", courseId)
+    .executeTakeFirst();
+}
+
 /**
  * Removes learners' progress on one lesson and returns how many rows went:
  * everyone's, except the learners in `keepUserIds`, whose rows are left as
