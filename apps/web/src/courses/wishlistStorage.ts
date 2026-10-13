@@ -1,7 +1,12 @@
-import { useCallback, useSyncExternalStore } from "react";
-import { authStore } from "../store/auth.store";
+import { useSyncExternalStore } from "react";
 import { courseMatchesWishlist, type Course } from "./catalogue";
 
+/**
+ * The wishlist a visitor who is not signed in keeps in this browser. A
+ * signed-in learner's wishlist is on the server (see `../wishlist`); what
+ * this browser had saved for them is sent there once, on their first
+ * signed-in load.
+ */
 export const WISHLIST_STORAGE_KEY = "veolms-wishlist";
 
 const WISHLIST_CHANGE_EVENT = "veolms-wishlist-change";
@@ -9,41 +14,6 @@ const EMPTY_WISHLIST = new Set<string>();
 
 let cachedSerialized = "";
 let cachedSnapshot: ReadonlySet<string> = EMPTY_WISHLIST;
-let carriedOverStorageKey = "";
-
-/**
- * The wishlist used to be one entry for the whole browser, so a second
- * account on the same browser saw the first one's saved courses. A signed-in
- * account now has its own entry; a guest keeps the original one.
- */
-function getWishlistStorageKey(): string {
-  const signedInUserId = authStore.getState().user?.id;
-  // Before the session check answers, the identity hint still names the
-  // account this tab was signed in to.
-  const userId = signedInUserId ?? authStore.getIdentityHint()?.userId;
-  if (!userId) {
-    carriedOverStorageKey = "";
-    return WISHLIST_STORAGE_KEY;
-  }
-
-  const storageKey = `${WISHLIST_STORAGE_KEY}-${userId}`;
-  if (signedInUserId && carriedOverStorageKey !== storageKey) {
-    carriedOverStorageKey = storageKey;
-    try {
-      // The first account to sign in takes over the browser-wide list saved
-      // before wishlists were per account, or as a guest. It is moved, not
-      // copied, so the next account does not receive it as well.
-      const guestWishlist = localStorage.getItem(WISHLIST_STORAGE_KEY);
-      if (guestWishlist !== null && localStorage.getItem(storageKey) === null) {
-        localStorage.setItem(storageKey, guestWishlist);
-        localStorage.removeItem(WISHLIST_STORAGE_KEY);
-      }
-    } catch {
-      // Storage may be unavailable in private mode.
-    }
-  }
-  return storageKey;
-}
 
 function parseWishlistIds(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
@@ -67,8 +37,13 @@ function buildSnapshotFromSerialized(serialized: string): ReadonlySet<string> {
 
 export function readWishlistIds(): ReadonlySet<string> {
   if (typeof window === "undefined") return EMPTY_WISHLIST;
-  const serialized = localStorage.getItem(getWishlistStorageKey()) || "[]";
-  return buildSnapshotFromSerialized(serialized);
+  try {
+    const serialized = localStorage.getItem(WISHLIST_STORAGE_KEY) || "[]";
+    return buildSnapshotFromSerialized(serialized);
+  } catch {
+    // Storage may be unavailable in private mode.
+    return EMPTY_WISHLIST;
+  }
 }
 
 export function writeWishlistIds(ids: Iterable<string>) {
@@ -76,7 +51,7 @@ export function writeWishlistIds(ids: Iterable<string>) {
   try {
     const serialized = JSON.stringify([...ids]);
     if (serialized === cachedSerialized) return;
-    localStorage.setItem(getWishlistStorageKey(), serialized);
+    localStorage.setItem(WISHLIST_STORAGE_KEY, serialized);
     buildSnapshotFromSerialized(serialized);
     window.dispatchEvent(new Event(WISHLIST_CHANGE_EVENT));
   } catch {
@@ -104,30 +79,24 @@ export function toggleWishlistCourse(
   return readWishlistIds();
 }
 
-export function toggleWishlistId(courseId: string): ReadonlySet<string> {
-  return toggleWishlistCourse({ id: courseId });
-}
-
 export function subscribeToWishlist(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => undefined;
 
   const onLocalChange = () => onStoreChange();
   const onStorage = (event: StorageEvent) => {
-    if (event.key?.startsWith(WISHLIST_STORAGE_KEY)) onStoreChange();
+    if (event.key === WISHLIST_STORAGE_KEY) onStoreChange();
   };
 
   window.addEventListener(WISHLIST_CHANGE_EVENT, onLocalChange);
   window.addEventListener("storage", onStorage);
-  // Signing in or out changes whose wishlist is shown.
-  const unsubscribeFromAuth = authStore.subscribe(onStoreChange);
   return () => {
     window.removeEventListener(WISHLIST_CHANGE_EVENT, onLocalChange);
     window.removeEventListener("storage", onStorage);
-    unsubscribeFromAuth();
   };
 }
 
-export function useWishlistIds(): ReadonlySet<string> {
+/** The courses saved in this browser by a visitor who is not signed in. */
+export function useBrowserWishlistIds(): ReadonlySet<string> {
   return useSyncExternalStore(
     subscribeToWishlist,
     readWishlistIds,
@@ -135,15 +104,63 @@ export function useWishlistIds(): ReadonlySet<string> {
   );
 }
 
-export function useCourseWishlisted(
-  course: Pick<Course, "id" | "slug">,
-): boolean {
-  const wishlisted = useWishlistIds();
-  return courseMatchesWishlist(course, wishlisted);
+/**
+ * Before wishlists were kept on the server, a signed-in account's list was
+ * kept here, in an entry of its own. It is read once more, to send it to the
+ * server, and not used after that; `importedKey` records that it was sent.
+ */
+const accountListKey = (userId: string) => `${WISHLIST_STORAGE_KEY}-${userId}`;
+const importedKey = (userId: string) =>
+  `${WISHLIST_STORAGE_KEY}-imported-${userId}`;
+
+function readStoredList(key: string): string[] {
+  try {
+    return parseWishlistIds(JSON.parse(localStorage.getItem(key) || "[]"));
+  } catch {
+    return [];
+  }
 }
 
-export function useToggleWishlistCourse() {
-  return useCallback((course: Pick<Course, "id" | "slug">) => {
-    toggleWishlistCourse(course);
-  }, []);
+/**
+ * What this browser holds that the account's server wishlist may not have:
+ * the account's own list from before (until it has been sent once), and
+ * whatever was saved here while signed out, which goes to the account that
+ * signs in, as it always has. Each entry is a course id or slug.
+ */
+export function readBrowserWishlistToImport(userId: string): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const accountList =
+      localStorage.getItem(importedKey(userId)) === null
+        ? readStoredList(accountListKey(userId))
+        : [];
+    return [
+      ...new Set([...accountList, ...readStoredList(WISHLIST_STORAGE_KEY)]),
+    ];
+  } catch {
+    // Storage may be unavailable in private mode.
+    return [];
+  }
+}
+
+/**
+ * Called once the server has the entries. The account's old entry is left
+ * where it is and never read again. The signed-out list is emptied: it was
+ * moved to this account, so the next account does not receive it as well.
+ */
+export function markBrowserWishlistImported(
+  userId: string,
+  sent: readonly string[],
+) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(importedKey(userId), new Date().toISOString());
+    // Keep anything saved signed out, in another tab, since it was read.
+    const sentEntries = new Set(sent);
+    writeWishlistIds(
+      [...readWishlistIds()].filter((entry) => !sentEntries.has(entry)),
+    );
+  } catch {
+    // Storage may be unavailable in private mode.
+  }
 }

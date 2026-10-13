@@ -55,7 +55,7 @@ import {
   resolveCourseEnrollmentOffer,
 } from "./courseEnrollmentOffer";
 import { readCustomAmount } from "./customAmountEntry";
-import { toggleWishlistCourse, useCourseWishlisted } from "./wishlistStorage";
+import { useCourseWishlisted, useToggleWishlistCourse } from "../wishlist";
 import { CourseWishlistHeartButton } from "./CourseWishlistHeartButton";
 import { CourseThumbnailPlaceholder } from "./CourseThumbnailPlaceholder";
 import type { CourseSection } from "../learning/courseContent";
@@ -2546,6 +2546,7 @@ function CourseOverviewContent({
     [course?.id, course?.slug, courseSlug],
   );
   const wishlisted = useCourseWishlisted(wishlistTarget);
+  const toggleWishlistCourse = useToggleWishlistCourse();
 
   // As in the course content beside a lesson: any number of sections may be
   // open, and opening or closing one moves nothing. The section opens where
@@ -2573,7 +2574,7 @@ function CourseOverviewContent({
       if (isReadOnlyPreview || !wishlistTarget.id) return;
       toggleWishlistCourse(wishlistTarget);
     },
-    [isReadOnlyPreview, wishlistTarget],
+    [isReadOnlyPreview, toggleWishlistCourse, wishlistTarget],
   );
 
   const trailerMediaId =

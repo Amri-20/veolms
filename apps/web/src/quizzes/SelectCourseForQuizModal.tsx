@@ -90,7 +90,10 @@ export function SelectCourseForQuizModal({
     };
   }, [isOpen, dismissModal]);
 
-  const rawCourses = coursesQuery.data?.courses ?? [];
+  const rawCourses = useMemo(
+    () => coursesQuery.data?.courses ?? [],
+    [coursesQuery.data?.courses],
+  );
 
   const filteredCourses = useMemo(() => {
     if (!searchQuery.trim()) return rawCourses;

@@ -5,6 +5,7 @@ import { ListBulletsIcon as ListBullets } from "@phosphor-icons/react/ListBullet
 import { SlidersHorizontalIcon as SlidersHorizontal } from "@phosphor-icons/react/SlidersHorizontal";
 import { StarIcon as Star } from "@phosphor-icons/react/Star";
 import { UserCircleIcon as UserCircle } from "@phosphor-icons/react/UserCircle";
+import { usePageSearchShortcut } from "../hooks/usePageSearchShortcut";
 import type { NavigateTo } from "../routing/navigation";
 import { CourseReviewHeader } from "./CourseReviewHeader";
 import { NeedHelpWidget } from "./NeedHelpWidget";
@@ -73,7 +74,9 @@ export function ReviewsPage({ onNavigatePage, setNotice }: ReviewsPageProps) {
     onDismiss: () => setIsSupportModalOpen(false),
   });
 
-  // Keyboard shortcut listener (/ or Cmd+K to search, W to write review)
+  usePageSearchShortcut("reviews-search-input");
+
+  // Keyboard shortcut listener (W to write review)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeTag = (document.activeElement?.tagName || "").toLowerCase();
@@ -82,14 +85,9 @@ export function ReviewsPage({ onNavigatePage, setNotice }: ReviewsPageProps) {
         activeTag === "textarea" ||
         (document.activeElement as HTMLElement)?.isContentEditable;
 
-      if (!isInput) {
-        if (e.key === "/" || ((e.metaKey || e.ctrlKey) && e.key === "k")) {
-          e.preventDefault();
-          document.getElementById("reviews-search-input")?.focus();
-        } else if (e.key.toLowerCase() === "w" && !e.metaKey && !e.ctrlKey) {
-          e.preventDefault();
-          setIsWriteModalOpen(true);
-        }
+      if (!isInput && e.key.toLowerCase() === "w" && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        setIsWriteModalOpen(true);
       }
     };
 

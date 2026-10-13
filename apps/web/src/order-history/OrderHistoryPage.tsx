@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { usePageSearchShortcut } from "../hooks/usePageSearchShortcut";
 import { CircleNotchIcon as CircleNotch } from "@phosphor-icons/react/CircleNotch";
 import { ReceiptIcon as Receipt } from "@phosphor-icons/react/Receipt";
 import { WarningCircleIcon as WarningCircle } from "@phosphor-icons/react/WarningCircle";
@@ -52,26 +52,7 @@ export function OrderHistoryPage({
     refetch,
   } = useOrderHistoryFilter(setNotice);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const activeTag = (document.activeElement?.tagName || "").toLowerCase();
-      const isInput =
-        activeTag === "input" ||
-        activeTag === "textarea" ||
-        (document.activeElement as HTMLElement)?.isContentEditable;
-      if (
-        !isInput &&
-        (event.key === "/" ||
-          ((event.metaKey || event.ctrlKey) && event.key === "k"))
-      ) {
-        event.preventDefault();
-        document.getElementById("order-history-search-input")?.focus();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  usePageSearchShortcut("order-history-search-input");
 
   const handleDownloadReceipt = (order: OrderHistoryItem) => {
     setNotice?.(`Opening invoice for order ${order.orderNumber}...`);

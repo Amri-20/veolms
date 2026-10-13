@@ -137,7 +137,7 @@ export function CouponBuilderPage({
     isEditMode ? couponId : null,
   );
   const { data: myCourses } = useMyCourses();
-  const courses = myCourses?.courses ?? [];
+  const courses = useMemo(() => myCourses?.courses ?? [], [myCourses?.courses]);
   const createMutation = useCreateCoupon();
   const updateMutation = useUpdateCoupon();
 
