@@ -5,6 +5,7 @@ import type {
   Json,
 } from "@veolms/database";
 import type { Executor } from "../shared/repository.types.ts";
+import { CHECKOUT_HAND_OUT_ATTEMPT_STATUS } from "../shared/open-orders.ts";
 
 export async function findPaymentById(database: Executor, paymentId: string) {
   return await database
@@ -265,8 +266,8 @@ export async function closeOpenPaymentsForOrder(
 
 /**
  * The last time an order's gateway order was returned to the buyer. Every
- * hand-out records an attempt, so this is the newest attempt on the order's
- * gateway payment; undefined when it never had one.
+ * hand-out records an attempt, so this is the newest such attempt on the
+ * order's gateway payment; undefined when it never had one.
  */
 export async function findLastCheckoutHandOutAt(
   database: Executor,
@@ -278,6 +279,7 @@ export async function findLastCheckoutHandOutAt(
     .select((eb) => eb.fn.max("a.created_at").as("at"))
     .where("p.order_id", "=", orderId)
     .where("p.gateway_provider", "not in", ["free", "manual"])
+    .where("a.status", "=", CHECKOUT_HAND_OUT_ATTEMPT_STATUS)
     .executeTakeFirst();
   return row?.at ?? undefined;
 }

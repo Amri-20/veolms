@@ -56,6 +56,21 @@ export function createWishlistService({
     };
   }
 
+  /**
+   * How many of the saved courses the learner can see. The limit is counted
+   * against these: a course that was unpublished since is hidden from the
+   * list, and the learner has no way to remove it to make room.
+   */
+  async function countListed(
+    rows: readonly { course_id: string }[],
+  ): Promise<number> {
+    if (rows.length < WISHLIST_MAX_ITEMS) return rows.length;
+    const published = await courseService.listPublishedCourseRefs(
+      rows.map((row) => row.course_id),
+    );
+    return published.length;
+  }
+
   async function add(
     userId: string,
     courseId: string,
@@ -67,17 +82,19 @@ export function createWishlistService({
       throw new AppError(404, "COURSE_NOT_FOUND", "Course not found.");
     }
 
-    const rows = await wishlistRepository.listItems(database, userId);
-    const alreadySaved = rows.some((row) => row.course_id === course.id);
-    if (!alreadySaved && rows.length >= WISHLIST_MAX_ITEMS) {
-      throw new AppError(
-        409,
-        "WISHLIST_FULL",
-        `A wishlist holds ${WISHLIST_MAX_ITEMS} courses at most. Remove one to save another.`,
-      );
-    }
-
-    await wishlistRepository.insertItems(database, userId, [course.id]);
+    await database.transaction().execute(async (trx) => {
+      await wishlistRepository.lockWishlist(trx, userId);
+      const rows = await wishlistRepository.listItems(trx, userId);
+      if (rows.some((row) => row.course_id === course.id)) return;
+      if ((await countListed(rows)) >= WISHLIST_MAX_ITEMS) {
+        throw new AppError(
+          409,
+          "WISHLIST_FULL",
+          `A wishlist holds ${WISHLIST_MAX_ITEMS} courses at most. Remove one to save another.`,
+        );
+      }
+      await wishlistRepository.insertItems(trx, userId, [course.id]);
+    });
     return await list(userId);
   }
 
@@ -97,21 +114,32 @@ export function createWishlistService({
     userId: string,
     payload: ImportWishlistRequest,
   ): Promise<WishlistResponse> {
-    const published = await courseService.listPublishedCourseRefs([
-      ...new Set(payload.courses),
-    ]);
-    const rows = await wishlistRepository.listItems(database, userId);
-    const saved = new Set(rows.map((row) => row.course_id));
-    const room = Math.max(0, WISHLIST_MAX_ITEMS - rows.length);
+    const wanted = [...new Set(payload.courses)];
+    const published = await courseService.listPublishedCourseRefs(wanted);
+    // In the order the browser sent them, so that when only some fit it is
+    // the first ones that are kept.
+    const position = new Map(wanted.map((value, index) => [value, index]));
+    const placeOf = (ref: { id: string; slug: string }) =>
+      Math.min(
+        position.get(ref.id) ?? Number.MAX_SAFE_INTEGER,
+        position.get(ref.slug) ?? Number.MAX_SAFE_INTEGER,
+      );
+    const ordered = [...published].sort((a, b) => placeOf(a) - placeOf(b));
 
-    await wishlistRepository.insertItems(
-      database,
-      userId,
-      published
-        .map((ref) => ref.id)
-        .filter((courseId) => !saved.has(courseId))
-        .slice(0, room),
-    );
+    await database.transaction().execute(async (trx) => {
+      await wishlistRepository.lockWishlist(trx, userId);
+      const rows = await wishlistRepository.listItems(trx, userId);
+      const saved = new Set(rows.map((row) => row.course_id));
+      const room = Math.max(0, WISHLIST_MAX_ITEMS - (await countListed(rows)));
+      await wishlistRepository.insertItems(
+        trx,
+        userId,
+        ordered
+          .map((ref) => ref.id)
+          .filter((courseId) => !saved.has(courseId))
+          .slice(0, room),
+      );
+    });
     return await list(userId);
   }
 

@@ -9,6 +9,7 @@ import {
   coverageOf,
   coverageOverlaps,
   decideOpenOrders,
+  isOrderOpen,
   sameItems,
   type OpenOrderFacts,
 } from "./open-orders.ts";
@@ -266,6 +267,22 @@ await test("the longest wait is the one reported", () => {
     orderId: "b",
     secondsLeft: 400,
   });
+});
+
+await test("only an unpaid order before its deadline is open", () => {
+  const later = new Date(now.getTime() + 1000);
+  assert.equal(
+    isOrderOpen({ status: "pending", expires_at: later }, now),
+    true,
+  );
+  assert.equal(
+    isOrderOpen({ status: "pending", expires_at: later.toISOString() }, now),
+    true,
+  );
+  assert.equal(isOrderOpen({ status: "pending", expires_at: now }, now), false);
+  for (const status of ["expired", "cancelled", "paid", "payment_processing"]) {
+    assert.equal(isOrderOpen({ status, expires_at: later }, now), false);
+  }
 });
 
 await test("the refusals are 409s that say what to do", () => {
