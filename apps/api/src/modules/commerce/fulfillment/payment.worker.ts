@@ -13,6 +13,7 @@ import {
 import * as orderRepository from "../orders/order.repository.ts";
 import { createPaymentReconciliationService } from "../payments/payment-reconciliation.service.ts";
 import * as paymentRepository from "../payments/payment.repository.ts";
+import { reportDuplicatePurchases } from "../payments/duplicate-purchase.ts";
 import {
   SURPLUS_CAPTURE_ERROR_CODE,
   applySurplusRefund,
@@ -129,6 +130,22 @@ export function createPaymentWorker({
         },
         "Gateway payment captured for an order that was already paid; recorded as a surplus payment, nothing granted. Refund it from the gateway dashboard",
       );
+    }
+    if (result.outcome === "finalized" && result.orderId && result.userId) {
+      // The other way money ends up needing a refund: this capture paid an
+      // order for a course the buyer already holds a paid order for (see
+      // duplicate-purchase.ts). Logged as an error too, for the same reason.
+      await reportDuplicatePurchases({
+        database,
+        log,
+        order: { id: result.orderId, userId: result.userId },
+        payment: {
+          id: payment.id,
+          gatewayPaymentId: event.gatewayPaymentId,
+          amount: payment.amount,
+          currency: payment.currency,
+        },
+      });
     }
     log?.info(
       {

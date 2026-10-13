@@ -5,6 +5,7 @@ import {
   applySurplusRefund,
   describeSurplusCapture,
   isOrderAlreadyPaid,
+  refundedSoFar,
 } from "./surplus-payment.ts";
 
 const captured = {
@@ -88,4 +89,20 @@ await test("a surplus payment with no description yet still records its refund",
     next.errorDescription,
     "Refund rfnd_1 of 100 INR (minor units) reported by the gateway.",
   );
+});
+
+await test("the refunds noted on a surplus payment add up, and a payment with none has returned nothing", () => {
+  assert.equal(refundedSoFar(null), 0);
+  assert.equal(refundedSoFar(captured.error_description), 0);
+  const once = applySurplusRefund(captured, {
+    gatewayRefundId: "rfnd_a",
+    amount: 10000,
+    currency: "INR",
+  });
+  assert.equal(refundedSoFar(once.errorDescription), 10000);
+  const twice = applySurplusRefund(
+    { amount: 49900, error_description: once.errorDescription },
+    { gatewayRefundId: "rfnd_b", amount: 2500, currency: "INR" },
+  );
+  assert.equal(refundedSoFar(twice.errorDescription), 12500);
 });

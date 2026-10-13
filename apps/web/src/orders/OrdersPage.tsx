@@ -1,9 +1,22 @@
-import { lazy, Suspense, useEffect, useMemo } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import type { NeedsRefundEntry } from "@veolms/contracts";
 import { CircleNotchIcon as CircleNotch } from "@phosphor-icons/react/CircleNotch";
 import { ShoppingBagIcon as ShoppingBag } from "@phosphor-icons/react/ShoppingBag";
 import type { CourseRole } from "../courses/catalogue";
 import type { NavigateTo } from "../routing/navigation";
 import { useCurrentUser } from "../services/auth";
+import {
+  useFetchOrder,
+  useOrder,
+  useOrdersNeedingRefund,
+} from "../services/orders";
 import { useAuthStore } from "../store/auth.store";
 import {
   getUserRoles,
@@ -16,6 +29,9 @@ import { OrderFiltersBar } from "./OrderFiltersBar";
 import { OrdersTable } from "./OrdersTable";
 import { OrderDetailsDrawer } from "./OrderDetailsDrawer";
 import { OrderRefundModal } from "./OrderRefundModal";
+import { NeedsRefundNotice } from "./NeedsRefundNotice";
+
+const NO_NEEDS_REFUND_ENTRIES: readonly NeedsRefundEntry[] = [];
 
 const OrderHistoryPageRoute = lazy(() =>
   import("../order-history/OrderHistoryPage").then((module) => ({
@@ -60,6 +76,44 @@ export function OrdersPage({
   );
 
   const filterState = useOrdersFilter({ enabled: isStaff });
+
+  // Payments staff have to refund by hand (a gateway payment for an order
+  // that was already paid, a course paid for twice). Usually there are
+  // none, and then nothing is shown for them.
+  const needsRefund = useOrdersNeedingRefund({ enabled: isStaff });
+  const needsRefundEntries =
+    needsRefund.data?.entries ?? NO_NEEDS_REFUND_ENTRIES;
+
+  // An order opened from that notice need not be among the rows the table
+  // has loaded (they follow the filters and the date range), so it is read
+  // by its id. Fetched before the drawer is asked to open, so a failure is
+  // said rather than leaving a click that does nothing.
+  const { setSelectedOrderId } = filterState;
+  const fetchOrder = useFetchOrder();
+  const [flaggedOrderId, setFlaggedOrderId] = useState<string | null>(null);
+  const { data: flaggedOrderData } = useOrder(flaggedOrderId, "admin");
+  const flaggedOrder =
+    flaggedOrderId && flaggedOrderData && "admin" in flaggedOrderData
+      ? flaggedOrderData
+      : null;
+
+  const openFlaggedOrder = useCallback(
+    (orderId: string) => {
+      fetchOrder(orderId, "admin").then(
+        () => {
+          setSelectedOrderId(null);
+          setFlaggedOrderId(orderId);
+        },
+        () => setNotice?.("That order could not be opened. Please try again."),
+      );
+    },
+    [fetchOrder, setSelectedOrderId, setNotice],
+  );
+
+  const closeOrderDrawer = useCallback(() => {
+    setSelectedOrderId(null);
+    setFlaggedOrderId(null);
+  }, [setSelectedOrderId]);
 
   // Keyboard shortcut listener (/ or Cmd+K to focus search input)
   useEffect(() => {
@@ -150,6 +204,15 @@ export function OrdersPage({
         </span>
       </header>
 
+      {/* Payments that need a manual refund. Renders nothing when there are
+          none, which is the usual case. */}
+      <NeedsRefundNotice
+        entries={needsRefundEntries}
+        hasMore={Boolean(needsRefund.data?.nextCursor)}
+        onOpenOrder={openFlaggedOrder}
+        setNotice={setNotice}
+      />
+
       {/* Filter toolbar card: placed ON TOP of stats cards as requested */}
       <OrderFiltersBar
         searchQuery={filterState.searchQuery}
@@ -195,12 +258,14 @@ export function OrdersPage({
         onResetFilters={filterState.resetFilters}
         loadError={filterState.loadError}
         onRetry={filterState.refetch}
+        layoutRevision={needsRefundEntries.length}
       />
 
-      {/* Slide-over Order Details Drawer */}
+      {/* Slide-over Order Details Drawer. A row picked in the table, or
+          failing that the order opened from the refund notice. */}
       <OrderDetailsDrawer
-        order={filterState.selectedOrder}
-        onClose={() => filterState.setSelectedOrderId(null)}
+        order={filterState.selectedOrder ?? flaggedOrder}
+        onClose={closeOrderDrawer}
         hasPrev={filterState.hasPrevOrder}
         hasNext={filterState.hasNextOrder}
         onPrev={filterState.selectPrevOrder}

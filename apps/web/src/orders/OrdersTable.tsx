@@ -69,6 +69,13 @@ export interface OrdersTableProps {
   onResetFilters?: () => void;
   loadError?: "forbidden" | "failed" | null;
   onRetry?: () => void;
+  /**
+   * Changes whenever something above the table on the page changes height
+   * (the refund notice appearing or shrinking). The rows are positioned
+   * from the table's distance to the top of the scroll area, which is
+   * measured again when this changes.
+   */
+  layoutRevision?: number;
 }
 
 function getOrderListScrollMargin(
@@ -106,6 +113,7 @@ function useOrderScrollMargin(
   feedRef: RefObject<HTMLDivElement | null>,
   useWindowScroll: boolean,
   itemCount: number,
+  layoutRevision: number,
 ) {
   const [scrollMargin, setScrollMargin] = useState(0);
 
@@ -122,7 +130,7 @@ function useOrderScrollMargin(
     syncScrollMargin();
     window.addEventListener("resize", syncScrollMargin);
     return () => window.removeEventListener("resize", syncScrollMargin);
-  }, [feedRef, itemCount, useWindowScroll]);
+  }, [feedRef, itemCount, layoutRevision, useWindowScroll]);
 
   return scrollMargin;
 }
@@ -468,6 +476,7 @@ export const OrdersTable = memo(function OrdersTable({
   onResetFilters,
   loadError,
   onRetry,
+  layoutRevision = 0,
 }: OrdersTableProps) {
   const [openMenuOrderId, setOpenMenuOrderId] = useState<string | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
@@ -476,6 +485,7 @@ export const OrdersTable = memo(function OrdersTable({
     feedRef,
     useWindowScroll,
     orders.length,
+    layoutRevision,
   );
 
   // TanStack Virtualizer

@@ -6,6 +6,7 @@ import type { AccessService } from "../../access/access.service.ts";
 import { createAccessService } from "../../access/access.service.ts";
 import { createPaymentReconciliationService } from "../payments/payment-reconciliation.service.ts";
 import * as paymentRepo from "../payments/payment.repository.ts";
+import { reportDuplicatePurchases } from "../payments/duplicate-purchase.ts";
 import { mapWithConcurrency } from "../../../lib/concurrency.ts";
 
 export interface PaymentRecoveryWorkerOptions {
@@ -136,6 +137,21 @@ export function createPaymentRecoveryWorker({
           { paymentId: payment.id, orderId: result.orderId },
           "Payment recovered and fulfilled via gateway order verification",
         );
+        if (result.orderId && result.userId) {
+          // See duplicate-purchase.ts: a recovered payment is often the one
+          // for an order the buyer had already replaced and paid again.
+          await reportDuplicatePurchases({
+            database,
+            log,
+            order: { id: result.orderId, userId: result.userId },
+            payment: {
+              id: payment.id,
+              gatewayPaymentId: targetPaymentId,
+              amount: payment.amount,
+              currency: payment.currency,
+            },
+          });
+        }
         return "recovered";
       }
       log?.info(

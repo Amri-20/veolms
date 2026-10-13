@@ -8,12 +8,15 @@ import {
   orderStatsResponseSchema,
   orderDirectRefundRequestSchema,
   refundResultSchema,
+  needsRefundListQuerySchema,
+  needsRefundListResponseSchema,
 } from "@veolms/contracts";
 import { jsonResponse } from "../../../lib/responses.ts";
 import { errorResponse } from "../../../lib/errors.ts";
 import type { RoutePlugin } from "../../../lib/route-plugin.ts";
 import { createCommerceContext } from "../shared/commerce.context.ts";
 import { createOrderService } from "./order.service.ts";
+import { createNeedsRefundService } from "./needs-refund.service.ts";
 import { createInvoiceService } from "../invoices/invoice.service.ts";
 import { createRefundService } from "../refunds/refund.service.ts";
 import { createAuthorizationService } from "../../authorization/authorization.service.ts";
@@ -28,9 +31,13 @@ const orderRoutes: RoutePlugin = async (app, options) => {
     paymentGateway: options.services.paymentGateway,
   });
   const authorizationService = createAuthorizationService(options.database);
+  const needsRefundService = createNeedsRefundService({
+    database: options.database,
+  });
 
   const controller = createOrderController({
     service,
+    needsRefundService,
     invoiceService,
     refundService,
     authorizationService,
@@ -82,6 +89,32 @@ const orderRoutes: RoutePlugin = async (app, options) => {
       },
     },
     controller.getOrderStats,
+  );
+
+  // 2b. GET /orders/needs-refund - Money staff must return by hand (registered BEFORE :orderId)
+  app.get(
+    "/orders/needs-refund",
+    {
+      preHandler: ctx.requireAuthenticated,
+      schema: {
+        operationId: "listOrdersNeedingRefund",
+        tags: ["Commerce - Orders"],
+        summary: "List payments that need a manual refund",
+        description:
+          "Returns, newest first, the money staff have to return by hand: gateway payments captured for an order that was already paid another way (kind surplus_payment, refundable only from the gateway dashboard), and later orders of a buyer who paid twice for the same course (kind duplicate_purchase, the later order is the one to refund). Read-only: nothing is refunded and no access changes. Amounts are in minor units.",
+        querystring: needsRefundListQuerySchema,
+        response: {
+          200: jsonResponse(
+            "Payments that need a manual refund",
+            needsRefundListResponseSchema,
+          ),
+          400: errorResponse("Invalid query parameters or cursor"),
+          401: errorResponse("Unauthorized"),
+          403: errorResponse("Forbidden - billing.read required"),
+        },
+      },
+    },
+    controller.listNeedsRefund,
   );
 
   // 3. GET /orders/:orderId - Order details (UUID validated)
