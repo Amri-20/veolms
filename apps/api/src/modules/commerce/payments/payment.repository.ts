@@ -34,6 +34,27 @@ export async function findPaymentByOrderId(
     .executeTakeFirst();
 }
 
+/**
+ * For each of these orders, the provider of the payment
+ * `findPaymentByOrderId` would return. An order with no payment row is left
+ * out.
+ */
+export async function listPaymentProvidersByOrderIds(
+  database: Executor,
+  orderIds: string[],
+) {
+  if (orderIds.length === 0) return [];
+  return await database
+    .selectFrom("payments")
+    .distinctOn("order_id")
+    .select(["order_id", "gateway_provider"])
+    .where("order_id", "in", orderIds)
+    .orderBy("order_id")
+    .orderBy(paymentRankForOrder, "asc")
+    .orderBy("created_at", "desc")
+    .execute();
+}
+
 /** The gateway ids of the payment `findPaymentByOrderId` would return. */
 export async function findPaymentReferenceByOrderId(
   database: Executor,

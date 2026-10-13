@@ -676,6 +676,22 @@ export const ordersListQuerySchema = z.object({
   courseId: z.string().uuid().optional(),
   couponId: z.string().uuid().optional(),
   status: orderStatusSchema.optional(),
+  /**
+   * Several statuses at once, separated by commas
+   * ("payment_failed,expired,cancelled"): an order with any of them is
+   * listed. One label on a screen often covers more than one status.
+   */
+  statuses: z
+    .string()
+    .max(200)
+    .transform((value) =>
+      value
+        .split(",")
+        .map((status) => status.trim())
+        .filter(Boolean),
+    )
+    .pipe(z.array(orderStatusSchema).min(1))
+    .optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
   sortOrder: orderSortOrderSchema.default("desc"),

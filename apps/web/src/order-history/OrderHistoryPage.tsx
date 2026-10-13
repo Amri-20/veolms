@@ -233,13 +233,15 @@ export function OrderHistoryPage({
             <p className="mt-1.5 max-w-sm text-xs sm:text-sm text-(--muted) leading-relaxed">
               {hasFilters
                 ? hasNextPage
-                  ? `Search and filters look through the ${totalLoadedCount} purchases loaded so far. Older ones have not been loaded yet.`
+                  ? `The payment method filter looks through the ${totalLoadedCount} purchases loaded so far. Older ones have not been loaded yet.`
                   : "Try changing your search query or reset your active filters to view all orders."
                 : "Your completed purchases, invoices, and payment history will appear here."}
             </p>
-            {/* The filters only see what has been loaded. Saying "nothing
-                matches" with older purchases still unloaded, and no way to
-                load them, hid orders that were there. */}
+            {/* Status and search are answered by the server over every
+                purchase, so this is reached only through the payment method
+                filter, which still sees just what has been loaded. Saying
+                "nothing matches" with older purchases still unloaded, and no
+                way to load them, hid orders that were there. */}
             {hasFilters && hasNextPage && (
               <button
                 type="button"

@@ -30,6 +30,7 @@ import { OrdersTable } from "./OrdersTable";
 import { OrderDetailsDrawer } from "./OrderDetailsDrawer";
 import { OrderRefundModal } from "./OrderRefundModal";
 import { NeedsRefundNotice } from "./NeedsRefundNotice";
+import { canRejectTransferRequests } from "./needsRefundHelpers";
 
 const NO_NEEDS_REFUND_ENTRIES: readonly NeedsRefundEntry[] = [];
 
@@ -210,6 +211,7 @@ export function OrdersPage({
         entries={needsRefundEntries}
         hasMore={Boolean(needsRefund.data?.nextCursor)}
         onOpenOrder={openFlaggedOrder}
+        canRejectTransfers={canRejectTransferRequests(userRoles)}
         setNotice={setNotice}
       />
 

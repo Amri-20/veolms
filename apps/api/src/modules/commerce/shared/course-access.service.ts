@@ -17,6 +17,11 @@ export interface OrderRefLike {
 }
 
 export interface OrderItemRefLike {
+  /**
+   * The order item's own id. With it, a refunded bundle item releases the
+   * courses that were noted for it when the order was fulfilled.
+   */
+  id?: string;
   item_type: "course" | "bundle" | "quiz";
   course_id: string | null;
   bundle_id: string | null;
@@ -71,6 +76,14 @@ export interface CourseAccessService {
   /**
    * Revokes access_grants and enrollments specifically for a single refunded order item
    * (expanding bundle item courses if the refunded item was a bundle).
+   *
+   * A bundle item releases the courses it granted when the order was
+   * fulfilled (`order_item_courses`), whatever the bundle holds today: a
+   * course added to the bundle since was never given by this order and is
+   * left alone, and one removed since is still released. Only a bundle item
+   * with nothing noted (an order paid before that record was kept, or a
+   * caller that does not pass the item's id) falls back to the bundle's
+   * courses as they are now.
    */
   revokeAccessForOrderItem(
     database: Executor,
@@ -307,12 +320,20 @@ export function createCourseAccessService({
     if (item.item_type === "course" && item.course_id) {
       await releaseCourseFromOrder(database, order, item.course_id);
     } else if (item.item_type === "bundle" && item.bundle_id) {
-      const bundleCourses = await bundleRepo.listBundleCourses(
-        database,
-        item.bundle_id,
-      );
-      for (const bc of bundleCourses) {
-        await releaseCourseFromOrder(database, order, bc.course_id);
+      const grantedCourseIds = item.id
+        ? await orderItemCoursesRepo.listCourseIdsGrantedByOrderItem(
+            database,
+            item.id,
+          )
+        : [];
+      const courseIds =
+        grantedCourseIds.length > 0
+          ? grantedCourseIds
+          : (await bundleRepo.listBundleCourses(database, item.bundle_id)).map(
+              (bc) => bc.course_id,
+            );
+      for (const courseId of courseIds) {
+        await releaseCourseFromOrder(database, order, courseId);
       }
     } else if (item.item_type === "quiz" && item.quiz_pricing_id) {
       const offering = await quizPricingRepo.findPricingById(

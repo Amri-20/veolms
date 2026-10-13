@@ -156,6 +156,7 @@ export function createOrderService({
       courseId: options.courseId,
       couponId: options.couponId,
       status: options.status,
+      statuses: options.statuses,
       from: options.from,
       to: options.to,
       sortOrder,
