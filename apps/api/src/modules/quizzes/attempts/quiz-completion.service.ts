@@ -1,4 +1,4 @@
-import type { Database } from "@veolms/database";
+import type { Database, DatabaseExecutor } from "@veolms/database";
 import type { Kysely } from "kysely";
 import * as repo from "../shared/quiz.repository.ts";
 
@@ -21,6 +21,17 @@ export function createQuizCompletionService({
       return new Set(
         await repo.listPassedLessonIds(database, userId, lessonIds),
       );
+    },
+    /**
+     * The learners who have passed the quiz of this lesson, by the same
+     * definition as above. `executor` lets a caller that is changing the
+     * lesson read it inside its own transaction.
+     */
+    async listLearnerIdsWhoPassedLesson(
+      lessonId: string,
+      executor: DatabaseExecutor = database,
+    ): Promise<string[]> {
+      return await repo.listLearnerIdsWhoPassedLesson(executor, lessonId);
     },
   };
 }

@@ -899,6 +899,22 @@ export async function listAnalyticsAttempts(
     .execute();
 }
 
+/**
+ * Passed attempts, each with the lesson its quiz is assigned to. The one
+ * place "passed a lesson's quiz" is defined: a graded attempt marked passed.
+ */
+function passedAttemptsWithLesson(database: DatabaseExecutor) {
+  return database
+    .selectFrom("quiz_attempts")
+    .innerJoin(
+      "quiz_assignments",
+      "quiz_assignments.id",
+      "quiz_attempts.assignment_id",
+    )
+    .where("quiz_attempts.status", "=", "graded")
+    .where("quiz_attempts.is_passed", "=", true);
+}
+
 /** Of these lessons, the ones whose quiz the learner has a passed attempt on. */
 export async function listPassedLessonIds(
   database: DatabaseExecutor,
@@ -906,21 +922,26 @@ export async function listPassedLessonIds(
   lessonIds: readonly string[],
 ): Promise<string[]> {
   if (lessonIds.length === 0) return [];
-  const rows = await database
-    .selectFrom("quiz_attempts")
-    .innerJoin(
-      "quiz_assignments",
-      "quiz_assignments.id",
-      "quiz_attempts.assignment_id",
-    )
+  const rows = await passedAttemptsWithLesson(database)
     .select("quiz_assignments.lesson_id as lessonId")
     .distinct()
     .where("quiz_attempts.user_id", "=", userId)
-    .where("quiz_attempts.status", "=", "graded")
-    .where("quiz_attempts.is_passed", "=", true)
     .where("quiz_assignments.lesson_id", "in", [...lessonIds])
     .execute();
   return rows.map((row) => row.lessonId);
+}
+
+/** The learners who have a passed attempt on the quiz of this lesson. */
+export async function listLearnerIdsWhoPassedLesson(
+  database: DatabaseExecutor,
+  lessonId: string,
+): Promise<string[]> {
+  const rows = await passedAttemptsWithLesson(database)
+    .select("quiz_attempts.user_id as userId")
+    .distinct()
+    .where("quiz_assignments.lesson_id", "=", lessonId)
+    .execute();
+  return rows.map((row) => row.userId);
 }
 
 /**
