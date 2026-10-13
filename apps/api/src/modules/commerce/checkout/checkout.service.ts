@@ -24,6 +24,7 @@ import {
   createPaymentService,
   type PaymentService,
 } from "../payments/payment.service.ts";
+import { findGatewayCapture } from "../payments/captured-gateway-payment.ts";
 import {
   createPaymentReconciliationService,
   type PaymentReconciliationService,
@@ -184,6 +185,47 @@ export function createCheckoutService({
    * request repeats an earlier one: same idempotency key, or the same items
    * under a coupon the earlier order is still holding.
    */
+  /**
+   * An unpaid order is about to be continued, which means handing its
+   * gateway order to the buyer's checkout again. The money for it may
+   * already have been taken: the checkout window can close without calling
+   * back after a capture, and the webhook can be late or lost. The gateway
+   * refuses to open a checkout for an order it has been paid for (the buyer
+   * sees "Something went wrong" and cannot get any further), so the gateway
+   * is asked first, and a captured payment is settled here, exactly once,
+   * through the same path as the webhook and the recovery worker.
+   *
+   * Returns true when the order was found paid for and has been delivered.
+   * A gateway that cannot be reached is no reason to refuse the checkout:
+   * the order is then continued as before, and recovery settles it later.
+   */
+  async function settleIfAlreadyCaptured(
+    existingOrder: OrderRow,
+    payment: NonNullable<
+      Awaited<ReturnType<typeof paymentRepo.findPaymentByOrderId>>
+    >,
+  ): Promise<boolean> {
+    if (existingOrder.status !== "pending") return false;
+    if (payment.status === "captured") return false;
+    if (payment.gateway_provider !== paymentGateway.providerName) return false;
+    if (payment.amount === 0 || !payment.gateway_order_id) return false;
+
+    let capture: Awaited<ReturnType<typeof findGatewayCapture>>;
+    try {
+      capture = await findGatewayCapture(paymentGateway, payment);
+    } catch {
+      return false;
+    }
+    if (capture.state !== "captured") return false;
+
+    await reconciliationService.finalizeSuccessfulPayment({
+      paymentId: payment.id,
+      gatewayPaymentId: capture.gatewayPaymentId,
+      paymentMethod: capture.paymentMethod,
+    });
+    return true;
+  }
+
   async function resumeExistingOrder(
     existingOrder: OrderRow,
     user: CheckoutUser,
@@ -193,6 +235,16 @@ export function createCheckoutService({
       existingOrder.id,
     );
     const order = { id: existingOrder.id, status: existingOrder.status };
+
+    // Before anything else: the buyer may already have paid for this order
+    // without our hearing of it. If so it is delivered now, whether or not
+    // the items could still be bought today.
+    if (payment && (await settleIfAlreadyCaptured(existingOrder, payment))) {
+      return {
+        order: { id: existingOrder.id, status: "paid" },
+        gateway: null,
+      };
+    }
 
     if (existingOrder.status !== "paid" && existingOrder.total_amount > 0) {
       await assertStillPurchasable(existingOrder);
