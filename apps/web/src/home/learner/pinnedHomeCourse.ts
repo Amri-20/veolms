@@ -20,7 +20,11 @@ function getStorageKey(): string | null {
   return userId ? `${STORAGE_KEY}-${userId}` : null;
 }
 
-function readPinnedHomeCourseId(): string | null {
+/**
+ * The id of the course pinned to the home, if any, as it stands now. For
+ * code that runs outside a component; a component uses the hook below.
+ */
+export function readPinnedHomeCourseId(): string | null {
   const storageKey = getStorageKey();
   if (!storageKey) return null;
   try {

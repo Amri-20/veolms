@@ -1,8 +1,10 @@
 import type { CourseRole } from "../courses/catalogue";
 import { CircleNotchIcon as CircleNotch } from "@phosphor-icons/react/CircleNotch";
 import { CourseCatalogueLoadingSkeleton } from "../courses/CourseCatalogueSkeleton";
+import { CreatorDashboardSkeleton } from "../home/creator/CreatorDashboardSkeleton";
 import { CouponsTableLoadingRows } from "../coupons/CouponsTableLoadingRows";
 import { LoadingCards, LoadingRows } from "../components/analytics/StatTiles";
+import { ProgressPageSkeleton } from "../progress/ProgressPageSkeleton";
 import { QuizAuthoringLoadingSkeleton } from "../quizzes/QuizAuthoringLoadingSkeleton";
 import { StudentDetailsSkeleton } from "../students/StudentDetailsSkeleton";
 import { StudentsTableSkeleton } from "../students/StudentsTableSkeleton";
@@ -20,6 +22,10 @@ export function AcademyRouteSkeleton({
 }: AcademyRouteSkeletonProps) {
   if (page === "courses") {
     return <CourseCatalogueLoadingSkeleton role={role} />;
+  }
+
+  if (page === "home" && role === "creator") {
+    return <CreatorDashboardSkeleton />;
   }
 
   if (page === "coupons") {
@@ -48,6 +54,10 @@ export function AcademyRouteSkeleton({
 
   if (page === "student-details") {
     return <StudentDetailsSkeleton />;
+  }
+
+  if (page === "progress") {
+    return <ProgressPageSkeleton />;
   }
 
   return (

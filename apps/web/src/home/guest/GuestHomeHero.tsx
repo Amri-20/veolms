@@ -5,6 +5,7 @@ import type { NavigateTo } from "../../routing/navigation";
 import { GuestHomeLink } from "./GuestHomeLink";
 import type { MouseEvent, ReactNode } from "react";
 import { HeroDesk, heroPictureBandFade } from "./HeroDesk";
+import { guestHeroCopyWhenComplete, HeroCopyEnd } from "./HeroPicture";
 import { glassActionClasses, primaryActionClasses } from "./heroActionClasses";
 
 /**
@@ -25,6 +26,43 @@ function scrollToSection(event: MouseEvent<HTMLAnchorElement>, id: string) {
 }
 
 /**
+ * A page built ahead of time is the guest's, and is also the first thing a
+ * signed-in learner with no courses sees (see store/homeHint.ts). The
+ * hero is as tall as its copy, and the picture covers the hero, so copy
+ * that changed after the first paint would resize the picture. That page
+ * therefore carries the learner's copy as well, and the document's own
+ * attributes pick between the two before anything is drawn.
+ */
+const forGuest =
+  "[:root[data-session-hint=signed-in][data-home-hint=new-learner]_&]:hidden";
+const forReturningLearner =
+  "hidden [:root[data-session-hint=signed-in][data-home-hint=new-learner]_&]:block";
+
+const greetingClasses =
+  "mb-2 text-[1.375rem] leading-snug font-semibold text-slate-200 [:root[data-theme=light]_&]:text-slate-700 sm:mb-3 sm:text-[clamp(1.375rem,2.4vw,2rem)]";
+const descriptionClasses =
+  "mt-4 max-w-md text-[0.9375rem] leading-relaxed text-pretty text-slate-200/90 [:root[data-theme=light]_&]:text-slate-700 sm:mt-5 sm:max-w-[min(32rem,54cqw)] sm:text-lg";
+
+function HeroHeadline({
+  hero,
+  className,
+}: {
+  hero: HomePageHero;
+  className: string;
+}) {
+  return (
+    <span className={className}>
+      {hero.headline}
+      {hero.highlightedHeadline ? (
+        <span className="block text-[color-mix(in_srgb,var(--accent)_66%,white)] [:root[data-theme=light]_&]:text-(--accent-ink,var(--accent))">
+          {hero.highlightedHeadline}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
  * The hero is a picture of a desk with the copy laid over its empty side. By
  * night (dark theme) the copy is light on the picture's navy; by day (light
  * theme) it is dark on the sunlit wall. The fades run into the picture's own
@@ -33,6 +71,7 @@ function scrollToSection(event: MouseEvent<HTMLAnchorElement>, id: string) {
 export function GuestHomeHero({
   hero,
   greeting,
+  returningLearnerHero,
   onNavigatePage,
   freeCoursesSectionId,
   laptopScreen,
@@ -41,6 +80,12 @@ export function GuestHomeHero({
   hero?: HomePageHero;
   /** A short line of its own above the title, for a signed-in learner. */
   greeting?: string;
+  /**
+   * The copy a signed-in learner with no courses will be given, for the
+   * page that is shown to them before their session has answered. It is in
+   * the page beside `hero` and takes its place by the document's attributes.
+   */
+  returningLearnerHero?: HomePageHero;
   onNavigatePage: NavigateTo;
   /** The secondary action scrolls to this section when it is on the page. */
   freeCoursesSectionId?: string;
@@ -60,11 +105,17 @@ export function GuestHomeHero({
         <div
           // The box lies over the laptop without showing; it lets the pointer
           // through to the screen, and only its own content takes it.
-          className={`pointer-events-none flex w-full max-w-3xl flex-col items-start py-8 *:pointer-events-auto sm:py-12 ${guestHomeGutter}`}
+          className={`pointer-events-none flex w-full max-w-3xl flex-col items-start py-8 *:pointer-events-auto sm:py-12 ${guestHomeGutter} ${guestHeroCopyWhenComplete}`}
         >
           {hero && greeting ? (
-            <p className="mb-2 text-[1.375rem] leading-snug font-semibold text-slate-200 [:root[data-theme=light]_&]:text-slate-700 sm:mb-3 sm:text-[clamp(1.375rem,2.4vw,2rem)]">
-              {greeting}
+            <p className={greetingClasses}>{greeting}</p>
+          ) : hero && returningLearnerHero ? (
+            // The greeting's line, kept empty: the name is not known yet.
+            <p
+              aria-hidden="true"
+              className={`invisible ${forReturningLearner} ${greetingClasses}`}
+            >
+              Hi 👋
             </p>
           ) : null}
           <h1
@@ -73,11 +124,17 @@ export function GuestHomeHero({
           >
             {hero ? (
               <>
-                {hero.headline}
-                {hero.highlightedHeadline ? (
-                  <span className="block text-[color-mix(in_srgb,var(--accent)_66%,white)] [:root[data-theme=light]_&]:text-(--accent-ink,var(--accent))">
-                    {hero.highlightedHeadline}
-                  </span>
+                <HeroHeadline
+                  hero={hero}
+                  className={
+                    returningLearnerHero ? `block ${forGuest}` : "block"
+                  }
+                />
+                {returningLearnerHero ? (
+                  <HeroHeadline
+                    hero={returningLearnerHero}
+                    className={forReturningLearner}
+                  />
                 ) : null}
               </>
             ) : (
@@ -88,8 +145,15 @@ export function GuestHomeHero({
             )}
           </h1>
           {!hero || hero.description ? (
-            <p className="mt-4 max-w-md text-[0.9375rem] leading-relaxed text-pretty text-slate-200/90 [:root[data-theme=light]_&]:text-slate-700 sm:mt-5 sm:max-w-[min(32rem,54cqw)] sm:text-lg">
+            <p
+              className={`${descriptionClasses} ${returningLearnerHero ? forGuest : ""}`}
+            >
               {hero?.description}
+            </p>
+          ) : null}
+          {returningLearnerHero?.description ? (
+            <p className={`${descriptionClasses} ${forReturningLearner}`}>
+              {returningLearnerHero.description}
             </p>
           ) : null}
 
@@ -97,9 +161,10 @@ export function GuestHomeHero({
               copy and the actions (the copy's last line runs a little over
               their top), faded into the hero at its top and bottom
               edges; on wider screens this box steps aside and they fill the
-              whole hero behind the copy. */}
+              whole hero behind the copy. They are drawn as soon as they
+              are there, whatever the copy around them is waiting for. */}
           <div
-            className={`pointer-events-none! relative -mx-[clamp(var(--application-page-inline-gutter,25px),3.6cqw,3rem)] -mt-6 h-56 self-stretch ${heroPictureBandFade} sm:static sm:mx-0 sm:mt-0 sm:h-auto sm:before:hidden`}
+            className={`pointer-events-none! visible relative -mx-[clamp(var(--application-page-inline-gutter,25px),3.6cqw,3rem)] -mt-6 h-56 self-stretch ${heroPictureBandFade} sm:static sm:mx-0 sm:mt-0 sm:h-auto sm:before:hidden`}
           >
             {pictures}
           </div>
@@ -132,6 +197,7 @@ export function GuestHomeHero({
               </a>
             ) : null}
           </div>
+          <HeroCopyEnd />
         </div>
       )}
     </HeroDesk>

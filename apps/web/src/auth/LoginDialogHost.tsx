@@ -1,14 +1,19 @@
-import { lazy, Suspense, useCallback, useEffect } from "react";
+import { Suspense, useCallback, useEffect, useSyncExternalStore } from "react";
 import { useLocation, useNavigate } from "react-router";
 import {
   LOGIN_DIALOG_PARAM,
   sanitizeReturnTo,
   stripLoginDialogParams,
 } from "../routing/routeAccess";
+import { loginDialogBody } from "../routing/prerenderedBodies";
 import { useSessionAccess } from "../routing/RouteGuards";
 
-// The login card and its styles load only when someone asks to log in.
-const LoginDialog = lazy(() => import("./LoginDialog"));
+// The login card and its styles load only when someone asks to log in. Once
+// they have loaded the pop-up renders at once, where a bare `lazy()` would
+// still show its (empty) fallback first and hold the pop-up back behind it.
+const LoginDialog = loginDialogBody.Body;
+
+const subscribeToNothing = () => () => {};
 
 /**
  * Opens the login pop-up over the current page whenever the address carries
@@ -23,6 +28,14 @@ export function LoginDialogHost() {
   const location = useLocation();
   const navigate = useNavigate();
   const isSessionReady = useSessionAccess().access.isSessionReady;
+  // A page built ahead of time has no pop-up in it, whatever its address
+  // says. The first render in the browser has to match that page, so the
+  // pop-up is added straight after it instead of during it.
+  const pageIsHydrated = useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  );
 
   const params = new URLSearchParams(location.search);
   const requested = params.has(LOGIN_DIALOG_PARAM);
@@ -43,7 +56,7 @@ export function LoginDialogHost() {
     if (requested && isSessionReady) finish();
   }, [finish, isSessionReady, requested]);
 
-  if (!requested || isSessionReady) return null;
+  if (!pageIsHydrated || !requested || isSessionReady) return null;
 
   return (
     <Suspense fallback={null}>

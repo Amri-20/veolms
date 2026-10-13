@@ -1,4 +1,3 @@
-import { useLayoutEffect, useRef, useState } from "react";
 import { courseSurfaceElevation } from "../../components/cardElevation";
 import { guestHeroDayImage, guestHeroImage } from "../guest/guestHeroImage";
 import { GuestHomeSectionHeader } from "../guest/GuestHomeSectionHeader";
@@ -7,7 +6,12 @@ import {
   guestHomeGutter,
   guestHomeSectionGap,
 } from "../guest/guestHomeSpacing";
-import { HeroPicture, heroSceneClasses } from "../guest/HeroPicture";
+import {
+  HeroCopyEnd,
+  learnerHeroCopyWhenComplete,
+  HeroPicture,
+  heroSceneClasses,
+} from "../guest/HeroPicture";
 import { getHomeTimeGreeting } from "../homeGreeting";
 import { LearnerCoursesSubtitle } from "./learnerCoursesSubtitle";
 import { LearnerHeroClock } from "./LearnerHeroClock";
@@ -20,7 +24,6 @@ import {
   heroGreetingClasses,
   heroNameClasses,
   heroQuoteBoxClasses,
-  heroQuoteClasses,
   heroSizeClasses,
   pictureBandClasses,
   picturePlacementClasses,
@@ -73,109 +76,41 @@ export function LearnerNameSkeleton() {
 }
 
 /**
- * A quote of the usual length. It is never shown: it is set as the day's
- * quote will be, in the same face and the same balanced lines, so that the
- * placeholder has the lines a quote has at this width, one where there is
- * room for it on one and two where there is not.
- */
-const USUAL_QUOTE = "“Poor is the pupil who does not surpass his master.”";
-
-interface QuoteLine {
-  top: number;
-  width: number;
-}
-
-/**
- * The quote of the day before it has arrived: a bar for each line a quote
- * of the usual length takes here, and one for its author, which stands
- * where the real one will (from the end of the longest line on, and a little
- * lower under a quote of one line).
+ * The quote of the day before it has arrived: two bars for its two lines
+ * and one for its author, in the room the quote's box keeps for them (see
+ * `heroQuoteBoxClasses`).
  *
- * The lines are read off the page, because CSS cannot say where balanced
- * text breaks. Until they have been read (a page built ahead of time has no
- * script yet) there are two.
+ * The bars are a fixed size, set in the quote's own letters: 20 of its font
+ * sizes for the first and four fifths of that for the second, which is
+ * about what a quote of middling length takes and no wider than the
+ * greeting above them. The author's bar begins where the first one ends,
+ * which is where the author's name begins under a quote of that length. They used to be measured from a sample quote once
+ * the page was running, so a page built ahead of time drew them at one
+ * length and then redrew them at another before the quote came. Nothing
+ * here waits on a script, so they are the same from the first paint on.
  */
 export function LearnerQuoteSkeleton() {
-  const textRef = useRef<HTMLParagraphElement>(null);
-  const [lines, setLines] = useState<readonly QuoteLine[]>();
-
-  useLayoutEffect(() => {
-    const text = textRef.current;
-    if (!text) return undefined;
-    const read = () => {
-      const range = document.createRange();
-      range.selectNodeContents(text);
-      const box = text.getBoundingClientRect();
-      const found: QuoteLine[] = [];
-      for (const rect of range.getClientRects()) {
-        const top = Math.round(rect.top - box.top + rect.height / 2);
-        const width = Math.round(rect.right - box.left);
-        const line = found.find((entry) => Math.abs(entry.top - top) < 4);
-        if (line) line.width = Math.max(line.width, width);
-        else if (width > 0) found.push({ top, width });
-      }
-      setLines((current) =>
-        current &&
-        current.length === found.length &&
-        current.every(
-          (line, index) =>
-            line.top === found[index]?.top &&
-            line.width === found[index]?.width,
-        )
-          ? current
-          : found,
-      );
-    };
-    read();
-    const observer = new ResizeObserver(read);
-    observer.observe(text);
-    // The serif face arrives after the first paint and changes the lines.
-    void document.fonts.ready.then(read);
-    return () => observer.disconnect();
-  }, []);
-
-  const longest = lines ? Math.max(0, ...lines.map((line) => line.width)) : 0;
   return (
     <div aria-hidden="true" className={heroQuoteBoxClasses}>
-      <div className="relative">
-        <p
-          ref={textRef}
-          className={`${heroQuoteClasses} invisible select-none`}
-        >
-          {USUAL_QUOTE}
-        </p>
-        {lines ? (
-          lines.map((line) => (
-            <span
-              key={line.top}
-              style={{ top: line.top, width: line.width }}
-              className={`${onHero} absolute left-0 block h-4 -translate-y-1/2`}
-            />
-          ))
-        ) : (
-          <>
-            <span
-              className={`${onHero} absolute top-[0.65em] left-0 block h-4 w-full -translate-y-1/2`}
-            />
-            <span
-              className={`${onHero} absolute top-[1.95em] left-0 block h-4 w-4/5 -translate-y-1/2`}
-            />
-          </>
-        )}
+      {/* As wide as the box of a quote of two lines is, so the author's
+          bar has the room the author has. */}
+      <div className="w-[28em] max-w-full">
+        <div className="relative h-[2.6em] w-[20em] max-w-full">
+          <span
+            className={`${onHero} absolute top-[0.65em] left-0 block h-4 w-full -translate-y-1/2`}
+          />
+          <span
+            className={`${onHero} absolute top-[1.95em] left-0 block h-4 w-4/5 -translate-y-1/2`}
+          />
+        </div>
+        {/* The author starts where the quote's longest line ends, or ends
+            with the box where there is no room for that (see
+            `useAuthorBesideQuote`); its bar does the same by the longer
+            bar. */}
+        <span
+          className={`${onHero} mt-2 mb-0.5 ml-[min(20em,calc(100%_-_9rem))] block h-3 w-36`}
+        />
       </div>
-      {/* The author starts where the longest line of the quote ends, as the
-          real one does, or ends with the box where there is no room for
-          that. */}
-      <span
-        style={
-          longest
-            ? { marginLeft: `min(${longest}px, calc(100% - 9rem))` }
-            : undefined
-        }
-        className={`${onHero} block h-3 w-36 ${longest ? "" : "ml-auto"} ${
-          lines?.length === 1 ? "mt-3.5" : "mt-2"
-        } mb-0.5`}
-      />
     </div>
   );
 }
@@ -187,7 +122,10 @@ export function LearnerResumeRowSkeleton() {
       <div className={resumePaneClasses}>
         <div className={resumeRowContentClasses}>
           <span className={`${resumeThumbnailClasses} ${onHero}`} />
-          <div className="min-w-0 flex-1 @[50rem]/home:w-52 @[50rem]/home:flex-none">
+          {/* As tall as the row's three lines of text (what to do, the
+              course, its progress), so the row is the real one's height
+              where its thumbnail is left out as well. */}
+          <div className="flex min-h-[3.8rem] min-w-0 flex-1 flex-col justify-center @[50rem]/home:w-52 @[50rem]/home:flex-none">
             <span className={`${onHero} block h-3 w-28`} />
             <span className={`${onHero} mt-2.5 block h-4 w-full max-w-52`} />
           </div>
@@ -304,7 +242,10 @@ export function LearnerHomeShell({
           className={`pointer-events-none absolute inset-0 -z-10 ${heroFadeClasses}`}
         />
         <div className={heroCopyBoxClasses}>
-          <div className={copyOnDeskClasses} aria-hidden="true">
+          <div
+            className={`${copyOnDeskClasses} ${learnerHeroCopyWhenComplete}`}
+            aria-hidden="true"
+          >
             <div className={heroGreetingBoxClasses}>
               <div className="min-w-0">
                 <LearnerHeroClock
@@ -327,6 +268,7 @@ export function LearnerHomeShell({
               <LearnerQuoteSkeleton />
             </div>
             <LearnerResumeRowSkeleton />
+            <HeroCopyEnd />
           </div>
           <div className={pictureBandClasses}>{pictures}</div>
         </div>

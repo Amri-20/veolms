@@ -1,13 +1,29 @@
-import { ArrowRightIcon as ArrowRight } from "@phosphor-icons/react/ArrowRight";
+import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { CheckCircleIcon as CheckCircle } from "@phosphor-icons/react/CheckCircle";
-import { PlayCircleIcon as PlayCircle } from "@phosphor-icons/react/PlayCircle";
+import { ClockIcon as Clock } from "@phosphor-icons/react/Clock";
+import { ConfettiIcon as Confetti } from "@phosphor-icons/react/Confetti";
+import { HandsClappingIcon as HandsClapping } from "@phosphor-icons/react/HandsClapping";
+import { LightningIcon as Lightning } from "@phosphor-icons/react/Lightning";
+import { PencilSimpleIcon as PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { TargetIcon as Target } from "@phosphor-icons/react/Target";
 import type { LearningSummaryResponse } from "@veolms/contracts";
-import type { ReactNode } from "react";
+import { DEFAULT_DAILY_GOAL_MINUTES } from "@veolms/contracts/learning-goal-defaults";
 import {
-  formatLearnedTime,
-  formatTimeToGo,
-  formatTodayAgainstGoal,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import { useLaptopWallpaper } from "./laptopWallpaper";
+import {
+  goalShareOfDay,
+  goalStanding,
+  percentOfGoal,
+  timeLeftParts,
+  timeOverGoalParts,
+  todayAgainstGoalParts,
+  type GoalStanding,
 } from "./learnerGoalFormat";
 
 /**
@@ -16,194 +32,361 @@ import {
  * pixels and looks oversized in the source.
  *
  * How much smaller depends on the hero. Beside the copy (a page 50rem or
- * wider) the laptop is drawn at about half size and has room for detail.
- * In the band a narrower page gives the picture, down to a phone, it is
- * drawn at about a quarter: there the screen keeps to a few large lines.
+ * wider) the laptop is drawn at about half size. In the band a narrower
+ * page gives the picture, down to a phone, it is drawn at about a quarter:
+ * there the sheet keeps to the goal and its bar, set larger.
  *
- * The screen is always a dark one, whatever the theme, so its accent is the
- * theme's accent held to a lightness that reads on it (several day palettes
- * have an accent that is nearly black).
+ * The screen is a wallpaper with a sheet of frosted glass risen from its
+ * bottom edge, and the day's goal on the sheet. It is always a dark one,
+ * whatever the theme. Progress is drawn in the wallpaper's own accent; a
+ * learner's own picture has none, and the theme's accent is used, held to
+ * a lightness that reads on a dark screen (several day palettes have an
+ * accent that is nearly black).
  */
 const screenClasses = [
-  "relative flex size-full flex-col bg-[#080d1b] p-9 text-white @[50rem]/home:p-11",
-  "bg-[radial-gradient(85%_75%_at_10%_0%,color-mix(in_srgb,var(--goal-accent)_24%,transparent),transparent_72%)]",
+  "relative size-full overflow-hidden bg-[#070b1c] text-white",
   "[--goal-accent:color-mix(in_srgb,var(--accent)_60%,white)]",
   "supports-[color:oklch(from_white_l_c_h)]:[--goal-accent:oklch(from_var(--accent)_max(l,0.76)_c_h)]",
 ].join(" ");
 
-const RING_RADIUS = 50;
-const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+/**
+ * The wallpaper. It fades in once it has arrived rather than appearing in
+ * strips, and the screen's own dark ground shows until then.
+ */
+function LaptopWallpaper({ src }: { src: string }) {
+  const imageRef = useRef<HTMLImageElement>(null);
+  const [loadedSrc, setLoadedSrc] = useState<string>();
+  // A picture the browser already holds has loaded before this can listen.
+  useEffect(() => {
+    if (imageRef.current?.complete) setLoadedSrc(src);
+  }, [src]);
+  return (
+    <img
+      ref={imageRef}
+      key={src}
+      src={src}
+      alt=""
+      decoding="async"
+      draggable={false}
+      onLoad={() => setLoadedSrc(src)}
+      // Lifted a little: the laptop's screen is dimmed to sit in the
+      // picture (see `HeroLaptopScreen`), which dulls a wallpaper.
+      className={`absolute inset-0 size-full object-cover brightness-115 saturate-125 transition-opacity duration-500 motion-reduce:transition-none ${
+        loadedSrc === src ? "opacity-100" : "opacity-0"
+      }`}
+    />
+  );
+}
 
-/** Today's share of the goal as a ring, with what it stands for inside. */
-function GoalRing({
-  percent,
+/**
+ * The screen: the learner's wallpaper, and the sheet over its lower part.
+ * The sheet blurs the wallpaper behind it as well as darkening it, so the
+ * picture's own lines and edges do not run through the words.
+ */
+function LaptopScreen({
+  busy,
   children,
 }: {
-  percent: number;
+  busy?: boolean;
   children: ReactNode;
 }) {
+  const wallpaper = useLaptopWallpaper();
   return (
-    <div className="relative size-56 shrink-0 @[50rem]/home:size-60">
-      <svg viewBox="0 0 120 120" aria-hidden="true" className="size-full">
-        <circle
-          cx="60"
-          cy="60"
-          r={RING_RADIUS}
-          fill="none"
-          strokeWidth="11"
-          className="stroke-white/12"
-        />
-        <circle
-          cx="60"
-          cy="60"
-          r={RING_RADIUS}
-          fill="none"
-          strokeWidth="11"
-          strokeLinecap="round"
-          strokeDasharray={RING_LENGTH}
-          strokeDashoffset={RING_LENGTH * (1 - percent / 100)}
-          transform="rotate(-90 60 60)"
-          className={`stroke-(--goal-accent) transition-[stroke-dashoffset] duration-700 ease-out motion-reduce:transition-none ${
-            percent > 0 ? "" : "opacity-0"
-          }`}
-        />
-      </svg>
-      <div className="absolute inset-0 grid place-content-center justify-items-center text-center">
+    <div
+      role="group"
+      aria-label="Your learning goals"
+      aria-busy={busy}
+      className={screenClasses}
+      style={
+        wallpaper.accent
+          ? ({ "--goal-accent": wallpaper.accent } as CSSProperties)
+          : undefined
+      }
+    >
+      <LaptopWallpaper src={wallpaper.src} />
+      <div className="group/sheet absolute inset-x-0 bottom-0 rounded-t-[44px] bg-[#0b0d16]/55 px-11 pt-9 pb-10 shadow-[inset_0_1.5px_0_rgb(255_255_255/0.16)] backdrop-blur-2xl @[50rem]/home:pt-8 @[50rem]/home:pb-9">
         {children}
       </div>
     </div>
   );
 }
 
+/** One of the three figures along the sheet's foot. */
+function GoalStat({
+  icon,
+  amount,
+  label,
+  className = "text-white/80",
+}: {
+  icon: ReactNode;
+  amount?: string;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <p
+      className={`flex items-center gap-2.5 text-[29px] leading-none font-medium whitespace-nowrap ${className}`}
+    >
+      {icon}
+      <span>
+        {amount ? (
+          <strong className="font-bold text-white">{amount} </strong>
+        ) : null}
+        {label}
+      </span>
+    </p>
+  );
+}
+
+const statIconClasses = "size-9 shrink-0";
+
 /**
- * What the laptop in the learner's hero shows: today's learning against
- * their daily goal, and nothing else, so it reads at a glance. A learner
- * without a goal sees what they have done today and is offered to set one.
+ * The picture after the sheet's first line once the goal is met. It hops
+ * twice as it arrives and comes to rest where it stands (the half turn ends
+ * the bounce on the ground rather than in the air).
+ */
+const celebrationIconClasses =
+  "size-13 shrink-0 text-amber-300 motion-safe:animate-bounce motion-safe:[animation-iteration-count:2.5] @[50rem]/home:size-11";
+
+/**
+ * The sheet's first line. It names the goal until the goal is met, then
+ * says so with applause. Once the learner has gone well past it the line
+ * is praise and nothing else: the figures under it say by how much.
+ */
+function GoalHeading({ standing }: { standing: GoalStanding }) {
+  return (
+    <p className="flex items-center gap-3.5 text-[44px] leading-none font-semibold whitespace-nowrap text-white/90 @[50rem]/home:gap-3 @[50rem]/home:text-[36px]">
+      {standing === "under" ? "Today's goal" : null}
+      {standing === "completed" ? (
+        <>
+          Today&apos;s goal completed
+          <HandsClapping
+            weight="fill"
+            aria-hidden="true"
+            className={celebrationIconClasses}
+          />
+        </>
+      ) : null}
+      {standing === "beyond" ? (
+        <>
+          Awesome work today!
+          <Confetti
+            weight="fill"
+            aria-hidden="true"
+            className={celebrationIconClasses}
+          />
+        </>
+      ) : null}
+    </p>
+  );
+}
+
+/**
+ * The middle figure along the sheet's foot: the time left of the goal,
+ * which is none once it is met; and past it, the time added.
+ */
+function GoalOutcomeStat({
+  standing,
+  todaySeconds,
+  goalMinutes,
+}: {
+  standing: GoalStanding;
+  todaySeconds: number;
+  goalMinutes: number;
+}) {
+  if (standing === "beyond") {
+    const over = timeOverGoalParts(todaySeconds, goalMinutes);
+    return (
+      <GoalStat
+        icon={
+          <Lightning
+            weight="fill"
+            aria-hidden="true"
+            className={`${statIconClasses} text-amber-300`}
+          />
+        }
+        amount={over.amount}
+        label={over.label}
+      />
+    );
+  }
+  const left =
+    standing === "under"
+      ? timeLeftParts(todaySeconds, goalMinutes)
+      : { amount: "0", label: "min left" };
+  return (
+    <GoalStat
+      icon={
+        <Clock weight="fill" aria-hidden="true" className={statIconClasses} />
+      }
+      amount={left.amount}
+      label={left.label}
+    />
+  );
+}
+
+/**
+ * What the laptop in the learner's hero shows: a wallpaper, and on a sheet
+ * over it today's learning against the daily goal: the minutes, a bar, and
+ * beside the copy three figures under it (lessons finished today, time
+ * left, the share done).
+ *
+ * Meeting the goal changes the sheet: its first line says the goal is
+ * completed, with applause, and no time is left. Going well past it
+ * changes it again: the line is praise, the bar becomes two, the goal and
+ * after it the extra in green, and the figures are the time added and the
+ * share of the goal (past 100).
+ *
+ * Every learner has a goal (an hour a day until they choose their own), so
+ * there is no screen without one. Changing it is the pencil at the sheet's
+ * corner, which shows when the pointer is over the sheet; where there is no
+ * pointer to hover with, the whole sheet takes the press instead.
  */
 export function LearnerGoalScreen({
   summary,
   isLoading,
-  onSetGoal,
+  onEditGoal,
 }: {
   summary: LearningSummaryResponse | undefined;
   isLoading: boolean;
-  onSetGoal: () => void;
+  onEditGoal: () => void;
 }) {
   if (!summary) {
     return (
-      <div className={screenClasses}>
-        <div
-          role="status"
-          aria-busy={isLoading}
-          className="grid flex-1 place-content-center justify-items-center gap-6 text-center"
-        >
-          {isLoading ? (
-            <>
-              <span className="size-40 animate-pulse rounded-full bg-white/10 motion-reduce:animate-none" />
-              <span className="sr-only">Loading your learning goals</span>
-            </>
-          ) : (
-            <>
-              <Target aria-hidden="true" className="size-28 text-slate-500" />
-              <p className="grid gap-3 leading-none">
-                <strong className="text-[46px] font-semibold @[50rem]/home:text-[34px]">
-                  Learning goals
-                </strong>
-                <span className="text-[38px] text-slate-400 @[50rem]/home:text-[27px]">
-                  Unavailable right now
-                </span>
-              </p>
-            </>
-          )}
-        </div>
-      </div>
+      <LaptopScreen busy={isLoading}>
+        {isLoading ? (
+          <div role="status">
+            <span className="block h-9 w-56 animate-pulse rounded-full bg-white/14 motion-reduce:animate-none" />
+            <span className="mt-5 block h-24 w-96 animate-pulse rounded-3xl bg-white/14 motion-reduce:animate-none" />
+            <span className="mt-8 block h-10 animate-pulse rounded-full bg-white/14 motion-reduce:animate-none @[50rem]/home:mt-6 @[50rem]/home:h-7" />
+            <span className="mt-8 hidden h-10 animate-pulse rounded-full bg-white/10 motion-reduce:animate-none @[50rem]/home:block" />
+            <span className="sr-only">Loading your learning goals</span>
+          </div>
+        ) : (
+          <div role="status" className="flex items-center gap-6 py-6">
+            <Target aria-hidden="true" className="size-20 text-white/60" />
+            <p className="grid gap-3 leading-none">
+              <strong className="text-[44px] font-bold @[50rem]/home:text-[40px]">
+                Learning goals
+              </strong>
+              <span className="text-[34px] font-medium text-white/70 @[50rem]/home:text-[30px]">
+                Unavailable right now
+              </span>
+            </p>
+          </div>
+        )}
+      </LaptopScreen>
     );
   }
 
-  const goalMinutes = summary.configured ? summary.dailyGoalMinutes : null;
-  const hasGoal = goalMinutes !== null;
-  const startedToday = summary.todaySeconds > 0;
+  // An API that predates the default goal answers with none; the figures
+  // are worked out here either way, so the two cannot disagree.
+  const goalMinutes = summary.dailyGoalMinutes ?? DEFAULT_DAILY_GOAL_MINUTES;
+  const today = todayAgainstGoalParts(summary.todaySeconds, goalMinutes);
+  const percent = percentOfGoal(summary.todaySeconds, goalMinutes);
+  const standing = goalStanding(summary.todaySeconds, goalMinutes);
+  const beyond = standing === "beyond";
+  // The length of the bar's first part. Short of the goal that is the share
+  // done, with a little showing as soon as anything is. Past the goal it is
+  // the goal's share of the day, and the extra takes the rest.
+  const barShare = beyond
+    ? goalShareOfDay(summary.todaySeconds, goalMinutes)
+    : percent > 0
+      ? Math.min(100, Math.max(percent, 4))
+      : 0;
+  // Not sent by an API that predates it; the figure is then left out.
+  const lessons: number | undefined = summary.todayCompletions;
 
   return (
-    <div
-      role="group"
-      aria-label="Your learning goals"
-      className={screenClasses}
-    >
-      <div className="flex min-h-0 flex-1 items-center gap-8 @[50rem]/home:gap-10">
-        <GoalRing percent={hasGoal ? summary.todayPct : 0}>
-          {hasGoal ? (
-            <>
-              <strong className="text-[60px] leading-none font-bold tracking-[-0.03em] @[50rem]/home:text-[60px]">
-                {summary.todayPct}%
-              </strong>
-              <span className="mt-2 hidden text-[23px] font-medium text-slate-400 @[50rem]/home:block">
-                of today&apos;s goal
-              </span>
-            </>
-          ) : (
-            <Target
-              aria-hidden="true"
-              className="size-26 text-(--goal-accent)"
-            />
-          )}
-        </GoalRing>
+    <LaptopScreen>
+      <button
+        type="button"
+        onClick={onEditGoal}
+        aria-label="Edit your daily goal"
+        title="Edit your daily goal"
+        // Shown while the pointer is over the sheet, and whenever it has
+        // the keyboard's focus. Without a pointer that can hover (a phone,
+        // a tablet) it is always there, and its `after` layer makes the
+        // whole sheet the target (the sheet's blur makes it what a fixed
+        // layer is held to): drawn that small, the pencil alone is too
+        // little to press.
+        className="absolute top-6 right-7 grid size-18 cursor-pointer place-items-center rounded-full bg-white/14 text-white opacity-0 transition-[opacity,background-color] duration-150 group-hover/sheet:opacity-100 hover:bg-white/26 focus-visible:opacity-100 focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-white motion-reduce:transition-none [@media(hover:none)]:opacity-100 [@media(hover:none)]:after:fixed [@media(hover:none)]:after:inset-0"
+      >
+        <PencilSimple weight="bold" aria-hidden="true" className="size-9" />
+      </button>
 
-        <div className="min-w-0 flex-1">
-          <p className="text-[42px] leading-none font-medium text-slate-300 @[50rem]/home:text-[34px]">
-            {hasGoal ? "Today’s goal" : "Learned today"}
-          </p>
-          <p className="mt-5 text-[80px] leading-none font-bold tracking-[-0.03em] whitespace-nowrap @[50rem]/home:text-[72px]">
-            {hasGoal
-              ? formatTodayAgainstGoal(summary.todaySeconds, goalMinutes)
-              : formatLearnedTime(summary.todaySeconds)}
-          </p>
-          {hasGoal ? (
-            <p
-              className={`mt-6 flex items-center gap-3 text-[40px] leading-none font-medium whitespace-nowrap @[50rem]/home:text-[34px] ${
-                summary.goalCompletedToday
-                  ? "text-emerald-400"
-                  : "text-slate-200"
-              }`}
-            >
-              {summary.goalCompletedToday ? (
-                <CheckCircle
-                  weight="fill"
-                  aria-hidden="true"
-                  className="size-11 shrink-0 @[50rem]/home:size-10"
-                />
-              ) : (
-                <PlayCircle
-                  weight="fill"
-                  aria-hidden="true"
-                  className="size-11 shrink-0 text-(--goal-accent) @[50rem]/home:size-10"
-                />
-              )}
-              {summary.goalCompletedToday
-                ? "Goal reached"
-                : startedToday
-                  ? formatTimeToGo(summary.remainingSeconds)
-                  : "Start today’s session"}
-            </p>
-          ) : (
-            <button
-              type="button"
-              onClick={onSetGoal}
-              // The whole screen takes the press (the `after` layer): drawn
-              // on a phone, the button alone is too small a target. The
-              // shell sizes every button's text, hence the `!`.
-              className="mt-8 inline-flex h-24 cursor-pointer items-center gap-4 rounded-full bg-(--goal-accent) px-10 text-[40px]! leading-none font-bold whitespace-nowrap text-slate-950 transition-[filter] duration-150 after:absolute after:inset-0 hover:brightness-110 focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-white @[50rem]/home:mt-7 @[50rem]/home:h-22 @[50rem]/home:px-9 @[50rem]/home:text-[34px]!"
-            >
-              Set a daily goal
-              <ArrowRight
-                weight="bold"
-                aria-hidden="true"
-                className="size-10 @[50rem]/home:size-9"
-              />
-            </button>
-          )}
-        </div>
+      <GoalHeading standing={standing} />
+      <p className="mt-4 flex items-baseline leading-none whitespace-nowrap @[50rem]/home:mt-3">
+        <strong className="text-[128px] font-extrabold tracking-[-0.03em] @[50rem]/home:text-[104px]">
+          {today.done}
+        </strong>
+        <span className="ml-5 text-[66px] font-semibold text-white/75 @[50rem]/home:text-[56px]">
+          / {today.goal} {today.unit}
+        </span>
+      </p>
+
+      <div
+        role="progressbar"
+        aria-label="Today's goal"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.min(100, percent)}
+        aria-valuetext={`${today.done} of ${today.goal} ${today.unit}`}
+        className="mt-8 flex h-10 gap-2 overflow-hidden rounded-full bg-white/16 @[50rem]/home:mt-6 @[50rem]/home:h-7 @[50rem]/home:gap-1.5"
+      >
+        <span
+          style={{ width: `${barShare}%` }}
+          // Past the goal the two parts are each rounded at both ends, with
+          // the track between them; the glow would fill that space.
+          className={`h-full shrink-0 rounded-full bg-[linear-gradient(90deg,color-mix(in_srgb,var(--goal-accent)_78%,white),var(--goal-accent))] transition-[width] duration-700 ease-out motion-reduce:transition-none ${
+            beyond
+              ? ""
+              : "shadow-[0_0_18px_color-mix(in_srgb,var(--goal-accent)_55%,transparent)]"
+          }`}
+        />
+        {beyond ? (
+          <span
+            data-goal-extra=""
+            className="h-full min-w-0 flex-1 rounded-full bg-[linear-gradient(90deg,#4ade80,#86efac)]"
+          />
+        ) : null}
       </div>
-    </div>
+
+      {/* Beside the copy only: at a quarter size these would not be read. */}
+      <div
+        data-goal-stats=""
+        className="mt-8 hidden items-center justify-between gap-4 @[50rem]/home:flex"
+      >
+        {typeof lessons === "number" ? (
+          <GoalStat
+            icon={
+              <BookOpen
+                weight="fill"
+                aria-hidden="true"
+                className={statIconClasses}
+              />
+            }
+            amount={String(lessons)}
+            label={lessons === 1 ? "lesson" : "lessons"}
+          />
+        ) : null}
+        <GoalOutcomeStat
+          standing={standing}
+          todaySeconds={summary.todaySeconds}
+          goalMinutes={goalMinutes}
+        />
+        <GoalStat
+          icon={
+            <CheckCircle
+              weight="fill"
+              aria-hidden="true"
+              className={statIconClasses}
+            />
+          }
+          amount={`${beyond ? percent : Math.min(100, percent)}%`}
+          label={beyond ? "of goal" : "complete"}
+        />
+      </div>
+    </LaptopScreen>
   );
 }

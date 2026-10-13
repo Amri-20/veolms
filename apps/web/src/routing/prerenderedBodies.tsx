@@ -1,4 +1,5 @@
 import { lazy, useState, type ComponentType } from "react";
+import { readHomeHint } from "../store/homeHint";
 import {
   CATALOGUE_CHUNK_URL_PLACEHOLDER,
   GUEST_HOME_CHUNK_URL_PLACEHOLDER,
@@ -71,6 +72,22 @@ export const workspacePageBody = definePrerenderedBody(
   (module) => module.WorkspacePage,
 );
 
+// The dashboard. Its code is fetched while the session is checked (see the
+// shell's warm-up effect), so that when the checks are done it takes its
+// placeholder's place at once.
+export const creatorDashboardBody = definePrerenderedBody(
+  () => import("../CreatorDashboard"),
+  (module) => module.CreatorDashboard,
+);
+
+// The login pop-up. Fetched with the app when the address asks for it (see
+// entry.client.tsx) and while the login address checks the session, so it
+// opens with the page and not a moment after it.
+export const loginDialogBody = definePrerenderedBody(
+  () => import("../auth/LoginDialog"),
+  (module) => module.default,
+);
+
 function documentPreloads(chunkUrl: string) {
   // Anywhere in the document, not only <head>: the link may still be on its
   // way there when this runs.
@@ -94,9 +111,12 @@ export function preloadPrerenderedBodies(): Promise<unknown> | null {
   // keeps that pass from showing the loading state while the module arrives.
   const isDevelopmentHome =
     import.meta.env.DEV && ["/", "/home"].includes(window.location.pathname);
+  // A learner who had no courses last time is the exception: their home is
+  // the guest home with a greeting, and it is what the first paint shows.
   if (
     (isDevelopmentHome || documentPreloads(GUEST_HOME_CHUNK_URL_PLACEHOLDER)) &&
-    !document.documentElement.dataset.sessionHint
+    (!document.documentElement.dataset.sessionHint ||
+      readHomeHint() === "new-learner")
   ) {
     pending.push(guestHomeBody.preload());
   }

@@ -111,10 +111,10 @@ export const copyOnDeskClasses = [
 export const heroCopyBoxClasses = `pointer-events-none flex w-full flex-col items-start pt-7 *:pointer-events-auto ${guestHomeGutter} @[50rem]/home:max-w-[min(57rem,calc(100cqw_-_var(--picture-h)))] @[50rem]/home:pt-0 @[50rem]/home:pr-0`;
 
 /**
- * Beside the picture the greeting and the quote share a box that is only as
- * wide as the greeting is long: the quote has no width of its own there, so
- * it wraps inside the greeting's and its author ends where the greeting
- * does, well clear of the laptop. A short greeting still leaves it 22rem.
+ * The greeting and the quote under it. Beside the picture the box is as
+ * wide as the longer of the two, and never less than 22rem; the quote has a
+ * width of its own (see `heroQuoteBoxClasses`) and may run on past the
+ * greeting's end.
  */
 export const heroGreetingBoxClasses =
   "flex min-w-0 flex-col gap-y-[inherit] @[50rem]/home:w-fit @[50rem]/home:max-w-full @[50rem]/home:min-w-[min(22rem,100%)]";
@@ -183,16 +183,42 @@ export const resumeThumbnailClasses =
   "block h-15 w-26 shrink-0 overflow-hidden rounded-[0.625rem] @[50rem]/home:@max-[56rem]/home:hidden";
 
 /**
- * The quote's box. Beside the picture it has no width of its own (see
- * `heroGreetingBoxClasses`).
+ * The quote's size. It steps with the page at fixed widths and does not
+ * scale with it. It is set on the quote's box so that the box can be sized
+ * in the quote's own letters (see `heroQuoteBoxClasses`).
+ *
+ * Where the copy first stands beside the picture (50rem to 62rem of page)
+ * there is little room before the laptop, and the quote is set smaller so
+ * that its two lines still hold. A phone sets it smaller for the same
+ * reason, though there the longest quotes take a third line.
  */
-export const heroQuoteBoxClasses =
-  "min-w-0 @[50rem]/home:w-0 @[50rem]/home:min-w-full";
+const heroQuoteSizeClasses =
+  "text-lg @max-[30rem]/home:text-base @[50rem]/home:text-[0.9375rem] @[56rem]/home:text-base @[62rem]/home:text-lg @[72rem]/home:text-xl @[90rem]/home:text-[1.375rem]";
 
 /**
- * The quote is set in lines of about the same length, so a long one grows
- * downwards rather than across. Its size steps up with the page at fixed
- * widths; it does not scale with it.
+ * The quote's box. It is never wider than 28 times the quote's font size:
+ * wide enough for the longest quote the rotation uses
+ * (`DAILY_QUOTE_MAX_LENGTH` characters) to take two lines and no more, with
+ * about a tenth to spare for a wider face than the one it was measured in.
+ * Beside the picture it is as wide as the quote needs, up to that. A quote
+ * is never set in three lines there; one too long for that is not used.
+ *
+ * The box is as tall as two lines and the author under them whatever the
+ * quote, and a quote of one line stands in the middle of it. The copy is
+ * centred in the hero, so a box that grew with the quote would move the
+ * greeting above it and the course below it when the quote arrived: what
+ * holds its place while it loads cannot know how long it will be.
+ *
+ * On a page with less room than that, the box ends 1.5rem short of the
+ * laptop's lid instead. The lid stands 1.05 picture heights in from the
+ * picture's right edge, which is `--picture-shift` past the hero's, and the
+ * quote is level with it; the course's row below it is held back further,
+ * by the laptop's base.
  */
-export const heroQuoteClasses =
-  "font-serif text-lg leading-[1.3] text-balance italic @[72rem]/home:text-xl @[90rem]/home:text-[1.375rem]";
+export const heroQuoteBoxClasses = `flex min-h-[calc(2.6em_+_1.375rem)] max-w-[28em] min-w-0 flex-col justify-center ${heroQuoteSizeClasses} @[50rem]/home:w-max @[50rem]/home:max-w-[min(28em,calc(100cqw_-_var(--picture-h)_*_1.05_+_var(--picture-shift)_-_clamp(var(--application-page-inline-gutter,25px),3.6cqw,3rem)_-_1.5rem))]`;
+
+/**
+ * The quote is set in lines of about the same length, so one that needs two
+ * lines fills both rather than leaving a word on the second.
+ */
+export const heroQuoteClasses = "font-serif leading-[1.3] text-balance italic";

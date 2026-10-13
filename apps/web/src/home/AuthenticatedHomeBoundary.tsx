@@ -1,8 +1,9 @@
 import type { LearningCourse } from "../StudentPages";
-import { lazy, Suspense, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import type { NavigateTo } from "../routing/navigation";
 import { useEnrolledCourses } from "../services/enrollments";
 import type { GuestHomeCourseCardActions } from "./guest/GuestHomeCourseSection";
+import { readHomeHint, rememberHomeHint } from "../store/homeHint";
 import { LearnerHomeShell } from "./learner/LearnerHomeSkeleton";
 
 const LearnerHome = lazy(() =>
@@ -103,6 +104,17 @@ export function AuthenticatedHomeBoundary({
 }: AuthenticatedHomeBoundaryProps) {
   const enrollmentQuery = useEnrolledCourses({ enabled: !sessionPending });
   const enrollmentData = sessionPending ? undefined : enrollmentQuery.data;
+  // Which home this learner had last time, read once: it only stands in
+  // until their courses answer, and must not change under the page.
+  const [wasNotEnrolled] = useState(() => readHomeHint() === "new-learner");
+  const isNotEnrolled = enrollmentData
+    ? enrollmentData.courses.length === 0
+    : undefined;
+  useEffect(() => {
+    if (isNotEnrolled !== undefined) {
+      rememberHomeHint(isNotEnrolled ? "new-learner" : null);
+    }
+  }, [isNotEnrolled]);
 
   if (!sessionPending) {
     if (
@@ -124,6 +136,13 @@ export function AuthenticatedHomeBoundary({
     if (enrollmentData?.courses.length === 0) {
       return <>{notEnrolledContent}</>;
     }
+  }
+
+  // A learner who had no courses last time is shown that home while the
+  // session and the courses are on their way, from the same place as when
+  // they have answered, so its picture is drawn once and stays where it is.
+  if (enrollmentData === undefined && wasNotEnrolled) {
+    return <>{notEnrolledContent}</>;
   }
 
   // The learner's home is the same element from the moment the page opens

@@ -1254,6 +1254,36 @@ export function createCourseService({
   }
 
   /**
+   * Title, slug, status and thumbnail of each of a list of courses, whatever
+   * their status: what a list that names courses needs. For module services
+   * that decide for themselves which of them the viewer may be told about (a
+   * learner's history is one). A course that has been deleted is left out.
+   */
+  async function listCourseCardsByIds(courseIds: readonly string[]) {
+    const courses = await courseRepo.findCoursesByIds(database, [
+      ...new Set(courseIds),
+    ]);
+    return await Promise.all(
+      courses.map(async (course) => {
+        const thumbnail = course.thumbnail_media_id
+          ? await resolveCourseThumbnailUrls(
+              course.thumbnail_media_id,
+              course.creator_id ?? undefined,
+            )
+          : { thumbnailUrl: course.thumbnail_url ?? null, thumbnailSrcSet: [] };
+        return {
+          id: course.id,
+          slug: course.slug,
+          title: course.title,
+          status: course.status,
+          thumbnailUrl: thumbnail.thumbnailUrl,
+          thumbnailSrcSet: thumbnail.thumbnailSrcSet,
+        };
+      }),
+    );
+  }
+
+  /**
    * Owner, status, access type and pricing type of a course addressed by id
    * or slug, in one query, for services that decide access themselves.
    */
@@ -1391,6 +1421,7 @@ export function createCourseService({
     deleteCourse,
     findLessonById,
     findCourseById,
+    listCourseCardsByIds,
     findCourseAccessByIdOrSlug,
   };
 }

@@ -1,12 +1,10 @@
-import {
-  EnvelopeSimpleIcon as EnvelopeSimple,
-  GithubLogoIcon as GithubLogo,
-  GlobeIcon as Globe,
-  LinkedinLogoIcon as LinkedinLogo,
-  PhoneIcon as Phone,
-  SealCheckIcon as SealCheck,
-  UserIcon as User,
-} from "@phosphor-icons/react";
+import { EnvelopeSimpleIcon as EnvelopeSimple } from "@phosphor-icons/react/EnvelopeSimple";
+import { GithubLogoIcon as GithubLogo } from "@phosphor-icons/react/GithubLogo";
+import { GlobeIcon as Globe } from "@phosphor-icons/react/Globe";
+import { LinkedinLogoIcon as LinkedinLogo } from "@phosphor-icons/react/LinkedinLogo";
+import { PhoneIcon as Phone } from "@phosphor-icons/react/Phone";
+import { SealCheckIcon as SealCheck } from "@phosphor-icons/react/SealCheck";
+import { UserIcon as User } from "@phosphor-icons/react/User";
 import { lazy, Suspense, useEffect, useState } from "react";
 import type { PublicProfileResponse } from "@veolms/contracts";
 import { PageHeading } from "../components/PageHeading";

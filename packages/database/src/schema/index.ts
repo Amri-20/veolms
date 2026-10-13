@@ -122,6 +122,7 @@ import type {
 } from "./quizzes.schema.ts";
 import type {
   LearningDailyActivityTable,
+  LearningDailyCourseActivityTable,
   UserLearningSettingsTable,
 } from "./learning-goals.schema.ts";
 import type { HomePageSettingsTable } from "./home-page.schema.ts";
@@ -222,6 +223,7 @@ export interface Database {
   quiz_attempts: QuizAttemptTable;
   quiz_attempt_answers: QuizAttemptAnswerTable;
   learning_daily_activity: LearningDailyActivityTable;
+  learning_daily_course_activity: LearningDailyCourseActivityTable;
   learning_progress: LearningProgressTable;
   user_learning_settings: UserLearningSettingsTable;
   home_page_settings: HomePageSettingsTable;

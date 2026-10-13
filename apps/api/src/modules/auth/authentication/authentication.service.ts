@@ -73,6 +73,7 @@ const RESERVED_USERNAMES: ReadonlySet<string> = new Set([
   "orders",
   "messages",
   "purchase-history",
+  "progress",
   "notifications",
   "settings",
   "coupons",
@@ -178,6 +179,19 @@ export function createAuthService({
   /** Bulk display-name lookup — one query instead of findUserById per row. */
   function listUserDisplayNamesByIds(userIds: readonly string[]) {
     return userRepository.listUserDisplayNamesByIds(database, userIds);
+  }
+
+  /** Name, username and avatar of each user, for lists that show people. */
+  function listUserCardsByIds(userIds: readonly string[]) {
+    return userRepository.listUserCardsByIds(database, userIds);
+  }
+
+  /** The same of one user, found by their username. */
+  function findUserCardByUsername(username: string) {
+    return userRepository.findUserCardByUsername(
+      database,
+      username.trim().toLowerCase(),
+    );
   }
 
   /** Bulk notification-recipient lookup (includes soft-deleted users). */
@@ -1627,6 +1641,8 @@ export function createAuthService({
     findUserById,
     findUserByIdForNotification,
     listUserDisplayNamesByIds,
+    listUserCardsByIds,
+    findUserCardByUsername,
     listNotificationRecipientsByIds,
     getPublicProfile,
     findUserByIdentifierIncludingDeleted,

@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   startTransition,
+  use,
   useSyncExternalStore,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -84,6 +85,8 @@ import type {
 } from "./courses/catalogue";
 import { AcademyPaletteMenu } from "./shell/AcademyPaletteMenu";
 import { AcademyRouteSkeleton } from "./routing/AcademyRouteSkeleton";
+import { CreatorDashboardSkeleton } from "./home/creator/CreatorDashboardSkeleton";
+import { readPinnedHomeCourseId } from "./home/learner/pinnedHomeCourse";
 import { LearnerHomeShell } from "./home/learner/LearnerHomeSkeleton";
 import { FloatingScrollbar } from "./shell/FloatingScrollbar";
 import { useScrollingMark } from "./shell/useScrollingMark";
@@ -116,11 +119,8 @@ import {
   prefetchCourseEditor,
   useRestoreCourse,
 } from "./services/courses";
-import { prefetchGuestHomePage } from "./services/home";
-import {
-  enrolledCoursesQueryOptions,
-  useEnrolledCourses,
-} from "./services/enrollments";
+import { prefetchGuestHomePage, prefetchLearnerHome } from "./services/home";
+import { useEnrolledCourses } from "./services/enrollments";
 import {
   adaptApiCourseToCatalogueCourse,
   adaptCourseSummaryToCatalogueCourse,
@@ -138,6 +138,7 @@ import {
 import { ChunkStylesheets } from "./routing/ChunkStylesheets";
 import {
   courseCatalogueBody,
+  creatorDashboardBody,
   guestHomeBody,
   settingsPageBody,
   workspacePageBody,
@@ -232,6 +233,12 @@ import {
 } from "./settings/settingsPreferences";
 import type { NavigateTo } from "./routing/navigation";
 import { useAcademyRouteGuardState } from "./routing/RouteGuards";
+import { prefetchCapabilities } from "./services/authorization";
+import {
+  isDashboardHomeHint,
+  readHomeHint,
+  rememberHomeHint,
+} from "./store/homeHint";
 import type { SettingsPageProps } from "./SettingsPage";
 import { isEditingShortcutTarget } from "./keyboardShortcuts";
 import { useGlobalSearchShortcut } from "./searchShortcut";
@@ -319,11 +326,7 @@ const OrderHistoryPageRoute = lazy(() =>
     default: module.OrderHistoryPage,
   })),
 );
-const CreatorDashboard = lazy(() =>
-  import("./CreatorDashboard").then((module) => ({
-    default: module.CreatorDashboard,
-  })),
-);
+const CreatorDashboard = creatorDashboardBody.Body;
 const ReadingModeQuickMenu = lazy(() =>
   import("./reading-mode/ReadingModeQuickMenu").then((module) => ({
     default: module.ReadingModeQuickMenu,
@@ -427,6 +430,11 @@ const StudentDetailsPage = lazy(() =>
     default: module.StudentDetailsPage,
   })),
 );
+const ProgressPage = lazy(() =>
+  import("./progress/ProgressPage").then((module) => ({
+    default: module.ProgressPage,
+  })),
+);
 const PublicProfilePageRoute = lazy(() =>
   import("./profiles/PublicProfilePage").then((module) => ({
     default: module.PublicProfilePage,
@@ -451,6 +459,34 @@ const CouponsAccessDenied = lazy(() =>
 function AcademyPageFallback() {
   return <AcademyRouteSkeleton />;
 }
+
+const neverSettles = new Promise<never>(() => {});
+
+/**
+ * Keeps the dashboard's placeholder up for as long as it is rendered: it is
+ * never ready, so the boundary around it goes on showing its fallback.
+ */
+function DashboardOnItsWay(): null {
+  use(neverSettles);
+  return null;
+}
+
+/**
+ * A home page built ahead of time holds three homes, because the build
+ * cannot know whose it will be: the guest's, the placeholders of a
+ * learner's, and the placeholders of the dashboard. The document's own
+ * attributes pick one before anything is drawn (the head scripts set them
+ * from what the browser remembers, see store/sessionPresence.ts and
+ * store/homeHint.ts): the guest's for a visitor and for a learner with no
+ * courses yet, the dashboard's for an account whose home that is, and the
+ * learner's for anyone else who is signed in.
+ */
+const guestHomePreviewClasses =
+  "guest-home-preview contents [:root[data-session-hint=signed-in]:not([data-home-hint=new-learner])_&]:hidden";
+const learnerHomePendingClasses =
+  "session-pending-home hidden [:root[data-session-hint=signed-in]:not([data-home-hint])_&]:block";
+const dashboardHomePendingClasses =
+  "dashboard-pending-home hidden [:root[data-session-hint=signed-in][data-home-hint$=dashboard]_&]:block";
 
 type ThemePreference = "light" | "dark" | "device";
 type AppearanceOption = ThemePreference | "theme";
@@ -1217,6 +1253,16 @@ export function CoursesPage({
   const sessionPresentAtBoot = useSessionPresentAtBoot();
   const showGuestHomeWhilePending =
     hydratedWorkspaceRoleHint !== "creator" && !sessionPresentAtBoot;
+  // Which home the account had last time, when it is not the usual one
+  // (see store/homeHint.ts). Nothing while hydrating, like the hints above.
+  const homeHint = useSyncExternalStore(
+    subscribeToNothing,
+    readHomeHint,
+    () => null,
+  );
+  // A learner who had no courses last time has the guest home with a
+  // greeting, not the home that lists courses.
+  const learnerWasNotEnrolled = homeHint === "new-learner";
   const storeUser = useAuthStore((s) => s.user);
   // Once `/auth/me` has completed, its null result must win over any
   // in-memory login snapshot. Before that, the snapshot is useful only for
@@ -1251,12 +1297,12 @@ export function CoursesPage({
     () => (isAuthenticated ? resolveWorkspaceRole(userRoles, role) : "student"),
     [isAuthenticated, role, userRoles],
   );
-  const isDashboardRoute = page === "home" && effectiveRole === "creator";
-  const roleNavigationItems = useMemo(
-    () => getRoleNavigationItems(effectiveRole, isAdmin),
-    [effectiveRole, isAdmin],
-  );
-  const { routeContentBlocked } = useAcademyRouteGuardState();
+  const {
+    canAccessDashboard,
+    dashboardCapabilitiesResolved,
+    dashboardPermissionPending,
+    routeContentBlocked,
+  } = useAcademyRouteGuardState();
   const isEditingOrCreatingCourse = page === "course-create";
   const isAuthReady = Boolean(storeUser) || authUserFetched;
   // The Discussions page needs a session, and the route guard holds every
@@ -1277,6 +1323,40 @@ export function CoursesPage({
       : null;
   const isWorkspaceRoleHydrated =
     workspaceRoleKey !== null && hydratedWorkspaceRoleKey === workspaceRoleKey;
+  // The account is in its Admin or Instructor view, as far as can be told
+  // before `effectiveRole` says so. That takes the session check and then
+  // the saved view, and until both are in `effectiveRole` reads "student":
+  // an admin's page used to open as a learner's and turn into their own.
+  // First the view remembered from last time stands in, then the one the
+  // account's saved choice (or, for an admin with none, its role) gives.
+  const creatorViewExpected =
+    (!isAuthReady && sessionPresentAtBoot && isDashboardHomeHint(homeHint)) ||
+    (isAuthenticated &&
+      !isWorkspaceRoleHydrated &&
+      (workspaceRoleHint === "creator" ||
+        (workspaceRoleHint === null && isAdmin)));
+  const dashboardHomeExpected = page === "home" && creatorViewExpected;
+  // The route guard holds a page back with a plain spinner in its place.
+  // The home page is the exception while all that is awaited is whether the
+  // account may see the dashboard: it shows the dashboard's own placeholder
+  // meanwhile, or the learner's home when the account is in its Student
+  // view, which does not depend on the answer.
+  const routeContentHeld =
+    routeContentBlocked &&
+    !discussionsWhileSessionPending &&
+    !(dashboardPermissionPending && page === "home");
+  const isDashboardRoute =
+    page === "home" && (effectiveRole === "creator" || dashboardHomeExpected);
+  const roleNavigationItems = useMemo(
+    () =>
+      creatorViewExpected
+        ? getRoleNavigationItems(
+            "creator",
+            isAuthenticated ? isAdmin : homeHint === "admin-dashboard",
+          )
+        : getRoleNavigationItems(effectiveRole, isAdmin),
+    [creatorViewExpected, effectiveRole, homeHint, isAdmin, isAuthenticated],
+  );
   const { isPending: isSigningOut, signOut } = useSignOut();
   const signOutAfterSync = useCallback(async () => {
     try {
@@ -4590,23 +4670,95 @@ export function CoursesPage({
   // requested the moment the session is confirmed.
   useEffect(() => {
     if (page !== "home" || !(sessionPresentAtBoot || isAuthenticated)) return;
-    if (workspaceRoleHint === "creator") {
-      void import("./CreatorDashboard");
+    if (
+      workspaceRoleHint === "creator" ||
+      dashboardHomeExpected ||
+      effectiveRole === "creator"
+    ) {
+      void creatorDashboardBody.preload();
       return;
     }
     void import("./home/AuthenticatedHomeBoundary");
     void import("./home/learner/LearnerHome");
-  }, [isAuthenticated, page, sessionPresentAtBoot, workspaceRoleHint]);
-  useEffect(() => {
-    // Same rule the catalogue uses: a remembered session may ask before the
-    // session check has answered.
+  }, [
+    dashboardHomeExpected,
+    effectiveRole,
+    isAuthenticated,
+    page,
+    sessionPresentAtBoot,
+    workspaceRoleHint,
+  ]);
+  // A layout effect, so that it runs before the home's own queries start
+  // (they start from effects of components further down): asked for first,
+  // those queries join these requests instead of making their own.
+  useLayoutEffect(() => {
+    // A remembered session may ask before the session check has answered:
+    // this tab was signed in (the rule the catalogue uses), or the browser
+    // was the last time it was open. Should the session have ended since,
+    // the answer says so, as the session check's own would.
     const sessionExpected =
-      isAuthenticated || (!authUserFetched && authStore.hasSessionHint());
-    if (page !== "home" || !sessionExpected || effectiveRole !== "student") {
+      isAuthenticated ||
+      (!authUserFetched &&
+        (authStore.hasSessionHint() || sessionPresentAtBoot));
+    if (page !== "home" || !sessionExpected) return;
+    if (
+      dashboardHomeExpected ||
+      effectiveRole === "creator" ||
+      // Read here as well: the first pass of a page built ahead of time
+      // runs before `homeHint` is given (it matches that page), and would
+      // ask for a learner's courses on a dashboard's behalf.
+      (!authUserFetched && isDashboardHomeHint(readHomeHint()))
+    ) {
+      // The dashboard's numbers, asked for beside its code and its
+      // permission check instead of after them. Loaded on demand: the
+      // module validates its answers, and that library stays out of the
+      // code every page starts with.
+      void import("./services/analytics").then(({ prefetchDashboard }) =>
+        prefetchDashboard(queryClient),
+      );
+      // Whether the account may see the dashboard is asked with the session
+      // check rather than after it, when this tab knows which account it
+      // was. The route guard finds the answer waiting.
+      if (!authUserFetched && authIdentityHint?.userId) {
+        void prefetchCapabilities(queryClient, authIdentityHint.userId);
+      }
       return;
     }
-    void queryClient.prefetchQuery(enrolledCoursesQueryOptions());
-  }, [authUserFetched, effectiveRole, isAuthenticated, page, queryClient]);
+    // A learner's courses, their goal summary and their place in the course
+    // the home leads with, in one request (see `prefetchLearnerHome`).
+    prefetchLearnerHome(queryClient, readPinnedHomeCourseId());
+  }, [
+    authIdentityHint?.userId,
+    authUserFetched,
+    dashboardHomeExpected,
+    effectiveRole,
+    isAuthenticated,
+    page,
+    queryClient,
+    sessionPresentAtBoot,
+  ]);
+
+  // Which home this account has is kept for the next time the page is
+  // opened (see store/homeHint.ts). The Student view's own answer, whether
+  // the learner has courses, is kept by the home that finds it out.
+  useEffect(() => {
+    if (!isAuthenticated || !isWorkspaceRoleHydrated) return;
+    if (effectiveRole !== "creator") {
+      if (isDashboardHomeHint(readHomeHint())) rememberHomeHint(null);
+      return;
+    }
+    if (!dashboardCapabilitiesResolved) return;
+    rememberHomeHint(
+      canAccessDashboard ? (isAdmin ? "admin-dashboard" : "dashboard") : null,
+    );
+  }, [
+    canAccessDashboard,
+    dashboardCapabilitiesResolved,
+    effectiveRole,
+    isAdmin,
+    isAuthenticated,
+    isWorkspaceRoleHydrated,
+  ]);
 
   const renderPageContent = ({
     surfaceCourseSlug = courseSlug,
@@ -4623,7 +4775,38 @@ export function CoursesPage({
     surfaceSettingsTab?: string;
     surfaceUsername?: string;
   } = {}): ReactNode => {
-    if (routeContentBlocked && !discussionsWhileSessionPending) {
+    const homeIsTheRoute = surfacePage === "home" && page === "home";
+    if (
+      homeIsTheRoute &&
+      (dashboardHomeExpected || effectiveRole === "creator")
+    ) {
+      // The dashboard, or what stands in for it while the session is
+      // checked, the saved view restored, its permission read and its code
+      // fetched. All of that is one wait to whoever is watching, so it is
+      // one placeholder, and the same element from the first to the last
+      // of it: a new one for each step would start its pulse again.
+      const dashboardReady =
+        effectiveRole === "creator" &&
+        !dashboardHomeExpected &&
+        !routeContentBlocked;
+      return (
+        // Keyed, so that it is not taken for the boundary of the home it
+        // replaces: React would keep that home in the page, hidden, behind
+        // the placeholder, and the frame is laid out by what is in it.
+        <Suspense key="dashboard" fallback={<CreatorDashboardSkeleton />}>
+          {dashboardReady ? (
+            <CreatorDashboard
+              onNavigatePage={onNavigatePage}
+              academyTheme={appliedAcademyTheme}
+              resolvedTheme={resolvedTheme}
+            />
+          ) : (
+            <DashboardOnItsWay />
+          )}
+        </Suspense>
+      );
+    }
+    if (routeContentHeld) {
       return (
         <AcademyRouteSkeleton
           page={surfacePage}
@@ -4645,9 +4828,23 @@ export function CoursesPage({
         </Suspense>
       );
     }
+    // Before the pages that are chosen by section: opened from another
+    // page (a learner's row in Students, say) this one keeps that section.
+    if (surfacePage === "progress") {
+      return (
+        <Suspense fallback={<AcademyRouteSkeleton page="progress" />}>
+          <ProgressPage
+            username={surfaceUsername}
+            onNavigatePage={onNavigatePage}
+            onNavigateBack={showPageBackButton ? onNavigateBack : undefined}
+            setNotice={setNotice}
+          />
+        </Suspense>
+      );
+    }
     if (surfacePage === "home" && effectiveRole === "creator") {
       return (
-        <Suspense fallback={<AcademyPageFallback />}>
+        <Suspense fallback={<CreatorDashboardSkeleton />}>
           <CreatorDashboard
             onNavigatePage={onNavigatePage}
             academyTheme={appliedAcademyTheme}
@@ -4668,6 +4865,18 @@ export function CoursesPage({
         setCourseMenu,
         setNotice,
       };
+      // The home of a learner with no courses: the guest home, greeting
+      // them. It can be up before the session has answered (see
+      // `learnerWasNotEnrolled`), so the name this tab remembers stands in.
+      const newLearnerHome = (
+        <GuestHome
+          onNavigatePage={onNavigatePage}
+          courseCardActions={guestHomeCourseCardActions}
+          initialPage={initialGuestHomePage}
+          initialCopy={initialGuestHomeCopy}
+          learnerName={shellProfileKnownName?.trim() ?? ""}
+        />
+      );
       // The guest home's hero picture is the page's largest paint. Emitting
       // its preload here (not inside the lazy GuestHome) places it in the
       // prerendered document head, so the browser starts the download before
@@ -4710,7 +4919,17 @@ export function CoursesPage({
             // rendering it from a different place in the tree would make
             // React rebuild the whole page that is already on screen.
             <>
-              <div className="guest-home-preview">
+              <div
+                className={
+                  // Once the session check is in, this is a visitor's
+                  // page and is shown whatever the browser remembered. A
+                  // check that failed (the API not answering) leaves the
+                  // remembered session in place, and the page was blank.
+                  isAuthReady
+                    ? "guest-home-preview contents"
+                    : guestHomePreviewClasses
+                }
+              >
                 <GuestHome
                   onNavigatePage={onNavigatePage}
                   courseCardActions={guestHomeCourseCardActions}
@@ -4719,9 +4938,14 @@ export function CoursesPage({
                 />
               </div>
               {isAuthReady ? null : (
-                <div className="session-pending-home">
-                  <LearnerHomeShell />
-                </div>
+                <>
+                  <div className={learnerHomePendingClasses}>
+                    <LearnerHomeShell />
+                  </div>
+                  <div className={dashboardHomePendingClasses}>
+                    <CreatorDashboardSkeleton />
+                  </div>
+                </>
               )}
             </>
           ) : !isAuthReady && showGuestHomeWhilePending ? (
@@ -4736,7 +4960,13 @@ export function CoursesPage({
             // learner are there from the start.
             <Suspense
               fallback={
-                <LearnerHomeShell learnerName={shellProfileKnownName ?? ""} />
+                // While the home's own code loads. A learner who had no
+                // courses last time gets their home here already.
+                learnerWasNotEnrolled ? (
+                  newLearnerHome
+                ) : (
+                  <LearnerHomeShell learnerName={shellProfileKnownName ?? ""} />
+                )
               }
             >
               <AuthenticatedHomeBoundary
@@ -4748,15 +4978,7 @@ export function CoursesPage({
                 learnerName={shellProfileKnownName?.trim() ?? ""}
                 courseCardActions={guestHomeCourseCardActions}
                 sessionPending={!isAuthReady}
-                notEnrolledContent={
-                  <GuestHome
-                    onNavigatePage={onNavigatePage}
-                    courseCardActions={guestHomeCourseCardActions}
-                    initialPage={initialGuestHomePage}
-                    initialCopy={initialGuestHomeCopy}
-                    learnerName={activeUser?.displayName?.trim() ?? ""}
-                  />
-                }
+                notEnrolledContent={newLearnerHome}
                 pendingContent={
                   initialGuestHomePage && showGuestHomeWhilePending ? (
                     // Keep the already-painted guest home on screen until
@@ -5932,7 +6154,7 @@ export function CoursesPage({
                   })}
                 </LearningBackgroundSurface>
               ) : null
-            ) : routeContentBlocked && !discussionsWhileSessionPending ? (
+            ) : routeContentHeld ? (
               <AcademyRouteSkeleton
                 page={page}
                 role={effectiveRole}
