@@ -20,6 +20,23 @@ export type LearningProgressRow = Awaited<
   ReturnType<typeof listUserCourseProgress>
 >[number];
 
+/**
+ * Removes every learner's progress on one lesson and returns how many rows
+ * went. Stored progress only ever rises (see the upsert below), so removing
+ * the row is the one way a lesson stops counting as started or finished; a
+ * learner's later progress on it is then recorded from nothing.
+ */
+export async function deleteLessonProgress(
+  database: LearningProgressExecutor,
+  lessonId: string,
+): Promise<number> {
+  const result = await database
+    .deleteFrom("learning_progress")
+    .where("lesson_id", "=", lessonId)
+    .executeTakeFirst();
+  return Number(result.numDeletedRows);
+}
+
 function toIdList(courseId: string | string[] | undefined): string[] {
   if (!courseId) return [];
   return Array.isArray(courseId) ? courseId : [courseId];

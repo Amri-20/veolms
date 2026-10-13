@@ -50,6 +50,7 @@ import {
   isRestrictedFreeCourse,
 } from "../../access/index.ts";
 import { createMediaService, type MediaService } from "../../media/index.ts";
+import { resolveAliasedBasicsUpdate } from "./basics-aliased-field.ts";
 import { resolveBasicsCategoryUpdate } from "./basics-category.ts";
 import {
   getLessonDurationSeconds,
@@ -354,6 +355,12 @@ export function createCourseService({
       totalDurationSeconds,
       pricing,
       certificateEnabled: Boolean(row.certificate_enabled ?? false),
+      // The same rule, on the same stored values, as the course overview's
+      // `canSelfEnroll`, so a card and the page it opens agree.
+      canSelfEnroll: !isRestrictedFreeCourse({
+        pricing_type: row.pricing_type,
+        access_type: row.access_type,
+      }),
     } satisfies CourseSummary;
   }
 
@@ -840,6 +847,13 @@ export function createCourseService({
     // may lose it too); `undefined` leaves it alone.
     const categoryUpdate = resolveBasicsCategoryUpdate(updates);
     await assertCategoryExists(categoryUpdate);
+    // The level by the same rule (`difficultyLevel` is its alias): `null`
+    // removes it, which `difficulty ?? difficultyLevel` skipped while the
+    // response said it was gone. Publishing does not require a level.
+    const difficultyUpdate = resolveAliasedBasicsUpdate(
+      updates.difficulty,
+      updates.difficultyLevel,
+    );
 
     if (updates.thumbnailMediaId) {
       const thumb = await mediaService.getMediaAsset(
@@ -887,8 +901,7 @@ export function createCourseService({
         short_description: updates.shortDescription,
         description: updates.description,
         category_id: categoryUpdate,
-        difficulty: (updates.difficulty ?? updates.difficultyLevel) as
-          "beginner" | "intermediate" | "advanced" | null | undefined,
+        difficulty: difficultyUpdate,
         thumbnail_media_id: updates.thumbnailMediaId,
         trailer_media_id: updates.trailerMediaId,
         instructor_alias: updates.instructorAlias,
@@ -930,10 +943,7 @@ export function createCourseService({
             ? updates.description
             : course.description,
         difficulty:
-          updates.difficulty !== undefined ||
-          updates.difficultyLevel !== undefined
-            ? (updates.difficulty ?? updates.difficultyLevel ?? null)
-            : course.difficulty,
+          difficultyUpdate !== undefined ? difficultyUpdate : course.difficulty,
         categoryId:
           categoryUpdate !== undefined ? categoryUpdate : course.category_id,
         instructorAlias:

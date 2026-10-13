@@ -61,6 +61,12 @@ export interface Course {
   deletedAt?: string;
   isApi?: boolean;
   creatorId?: string | null;
+  /**
+   * The course list's `canSelfEnroll`: false for a course nobody may enrol
+   * in themselves (access-restricted, with no price). Absent for a course
+   * that did not come from that list.
+   */
+  canSelfEnroll?: boolean;
 }
 
 /**

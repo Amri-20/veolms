@@ -26,6 +26,10 @@ import { getCourseRouteKey } from "./catalogue";
 import type { Course, CourseRole } from "./catalogue";
 import { ALT_DRAG_TEXT_SELECT_CLASSES } from "./altDragTextSelect";
 import { CourseActionMenu, MenuAction, MenuDivider } from "./CourseActionMenu";
+import {
+  courseCardOffersEnrollment,
+  resolveCourseCardLearnerAction,
+} from "./courseCardAction";
 import { CourseCardThumbnail } from "./CourseCardThumbnail";
 import { CourseThumbnailPlaceholder } from "./CourseThumbnailPlaceholder";
 export {
@@ -123,7 +127,18 @@ export function CourseCard({
   factIcons = false,
 }: CourseCardProps) {
   const isPublic = variant === "public";
-  const isPublicEnrollmentAction = isPublic && publicAction === "enroll";
+  // Never for a course nobody can enrol in themselves; see the helper.
+  const cardOffer = {
+    isPublic,
+    publicAction,
+    canSelfEnroll: course.canSelfEnroll,
+  };
+  const isPublicEnrollmentAction =
+    isPublic && courseCardOffersEnrollment(cardOffer);
+  const learnerAction = resolveCourseCardLearnerAction({
+    ...cardOffer,
+    enrolled: course.enrolled,
+  });
   const canEdit =
     isAdmin ||
     (Boolean(currentUserId) &&
@@ -715,7 +730,7 @@ export function CourseCard({
                 <span
                   className={`flex min-w-0 items-center ${course.enrolled ? "gap-3" : "gap-2.5"}`}
                 >
-                  {course.enrolled ? (
+                  {learnerAction === "continue" ? (
                     <>
                       <Play
                         className="shrink-0"
@@ -725,7 +740,7 @@ export function CourseCard({
                       />
                       <span className="truncate">Continue Learning</span>
                     </>
-                  ) : isPublic && !isPublicEnrollmentAction ? (
+                  ) : learnerAction === "view" ? (
                     <>
                       <ListBullets
                         className="shrink-0"

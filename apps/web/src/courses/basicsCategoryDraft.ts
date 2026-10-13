@@ -1,3 +1,5 @@
+import { basicsChangeToSend, draftValueAfterReload } from "./basicsDraftChange";
+
 /**
  * The category in a course editor's unsaved basics draft: when a save sends
  * it, and what a reloaded course does to it.
@@ -11,6 +13,8 @@
  * removes the stored category. The category is the creator's to change, so
  * it is sent only when they changed it, and an untouched one follows the
  * course when it is reloaded.
+ *
+ * The rule is `basicsDraftChange`'s; the course's level follows it too.
  */
 
 /**
@@ -22,8 +26,7 @@ export function categoryChangeToSend(
   draftCategoryId: string,
   confirmedCategoryId: string,
 ): { categoryId?: string | null } {
-  if (draftCategoryId === confirmedCategoryId) return {};
-  return { categoryId: draftCategoryId || null };
+  return basicsChangeToSend("categoryId", draftCategoryId, confirmedCategoryId);
 }
 
 /**
@@ -37,7 +40,9 @@ export function draftCategoryAfterReload(
   previouslyConfirmedCategoryId: string,
   reloadedCategoryId: string,
 ): string {
-  return draftCategoryId === previouslyConfirmedCategoryId
-    ? reloadedCategoryId
-    : draftCategoryId;
+  return draftValueAfterReload(
+    draftCategoryId,
+    previouslyConfirmedCategoryId,
+    reloadedCategoryId,
+  );
 }

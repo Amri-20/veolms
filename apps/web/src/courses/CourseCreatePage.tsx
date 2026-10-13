@@ -102,6 +102,7 @@ import {
   categoryChangeToSend,
   draftCategoryAfterReload,
 } from "./basicsCategoryDraft";
+import { basicsChangeToSend, draftValueAfterReload } from "./basicsDraftChange";
 import { handleRovingTabKeyDown } from "../accessibility/rovingTabFocus";
 import {
   getNumberShortcutIndex,
@@ -5013,6 +5014,7 @@ export function CourseCreatePage({
             : true,
       });
       const previouslyConfirmedCategoryId = serverBasicsRef.current.categoryId;
+      const previouslyConfirmedDifficulty = serverBasicsRef.current.difficulty;
       setServerBasics(confirmedBasics);
       serverBasicsRef.current = confirmedBasics;
       setCourseVersion(c.version || 1);
@@ -5054,6 +5056,16 @@ export function CourseCreatePage({
         if (categoryId !== basicsDraftRef.current.categoryId) {
           setBasicsDraft((prev) => ({ ...prev, categoryId }));
           basicsDraftRef.current = { ...basicsDraftRef.current, categoryId };
+        }
+        // The level follows the course in the same way.
+        const difficulty = draftValueAfterReload(
+          basicsDraftRef.current.difficulty,
+          previouslyConfirmedDifficulty,
+          confirmedBasics.difficulty,
+        );
+        if (difficulty !== basicsDraftRef.current.difficulty) {
+          setBasicsDraft((prev) => ({ ...prev, difficulty }));
+          basicsDraftRef.current = { ...basicsDraftRef.current, difficulty };
         }
       }
       setIsPublished(c.status === "published");
@@ -8426,7 +8438,13 @@ export function CourseCreatePage({
           latestDraft.categoryId,
           serverBasicsRef.current.categoryId,
         ),
-        difficulty: latestDraft.difficulty || null,
+        // The level likewise: it used to go out on every save, `null` when
+        // the draft held none, which now removes the stored level.
+        ...basicsChangeToSend(
+          "difficulty",
+          latestDraft.difficulty,
+          serverBasicsRef.current.difficulty,
+        ),
         instructorAlias: latestDraft.instructorAlias.trim() || null,
         version: currentVersion,
       };
