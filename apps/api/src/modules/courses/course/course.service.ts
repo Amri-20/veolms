@@ -44,8 +44,13 @@ import {
   createIncludesService,
   type IncludesService,
 } from "../includes/includes.service.ts";
-import { createAccessService, isOpenFreeCourse } from "../../access/index.ts";
+import {
+  createAccessService,
+  isOpenFreeCourse,
+  isRestrictedFreeCourse,
+} from "../../access/index.ts";
 import { createMediaService, type MediaService } from "../../media/index.ts";
+import { resolveBasicsCategoryUpdate } from "./basics-category.ts";
 import {
   getLessonDurationSeconds,
   presentAccessRule,
@@ -828,10 +833,13 @@ export function createCourseService({
       );
     }
 
-    // The value checked is the value written below: `category` is an
-    // accepted alias, and checking `categoryId` alone let an unknown or a
-    // removed category through under the other name.
-    await assertCategoryExists(updates.categoryId ?? updates.category);
+    // One value is checked here, written below and reported back: `category`
+    // is an accepted alias, and checking `categoryId` alone let an unknown
+    // or a removed category through under the other name. `null` removes
+    // the category (publishing does not require one, so a published course
+    // may lose it too); `undefined` leaves it alone.
+    const categoryUpdate = resolveBasicsCategoryUpdate(updates);
+    await assertCategoryExists(categoryUpdate);
 
     if (updates.thumbnailMediaId) {
       const thumb = await mediaService.getMediaAsset(
@@ -878,7 +886,7 @@ export function createCourseService({
         title: updates.title,
         short_description: updates.shortDescription,
         description: updates.description,
-        category_id: updates.categoryId ?? updates.category,
+        category_id: categoryUpdate,
         difficulty: (updates.difficulty ?? updates.difficultyLevel) as
           "beginner" | "intermediate" | "advanced" | null | undefined,
         thumbnail_media_id: updates.thumbnailMediaId,
@@ -927,9 +935,7 @@ export function createCourseService({
             ? (updates.difficulty ?? updates.difficultyLevel ?? null)
             : course.difficulty,
         categoryId:
-          updates.categoryId !== undefined || updates.category !== undefined
-            ? (updates.categoryId ?? updates.category ?? null)
-            : course.category_id,
+          categoryUpdate !== undefined ? categoryUpdate : course.category_id,
         instructorAlias:
           updates.instructorAlias !== undefined
             ? updates.instructorAlias
@@ -1010,18 +1016,13 @@ export function createCourseService({
     userId: string,
     courseId: string,
     pricingType: string | null | undefined,
+    accessType: string | null | undefined,
   ): Promise<boolean> {
-    const [accessRule, hasAccess] = await Promise.all([
-      configurationService.findAccessRuleByCourseId(courseId),
-      accessService.hasActiveAccess(database, userId, courseId),
-    ]);
-    return (
-      hasAccess ||
-      isOpenFreeCourse({
-        pricing_type: pricingType,
-        access_type: accessRule?.access_type,
-      })
-    );
+    const isOpen = isOpenFreeCourse({
+      pricing_type: pricingType,
+      access_type: accessType,
+    });
+    return isOpen || accessService.hasActiveAccess(database, userId, courseId);
   }
 
   /**
@@ -1072,6 +1073,7 @@ export function createCourseService({
       allSections,
       allLessons,
       allResources,
+      accessRule,
       pricing,
       settings,
       includes,
@@ -1083,6 +1085,7 @@ export function createCourseService({
       curriculumService.findSectionsByCourseId(courseId),
       curriculumService.findLessonsByCourseId(courseId),
       curriculumService.listResourcesByCourseId(courseId),
+      configurationService.findAccessRuleByCourseId(courseId),
       configurationService.findPricingByCourseId(courseId),
       configurationService.findSettingsByCourseId(courseId),
       includesService.listIncludesForAuthorizedCourse(courseId),
@@ -1118,7 +1121,12 @@ export function createCourseService({
       viewerManagesCourse ||
       (user !== undefined &&
         resources.length > 0 &&
-        (await viewerHasCourse(user.id, courseId, pricing?.pricing_type)));
+        (await viewerHasCourse(
+          user.id,
+          courseId,
+          pricing?.pricing_type,
+          accessRule?.access_type,
+        )));
     const visibleResources = viewerMayDownloadResources
       ? resources
       : redactLockedResources(resources);
@@ -1196,6 +1204,12 @@ export function createCourseService({
           }
         : null,
       includes: includes.map(({ text, position }) => ({ text, position })),
+      // Asked of the rule checkout applies before it prices the course, so
+      // the page offers enrolment exactly when checkout would allow it.
+      canSelfEnroll: !isRestrictedFreeCourse({
+        pricing_type: pricing?.pricing_type,
+        access_type: accessRule?.access_type,
+      }),
       stats: {
         totalSections: sections.length,
         totalLessons: lessons.length,

@@ -50,6 +50,10 @@ import {
   payableBeforeCoupon,
   type AppliedCoupon,
 } from "./couponTotal";
+import {
+  INVITATION_ONLY_MESSAGE,
+  resolveCourseEnrollmentOffer,
+} from "./courseEnrollmentOffer";
 import { readCustomAmount } from "./customAmountEntry";
 import { toggleWishlistCourse, useCourseWishlisted } from "./wishlistStorage";
 import { CourseWishlistHeartButton } from "./CourseWishlistHeartButton";
@@ -523,6 +527,8 @@ interface CourseHeroSectionProps {
   onNavigatePage?: NavigateTo;
   isReadOnlyPreview?: boolean;
   isCreator?: boolean;
+  /** The overview's `canSelfEnroll`; only `false` closes enrolment. */
+  canSelfEnroll?: boolean;
 }
 
 function CourseHeroSection({
@@ -542,6 +548,7 @@ function CourseHeroSection({
   onNavigatePage,
   isReadOnlyPreview = false,
   isCreator = false,
+  canSelfEnroll,
 }: CourseHeroSectionProps) {
   const user = useAuthStore((state) => state.user);
   const preview = useCheckoutPreview();
@@ -581,6 +588,17 @@ function CourseHeroSection({
   const isPreview = Boolean(isReadOnlyPreview);
   const isCreatorNormal = Boolean(isCreator && !isPreview);
   const isFree = isFreeCoursePricing(pricing);
+  // A restricted course with no price is entered by a grant from staff and
+  // checkout refuses it, so the card offers no enrolment, amount or coupon
+  // for it: one line says how the course is entered.
+  const isInvitationOnly =
+    resolveCourseEnrollmentOffer({
+      managesCourse: isCreatorNormal,
+      isPreview,
+      isEnrolled,
+      isFree,
+      canSelfEnroll,
+    }) === "invitation-only";
 
   const checkoutItem = useMemo(
     () =>
@@ -899,7 +917,8 @@ function CourseHeroSection({
 
   // An enrolled student has nothing left to buy; offering a coupon next to
   // "Continue Learning" suggested there was still something to pay for.
-  const showApplyCoupon = !isCreatorNormal && !isFree && !isEnrolled;
+  const showApplyCoupon =
+    !isCreatorNormal && !isFree && !isEnrolled && !isInvitationOnly;
   const isCustomUnderPrice =
     !isFree &&
     selectedPreset === "custom" &&
@@ -1352,7 +1371,7 @@ function CourseHeroSection({
             )}
 
             {/* Pay What You Want / Voluntary Contribution for Free and Paid Courses */}
-            {!isCreatorNormal && !isEnrolled && (
+            {!isCreatorNormal && !isEnrolled && !isInvitationOnly && (
               <div className="flex flex-col gap-2 pt-2 pb-0.5 border-t border-[color-mix(in_srgb,var(--text)_10%,transparent)]">
                 <div className="flex items-center justify-between gap-2 min-h-5">
                   <span className="text-[0.8rem] font-bold text-(--text) uppercase tracking-wider flex items-center gap-1.5">
@@ -1559,36 +1578,42 @@ function CourseHeroSection({
             )}
 
             {/* Middle Row: Actions (Apply Coupon + Pay Now / Continue Learning / Enroll for Free) */}
-            <div className="flex flex-wrap items-center gap-2.5 w-full min-w-0 max-[640px]:gap-2">
-              {showApplyCoupon && !couponInputOpen && !appliedCoupon && (
+            {isInvitationOnly ? (
+              <p className="m-0 text-[0.88rem] font-medium text-(--text-secondary) leading-snug">
+                {INVITATION_ONLY_MESSAGE}
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2.5 w-full min-w-0 max-[640px]:gap-2">
+                {showApplyCoupon && !couponInputOpen && !appliedCoupon && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCouponInputOpen(true);
+                      setCouponError(null);
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 min-h-10.5 border border-dashed border-[color-mix(in_srgb,var(--text)_25%,transparent)] rounded-[9px] px-3.5 sm:px-4 py-2 text-(--text) bg-[color-mix(in_srgb,var(--surface)_60%,transparent)] text-[0.86rem] font-[750] cursor-pointer whitespace-nowrap min-w-0 transition-[border-color,color,background-color,transform] duration-160 ease-out hover:border-(--accent) hover:text-(--accent) hover:bg-(--accent-soft,color-mix(in_srgb,var(--accent)_12%,transparent)) hover:-translate-y-px shrink-0 max-[480px]:flex-1 max-[480px]:min-w-30 max-[640px]:px-3 max-[640px]:text-[0.84rem]"
+                  >
+                    <Ticket
+                      size="1.15em"
+                      weight="bold"
+                      className="shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className="font-[750] truncate">Apply coupon</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => {
-                    setCouponInputOpen(true);
-                    setCouponError(null);
-                  }}
-                  className="inline-flex items-center justify-center gap-1.5 min-h-10.5 border border-dashed border-[color-mix(in_srgb,var(--text)_25%,transparent)] rounded-[9px] px-3.5 sm:px-4 py-2 text-(--text) bg-[color-mix(in_srgb,var(--surface)_60%,transparent)] text-[0.86rem] font-[750] cursor-pointer whitespace-nowrap min-w-0 transition-[border-color,color,background-color,transform] duration-160 ease-out hover:border-(--accent) hover:text-(--accent) hover:bg-(--accent-soft,color-mix(in_srgb,var(--accent)_12%,transparent)) hover:-translate-y-px shrink-0 max-[480px]:flex-1 max-[480px]:min-w-30 max-[640px]:px-3 max-[640px]:text-[0.84rem]"
+                  className="inline-flex items-center justify-center gap-2 flex-1 min-h-10.5 min-w-35 px-4 sm:px-5 py-2.5 border-0 rounded-[9px] text-(--on-accent,#ffffff) bg-(--accent) shadow-[0_4px_14px_var(--accent-shadow,color-mix(in_srgb,var(--accent)_28%,transparent))] text-[0.94rem] font-[800] tracking-[-0.01em] cursor-pointer whitespace-nowrap min-w-0 max-[640px]:text-[0.88rem] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none disabled:shadow-none"
+                  disabled={ctaDisabled}
+                  onClick={ctaOnClick}
                 >
-                  <Ticket
-                    size="1.15em"
-                    weight="bold"
-                    className="shrink-0"
-                    aria-hidden="true"
-                  />
-                  <span className="font-[750] truncate">Apply coupon</span>
+                  {ctaIcon}
+                  <span className="font-[800] truncate">{ctaLabel}</span>
                 </button>
-              )}
-
-              <button
-                type="button"
-                className="inline-flex items-center justify-center gap-2 flex-1 min-h-10.5 min-w-35 px-4 sm:px-5 py-2.5 border-0 rounded-[9px] text-(--on-accent,#ffffff) bg-(--accent) shadow-[0_4px_14px_var(--accent-shadow,color-mix(in_srgb,var(--accent)_28%,transparent))] text-[0.94rem] font-[800] tracking-[-0.01em] cursor-pointer whitespace-nowrap min-w-0 max-[640px]:text-[0.88rem] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none disabled:shadow-none"
-                disabled={ctaDisabled}
-                onClick={ctaOnClick}
-              >
-                {ctaIcon}
-                <span className="font-[800] truncate">{ctaLabel}</span>
-              </button>
-            </div>
+              </div>
+            )}
 
             {/* Payment received, access still being confirmed */}
             {paymentNotice && (
@@ -1942,6 +1967,11 @@ export interface AdaptedOverviewData {
   pricing: CourseOverviewPricingProps;
   instructorName: string | undefined;
   trailerMediaId: string | null;
+  /**
+   * The overview's `canSelfEnroll`. Absent for the editor's preview, which
+   * is built from the course's saved settings rather than from an overview.
+   */
+  canSelfEnroll?: boolean;
 }
 
 export function adaptCourseOverviewResponse(
@@ -2048,6 +2078,7 @@ export function adaptCourseOverviewResponse(
     pricing: pricingProps,
     instructorName: resolvedInstructorName,
     trailerMediaId: c.trailerMediaId ?? null,
+    canSelfEnroll: overview.canSelfEnroll,
   };
 }
 
@@ -2578,6 +2609,7 @@ function CourseOverviewContent({
         onNavigatePage={onNavigatePage}
         isReadOnlyPreview={isReadOnlyPreview}
         isCreator={isCreator}
+        canSelfEnroll={adaptedFromPreview?.canSelfEnroll}
       />
 
       {/* 2. About This Course */}

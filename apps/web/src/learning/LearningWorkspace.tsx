@@ -133,6 +133,11 @@ import {
 } from "./learningShellPreferences";
 import { useLearningProgress } from "./useLearningProgress";
 import {
+  NO_VIDEO_NOTICE,
+  planLessonStage,
+  viewerMayRecordProgress,
+} from "./lessonWithoutVideo";
+import {
   getPhoneLessonDrawerCollapsedSnapPoint,
   getSideLessonDrawerBounds,
   LESSON_DRAWER_DEFAULT_FLOATING_WIDTH,
@@ -999,11 +1004,71 @@ export function LearningWorkspace({
     void refetchCourseOverview();
   }, [refetchCourseOverview, retryPlaybackBootstrap]);
 
+  // What stands where the video goes, whether the server is asked for one,
+  // and whether opening the lesson finishes it. A lesson the course lists
+  // with no video (a quiz lesson whose quiz was deleted, for one) is asked
+  // for none; see `lessonWithoutVideo`.
+  const selectedLessonQuizAttached = hasLessonQuiz(selectedLesson)
+    ? true
+    : courseQuizAssignments.data === undefined
+      ? undefined
+      : false;
+  const lessonStagePlan = useMemo(() => {
+    const course = courseOverview?.course;
+    const holdsCourse = enrolledCoursesQuery.isFetched
+      ? Boolean(
+          enrolledCoursesQuery.data?.courses.some(
+            (enrolled) => enrolled.courseId === course?.id,
+          ),
+        )
+      : undefined;
+    return planLessonStage({
+      lesson: adaptedCurriculum?.lessonsByNumber.get(selectedLesson),
+      showingQuiz,
+      hasQuiz: selectedLessonQuizAttached,
+      viewerMayRecordProgress:
+        Boolean(course) &&
+        !isAuthResolutionPending &&
+        viewerMayRecordProgress({
+          isAuthenticated,
+          managesCourse: Boolean(
+            resolvedAuthUser &&
+            (resolvedAuthUser.id === course?.creatorId ||
+              resolvedAuthUser.roles?.some(
+                (role) => role.trim().toLowerCase() === "admin",
+              )),
+          ),
+          holdsCourse,
+          pricingType: courseOverview?.pricing?.pricingType,
+          canSelfEnroll: courseOverview?.canSelfEnroll,
+        }),
+    });
+  }, [
+    adaptedCurriculum,
+    courseOverview,
+    enrolledCoursesQuery.data?.courses,
+    enrolledCoursesQuery.isFetched,
+    isAuthResolutionPending,
+    isAuthenticated,
+    resolvedAuthUser,
+    selectedLesson,
+    selectedLessonQuizAttached,
+    showingQuiz,
+  ]);
+  const requestsLessonPlayback = lessonStagePlan.requestsPlayback;
+
   useEffect(() => {
     setPlaybackBootstrapError(null);
     if (!courseSlug) {
       setPlaybackBootstrap(null);
       setPlaybackBootstrapError(null);
+      playbackRequestKeyRef.current = null;
+      return;
+    }
+
+    if (!requestsLessonPlayback) {
+      // Nothing to play: the request could only come back "not found".
+      setPlaybackBootstrap(null);
       playbackRequestKeyRef.current = null;
       return;
     }
@@ -1065,6 +1130,7 @@ export function LearningWorkspace({
     isAuthenticated,
     playbackRequestKey,
     playbackBootstrapAttempt,
+    requestsLessonPlayback,
     selectedLesson,
   ]);
   const playbackAccessError = useMemo<
@@ -1091,6 +1157,10 @@ export function LearningWorkspace({
             link: { label: "Browse courses", href: "/courses" },
           }
         : null;
+
+    // A lesson the course lists with no video says so, whatever a request
+    // made before the course had loaded came back with.
+    if (!courseNotFound && !requestsLessonPlayback) return NO_VIDEO_NOTICE;
 
     if (!playbackBootstrapError) return courseNotFound;
 
@@ -1135,13 +1205,10 @@ export function LearningWorkspace({
       };
     }
 
+    // The same statement as when the course itself says the lesson has no
+    // video: it is asked for only while the course is still loading.
     if (playbackBootstrapError.code === "MEDIA_NOT_FOUND") {
-      return {
-        kind: "retry",
-        title: "No video",
-        message: "This lesson has no video.",
-        actionLabel: "Try again",
-      };
+      return NO_VIDEO_NOTICE;
     }
 
     return {
@@ -1155,11 +1222,15 @@ export function LearningWorkspace({
     onOpenCourseOverview,
     onOpenLogin,
     playbackBootstrapError,
+    requestsLessonPlayback,
     retryCourseOverview,
     retryPlaybackBootstrap,
   ]);
   const playbackBootstrapPending = Boolean(
-    protectedPlayback && !playbackBootstrap && !playbackBootstrapError,
+    protectedPlayback &&
+    requestsLessonPlayback &&
+    !playbackBootstrap &&
+    !playbackBootstrapError,
   );
   // The loader is never the last word. Whatever leaves the player waiting
   // (a request that does not come back, or one this page is no longer
@@ -1786,6 +1857,24 @@ export function LearningWorkspace({
   const handleLessonEnded = useCallback(() => {
     updateSelectedLessonProgress(100);
   }, [updateSelectedLessonProgress]);
+
+  // A lesson with no video and no quiz has nothing to watch or pass: its
+  // title, description and resources are all of it. Opening it is finishing
+  // it, so the course can still reach 100%. Recorded once the route and the
+  // selection agree on the lesson, for a viewer whose progress the server
+  // accepts.
+  const selectedLessonCompletesWhenOpened = lessonStagePlan.completesWhenOpened;
+  useEffect(() => {
+    if (!selectedLessonCompletesWhenOpened || lessonId !== selectedLesson) {
+      return;
+    }
+    updateSelectedLessonProgress(100);
+  }, [
+    lessonId,
+    selectedLesson,
+    selectedLessonCompletesWhenOpened,
+    updateSelectedLessonProgress,
+  ]);
 
   useEffect(() => {
     const pendingLessonSelection = pendingLessonSelectionRef.current;
