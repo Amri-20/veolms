@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   exceedsUploadQuota,
+  isUnrecordedUpload,
   supersededUploadFileName,
 } from "./attachment-upload-rules.ts";
 
@@ -74,4 +75,28 @@ await test("a key that points somewhere else is never named for removal", () => 
     null,
   );
   assert.equal(supersededUploadFileName("", `${DIRECTORY}/${ID}.pdf`), null);
+});
+
+await test("a file sent to a slot another request filled is one no record points at", () => {
+  // The record kept the other request's file, stored under another name.
+  assert.equal(
+    isUnrecordedUpload(`${DIRECTORY}/${ID}.txt`, `${DIRECTORY}/${ID}.pdf`),
+    true,
+  );
+  // The record still names the address the slot was opened with.
+  assert.equal(
+    isUnrecordedUpload(`${DIRECTORY}/${ID}.pdf`, `${DIRECTORY}/${ID}.png`),
+    true,
+  );
+  // The record is gone altogether.
+  assert.equal(isUnrecordedUpload(`${DIRECTORY}/${ID}.pdf`, null), true);
+  assert.equal(isUnrecordedUpload(`${DIRECTORY}/${ID}.pdf`, undefined), true);
+});
+
+await test("a file stored under the name the record points at is kept", () => {
+  // Both requests stored under one name: it is the accepted upload's file.
+  assert.equal(
+    isUnrecordedUpload(`${DIRECTORY}/${ID}.pdf`, `${DIRECTORY}/${ID}.pdf`),
+    false,
+  );
 });

@@ -52,6 +52,7 @@ import type {
   ProfileRole,
 } from "./profileTypes";
 import { getDefaultProfileIdentity } from "./profileTypes";
+import { getShortUsernameHint } from "./usernameProfileHint";
 import {
   useCurrentUser,
   useSendEmailVerificationOtp,
@@ -608,6 +609,11 @@ export function ProfileSettings({
   const verificationSubmitButtonRef = useRef<HTMLButtonElement>(null);
   const displayName = draftProfile.displayName.trim() || "Your name";
   const username = draftProfile.username?.trim() || "username";
+  // From the saved username, not the one being typed: the profile page
+  // follows the saved name.
+  const shortUsernameHint = canEdit
+    ? getShortUsernameHint(activeUser?.username)
+    : null;
   const avatarUrl = optimisticAvatarUrl ?? draftProfile.avatarDataUrl;
   const avatarSrcSet = optimisticAvatarUrl ? [] : draftProfile.avatarSrcSet;
   const showAvatar = Boolean(avatarUrl) && !avatarFailed;
@@ -1409,6 +1415,11 @@ export function ProfileSettings({
                         name="username"
                         value={draftProfile.username ?? ""}
                         autoComplete="username"
+                        aria-describedby={
+                          shortUsernameHint
+                            ? "profile-username-hint"
+                            : undefined
+                        }
                         disabled={!canEdit}
                         onChange={(event) => updateUsername(event.target.value)}
                       />
@@ -1417,6 +1428,11 @@ export function ProfileSettings({
                   {usernameError && (
                     <small className="settings-profile__error" role="alert">
                       {usernameError}
+                    </small>
+                  )}
+                  {shortUsernameHint && (
+                    <small id="profile-username-hint">
+                      {shortUsernameHint}
                     </small>
                   )}
                 </div>

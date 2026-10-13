@@ -205,20 +205,31 @@ export function requiresAcademyAuth(pathname: string): boolean {
 }
 
 /**
- * Whether no page answers to the address: the router fell through to its
- * catch-all, or matched a pattern the address does not really fit. Takes the
- * router's matches because only the route tree knows which addresses exist.
+ * Whether no page of its own answers to the address: the router fell through
+ * to its catch-all, matched a pattern the address does not really fit, or
+ * could only hand the address to the profile page although the path rules do
+ * not count it as a profile address. Takes the router's matches because only
+ * the route tree knows which addresses exist.
+ *
+ * The last case is a single word held back from the public profile addresses
+ * (see `isPublicProfilePath`): a reserved word with no page of its own
+ * ("/auth"), or one written in another case ("/Orders") or percent-encoded,
+ * which no page's own route matches. It was taken for a signed-in page, so a
+ * signed-out visitor was sent to the home page while a signed-in one saw
+ * "Page not found". Nothing signed-in is behind it: what the router gave it
+ * to is the profile page, which looks the name up and shows the not-found
+ * screen when it is no one's.
  */
 export function isUnknownAddress(
   matches: readonly { id: string }[],
   pathname: string,
 ): boolean {
   const descriptor = getMatchedRouteDescriptor(matches, pathname);
-  return (
-    descriptor.kind === "shell" &&
-    descriptor.page === "placeholder" &&
-    descriptor.section === NOT_FOUND_SECTION
-  );
+  if (descriptor.kind !== "shell") return false;
+  if (descriptor.page === "placeholder") {
+    return descriptor.section === NOT_FOUND_SECTION;
+  }
+  return descriptor.page === "public-profile" && !isPublicProfilePath(pathname);
 }
 
 /**
