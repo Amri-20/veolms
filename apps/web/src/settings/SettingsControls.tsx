@@ -6,6 +6,7 @@ import type {
   MouseEvent,
   ReactNode,
 } from "react";
+import { ArrowCounterClockwiseIcon as ArrowCounterClockwise } from "@phosphor-icons/react/ArrowCounterClockwise";
 import { CheckIcon as Check } from "@phosphor-icons/react/Check";
 import { StarIcon as Star } from "@phosphor-icons/react/Star";
 import { ThemedSelect } from "../ThemedSelect";
@@ -146,6 +147,33 @@ export function SettingsToggle({
       onClick={() => onChange(!checked)}
     >
       <span aria-hidden="true" />
+    </button>
+  );
+}
+
+export interface SettingsResetButtonProps {
+  onReset: () => void;
+  // Names what is reset, for assistive technology; the button reads "Reset".
+  label: string;
+  disabled?: boolean;
+}
+
+/** Returns one settings section to its defaults, from the section heading. */
+export function SettingsResetButton({
+  onReset,
+  label,
+  disabled = false,
+}: SettingsResetButtonProps) {
+  return (
+    <button
+      type="button"
+      className="settings-section__reset"
+      disabled={disabled}
+      onClick={onReset}
+      aria-label={label}
+    >
+      <ArrowCounterClockwise size={16} weight="bold" />
+      Reset
     </button>
   );
 }

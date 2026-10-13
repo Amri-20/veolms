@@ -63,8 +63,9 @@ import {
 } from "./unified-discussions.reconciliation";
 
 export type { InteractionCapabilities };
+const loadDiscussionThreadPanel = () => import("./DiscussionThreadPanel");
 const DiscussionThreadPanel = lazy(() =>
-  import("./DiscussionThreadPanel").then((module) => ({
+  loadDiscussionThreadPanel().then((module) => ({
     default: module.DiscussionThreadPanel,
   })),
 );
@@ -85,6 +86,7 @@ import {
   type DiscussionEntryKind,
   type DiscussionVisibility,
 } from "./discussion-editor/types";
+import { preloadDiscussionEditor } from "./discussion-editor/DiscussionEditor";
 import {
   NO_LEGACY_KEYS,
   useSessionStorageState,
@@ -1761,6 +1763,56 @@ function DiscussionInner({
   );
   const lastHandledErrorThreadRef = useRef<string | null>(null);
   const suppressThreadUrlSyncRef = useRef(false);
+  // Set while the address is on its way to a thread that was chosen here: a
+  // swipe to the next one, or another picked from the list. The address
+  // follows such a choice a moment later. Until it has, the effect below
+  // would take the old address for an instruction and put the old thread
+  // back, which made every swipe between threads spring back. `from` is the
+  // address the choice started from.
+  const pendingThreadAddressRef = useRef<{
+    from: string | null;
+    to: string;
+  } | null>(null);
+  const expectThreadAddress = (serverId: string | undefined) => {
+    pendingThreadAddressRef.current =
+      serverId && serverId !== threadIdFromUrl && !spotlightIdFromUrl
+        ? { from: threadIdFromUrl ?? null, to: serverId }
+        : null;
+  };
+  const threadPanelOpen =
+    openThread !== null &&
+    threadEntries.some(
+      (entry) => getClientEntityId(entry) === String(openThread.id),
+    );
+  // The thread panel is put on the page with the first thread that is opened
+  // and stays until it has finished sliding shut, so it animates both ways.
+  const [threadPanelMounted, setThreadPanelMounted] = useState(false);
+  if (threadPanelOpen && !threadPanelMounted) setThreadPanelMounted(true);
+  const hasThreadEntries = threadEntries.length > 0;
+
+  useEffect(() => {
+    if (!hasThreadEntries && !canParticipate) return undefined;
+    // A visitor who has asked their browser to save data only pays for
+    // these when they are about to use them.
+    const saveData =
+      (navigator as Navigator & { connection?: { saveData?: boolean } })
+        .connection?.saveData === true;
+    if (saveData) return undefined;
+    // Fetched once the lesson is idle: the thread panel, so the first thread
+    // that is opened does not wait for its code, and the editor, so neither
+    // a reply nor a new comment waits for theirs. Arriving while the panel
+    // is opening, the editor and its styles more than doubled that wait.
+    const warm = () => {
+      if (hasThreadEntries) void loadDiscussionThreadPanel().catch(() => {});
+      if (canParticipate) preloadDiscussionEditor();
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      const handle = window.requestIdleCallback(warm, { timeout: 4000 });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const handle = window.setTimeout(warm, 2000);
+    return () => window.clearTimeout(handle);
+  }, [canParticipate, hasThreadEntries]);
 
   useEffect(() => {
     if (
@@ -1774,6 +1826,13 @@ function DiscussionInner({
         suppressThreadUrlSyncRef.current = false;
       }
       return;
+    }
+
+    const pendingThreadAddress = pendingThreadAddressRef.current;
+    if (pendingThreadAddress) {
+      // Still where the choice started from: the address has not caught up.
+      if ((threadIdFromUrl ?? null) === pendingThreadAddress.from) return;
+      pendingThreadAddressRef.current = null;
     }
 
     if (!threadIdFromUrl) {
@@ -2362,6 +2421,7 @@ function DiscussionInner({
       setNotice("");
       if (!isBackendNote && openThread?.id === clientId) {
         suppressThreadUrlSyncRef.current = true;
+        pendingThreadAddressRef.current = null;
         setOpenThread(null);
         setSearchParams(
           (prev) => {
@@ -2821,6 +2881,7 @@ function DiscussionInner({
           if (!entry) return;
           const clientId = getClientEntityId(entry);
           const serverId = getServerEntityId(entry);
+          expectThreadAddress(serverId);
           setOpenThread({
             id: clientId,
             focusComposer: canParticipate && focusComposer,
@@ -2850,13 +2911,11 @@ function DiscussionInner({
         onDeleteFailure={setNotice}
         courseId={courseId}
       />
-      {openThread !== null &&
-      threadEntries.some(
-        (entry) => getClientEntityId(entry) === String(openThread.id),
-      ) ? (
+      {threadPanelMounted ? (
         <Suspense fallback={null}>
           <DiscussionThreadPanel
-            open={true}
+            open={threadPanelOpen}
+            onCloseComplete={() => setThreadPanelMounted(false)}
             activeEntryId={openThread?.id ?? null}
             entries={threadEntries}
             isBackendMode={isBackendMode}
@@ -2873,6 +2932,7 @@ function DiscussionInner({
             onOpenChange={(open) => {
               if (!open) {
                 suppressThreadUrlSyncRef.current = true;
+                pendingThreadAddressRef.current = null;
                 setOpenThread(null);
                 setSearchParams(
                   (prev) => {
@@ -2886,16 +2946,17 @@ function DiscussionInner({
               }
             }}
             onActiveEntryChange={(id) => {
+              const entry = threadEntries.find(
+                (candidate) => getClientEntityId(candidate) === String(id),
+              );
+              const serverId = entry ? getServerEntityId(entry) : undefined;
+              expectThreadAddress(serverId);
               setOpenThread((current) =>
                 current ? { id, focusComposer: false } : current,
               );
               setSearchParams(
                 (prev) => {
                   const next = new URLSearchParams(prev);
-                  const entry = threadEntries.find(
-                    (candidate) => getClientEntityId(candidate) === String(id),
-                  );
-                  const serverId = entry ? getServerEntityId(entry) : undefined;
                   if (serverId) next.set("thread", serverId);
                   else next.delete("thread");
                   return next;

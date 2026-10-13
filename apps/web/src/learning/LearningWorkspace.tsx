@@ -3177,13 +3177,17 @@ export function LearningWorkspace({
         <section className="learning-workspace__lesson-column">
           <div
             ref={playerWrapRef}
-            // Above phone width the video stays at the top of the page while
-            // the title and description scroll away beneath it. (On a phone
-            // the page does not scroll; the area under the video does.) The
-            // player itself is positioned on this slot, so it follows. The
-            // slot sits above the page that scrolls behind it, so the strip
-            // that resizes the video is never covered.
-            className={`learning-workspace__player-wrap ${stickyPlayer ? "min-[641px]:sticky! min-[641px]:top-0 min-[641px]:z-40" : ""}`}
+            // Above phone width a video at its full height scrolls away with
+            // the page. Once the viewer has resized it (the grip, or the
+            // title on a touch screen) it stays at the top while the title
+            // and description scroll away beneath it. (On a phone the page
+            // does not scroll; the area under the video does.) The grip marks
+            // the slot inside while it is dragged, before the new height is
+            // saved, so the rule reads that mark. The player itself is
+            // positioned on this slot, so it follows. The slot sits above the
+            // page that scrolls behind it, so the strip that resizes the
+            // video is never covered.
+            className={`learning-workspace__player-wrap ${stickyPlayer ? "min-[641px]:z-40 min-[641px]:has-[[data-learning-player-shortened]]:sticky! min-[641px]:has-[[data-learning-player-shortened]]:top-0" : ""}`}
             data-learning-player-motion-target=""
           >
             {showingQuiz ? (
