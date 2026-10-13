@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { outsideRefundId, refundChannelRefusal } from "./outside-refund.ts";
+import {
+  isManualTransferProvider,
+  outsideRefundId,
+  refundChannelRefusal,
+} from "./outside-refund.ts";
+
+await test("only the manual provider counts as a manual transfer", () => {
+  assert.equal(isManualTransferProvider("manual"), true);
+  assert.equal(isManualTransferProvider("razorpay"), false);
+  assert.equal(isManualTransferProvider("free"), false);
+  assert.equal(isManualTransferProvider("Manual"), false);
+});
 
 await test("an outside refund id is the reference without spaces, in upper case", () => {
   assert.equal(outsideRefundId("utr 1234 ab"), "manual_refund_UTR1234AB");

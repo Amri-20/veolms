@@ -9,4 +9,4 @@ export {
   useFetchOrder,
   useOrderInvoice,
 } from "./orders.queries";
-export { useRefundOrder } from "./orders.mutations";
+export { useRefundOrder, useReviewRefundRequest } from "./orders.mutations";

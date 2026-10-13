@@ -138,6 +138,7 @@ import {
   getStaticRouteDescriptor,
   normalizeNavigationPath,
 } from "../routing/routeDescriptors";
+import { useCourseOverviewDocumentTitle } from "../routing/useCourseDocumentTitle";
 
 export const links: Route.LinksFunction = () => [
   { rel: "stylesheet", href: academyShellStylesheet },
@@ -398,6 +399,9 @@ export default function AcademyLayout() {
   const selectLessonTokenRef = useRef(0);
   const currentLocationPath = `${location.pathname}${location.search}${location.hash}`;
   const route = getMatchedRouteDescriptor(matches, location.pathname);
+  useCourseOverviewDocumentTitle(
+    route.kind === "shell" && route.page === "course-overview",
+  );
   const staticCourseRouteData = matches.find((match) => match.id === "root")
     ?.loaderData as AcademyStaticPageData | undefined;
   const {

@@ -22,6 +22,11 @@ export function outsideRefundId(reference: string): string | null {
   return normalised ? `${OUTSIDE_REFUND_ID_PREFIX}${normalised}` : null;
 }
 
+/** Whether a payment from this provider arrived by manual bank or UPI transfer. */
+export function isManualTransferProvider(gatewayProvider: string): boolean {
+  return gatewayProvider === "manual";
+}
+
 /**
  * Why a refund may not go the way it was asked for, or nothing when it may.
  *
@@ -34,7 +39,7 @@ export function refundChannelRefusal(
   gatewayProvider: string,
   recordedAsOutside: boolean,
 ): string | null {
-  const paidByManualTransfer = gatewayProvider === "manual";
+  const paidByManualTransfer = isManualTransferProvider(gatewayProvider);
   if (paidByManualTransfer && !recordedAsOutside) {
     return "This order was paid by manual transfer, so it cannot be refunded from here. Return the money outside the platform.";
   }

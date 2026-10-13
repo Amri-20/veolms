@@ -103,8 +103,17 @@ function persistAuthenticatedSession(
   queryClient.setQueryData(authKeys.me(), currentUser);
 }
 
-/** What the tab forgets when its session ends. */
-function clearSignedOutState(queryClient: QueryClient) {
+/**
+ * What the tab forgets when its session ends.
+ *
+ * `sessionEnded` says whether the server confirmed it: the sign-out request
+ * itself succeeded. Then "nobody is signed in" is a fact and is kept as the
+ * answer; dropping it had every mounted reader ask `/auth/me` once more,
+ * only to be told the same. When the request failed the session may still
+ * be alive, so the answer is dropped and asked for again: that is how the
+ * tab notices a session the sign-out did not end.
+ */
+function clearSignedOutState(queryClient: QueryClient, sessionEnded: boolean) {
   authStore.clearAuth();
   resetRegisteredInteractionState();
   clearCoursePlayerSessions();
@@ -112,10 +121,12 @@ function clearSignedOutState(queryClient: QueryClient) {
   // Signing out says so outright, so it does not depend on that.
   forgetAccountBrowserState();
   queryClient.setQueryData(authKeys.me(), null);
-  queryClient.removeQueries({ queryKey: authKeys.me() });
+  if (!sessionEnded) queryClient.removeQueries({ queryKey: authKeys.me() });
   queryClient.removeQueries({ queryKey: authKeys.avatars() });
   queryClient.removeQueries({ queryKey: learningInteractionKeys.all });
-  queryClient.invalidateQueries({ queryKey: authKeys.me() });
+  if (!sessionEnded) {
+    queryClient.invalidateQueries({ queryKey: authKeys.me() });
+  }
 }
 
 let pendingLoginCancellation: Promise<void> | null = null;
@@ -137,8 +148,10 @@ export function cancelPendingLogin(queryClient: QueryClient): Promise<void> {
   pendingLoginCancellation ??= (async () => {
     authStore.clearAuth();
     queryClient.setQueryData(authKeys.me(), null);
+    let sessionEnded = false;
     try {
       await authService.logout();
+      sessionEnded = true;
     } catch {
       // Unreachable or already ended. The tab stays signed out either way;
       // a session that did survive is met, and ended, on the next visit.
@@ -148,7 +161,7 @@ export function cancelPendingLogin(queryClient: QueryClient): Promise<void> {
       // the session is gone would take this for a session it has to send to
       // the step.
       endPendingMfaLogin();
-      clearSignedOutState(queryClient);
+      clearSignedOutState(queryClient, sessionEnded);
       pendingLoginCancellation = null;
     }
   })();
@@ -430,7 +443,7 @@ export function useLogout() {
 
   return useMutation<AuthMessageResponse, ApiError, void>({
     mutationFn: () => authService.logout(),
-    onSettled: () => clearSignedOutState(queryClient),
+    onSettled: (_data, error) => clearSignedOutState(queryClient, !error),
   });
 }
 

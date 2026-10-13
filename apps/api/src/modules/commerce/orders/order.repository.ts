@@ -16,6 +16,8 @@ export interface ListOrdersOptions {
   courseId?: string;
   couponId?: string;
   status?: OrderStatus;
+  /** Any of these statuses; combined with `status` when both are given. */
+  statuses?: readonly OrderStatus[];
   from?: Date;
   to?: Date;
   sortOrder?: OrderSortOrder;
@@ -176,6 +178,7 @@ export async function listOrders(
     courseId,
     couponId,
     status,
+    statuses,
     from,
     to,
     sortOrder = "desc",
@@ -218,6 +221,9 @@ export async function listOrders(
   if (status) {
     query = query.where("o.status", "=", status);
   }
+  if (statuses && statuses.length > 0) {
+    query = query.where("o.status", "in", [...statuses]);
+  }
 
   // 3. Date range filters
   if (from) {
@@ -243,7 +249,10 @@ export async function listOrders(
     query = query.where("o.coupon_id", "=", couponId);
   }
 
-  // 6. Search filter (order number for students, plus student details for admin)
+  // 6. Search filter. A learner's own list: order number, the invoice number
+  // shown on a paid or refunded order ("INV-" plus the order number, as the
+  // invoice service numbers it) and what was bought. Staff: order number
+  // plus student details.
   if (search && search.trim()) {
     // "%" and "_" mean "anything" to ILIKE, so a search for "100%" or "a_b"
     // matched far more than was typed. They are escaped, with the escape
@@ -251,7 +260,20 @@ export async function listOrders(
     // search screens do.
     const term = `%${escapeLikePattern(search.trim())}%`;
     if (scope.type === "user") {
-      query = query.where(sql<boolean>`o.order_number ILIKE ${term}`);
+      query = query.where(
+        sql<boolean>`(
+          o.order_number ILIKE ${term}
+          OR (
+            o.status IN ('paid', 'partially_refunded', 'refunded')
+            AND ('INV-' || o.order_number) ILIKE ${term}
+          )
+          OR EXISTS (
+            SELECT 1 FROM order_items oi
+            WHERE oi.order_id = o.id
+              AND oi.title_snapshot ILIKE ${term}
+          )
+        )`,
+      );
     } else {
       query = query.where(
         sql<boolean>`(
@@ -560,6 +582,13 @@ export async function countPendingOrdersUsingCoupon(
  * course — bought directly, or inside a bundle — other than the order being
  * refunded. Items that have themselves been refunded do not count.
  *
+ * What an item entitles the buyer to is what it granted when the order was
+ * fulfilled (`order_item_courses`), not what its bundle holds today: a
+ * bundle edited since may have gained courses this buyer never got through
+ * it, and lost ones they did. Only an item with nothing recorded (a bundle
+ * order paid before that record was kept) is read from the item itself and
+ * from the bundle as it is now.
+ *
  * access_grants and enrollments hold ONE row per (user, course), owned by
  * the most recent purchase. So when that owning order is refunded and this
  * returns an order, the row is handed to it instead of being revoked;
@@ -577,19 +606,29 @@ export async function findOtherPaidOrderCoveringCourse(
     .where("o.user_id", "=", input.userId)
     .where("o.id", "!=", input.excludeOrderId)
     .where("o.status", "in", ["paid", "partially_refunded"])
-    .where((eb) =>
-      eb.or([
-        eb("oi.course_id", "=", input.courseId),
-        eb(
-          "oi.bundle_id",
-          "in",
-          eb
-            .selectFrom("course_bundle_items as cbi")
-            .select("cbi.bundle_id")
-            .where("cbi.course_id", "=", input.courseId),
-        ),
-      ]),
-    )
+    .where((eb) => {
+      const recorded = eb
+        .selectFrom("order_item_courses as oic")
+        .select("oic.id")
+        .whereRef("oic.order_item_id", "=", "oi.id");
+      return eb.or([
+        eb.exists(recorded.where("oic.course_id", "=", input.courseId)),
+        eb.and([
+          eb.not(eb.exists(recorded)),
+          eb.or([
+            eb("oi.course_id", "=", input.courseId),
+            eb(
+              "oi.bundle_id",
+              "in",
+              eb
+                .selectFrom("course_bundle_items as cbi")
+                .select("cbi.bundle_id")
+                .where("cbi.course_id", "=", input.courseId),
+            ),
+          ]),
+        ]),
+      ]);
+    })
     .where((eb) =>
       eb.not(
         eb.exists(

@@ -193,7 +193,13 @@ export function createDiscussionUploadStore(
       }
       return { fileName, mimeType, size: fileStats.size };
     } catch (error) {
-      await unlink(filePath).catch(() => undefined);
+      // "The name is taken" means the file at this path is another upload's
+      // (the writer opens it with "wx" and never got to create one of its
+      // own). Removing it here deleted the upload that won, and left that
+      // upload's record pointing at nothing.
+      if ((error as NodeJS.ErrnoException | null)?.code !== "EEXIST") {
+        await unlink(filePath).catch(() => undefined);
+      }
       throw error;
     }
   }

@@ -5,6 +5,7 @@ import {
   useDebounceValue,
 } from "../hooks/useDebounce";
 import type { OrderHistoryItem } from "./orderHistoryData";
+import { buildOrderHistoryListFilter } from "./orderHistoryQuery";
 import { useMyOrders } from "../services/orders";
 import { adaptOrderToOrderHistoryItem } from "../orders/orderAdapter";
 
@@ -80,13 +81,16 @@ export function useOrderHistoryFilter(
     () => getDateBounds(dateRangeFilter),
     [dateRangeFilter],
   );
+  // Status and search are answered by the server, over every purchase and
+  // not only the pages loaded so far.
   const queryParams = useMemo(
     () => ({
       limit: 30,
       sortOrder,
       ...dateBounds,
+      ...buildOrderHistoryListFilter(statusFilter, debouncedSearch),
     }),
-    [dateBounds, sortOrder],
+    [dateBounds, debouncedSearch, sortOrder, statusFilter],
   );
   const {
     data,
@@ -106,26 +110,17 @@ export function useOrderHistoryFilter(
     [data?.pages],
   );
 
-  const filteredOrders = useMemo(() => {
-    const search = debouncedSearch.toLocaleLowerCase();
-    return ordersList.filter((order) => {
-      if (statusFilter !== "all" && order.status !== statusFilter) return false;
-      if (
-        paymentMethodFilter !== "all" &&
-        order.payment.type !== paymentMethodFilter
-      ) {
-        return false;
-      }
-      if (!search) return true;
-      return [
-        order.orderNumber,
-        order.invoiceNumber ?? "",
-        order.courseTitle,
-        order.payment.brand,
-        order.payment.label,
-      ].some((value) => value.toLocaleLowerCase().includes(search));
-    });
-  }, [debouncedSearch, ordersList, paymentMethodFilter, statusFilter]);
+  // The payment method is the one filter the server does not take: it is
+  // applied here, to the purchases loaded so far.
+  const filteredOrders = useMemo(
+    () =>
+      paymentMethodFilter === "all"
+        ? ordersList
+        : ordersList.filter(
+            (order) => order.payment.type === paymentMethodFilter,
+          ),
+    [ordersList, paymentMethodFilter],
+  );
 
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);

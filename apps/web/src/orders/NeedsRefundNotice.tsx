@@ -18,6 +18,11 @@ export interface NeedsRefundNoticeProps {
   hasMore: boolean;
   /** Opens an order in the details drawer. */
   onOpenOrder: (orderId: string) => void;
+  /**
+   * Whether the viewer may reject a reported transfer (admins only). Other
+   * staff see a line telling them to ask an admin instead of the button.
+   */
+  canRejectTransfers: boolean;
   setNotice?: (message: string) => void;
 }
 
@@ -37,6 +42,7 @@ export const NeedsRefundNotice = memo(function NeedsRefundNotice({
   entries,
   hasMore,
   onOpenOrder,
+  canRejectTransfers,
   setNotice,
 }: NeedsRefundNoticeProps) {
   if (entries.length === 0) return null;
@@ -103,6 +109,7 @@ export const NeedsRefundNotice = memo(function NeedsRefundNotice({
                 {isReportedTransfer(entry) && (
                   <div className="mt-2">
                     <RejectTransferRequestAction
+                      canReject={canRejectTransfers}
                       requestId={entry.id}
                       orderNumber={lines.orderNumber}
                       adminNotes={transferRejectionNote(entry)}

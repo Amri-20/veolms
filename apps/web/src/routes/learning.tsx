@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   useLocation,
+  useMatches,
   useNavigate,
   useOutletContext,
   useParams,
@@ -36,7 +37,11 @@ import {
   getLearningReturnLocationServerSnapshot,
   subscribeToLearningReturnLocation,
 } from "../learning/learningReturnLocation";
-import { getRouteMeta } from "../routing/routeDescriptors";
+import {
+  getCourseDocumentTitle,
+  getRouteMeta,
+} from "../routing/routeDescriptors";
+import { useDocumentTitle } from "../routing/useDocumentTitle";
 import {
   buildLoginPath,
   keepLoginDialogOpen,
@@ -98,6 +103,7 @@ const isDiscussionsReturnPath = (returnPath: string): boolean => {
 export default function LearningRoute() {
   const { courseSlug, lectureSlug } = useParams();
   const location = useLocation();
+  const matches = useMatches();
   const navigate = useNavigate();
   const outletContext = useOutletContext<AcademyOutletContext>() ?? {};
   const {
@@ -195,6 +201,20 @@ export default function LearningRoute() {
       !isLessonUuidResolutionPending,
     );
   const apiLesson = allApiLessons[lessonId - 1];
+  // `meta` above can only name a course the document was built with. Once
+  // the course is here the tab is titled with the lesson and the course.
+  useDocumentTitle(
+    getCourseDocumentTitle(
+      "learning",
+      { courseSlug, lectureSlug },
+      location.pathname,
+      matches,
+      {
+        courseTitle: courseOverview?.course.title,
+        lessonTitle: apiLesson?.title,
+      },
+    ),
+  );
   const quizAssignment = myQuizAssignments?.assignments.find(
     (assignment) =>
       assignment.courseId === courseOverview?.course.id &&
