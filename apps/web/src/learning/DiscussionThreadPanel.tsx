@@ -1986,9 +1986,9 @@ function ThreadReplyComposer({
 
   const composerAvatar = currentUser?.avatar || "";
 
-  // Sized and set like the empty editor (its measures are in
-  // `atomic-editor.css`, its font is the editor's own rule), so nothing
-  // moves or changes face when the editor takes its place. It is a text box
+  // Sized and set like the empty editor (its measures and its font variable
+  // are in `atomic-editor.css`), so nothing moves or changes face when the
+  // editor takes its place. It is a text box
   // to assistive technology too, and turns into the editor as soon as it is
   // clicked or tabbed into.
   const editorPlaceholder = (
@@ -2001,7 +2001,7 @@ function ThreadReplyComposer({
       aria-placeholder={REPLY_PLACEHOLDER_TEXT}
       onClick={openEditor}
       onFocus={openEditor}
-      className="min-h-11 w-full cursor-text px-4 py-2.5 font-[family-name:var(--atomic-editor-font,system-ui,-apple-system,BlinkMacSystemFont,sans-serif)] text-[0.9375rem] leading-[1.6] text-(--muted) outline-none"
+      className="min-h-11 w-full cursor-text px-4 py-2.5 font-(family-name:--app-font-family) text-[0.9375rem] leading-[1.6] text-(--muted) outline-none"
     >
       {REPLY_PLACEHOLDER_TEXT}
     </div>
