@@ -5,6 +5,7 @@ export * from "./home.ts";
 export * from "./learner-home.ts";
 export * from "./learner-home-plan.ts";
 export * from "./quotes.ts";
+export * from "./wishlist.ts";
 export * from "./commerce/index.ts";
 export * from "./media.ts";
 export * from "./video-playback.ts";

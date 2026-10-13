@@ -333,11 +333,15 @@ const courseRoutes: RoutePlugin = async (app, options) => {
             .enum(["beginner", "intermediate", "advanced", "all_levels"])
             .optional(),
           categoryId: z.string().uuid().optional().nullable(),
+          // The course version the caller last read. When sent, the update
+          // is refused if the course has changed since.
+          version: z.number().int().positive().optional(),
         }),
         response: {
           200: jsonResponse("Course details updated", courseSchema),
           403: errorResponse("Forbidden - not permitted"),
           404: errorResponse("Course not found"),
+          409: errorResponse("Optimistic lock conflict"),
         },
       },
       preHandler: ctx.authorize("course.details.update", "course"),
@@ -357,12 +361,14 @@ const courseRoutes: RoutePlugin = async (app, options) => {
           .object({
             thumbnailUrl: z.string().url().max(2048),
             thumbnailMediaId: z.string().uuid().optional().nullable(),
+            version: z.number().int().positive().optional(),
           })
           .strict(),
         response: {
           200: jsonResponse("Course thumbnail updated", courseSchema),
           403: errorResponse("Forbidden - not permitted"),
           404: errorResponse("Course not found"),
+          409: errorResponse("Optimistic lock conflict"),
         },
       },
       preHandler: ctx.authorize("course.thumbnail.update", "course"),

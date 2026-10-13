@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { usePageSearchShortcut } from "../hooks/usePageSearchShortcut";
 import type { CouponListItem } from "@veolms/contracts";
 import { PlusIcon as Plus } from "@phosphor-icons/react/Plus";
 import { TagIcon as Tag } from "@phosphor-icons/react/Tag";
@@ -53,27 +53,7 @@ export function CouponsPage({ onNavigatePage, setNotice }: CouponsPageProps) {
 
   const updateMutation = useUpdateCoupon();
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const activeTag = (document.activeElement?.tagName || "").toLowerCase();
-      const isInput =
-        activeTag === "input" ||
-        activeTag === "textarea" ||
-        (document.activeElement as HTMLElement)?.isContentEditable;
-
-      if (
-        !isInput &&
-        (event.key === "/" ||
-          ((event.metaKey || event.ctrlKey) && event.key === "k"))
-      ) {
-        event.preventDefault();
-        document.getElementById("coupons-search-input")?.focus();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  usePageSearchShortcut("coupons-search-input");
 
   const handleOpenCreate = () => {
     onNavigatePage?.("/coupons/create");

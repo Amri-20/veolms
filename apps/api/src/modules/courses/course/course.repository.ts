@@ -122,6 +122,36 @@ export async function findCourseAccessByIdOrSlug(
 }
 
 /**
+ * Id and slug of the published courses among those named, each by its id or
+ * its slug. Drafts, archived courses and courses in the bin are left out.
+ */
+export async function findPublishedCourseRefs(
+  database: DatabaseExecutor,
+  courseIdsOrSlugs: readonly string[],
+) {
+  const courseIds = courseIdsOrSlugs.filter((value) =>
+    COURSE_UUID_PATTERN.test(value),
+  );
+  const slugs = courseIdsOrSlugs.filter(
+    (value) => !COURSE_UUID_PATTERN.test(value),
+  );
+  if (courseIds.length === 0 && slugs.length === 0) return [];
+
+  return await database
+    .selectFrom("courses")
+    .select(["id", "slug"])
+    .where("status", "=", "published")
+    .where("deleted_at", "is", null)
+    .where((eb) =>
+      eb.or([
+        ...(courseIds.length > 0 ? [eb("id", "in", courseIds)] : []),
+        ...(slugs.length > 0 ? [eb("slug", "in", slugs)] : []),
+      ]),
+    )
+    .execute();
+}
+
+/**
  * Looks up a slug reservation, including courses in the recovery bin. The
  * database keeps slugs globally unique so a course can be restored with its
  * original public URL during the retention window.
@@ -614,10 +644,15 @@ export async function softDeleteCourse(
     .executeTakeFirst();
 }
 
+/**
+ * `expectedVersion`, when given, makes the write conditional on the course
+ * still being at that version (no row is updated otherwise).
+ */
 export async function updateCourseDirect(
   database: Kysely<Database>,
   courseId: string,
   updates: Record<string, unknown>,
+  expectedVersion?: number,
 ) {
   return await database
     .updateTable("courses")
@@ -628,5 +663,8 @@ export async function updateCourseDirect(
     })
     .where("id", "=", courseId)
     .where("deleted_at", "is", null)
+    .$if(expectedVersion !== undefined, (query) =>
+      query.where("version", "=", expectedVersion!),
+    )
     .executeTakeFirst();
 }

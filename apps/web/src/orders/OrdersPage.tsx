@@ -1,15 +1,9 @@
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import type { NeedsRefundEntry } from "@veolms/contracts";
 import { CircleNotchIcon as CircleNotch } from "@phosphor-icons/react/CircleNotch";
 import { ShoppingBagIcon as ShoppingBag } from "@phosphor-icons/react/ShoppingBag";
 import type { CourseRole } from "../courses/catalogue";
+import { usePageSearchShortcut } from "../hooks/usePageSearchShortcut";
 import type { NavigateTo } from "../routing/navigation";
 import { useCurrentUser } from "../services/auth";
 import {
@@ -116,28 +110,7 @@ export function OrdersPage({
     setFlaggedOrderId(null);
   }, [setSelectedOrderId]);
 
-  // Keyboard shortcut listener (/ or Cmd+K to focus search input)
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const activeTag = (document.activeElement?.tagName || "").toLowerCase();
-      const isInput =
-        activeTag === "input" ||
-        activeTag === "textarea" ||
-        (document.activeElement as HTMLElement)?.isContentEditable;
-
-      if (
-        !isInput &&
-        (event.key === "/" ||
-          ((event.metaKey || event.ctrlKey) && event.key === "k"))
-      ) {
-        event.preventDefault();
-        document.getElementById("orders-search-input")?.focus();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  usePageSearchShortcut("orders-search-input");
 
   // Waiting for authentication
   if (!isAuthReady) {

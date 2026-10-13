@@ -9,9 +9,6 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 
 const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
 const webSourceRoot = fileURLToPath(new URL("./src", import.meta.url));
-const axiosBrowserEntry = fileURLToPath(
-  new URL("./node_modules/axios/dist/esm/axios.js", import.meta.url),
-);
 
 const shellPhosphorIcons = new Set([
   "Bell",
@@ -426,7 +423,6 @@ export default defineConfig(({ command, mode }) => {
         "@tanstack/query-async-storage-persister",
         "@tanstack/react-query-persist-client",
         "@veolms/contracts > zod",
-        "axios",
         "clsx",
         "tailwind-merge",
         // The login card's icon registry imports from the package's index,
@@ -496,9 +492,6 @@ export default defineConfig(({ command, mode }) => {
             ),
           ),
         },
-        // Axios' package ESM entry currently resolves its Node platform in
-        // Vite, which exposes the Node-only `process` global to the browser.
-        { find: "axios", replacement: axiosBrowserEntry },
         {
           find: "@veolms/video-player/shaka-preload",
           replacement: fileURLToPath(

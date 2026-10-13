@@ -14,6 +14,7 @@ import {
   DEFAULT_DEBOUNCE_DELAY_MS,
   useDebounceValue,
 } from "../hooks/useDebounce";
+import { usePageSearchShortcut } from "../hooks/usePageSearchShortcut";
 import { useCourseOptions } from "../services/courses";
 import { useStudents } from "../services/students";
 import { StudentsTable } from "./StudentsTable";
@@ -97,26 +98,7 @@ export function StudentsPage({ onNavigatePage, setNotice }: StudentsPageProps) {
     refetch,
   } = useStudents(queryFilter);
 
-  // Keyboard shortcut listener (/ or Cmd+K to search)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeTag = (document.activeElement?.tagName || "").toLowerCase();
-      const isInput =
-        activeTag === "input" ||
-        activeTag === "textarea" ||
-        (document.activeElement as HTMLElement)?.isContentEditable;
-
-      if (!isInput) {
-        if (e.key === "/" || ((e.metaKey || e.ctrlKey) && e.key === "k")) {
-          e.preventDefault();
-          document.getElementById("students-search-input")?.focus();
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  usePageSearchShortcut("students-search-input");
 
   const students = useMemo(() => {
     return data?.pages.flatMap((page) => page.students) || [];

@@ -90,6 +90,8 @@ export interface CourseCatalogueProps {
   onResetCatalogue: () => void;
   isAdmin?: boolean;
   currentUserId?: string;
+  /** The session has been checked and nobody is signed in. */
+  signedOut?: boolean;
   isLoading?: boolean;
   hasLoadError?: boolean;
   onRetryLoad?: () => void;
@@ -104,6 +106,7 @@ export function CourseCatalogue({
   role,
   isAdmin = false,
   currentUserId,
+  signedOut = false,
   isLoading = false,
   hasLoadError = false,
   onRetryLoad,
@@ -155,6 +158,12 @@ export function CourseCatalogue({
     totalCoursesCount !== undefined
       ? totalCoursesCount > 0 || isFiltered
       : isFiltered;
+
+  // A signed-out visitor has no courses of their own to list. "No courses
+  // found, try a different filter" told them nothing; they are asked to log
+  // in instead.
+  const loginForEnrolledCourses =
+    signedOut && role === "student" && enrollmentFilter === "enrolled";
 
   const isCourseDeleting = (courseId: string) =>
     Boolean(deletingCourseIds?.has(courseId) || localDeletingIds.has(courseId));
@@ -487,22 +496,37 @@ export function CourseCatalogue({
         <div className="mt-6 grid min-h-90 place-items-center content-center rounded-xl border border-dashed border-(--border-strong) px-6 text-center">
           <Heart size={34} className="text-(--accent)" />
           <h2 className="mt-3 text-base font-semibold text-(--text)">
-            {enrollmentFilter === "wishlist" && quickFilterCounts.wishlist === 0
-              ? "Your wishlist is empty"
-              : hasCourses
-                ? "No courses found"
-                : "No courses yet"}
+            {loginForEnrolledCourses
+              ? "Log in to see your courses"
+              : enrollmentFilter === "wishlist" &&
+                  quickFilterCounts.wishlist === 0
+                ? "Your wishlist is empty"
+                : hasCourses
+                  ? "No courses found"
+                  : "No courses yet"}
           </h2>
           <p className="mt-1.5 max-w-sm text-[0.82rem] leading-6 text-(--muted)">
-            {enrollmentFilter === "wishlist" && quickFilterCounts.wishlist === 0
-              ? "Save a course with its heart button and it will appear here."
-              : hasCourses
-                ? "Try a different search or filter."
-                : role === "creator"
-                  ? "You haven't created any courses yet. Create your first course to get started."
-                  : "You don't have any courses available to you yet."}
+            {loginForEnrolledCourses
+              ? "The courses you have joined are listed here once you are logged in."
+              : enrollmentFilter === "wishlist" &&
+                  quickFilterCounts.wishlist === 0
+                ? "Save a course with its heart button and it will appear here."
+                : hasCourses
+                  ? "Try a different search or filter."
+                  : role === "creator"
+                    ? "You haven't created any courses yet. Create your first course to get started."
+                    : "You don't have any courses available to you yet."}
           </p>
-          {hasCourses || enrollmentFilter === "wishlist" ? (
+          {loginForEnrolledCourses ? (
+            <button
+              type="button"
+              className="mt-4 min-h-10 rounded-(--control-radius-action) bg-(--accent) px-4 text-[0.8rem] font-semibold text-(--on-accent) hover:bg-(--accent-hover) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
+              data-control-radius-action
+              onClick={() => onNavigatePage("/login")}
+            >
+              Log in
+            </button>
+          ) : hasCourses || enrollmentFilter === "wishlist" ? (
             <button
               type="button"
               className="mt-4 min-h-10 rounded-(--control-radius-action) bg-(--accent) px-4 text-[0.8rem] font-semibold text-(--on-accent) hover:bg-(--accent-hover) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"

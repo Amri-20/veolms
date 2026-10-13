@@ -109,6 +109,7 @@ import { ExamIcon as Exam } from "@phosphor-icons/react/Exam";
 import { adaptCourseOverviewToCurriculum } from "./courseCurriculumAdapter";
 import {
   getCachedVideoPlaybackBootstrap,
+  getRefusedVideoPlaybackBootstrap,
   getVideoPlaybackBootstrap,
   refreshVideoPlaybackToken,
   PLAYBACK_BOOTSTRAP_LIMIT_MS,
@@ -770,9 +771,17 @@ export function LearningWorkspace({
     curriculumLessonsById.get(selectedLesson) ||
     firstCurriculumLesson ||
     fallbackEmptyLesson;
+  const [playbackBootstrapError, setPlaybackBootstrapError] =
+    useState<VideoPlaybackBootstrapError | null>(null);
+  // The server has just refused this account the lesson's video because it
+  // has no access to the course. It refuses the course's quizzes on the same
+  // grounds, and its progress too when the course is sold or restricted, so
+  // neither is asked for only to be told so again.
+  const courseAccessRefused =
+    playbackBootstrapError?.code === "COURSE_ACCESS_DENIED";
   const courseQuizAssignments = useCourseQuizAssignments(
     courseOverview?.course.id,
-    { enabled: isAuthenticated },
+    { enabled: isAuthenticated && !courseAccessRefused },
   );
   const [activeLessonView, setActiveLessonView] = useState<"video" | "quiz">(
     initialLessonView,
@@ -962,8 +971,6 @@ export function LearningWorkspace({
         lessonNumber: selectedLesson,
       });
     });
-  const [playbackBootstrapError, setPlaybackBootstrapError] =
-    useState<VideoPlaybackBootstrapError | null>(null);
   const [playbackBootstrapAttempt, setPlaybackBootstrapAttempt] = useState(0);
   const playbackRequestKeyRef = useRef<string | null>(null);
   const refreshPlaybackToken = useCallback(async () => {
@@ -1083,6 +1090,19 @@ export function LearningWorkspace({
     if (cached) {
       setPlaybackBootstrap(cached);
       setPlaybackBootstrapError(null);
+      return;
+    }
+
+    // An answer the preload or an earlier run of this effect was just given.
+    // Taken here rather than from the promise below, so the refusal never
+    // leaves the page for a moment in between.
+    const refused = getRefusedVideoPlaybackBootstrap({
+      courseSlug,
+      lessonNumber: selectedLesson,
+    });
+    if (refused) {
+      setPlaybackBootstrap(null);
+      setPlaybackBootstrapError(refused);
       return;
     }
 
@@ -1397,7 +1417,13 @@ export function LearningWorkspace({
       courseKey: courseOverview?.course.slug,
       userId,
       lessonIdsByNumber,
-      enabled: Boolean(courseOverview?.course.slug),
+      enabled:
+        Boolean(courseOverview?.course.slug) &&
+        !(
+          courseAccessRefused &&
+          (courseOverview?.pricing?.pricingType === "paid" ||
+            courseOverview?.canSelfEnroll === false)
+        ),
     });
   // Handed to the persistent player so progress is still recorded while it
   // plays as the mini player, after this page has unmounted.

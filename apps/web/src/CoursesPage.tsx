@@ -70,10 +70,7 @@ import {
   getStudentCataloguePathForEnrollmentFilter,
   isStudentCatalogueFilterSubpath,
 } from "./courses/catalogueRoutes";
-import {
-  toggleWishlistCourse,
-  useWishlistIds,
-} from "./courses/wishlistStorage";
+import { useToggleWishlistCourse, useWishlistIds } from "./wishlist";
 import { CourseCatalogueLoadingSkeleton } from "./courses/CourseCatalogueSkeleton";
 import type {
   Course,
@@ -3170,9 +3167,7 @@ export function CoursesPage({
     ],
   );
 
-  const toggleWishlist = (course: Course) => {
-    toggleWishlistCourse(course);
-  };
+  const toggleWishlist = useToggleWishlistCourse();
 
   const resetCatalogue = () => {
     setSearch("");
@@ -5290,6 +5285,7 @@ export function CoursesPage({
           role={effectiveRole}
           isAdmin={isAdmin}
           currentUserId={activeUser?.id}
+          signedOut={authUserFetched && !activeUser}
           isLoading={isLoadingCourses}
           hasLoadError={isCourseCatalogueLoadError}
           onRetryLoad={() => {

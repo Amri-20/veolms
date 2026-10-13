@@ -173,7 +173,11 @@ export function createCourseController({
   async function updateCourseThumbnail(
     request: FastifyRequest<{
       Params: { id: string };
-      Body: { thumbnailUrl: string; thumbnailMediaId?: string | null };
+      Body: {
+        thumbnailUrl: string;
+        thumbnailMediaId?: string | null;
+        version?: number;
+      };
     }>,
   ) {
     const { id } = request.params;
@@ -195,6 +199,7 @@ export function createCourseController({
         language?: string;
         level?: "beginner" | "intermediate" | "advanced" | "all_levels";
         categoryId?: string | null;
+        version?: number;
       };
     }>,
   ) {
