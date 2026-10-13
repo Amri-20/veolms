@@ -1,0 +1,117 @@
+import { Play } from "@phosphor-icons/react/Play";
+import type { Course } from "../catalogue";
+import { getCourseThumbnailSrcSet } from "../courseThumbnail";
+
+interface CourseHeroArtworkProps {
+  title: string;
+  thumbnail: string;
+  thumbnailSrcSet?: Course["thumbnailSrcSet"];
+  /** Opens the course's preview. Without it there is no play button. */
+  onPreview?: () => void;
+  previewDisabled?: boolean;
+}
+
+/**
+ * The widest the picture is drawn: the hero's full width while it is stacked,
+ * and 16:9 at the hero's height once it sits beside the text (the hero is
+ * 16.5rem tall on a laptop and up to 21rem on a very wide monitor).
+ */
+const heroPictureSizes =
+  "(min-width: 2200px) 600px, (min-width: 900px) 480px, 100vw";
+
+/**
+ * The hero's picture layers, all made from the course thumbnail:
+ *
+ * 1. a blurred, enlarged copy of the thumbnail that tints the hero with its
+ *    colours (the smallest size on file is used; it is blurred anyway). It
+ *    lies under the picture and spreads out from it, so on a hero much wider
+ *    than the picture the colours fade away from the picture instead of the
+ *    thumbnail's middle showing up as a patch in the hero's middle;
+ * 2. a dot grid;
+ * 3. the thumbnail itself, with no edge of its own: it dissolves into the
+ *    wash, downwards while it sits above the text and leftwards once it sits
+ *    beside it. Beside the text it is as tall as the hero and whole; in a
+ *    hero too narrow for that it loses its left side, which is the faded one;
+ * 4. a shade under the text so it reads on any thumbnail.
+ *
+ * The parent is the `@container/hero` these layers size themselves against.
+ */
+export function CourseHeroArtwork({
+  title,
+  thumbnail,
+  thumbnailSrcSet,
+  onPreview,
+  previewDisabled = false,
+}: CourseHeroArtworkProps) {
+  // A thumbnail from before sizes were kept has an empty list.
+  const smallestVariant = thumbnailSrcSet?.length
+    ? thumbnailSrcSet.reduce((smallest, variant) =>
+        variant.width < smallest.width ? variant : smallest,
+      )
+    : undefined;
+
+  return (
+    <>
+      {thumbnail ? (
+        <img
+          src={smallestVariant?.url ?? thumbnail}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 size-full scale-125 object-cover object-right opacity-55 blur-3xl saturate-150 @3xl/hero:left-auto @3xl/hero:aspect-video @3xl/hero:w-auto @3xl/hero:max-w-[62%] @3xl/hero:origin-right @3xl/hero:scale-[1.7]"
+          decoding="async"
+          fetchPriority="low"
+        />
+      ) : (
+        // No thumbnail to take colours from: the accent lights the corner the
+        // picture would have filled.
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_90%_at_85%_40%,color-mix(in_srgb,var(--accent)_45%,transparent),transparent_70%)]"
+        />
+      )}
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,rgb(255_255_255/0.2)_1px,transparent_1.5px)] bg-size-[16px_16px] [mask-image:radial-gradient(110%_95%_at_58%_0%,black,transparent_74%)]"
+      />
+
+      {thumbnail ? (
+        <div className="relative aspect-video w-full @3xl/hero:absolute @3xl/hero:inset-y-0 @3xl/hero:right-0 @3xl/hero:h-full @3xl/hero:w-auto @3xl/hero:max-w-[62%]">
+          <img
+            src={thumbnail}
+            srcSet={getCourseThumbnailSrcSet({ thumbnailSrcSet })}
+            sizes={heroPictureSizes}
+            alt={`Preview thumbnail for ${title}`}
+            className="absolute inset-0 size-full object-cover object-right [mask-image:linear-gradient(to_bottom,black_52%,rgb(0_0_0/0.5)_78%,transparent)] @3xl/hero:[mask-image:linear-gradient(to_right,transparent_6%,rgb(0_0_0/0.1)_18%,rgb(0_0_0/0.55)_34%,black_50%)]"
+            width={960}
+            height={540}
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+          />
+          {onPreview ? (
+            <button
+              type="button"
+              className="absolute top-[44%] left-1/2 z-20 inline-flex size-15 -translate-1/2 cursor-pointer items-center justify-center rounded-full border border-white/25 bg-slate-950/75 text-white shadow-[0_8px_30px_rgb(0_0_0/0.45)] transition-[background-color,scale] duration-160 ease-out hover:scale-105 hover:bg-slate-950/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-default disabled:hover:scale-100 motion-reduce:transition-none @3xl/hero:hidden"
+              onClick={onPreview}
+              disabled={previewDisabled}
+              aria-label="Preview course"
+              title="Preview course"
+            >
+              <Play size={24} weight="fill" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-linear-to-b from-transparent from-30% to-(--hero-base)/80 to-75% @3xl/hero:hidden"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 hidden bg-linear-to-r from-(--hero-base) from-28% via-(--hero-base)/75 via-48% to-transparent to-68% @3xl/hero:block"
+      />
+    </>
+  );
+}

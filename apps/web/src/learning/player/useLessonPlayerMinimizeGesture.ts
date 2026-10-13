@@ -93,9 +93,20 @@ const getGeometry = (element: HTMLElement): GestureGeometry =>
     preferredWidth: readMiniPlayerWidthPreference() ?? undefined,
   });
 
+/**
+ * Marks a part of the player that scrolls by itself (a reading lesson's
+ * text). The swipe leaves it alone: a finger moving down a text is reading
+ * it, not putting the player away.
+ */
+export const LESSON_READING_SCROLL_ATTRIBUTE = "data-lesson-reading-scroll";
+
 const isExcludedTarget = (target: EventTarget | null) =>
   target instanceof Element &&
-  Boolean(target.closest("[data-video-player-mobile-sheet]"));
+  Boolean(
+    target.closest(
+      `[data-video-player-mobile-sheet], [${LESSON_READING_SCROLL_ATTRIBUTE}]`,
+    ),
+  );
 
 /**
  * On desktop the motion target is the player's slot in the lesson layout,

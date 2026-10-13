@@ -19,6 +19,7 @@ import type { CourseLesson } from "@veolms/contracts";
  */
 
 type LessonContent = Pick<CourseLesson, "contentType" | "contentMediaId">;
+type LessonReadingContent = LessonContent & Pick<CourseLesson, "description">;
 
 /**
  * True when the course lists the lesson with no media. `null` is the
@@ -115,3 +116,36 @@ export const NO_VIDEO_NOTICE = {
   message: "This lesson has no video.",
   actionLabel: "",
 } as const;
+
+/**
+ * The text of a reading lesson: a document lesson with no file attached
+ * keeps what there is to read in its description, the only text field a
+ * lesson has. `null` for any other lesson, and for a reading left empty.
+ */
+export function getLessonReading(
+  lesson: LessonReadingContent | null | undefined,
+): string | null {
+  if (!lesson || lesson.contentType !== "document") return null;
+  if (!lessonHasNoVideo(lesson)) return null;
+  return lesson.description?.trim() || null;
+}
+
+/**
+ * What stands where the video would be for a lesson with none: its reading
+ * when it is a reading lesson, the plain statement otherwise. The small
+ * player has no room for a text and names the lesson's kind instead.
+ */
+export function noVideoNoticeFor(
+  lesson: LessonReadingContent | null | undefined,
+) {
+  const article = getLessonReading(lesson);
+  return article
+    ? ({
+        kind: "notice",
+        title: "Reading",
+        message: "This lesson is a reading.",
+        actionLabel: "",
+        article,
+      } as const)
+    : NO_VIDEO_NOTICE;
+}

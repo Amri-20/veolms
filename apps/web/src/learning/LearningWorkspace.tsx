@@ -133,7 +133,8 @@ import {
 } from "./learningShellPreferences";
 import { useLearningProgress } from "./useLearningProgress";
 import {
-  NO_VIDEO_NOTICE,
+  getLessonReading,
+  noVideoNoticeFor,
   planLessonStage,
   viewerMayRecordProgress,
 } from "./lessonWithoutVideo";
@@ -1013,6 +1014,9 @@ export function LearningWorkspace({
     : courseQuizAssignments.data === undefined
       ? undefined
       : false;
+  // The lesson as the course lists it: what the stage is planned from, and
+  // where a reading lesson's text comes from.
+  const stageLesson = adaptedCurriculum?.lessonsByNumber.get(selectedLesson);
   const lessonStagePlan = useMemo(() => {
     const course = courseOverview?.course;
     const holdsCourse = enrolledCoursesQuery.isFetched
@@ -1160,7 +1164,9 @@ export function LearningWorkspace({
 
     // A lesson the course lists with no video says so, whatever a request
     // made before the course had loaded came back with.
-    if (!courseNotFound && !requestsLessonPlayback) return NO_VIDEO_NOTICE;
+    if (!courseNotFound && !requestsLessonPlayback) {
+      return noVideoNoticeFor(stageLesson);
+    }
 
     if (!playbackBootstrapError) return courseNotFound;
 
@@ -1208,7 +1214,7 @@ export function LearningWorkspace({
     // The same statement as when the course itself says the lesson has no
     // video: it is asked for only while the course is still loading.
     if (playbackBootstrapError.code === "MEDIA_NOT_FOUND") {
-      return NO_VIDEO_NOTICE;
+      return noVideoNoticeFor(stageLesson);
     }
 
     return {
@@ -1225,6 +1231,7 @@ export function LearningWorkspace({
     requestsLessonPlayback,
     retryCourseOverview,
     retryPlaybackBootstrap,
+    stageLesson,
   ]);
   const playbackBootstrapPending = Boolean(
     protectedPlayback &&
@@ -1606,6 +1613,7 @@ export function LearningWorkspace({
     return adaptedCurriculum.lessonsByNumber.get(selectedLesson) ?? null;
   }, [adaptedCurriculum, selectedLesson]);
   const selectedLessonDescription = selectedLessonRecord?.description ?? null;
+  const selectedLessonReading = getLessonReading(selectedLessonRecord);
   const courseId = courseOverview?.course.id;
   const backendLessonId = selectedLessonRecord?.id;
   const isLearningDeepLinkReady =
@@ -3343,7 +3351,11 @@ export function LearningWorkspace({
                     true,
                     isLearningBootstrapLoading,
                   )}
-                  lessonDescription={selectedLessonDescription}
+                  // A reading is shown in the player; the card under it
+                  // would say the same text a second time.
+                  lessonDescription={
+                    selectedLessonReading ? null : selectedLessonDescription
+                  }
                   isLessonDescriptionLoading={
                     (isApiRoute && isCourseOverviewLoading) ||
                     isLearningBootstrapLoading
