@@ -8,26 +8,12 @@ import {
 } from "react";
 import type { MouseEvent } from "react";
 import { useParams } from "react-router";
-import { ArrowLeft } from "@phosphor-icons/react/ArrowLeft";
-import { ArrowsInLineVertical } from "@phosphor-icons/react/ArrowsInLineVertical";
-import { ArrowsOutLineVertical } from "@phosphor-icons/react/ArrowsOutLineVertical";
 import { BookOpen } from "@phosphor-icons/react/BookOpen";
 import { CaretDown } from "@phosphor-icons/react/CaretDown";
-import { CheckCircle } from "@phosphor-icons/react/CheckCircle";
-import { Circle } from "@phosphor-icons/react/Circle";
 import { CircleNotch } from "@phosphor-icons/react/CircleNotch";
-import { Clock } from "@phosphor-icons/react/Clock";
-import { FileText } from "@phosphor-icons/react/FileText";
 import { Heart } from "@phosphor-icons/react/Heart";
 import { Play } from "@phosphor-icons/react/Play";
-import { PlayCircle } from "@phosphor-icons/react/PlayCircle";
-import { Question } from "@phosphor-icons/react/Question";
 import { ShoppingBag } from "@phosphor-icons/react/ShoppingBag";
-import { Stack } from "@phosphor-icons/react/Stack";
-import { Tag } from "@phosphor-icons/react/Tag";
-import { Ticket } from "@phosphor-icons/react/Ticket";
-import { User } from "@phosphor-icons/react/User";
-import { X } from "@phosphor-icons/react/X";
 import {
   MAX_VOLUNTARY_AMOUNT,
   type Category,
@@ -56,10 +42,7 @@ import {
 } from "./courseEnrollmentOffer";
 import { readCustomAmount } from "./customAmountEntry";
 import { useCourseWishlisted, useToggleWishlistCourse } from "../wishlist";
-import { CourseWishlistHeartButton } from "./CourseWishlistHeartButton";
-import { CourseThumbnailPlaceholder } from "./CourseThumbnailPlaceholder";
 import type { CourseSection } from "../learning/courseContent";
-import { VirtualizedLessonList } from "./curriculum/VirtualizedLessonList";
 import { getCoursePlayerPath } from "../learning/coursePlayerNavigation";
 import type { NavigateTo } from "../routing/navigation";
 import { productName } from "../routing/routeDescriptors";
@@ -77,13 +60,25 @@ import {
 import { DiscussionMarkdown } from "../learning/discussion-editor/DiscussionMarkdown";
 import { createDiscussionDraft } from "../learning/discussion-editor/types";
 import { formatDuration, resolveCourseDurationSeconds } from "./courseAdapter";
+import { CourseLearnerProgressBar } from "./overview/CourseLearnerProgressBar";
+import { CourseOverviewCurriculum } from "./overview/CourseOverviewCurriculum";
+import {
+  CourseOverviewHero,
+  overviewColumnClasses,
+} from "./overview/CourseOverviewHero";
+import { CourseOverviewSkeleton } from "./overview/CourseOverviewSkeleton";
+import { CoursePriceBar } from "./overview/CoursePriceBar";
+import {
+  CourseSupportAmountPicker,
+  type ContributionPresetId,
+} from "./overview/CourseSupportAmountPicker";
+import { formatPriceWithCurrency } from "./overview/coursePriceFormat";
+
+export { CourseOverviewSkeleton };
+
 // ─── Helpers for Currency, Sale Window, Language, and Price Sizing ────────────
 
 export type PriceSizeVariant = "normal" | "medium" | "large" | "xlarge";
-
-const NO_PINNED_LESSONS: ReadonlySet<string> = new Set();
-const getOverviewLessonKey = (lesson: CourseSection["lessons"][number]) =>
-  String(lesson[0]);
 
 declare global {
   interface Window {
@@ -119,37 +114,6 @@ export const priceTextClasses: Record<PriceSizeVariant, string> = {
   large: "text-[1.75rem] max-[640px]:text-[1.55rem] tracking-[-0.02em]",
   xlarge: "text-[1.55rem] max-[640px]:text-[1.4rem] tracking-[-0.015em]",
 };
-
-export function getCurrencySymbol(currency: string = "INR"): string {
-  switch (currency.toUpperCase()) {
-    case "INR":
-      return "₹";
-    case "USD":
-      return "$";
-    case "EUR":
-      return "€";
-    case "GBP":
-      return "£";
-    case "CAD":
-      return "CA$";
-    case "AUD":
-      return "A$";
-    case "JPY":
-      return "¥";
-    default:
-      return `${currency.toUpperCase()} `;
-  }
-}
-
-export function formatPriceWithCurrency(
-  amount: number,
-  currency: string = "INR",
-): string {
-  const sym = getCurrencySymbol(currency);
-  // Rupees are grouped the Indian way (1,00,000), not in thousands.
-  const locale = currency.toUpperCase() === "INR" ? "en-IN" : "en-US";
-  return `${sym}${amount.toLocaleString(locale)}`;
-}
 
 export function isCourseSaleActive(
   salePrice: number | null | undefined,
@@ -270,8 +234,6 @@ function toOverviewPricingProps(
   };
 }
 
-type ContributionPresetId = "0" | "100" | "250" | "500" | "custom";
-
 function appliedCouponFromPreview(
   code: string,
   res: CheckoutPreviewResponse,
@@ -299,231 +261,20 @@ function appliedCouponFromPreview(
   };
 }
 
-// ─── sub-components ──────────────────────────────────────────────────────────
+// ─── Price, Coupon & Enrolment ──────────────────────────────────────────────
 
-interface CurriculumSectionProps {
-  section: CourseSection;
-  index: number;
-  isOpen: boolean;
-  onToggle: () => void;
-  onSelectLesson?: (lessonNumber: number) => void;
-  shouldVirtualizeLessons?: boolean;
-  isReadOnlyPreview?: boolean;
-  isPaidCourse?: boolean;
-}
+/**
+ * Whether a buyer is offered amounts above the price ("Support Teacher").
+ * Switched off for now: the page shows the course's one price. The checkout
+ * below still handles a chosen amount, so turning this on brings the picker
+ * back as it was.
+ */
+const SUPPORT_AMOUNTS_OFFERED: boolean = false;
 
-function parseDurationLabel(label: string): number {
-  const hours = Number(label.match(/(\d+)h/)?.[1] ?? 0);
-  const minutes = Number(label.match(/(\d+)m/)?.[1] ?? 0);
-  return hours * 3600 + minutes * 60;
-}
-
-function CurriculumSectionItem({
-  section,
-  index,
-  isOpen,
-  onToggle,
-  onSelectLesson,
-  shouldVirtualizeLessons = false,
-  isReadOnlyPreview = false,
-  isPaidCourse = false,
-}: CurriculumSectionProps) {
-  const panelId = `cov-section-panel-${section.id}`;
-  const buttonId = `cov-section-toggle-${section.id}`;
-  const lessonCount = section.lessons.length;
-  const durationSeconds = section.lessons.reduce(
-    (total, lesson) => total + parseDurationLabel(lesson[2]),
-    0,
-  );
-  const durationLabel =
-    durationSeconds > 0 ? formatDuration(durationSeconds) : "";
-
-  return (
-    <div
-      className={`rounded-xl border bg-(--surface) shadow-(--card-shadow) overflow-hidden transition-[border-color,box-shadow] duration-150 ${
-        isOpen
-          ? "border-[color-mix(in_srgb,var(--accent)_35%,transparent)]"
-          : "border-[color-mix(in_srgb,var(--text)_10%,transparent)]"
-      }`}
-      role="listitem"
-    >
-      <button
-        id={buttonId}
-        type="button"
-        className="flex w-full min-h-13 items-center gap-3.5 border-0 px-4.5 py-3 text-(--text) bg-transparent text-[0.92rem] font-semibold text-left cursor-pointer transition-colors duration-140 hover:bg-(--hover) max-[640px]:p-[10px_14px] max-[640px]:text-[0.88rem]"
-        aria-expanded={isOpen}
-        aria-controls={panelId}
-        onClick={onToggle}
-      >
-        <span
-          className="inline-flex w-6.5 h-6.5 shrink-0 items-center justify-center rounded-md bg-(--accent) text-(--on-accent,#ffffff) text-[0.82rem] font-bold"
-          aria-hidden="true"
-        >
-          {index + 1}
-        </span>
-        <span className="flex-1 min-w-0 text-(--text)">{section.title}</span>
-        <span className="shrink-0 text-(--muted) text-[0.82rem] font-normal mr-1">
-          {lessonCount} Lesson{lessonCount === 1 ? "" : "s"}
-          {durationLabel ? ` • ${durationLabel}` : ""}
-        </span>
-        <span
-          className={`shrink-0 text-(--muted) inline-flex items-center justify-center transition-transform duration-200 ease-out motion-reduce:transition-none ${
-            isOpen ? "rotate-180" : ""
-          }`}
-          aria-hidden="true"
-        >
-          <CaretDown size={16} weight="bold" />
-        </span>
-      </button>
-
-      <div
-        id={panelId}
-        role="region"
-        aria-labelledby={buttonId}
-        aria-hidden={!isOpen}
-        className={`grid motion-reduce:transition-none ${
-          isOpen
-            ? "grid-rows-[1fr] opacity-100 visible transition-[grid-template-rows,opacity,visibility] duration-220 ease-[cubic-bezier(0.22,1,0.36,1)]"
-            : "grid-rows-[0fr] opacity-0 invisible transition-[grid-template-rows,opacity,visibility] duration-250 ease-[cubic-bezier(0,1,0,1)]"
-        }`}
-      >
-        <div className="overflow-hidden min-h-0">
-          <div className="border-t border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--surface)_95%,var(--text))]">
-            {section.lessons.length > 0 ? (
-              isOpen ? (
-                <VirtualizedLessonList
-                  items={section.lessons}
-                  forceVirtualized={shouldVirtualizeLessons}
-                  estimatedItemSize={46}
-                  itemGap={0}
-                  overscan={14}
-                  getItemKey={getOverviewLessonKey}
-                  pinnedItemIds={NO_PINNED_LESSONS}
-                  renderItem={([
-                    number,
-                    title,
-                    duration,
-                    status,
-                    isPreview,
-                    contentType,
-                  ]) => {
-                    const isDoc = contentType === "document";
-                    const isQuiz = contentType === "quiz";
-                    return (
-                      <button
-                        type="button"
-                        className={`group/lesson flex items-center gap-3 w-full min-h-11.5 border-0 bg-transparent px-4.5 py-1.5 text-(--text-secondary) text-[0.85rem] text-left transition-colors duration-140 ${
-                          isReadOnlyPreview
-                            ? "cursor-default opacity-85 hover:bg-transparent hover:text-(--text-secondary)"
-                            : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)] hover:text-(--text) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-inset"
-                        }`}
-                        key={number}
-                        disabled={isReadOnlyPreview}
-                        onClick={() => {
-                          if (isReadOnlyPreview) return;
-                          onSelectLesson?.(number);
-                        }}
-                      >
-                        {/* The row is named by what it shows, with the lesson
-                            number added for screen readers. A separate
-                            aria-label used to replace the visible text with
-                            wording of its own ("Lesson 1: Title, 12:30"),
-                            which voice control cannot match to what is on
-                            screen and which left the "Free" badge out. */}
-                        <span className="sr-only">{`Lesson ${number}: `}</span>
-                        {/* Content type icon */}
-                        <span
-                          className={`inline-flex w-5 shrink-0 items-center justify-center text-(--muted) transition-colors duration-140 ${
-                            isReadOnlyPreview
-                              ? ""
-                              : "group-hover/lesson:text-(--accent)"
-                          }`}
-                          aria-hidden="true"
-                        >
-                          {isDoc ? (
-                            <FileText size={16} weight="regular" />
-                          ) : isQuiz ? (
-                            <Question size={16} weight="regular" />
-                          ) : (
-                            <PlayCircle size={16} weight="regular" />
-                          )}
-                        </span>
-
-                        {/* Lesson title */}
-                        <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.85rem] text-(--text-secondary)">
-                          {title}
-                        </span>
-
-                        {/* Duration */}
-                        {duration ? (
-                          <span className="text-(--muted) text-[0.78rem] shrink-0 w-11.25 text-right">
-                            {duration}
-                          </span>
-                        ) : null}
-
-                        {/* Free preview badge: only displayed when course is paid and lesson is marked as free preview */}
-                        {isPaidCourse && isPreview ? (
-                          <span
-                            className="shrink-0 inline-flex items-center rounded-[5px] px-[6px] py-[2px] text-[0.7rem] font-[700] leading-none bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-(--accent) border border-[color-mix(in_srgb,var(--accent)_30%,transparent)]"
-                            aria-label="Free preview"
-                          >
-                            Free
-                          </span>
-                        ) : null}
-
-                        {/* Progress status */}
-                        {status === "done" ? (
-                          <span
-                            className="inline-flex items-center justify-center shrink-0"
-                            aria-hidden="true"
-                          >
-                            <CheckCircle
-                              size={16}
-                              weight="fill"
-                              className="text-[#10b981]"
-                            />
-                          </span>
-                        ) : status === "todo" ? (
-                          <span
-                            className="inline-flex items-center justify-center shrink-0"
-                            aria-hidden="true"
-                          >
-                            <Circle size={16} className="text-(--muted)" />
-                          </span>
-                        ) : null}
-                      </button>
-                    );
-                  }}
-                />
-              ) : null
-            ) : (
-              <div className="px-3.5 py-3 text-(--muted) text-[0.82rem] italic">
-                No lessons added yet
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Header & Hero Section ──────────────────────────────────────────────────
-
-interface CourseHeroSectionProps {
+interface CoursePurchaseSectionProps {
   course: Course;
-  title: string;
-  thumbnail: string;
-  wishlisted: boolean;
-  instructorName?: string;
-  shortDescription?: string;
-  categoryName?: string;
-  language?: string;
   pricing?: CourseOverviewPricingProps;
   inclusions?: string[];
-  trailerMediaId?: string | null;
-  onNavigateCourses?: () => void;
-  onToggleWishlist?: (event: MouseEvent<HTMLButtonElement>) => void;
   onNavigatePage?: NavigateTo;
   isReadOnlyPreview?: boolean;
   isCreator?: boolean;
@@ -531,25 +282,15 @@ interface CourseHeroSectionProps {
   canSelfEnroll?: boolean;
 }
 
-function CourseHeroSection({
+function CoursePurchaseSection({
   course,
-  title,
-  thumbnail,
-  trailerMediaId,
-  wishlisted,
-  instructorName,
-  shortDescription,
-  categoryName,
-  language,
   pricing,
   inclusions,
-  onNavigateCourses,
-  onToggleWishlist,
   onNavigatePage,
   isReadOnlyPreview = false,
   isCreator = false,
   canSelfEnroll,
-}: CourseHeroSectionProps) {
+}: CoursePurchaseSectionProps) {
   const user = useAuthStore((state) => state.user);
   const preview = useCheckoutPreview();
   const createOrder = useCreateCheckoutOrder();
@@ -583,7 +324,6 @@ function CourseHeroSection({
   );
 
   const courseCurrency = pricing?.currency ?? "INR";
-  const currencySymbol = getCurrencySymbol(courseCurrency);
   const baseNumericPrice = pricing?.amount ?? 0;
   const isPreview = Boolean(isReadOnlyPreview);
   const isCreatorNormal = Boolean(isCreator && !isPreview);
@@ -904,6 +644,16 @@ function CourseHeroSection({
     }
   };
 
+  // The price stands on the bar beside the button, so the button does not
+  // repeat it. A buyer's own, higher amount is still named, and so is a
+  // coupon that leaves nothing to pay.
+  const paidCtaLabel = (payable: number, currency: string) =>
+    voluntaryAmount > baseNumericPrice
+      ? `Pay ${formatPriceWithCurrency(payable, currency)} & Enroll`
+      : payable === 0
+        ? "Enroll for Free"
+        : "Buy Now";
+
   let ctaLabel = "Continue Learning";
   let ctaIcon: React.ReactNode = (
     <Play size="1.15em" weight="fill" className="shrink-0" aria-hidden="true" />
@@ -995,7 +745,7 @@ function CourseHeroSection({
     } else {
       const payable =
         voluntaryAmount > baseNumericPrice ? voluntaryAmount : baseNumericPrice;
-      ctaLabel = `Pay ${formatPriceWithCurrency(payable, courseCurrency)} & Enroll`;
+      ctaLabel = paidCtaLabel(payable, courseCurrency);
       ctaIcon = (
         <ShoppingBag
           size="1.15em"
@@ -1055,7 +805,7 @@ function CourseHeroSection({
       const finalPayable = appliedCoupon ? appliedCoupon.totalAmount : payable;
       ctaLabel = isPaymentBusy
         ? "Processing…"
-        : `Pay ${formatPriceWithCurrency(finalPayable, appliedCoupon?.currency ?? courseCurrency)} & Enroll`;
+        : paidCtaLabel(finalPayable, appliedCoupon?.currency ?? courseCurrency);
       ctaIcon = isPaymentBusy ? (
         <CircleNotch
           size="1.15em"
@@ -1112,608 +862,94 @@ function CourseHeroSection({
     }
   }
 
-  const handlePreviewClick = (event: MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    if (isReadOnlyPreview) return;
-    if (onNavigatePage) {
-      onNavigatePage(`/learn/${encodeURIComponent(getCourseRouteKey(course))}`);
-    }
-  };
+  const priceLabel = isFree
+    ? originalPrice
+      ? basePrice
+      : "Free"
+    : displayPrice;
+  const priceBadge =
+    (isFree ? originalPrice : true) && displayDiscount
+      ? displayDiscount
+      : undefined;
 
   return (
-    <div className="grid grid-cols-1 min-[1200px]:grid-cols-2 gap-8 items-start relative max-[1200px]:flex max-[1200px]:flex-col max-[1200px]:gap-5.5 max-[640px]:gap-4.5">
-      {/* Left Column: Title, Metadata, Pricing Section */}
-      <div className="flex flex-col min-w-0 w-full gap-4 max-[1200px]:contents">
-        {/* Upper Navigation Back Button */}
-        {onNavigateCourses && (
-          <div className="flex items-center gap-2.5 flex-wrap max-[1200px]:order-0 max-[1200px]:w-full">
-            <button
-              type="button"
-              className="inline-flex items-center justify-center w-9.5 h-9.5 rounded-xl border border-[color-mix(in_srgb,var(--text)_14%,transparent)] bg-[color-mix(in_srgb,var(--surface)_90%,#000)] text-(--text) cursor-pointer p-0 shadow-[0_2px_8px_rgba(0,0,0,0.14)] transition-[border-color,background-color,color] duration-160 ease-out hover:border-[color-mix(in_srgb,var(--text)_30%,transparent)] hover:bg-(--hover) hover:text-(--text)"
-              aria-label="Back to courses"
-              onClick={onNavigateCourses}
-              title="Back to courses"
-            >
-              <ArrowLeft size={18} weight="bold" />
-            </button>
-          </div>
-        )}
-
-        {/* Lower Content Group: Title, Meta row, Pricing Card */}
-        <div className="flex flex-col min-w-0 w-full gap-3.5 max-[1200px]:contents">
-          {/* Title & Metadata Group */}
-          <div className="flex flex-col min-w-0 shrink-0 max-[1200px]:order-1 max-[1200px]:w-full gap-2.5">
-            {/* 1. Title */}
-            <h1 className="m-0 text-(--text) text-[clamp(1.8rem,2.4vw,2.15rem)] font-bold leading-tight tracking-[-0.035em]">
-              {title}
-            </h1>
-
-            {/* 2. Metadata row immediately below title */}
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-(--text-secondary) text-[0.88rem] max-[900px]:gap-x-3 max-[900px]:gap-y-1.5 max-[640px]:text-[0.86rem] max-[640px]:gap-x-2.5 max-[640px]:gap-y-1.25">
-              {instructorName && (
-                <>
-                  <span className="inline-flex items-center gap-1.5 text-(--text) font-[650]">
-                    <User size={17} weight="bold" aria-hidden="true" />
-                    <span>{instructorName}</span>
-                  </span>
-                  <span
-                    className="text-[color-mix(in_srgb,var(--text)_30%,transparent)] text-[0.8rem]"
-                    aria-hidden="true"
-                  >
-                    •
-                  </span>
-                </>
-              )}
-              <span className="inline-flex items-center gap-1.5">
-                <Stack size={17} aria-hidden="true" />
-                <span>
-                  {course.sections} Section{course.sections === 1 ? "" : "s"}
-                </span>
-              </span>
-              <span
-                className="text-[color-mix(in_srgb,var(--text)_30%,transparent)] text-[0.8rem]"
-                aria-hidden="true"
-              >
-                •
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <BookOpen size={17} aria-hidden="true" />
-                <span>
-                  {course.lectures} Lesson{course.lectures === 1 ? "" : "s"}
-                </span>
-              </span>
-              {/* Language metadata is temporarily hidden per requirements (retained for future use) */}
-              {categoryName ? (
-                <>
-                  <span
-                    className="text-[color-mix(in_srgb,var(--text)_30%,transparent)] text-[0.8rem]"
-                    aria-hidden="true"
-                  >
-                    •
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <Tag size={17} aria-hidden="true" />
-                    <span>{categoryName}</span>
-                  </span>
-                </>
-              ) : null}
-              <span
-                className="text-[color-mix(in_srgb,var(--text)_30%,transparent)] text-[0.8rem]"
-                aria-hidden="true"
-              >
-                •
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Clock size={17} aria-hidden="true" />
-                <span>{course.duration || "0h 0m"}</span>
-              </span>
-            </div>
-          </div>
-
-          {/* Full-width Rich Pricing Section in Left Column */}
-          <div
-            className={`flex flex-col min-h-0 rounded-[14px] border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-[color-mix(in_srgb,var(--surface)_95%,transparent)] shadow-(--card-shadow) w-full box-border max-[1200px]:order-3 max-[1200px]:w-full max-[1200px]:mt-0 max-[640px]:p-[16px_14px] max-[640px]:gap-3 p-[18px_20px] gap-3.5`}
-            aria-label="Course pricing and enrollment"
-          >
-            {/* Top Row: Prominent Price + Original Price + Discount (Left) and Favourite Button (Top Right) */}
-            {!isCreatorNormal && (
-              <div className="flex items-start justify-between gap-3 w-full">
-                <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5 min-w-0 flex-1">
-                  <span
-                    className={`text-(--text) font-[850] leading-none whitespace-nowrap ${priceTextClasses[priceSizeVariant]}`}
-                  >
-                    {isFree
-                      ? originalPrice
-                        ? basePrice
-                        : "Free"
-                      : displayPrice}
-                  </span>
-                  {struckThroughPrice && (
-                    <span className="text-(--muted) text-[1.05rem] font-medium line-through whitespace-nowrap">
-                      {struckThroughPrice}
-                    </span>
-                  )}
-                  {(isFree ? originalPrice : true) && displayDiscount && (
-                    <span className="inline-flex items-center rounded-md px-2 py-0.75 bg-(--accent-soft,color-mix(in_srgb,var(--accent)_18%,transparent)) text-(--accent-ink,var(--accent)) text-[0.75rem] font-[750] leading-none whitespace-nowrap">
-                      {displayDiscount}
-                    </span>
-                  )}
-                </div>
-
-                <CourseWishlistHeartButton
-                  variant="overview-surface"
-                  wishlisted={wishlisted}
-                  disabled={isPreview}
-                  aria-label={
-                    wishlisted ? "Remove from wishlist" : "Add to wishlist"
+    <CoursePriceBar
+      price={
+        isCreatorNormal
+          ? undefined
+          : {
+              label: priceLabel,
+              sizeClassName: priceTextClasses[priceSizeVariant],
+              struckThrough: struckThroughPrice,
+              badge: priceBadge,
+            }
+      }
+      coupon={
+        appliedCoupon || showApplyCoupon
+          ? {
+              applied: appliedCoupon
+                ? {
+                    code: appliedCoupon.code,
+                    discountLabel: appliedCoupon.discountLabel,
                   }
-                  title={
-                    wishlisted ? "Remove from wishlist" : "Add to wishlist"
-                  }
-                  onClick={(event) => onToggleWishlist?.(event)}
-                />
-              </div>
-            )}
-
-            {/* Applied Coupon Badge */}
-            {appliedCoupon && (
-              <div className="flex items-center justify-between gap-2 w-full px-3 py-2 rounded-[9px] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] border border-[color-mix(in_srgb,var(--accent)_28%,transparent)] text-(--text)">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Ticket
-                    size={16}
-                    weight="fill"
-                    className="text-(--accent) shrink-0"
-                    aria-hidden="true"
-                  />
-                  <span className="text-xs font-bold uppercase tracking-wider text-(--accent-ink,var(--accent)) truncate">
-                    {appliedCoupon.code}
-                  </span>
-                  <span className="text-xs text-(--muted) whitespace-nowrap">
-                    applied{" "}
-                    {appliedCoupon.discountLabel
-                      ? `(${appliedCoupon.discountLabel})`
-                      : ""}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleRemoveCoupon}
-                  className="inline-flex items-center justify-center w-5 h-5 rounded-full text-(--muted) hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer transition-colors"
-                  aria-label="Remove coupon"
-                  title="Remove coupon"
-                >
-                  <X size={13} weight="bold" />
-                </button>
-              </div>
-            )}
-
-            {/* Inline Coupon Input Box (shown when user clicks 'Apply coupon') */}
-            {showApplyCoupon && couponInputOpen && !appliedCoupon && (
-              <div className="flex flex-col gap-1.5 w-full">
-                <div className="flex items-center gap-2 w-full min-h-10.5 rounded-[9px] bg-[color-mix(in_srgb,var(--surface-strong)_75%,var(--canvas))] border border-[color-mix(in_srgb,var(--text)_18%,transparent)] focus-within:border-(--accent) focus-within:ring-2 focus-within:ring-[color-mix(in_srgb,var(--accent)_18%,transparent)] p-1.5 pl-3 transition-all">
-                  <Ticket
-                    size={18}
-                    weight="bold"
-                    className="text-(--muted) shrink-0"
-                    aria-hidden="true"
-                  />
-                  <input
-                    type="text"
-                    value={couponCodeInput}
-                    onChange={(e) => {
-                      setCouponCodeInput(e.target.value.toUpperCase());
-                      setCouponError(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleApplyCoupon();
-                      } else if (e.key === "Escape") {
-                        setCouponInputOpen(false);
-                        setCouponError(null);
-                      }
-                    }}
-                    placeholder="Enter coupon code"
-                    disabled={couponBusy}
-                    aria-label="Coupon code"
-                    className="w-full bg-transparent border-0 text-(--text) placeholder-(--muted) text-[0.86rem] font-semibold tracking-wider outline-none uppercase"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={handleApplyCoupon}
-                    disabled={couponBusy || !couponCodeInput.trim()}
-                    aria-label={couponBusy ? "Applying coupon" : undefined}
-                    className="inline-flex items-center justify-center px-3.5 py-1.5 rounded-[7px] bg-(--accent) text-(--on-accent,#ffffff) text-[0.82rem] font-[750] cursor-pointer whitespace-nowrap transition-all hover:bg-(--accent-hover,color-mix(in_srgb,var(--accent)_85%,var(--text))) disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                  >
-                    {couponBusy ? (
-                      <CircleNotch
-                        size={14}
-                        className="animate-spin"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      "Apply"
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCouponInputOpen(false);
-                      setCouponError(null);
-                    }}
-                    aria-label="Cancel"
-                    title="Cancel"
-                    className="inline-flex items-center justify-center w-7 h-7 rounded-md text-(--muted) hover:text-(--text) hover:bg-(--hover) cursor-pointer transition-colors shrink-0"
-                  >
-                    <X size={15} weight="bold" />
-                  </button>
-                </div>
-                {couponError && (
-                  <p
-                    role="alert"
-                    className="m-0 text-xs text-rose-500 font-semibold px-1"
-                  >
-                    {couponError}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* A coupon that came off by itself: the box above is closed then, so its reason would otherwise not be shown at all */}
-            {couponError && !couponInputOpen && !appliedCoupon && (
-              <p
-                role="alert"
-                className="m-0 text-xs text-rose-500 font-semibold px-1"
-              >
-                {couponError}
-              </p>
-            )}
-
-            {/* Pay What You Want / Voluntary Contribution for Free and Paid Courses */}
-            {!isCreatorNormal && !isEnrolled && !isInvitationOnly && (
-              <div className="flex flex-col gap-2 pt-2 pb-0.5 border-t border-[color-mix(in_srgb,var(--text)_10%,transparent)]">
-                <div className="flex items-center justify-between gap-2 min-h-5">
-                  <span className="text-[0.8rem] font-bold text-(--text) uppercase tracking-wider flex items-center gap-1.5">
-                    <Heart
-                      size={14}
-                      weight="fill"
-                      className="text-rose-500"
-                      aria-hidden="true"
-                    />
-                    <span>Support Teacher (Optional)</span>
-                  </span>
-                  <span
-                    // Kept in the layout while hidden so the row does not
-                    // jump; hidden from assistive technology too, which
-                    // otherwise read out a stale "₹0 Total".
-                    aria-hidden={
-                      !(voluntaryAmount > (isFree ? 0 : baseNumericPrice))
-                    }
-                    className={`text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full transition-opacity duration-150 ${
-                      voluntaryAmount > (isFree ? 0 : baseNumericPrice)
-                        ? "opacity-100"
-                        : "opacity-0 pointer-events-none"
-                    }`}
-                  >
-                    {formatPriceWithCurrency(voluntaryAmount, courseCurrency)}{" "}
-                    Total
-                  </span>
-                </div>
-                <p className="m-0 text-[0.8rem] text-(--muted) leading-snug">
-                  {isFree
-                    ? "This course is free. If you'd like to support the instructor, you can optionally contribute any amount."
-                    : `You can optionally pay more than the regular price (${formatPriceWithCurrency(baseNumericPrice, courseCurrency)}) to support the instructor.`}
-                </p>
-
-                {/* Preset Contribution Chips with Inline Custom Pill */}
-                <div className="flex flex-wrap items-center gap-1.5 min-h-8">
-                  {(isFree
-                    ? [
-                        {
-                          id: "0" as const,
-                          label: `Free (${formatPriceWithCurrency(0, courseCurrency)})`,
-                          value: 0,
-                        },
-                        {
-                          id: "100" as const,
-                          label: formatPriceWithCurrency(100, courseCurrency),
-                          value: 100,
-                        },
-                        {
-                          id: "250" as const,
-                          label: formatPriceWithCurrency(250, courseCurrency),
-                          value: 250,
-                        },
-                        {
-                          id: "500" as const,
-                          label: formatPriceWithCurrency(500, courseCurrency),
-                          value: 500,
-                        },
-                        { id: "custom" as const, label: "Custom", value: -1 },
-                      ]
-                    : [
-                        {
-                          id: "0" as const,
-                          label: `Regular (${formatPriceWithCurrency(baseNumericPrice, courseCurrency)})`,
-                          value: 0,
-                        },
-                        {
-                          id: "100" as const,
-                          label: `+${formatPriceWithCurrency(100, courseCurrency)} (${formatPriceWithCurrency(baseNumericPrice + 100, courseCurrency)})`,
-                          value: baseNumericPrice + 100,
-                        },
-                        {
-                          id: "250" as const,
-                          label: `+${formatPriceWithCurrency(250, courseCurrency)} (${formatPriceWithCurrency(baseNumericPrice + 250, courseCurrency)})`,
-                          value: baseNumericPrice + 250,
-                        },
-                        {
-                          id: "500" as const,
-                          label: `+${formatPriceWithCurrency(500, courseCurrency)} (${formatPriceWithCurrency(baseNumericPrice + 500, courseCurrency)})`,
-                          value: baseNumericPrice + 500,
-                        },
-                        { id: "custom" as const, label: "Custom", value: -1 },
-                      ]
-                  ).map((preset) => {
-                    if (preset.id === "custom") {
-                      if (selectedPreset === "custom") {
-                        return (
-                          <div
-                            key="custom-input-pill"
-                            className="inline-flex items-center gap-1 h-8 rounded-[8px] bg-[color-mix(in_srgb,var(--surface-strong)_85%,var(--canvas))] border border-(--accent) focus-within:ring-2 focus-within:ring-[color-mix(in_srgb,var(--accent)_25%,transparent)] px-2.5 transition-all"
-                          >
-                            <span className="text-xs font-bold text-(--accent)">
-                              {currencySymbol}
-                            </span>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={customAmountInput}
-                              aria-label="Custom amount"
-                              aria-invalid={Boolean(customAmountMessage)}
-                              onBlur={() => setCustomAmountError(null)}
-                              onChange={(e) => {
-                                const typed = e.target.value;
-                                const entry = readCustomAmount(
-                                  typed,
-                                  MAX_VOLUNTARY_AMOUNT,
-                                );
-                                if (entry.kind !== "amount") {
-                                  // Empty, or not an amount. The box shows
-                                  // what was typed and no amount is taken
-                                  // from it; `isCustomAmountUnreadable`
-                                  // holds the button and shows the reason.
-                                  setCustomAmountInput(
-                                    entry.kind === "empty" ? "" : typed,
-                                  );
-                                  setVoluntaryAmount(0);
-                                  setCustomAmountError(null);
-                                  return;
-                                }
-                                setCustomAmountInput(String(entry.amount));
-                                setVoluntaryAmount(entry.amount);
-                                setCustomAmountError(
-                                  entry.overMaximum
-                                    ? `The most you can pay here is ${formatPriceWithCurrency(MAX_VOLUNTARY_AMOUNT, courseCurrency)}.`
-                                    : null,
-                                );
-                              }}
-                              placeholder={
-                                isFree ? "Amount" : `>= ${baseNumericPrice}`
-                              }
-                              className="w-24 bg-transparent border-0 text-(--text) placeholder-(--muted) text-[0.82rem] font-bold outline-none"
-                              autoFocus
-                            />
-                            {customAmountInput && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setCustomAmountInput("");
-                                  setVoluntaryAmount(0);
-                                  setCustomAmountError(null);
-                                }}
-                                aria-label="Clear custom amount"
-                                className="inline-flex items-center justify-center w-4 h-4 rounded-full text-(--muted) hover:text-(--text) cursor-pointer"
-                              >
-                                <X size={11} weight="bold" />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      }
-                      return (
-                        <button
-                          key="custom-btn"
-                          type="button"
-                          onClick={() => {
-                            setSelectedPreset("custom");
-                            const entry = readCustomAmount(
-                              customAmountInput,
-                              MAX_VOLUNTARY_AMOUNT,
-                            );
-                            setVoluntaryAmount(
-                              entry.kind === "amount" ? entry.amount : 0,
-                            );
-                          }}
-                          className="px-3 py-1.5 rounded-[8px] text-[0.82rem] font-bold border transition-all cursor-pointer bg-[color-mix(in_srgb,var(--surface-strong)_70%,var(--canvas))] text-(--text) border-[color-mix(in_srgb,var(--text)_14%,transparent)] hover:border-[color-mix(in_srgb,var(--text)_30%,transparent)] hover:bg-(--hover)"
-                        >
-                          Custom
-                        </button>
-                      );
-                    }
-
-                    const isSelected = selectedPreset === preset.id;
-                    return (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedPreset(preset.id);
-                          setVoluntaryAmount(preset.value);
-                          setCustomAmountInput("");
-                          setCustomAmountError(null);
-                        }}
-                        className={`px-3 py-1.5 rounded-[8px] text-[0.82rem] font-bold border transition-all cursor-pointer ${
-                          isSelected
-                            ? "bg-(--accent) text-(--on-accent,#ffffff) border-(--accent) shadow-xs"
-                            : "bg-[color-mix(in_srgb,var(--surface-strong)_70%,var(--canvas))] text-(--text) border-[color-mix(in_srgb,var(--text)_14%,transparent)] hover:border-[color-mix(in_srgb,var(--text)_30%,transparent)] hover:bg-(--hover)"
-                        }`}
-                      >
-                        {preset.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                {customAmountMessage && (
-                  <p
-                    role="alert"
-                    className="m-0 text-xs text-rose-500 font-semibold"
-                  >
-                    {customAmountMessage}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Middle Row: Actions (Apply Coupon + Pay Now / Continue Learning / Enroll for Free) */}
-            {isInvitationOnly ? (
-              <p className="m-0 text-[0.88rem] font-medium text-(--text-secondary) leading-snug">
-                {INVITATION_ONLY_MESSAGE}
-              </p>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2.5 w-full min-w-0 max-[640px]:gap-2">
-                {showApplyCoupon && !couponInputOpen && !appliedCoupon && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCouponInputOpen(true);
-                      setCouponError(null);
-                    }}
-                    className="inline-flex items-center justify-center gap-1.5 min-h-10.5 border border-dashed border-[color-mix(in_srgb,var(--text)_25%,transparent)] rounded-[9px] px-3.5 sm:px-4 py-2 text-(--text) bg-[color-mix(in_srgb,var(--surface)_60%,transparent)] text-[0.86rem] font-[750] cursor-pointer whitespace-nowrap min-w-0 transition-[border-color,color,background-color,transform] duration-160 ease-out hover:border-(--accent) hover:text-(--accent) hover:bg-(--accent-soft,color-mix(in_srgb,var(--accent)_12%,transparent)) hover:-translate-y-px shrink-0 max-[480px]:flex-1 max-[480px]:min-w-30 max-[640px]:px-3 max-[640px]:text-[0.84rem]"
-                  >
-                    <Ticket
-                      size="1.15em"
-                      weight="bold"
-                      className="shrink-0"
-                      aria-hidden="true"
-                    />
-                    <span className="font-[750] truncate">Apply coupon</span>
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  className="inline-flex items-center justify-center gap-2 flex-1 min-h-10.5 min-w-35 px-4 sm:px-5 py-2.5 border-0 rounded-[9px] text-(--on-accent,#ffffff) bg-(--accent) shadow-[0_4px_14px_var(--accent-shadow,color-mix(in_srgb,var(--accent)_28%,transparent))] text-[0.94rem] font-[800] tracking-[-0.01em] cursor-pointer whitespace-nowrap min-w-0 max-[640px]:text-[0.88rem] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none disabled:shadow-none"
-                  disabled={ctaDisabled}
-                  onClick={ctaOnClick}
-                >
-                  {ctaIcon}
-                  <span className="font-[800] truncate">{ctaLabel}</span>
-                </button>
-              </div>
-            )}
-
-            {/* Payment received, access still being confirmed */}
-            {paymentNotice && (
-              <div
-                role="status"
-                className="w-full rounded-lg bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] border border-[color-mix(in_srgb,var(--accent)_30%,transparent)] p-2.5 text-xs text-(--text) font-medium"
-              >
-                {paymentNotice}
-              </div>
-            )}
-
-            {/* Payment Error Banner */}
-            {paymentError && (
-              <div
-                role="alert"
-                className="flex items-center justify-between gap-2 w-full rounded-lg bg-rose-500/12 border border-rose-500/30 p-2.5 text-xs text-rose-500 font-medium"
-              >
-                <span>{paymentError}</span>
-                <button
-                  type="button"
-                  onClick={() => setPaymentError(null)}
-                  className="text-rose-400 hover:text-rose-600 cursor-pointer p-0.5"
-                  aria-label="Dismiss error"
-                >
-                  <X size={13} weight="bold" />
-                </button>
-              </div>
-            )}
-
-            {/* Bottom Row: Additional Inclusions / Value Perks */}
-            {perksList.length > 0 && (
-              <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 pt-2.5 border-t border-[color-mix(in_srgb,var(--text)_8%,transparent)] text-(--muted) text-[0.82rem] max-[640px]:text-[0.78rem] max-[640px]:gap-x-3 max-[640px]:gap-y-2">
-                {perksList.map((perk, idx) => (
-                  <span
-                    key={idx}
-                    className="inline-flex items-center gap-1.5 font-medium whitespace-nowrap"
-                  >
-                    <CheckCircle
-                      size={15}
-                      weight="fill"
-                      className="text-emerald-500 dark:text-emerald-400 shrink-0"
-                      aria-hidden="true"
-                    />
-                    <span>{perk}</span>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Right Column: 16:9 Course Trailer */}
-      <div className="flex items-end justify-center w-full min-w-0 min-[1200px]:h-full max-[1200px]:order-2 max-[1200px]:w-full max-[640px]:-mx-3.5 max-[640px]:w-[calc(100%+28px)] max-[640px]:max-w-none">
-        <div
-          className="group w-full aspect-video overflow-hidden border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-[color-mix(in_srgb,var(--surface)_60%,#000)] shadow-(--card-shadow) relative flex items-center justify-center rounded-[14px] max-[640px]:rounded-none max-[640px]:border-x-0"
-          aria-label="Course preview player"
-        >
-          {thumbnail ? (
-            <img
-              src={thumbnail}
-              srcSet={course.thumbnailSrcSet
-                ?.map(({ url, width }) => `${url} ${width}w`)
-                .join(", ")}
-              sizes="(max-width: 640px) 100vw, (max-width: 1200px) 50vw, 560px"
-              alt={`Preview thumbnail for ${title}`}
-              className="w-full h-full object-cover opacity-90 transition-[transform,opacity] duration-300 motion-reduce:transition-none group-hover:scale-[1.015] group-hover:opacity-[0.98]"
-              width={960}
-              height={540}
-              loading="eager"
-              fetchPriority="high"
-              decoding="async"
-            />
-          ) : (
-            <CourseThumbnailPlaceholder />
-          )}
-
-          {/* Conditional Trailer Overlay & Watch Trailer Action */}
-          {Boolean(trailerMediaId) && (
-            <>
-              <div className="absolute inset-0 bg-linear-to-b from-black/8 to-black/45 pointer-events-none" />
-
-              {/* Bottom Left Pill Button */}
-              <button
-                type="button"
-                className="absolute bottom-3 left-3 inline-flex items-center gap-1.5 bg-black/65 backdrop-blur-[10px] border border-white/18 text-white text-[0.78rem] font-semibold px-3.25 py-1.5 rounded-full cursor-pointer z-2 transition-[background-color,border-color,transform] duration-160 ease-out hover:bg-black/85 hover:border-white/40 hover:-translate-y-px"
-                onClick={handlePreviewClick}
-                disabled={isReadOnlyPreview}
-                aria-label="Preview course"
-              >
-                <PlayCircle size={15} weight="bold" />
-                <span>Preview course</span>
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+                : null,
+              isOpen: couponInputOpen,
+              code: couponCodeInput,
+              busy: couponBusy,
+              onOpen: () => {
+                setCouponInputOpen(true);
+                setCouponError(null);
+              },
+              onClose: () => {
+                setCouponInputOpen(false);
+                setCouponError(null);
+              },
+              onCodeChange: (code) => {
+                setCouponCodeInput(code);
+                setCouponError(null);
+              },
+              onApply: handleApplyCoupon,
+              onRemove: handleRemoveCoupon,
+            }
+          : undefined
+      }
+      // Shown under the open box, and also when the box is closed: a coupon
+      // that came off by itself would otherwise give no reason at all.
+      couponError={appliedCoupon ? null : couponError}
+      action={{
+        label: ctaLabel,
+        icon: ctaIcon,
+        disabled: ctaDisabled,
+        onClick: ctaOnClick,
+      }}
+      closedMessage={isInvitationOnly ? INVITATION_ONLY_MESSAGE : undefined}
+      notice={paymentNotice}
+      error={paymentError}
+      onDismissError={() => setPaymentError(null)}
+      perks={perksList}
+    >
+      {SUPPORT_AMOUNTS_OFFERED &&
+      !isCreatorNormal &&
+      !isEnrolled &&
+      !isInvitationOnly ? (
+        <CourseSupportAmountPicker
+          isFree={isFree}
+          basePrice={baseNumericPrice}
+          currency={courseCurrency}
+          selectedPreset={selectedPreset}
+          voluntaryAmount={voluntaryAmount}
+          customAmountInput={customAmountInput}
+          customAmountMessage={customAmountMessage}
+          onSelectPreset={setSelectedPreset}
+          onVoluntaryAmountChange={setVoluntaryAmount}
+          onCustomAmountInputChange={setCustomAmountInput}
+          onCustomAmountErrorChange={setCustomAmountError}
+        />
+      ) : null}
+    </CoursePriceBar>
   );
 }
+
 interface CourseAboutCardProps {
   description?: string;
   isReadOnlyPreview?: boolean;
@@ -1742,7 +978,7 @@ function CourseAboutCard({ description }: CourseAboutCardProps) {
 
   return (
     <section
-      className="p-[18px_22px] rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-(--surface) shadow-(--card-shadow) max-[640px]:p-[18px_16px]"
+      className="p-[18px_24px] rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-(--surface) shadow-(--card-shadow) max-[640px]:p-[18px_16px]"
       aria-labelledby="cov-about-heading"
     >
       <h2
@@ -1767,6 +1003,9 @@ function CourseAboutCard({ description }: CourseAboutCardProps) {
               <DiscussionMarkdown
                 content={createDiscussionDraft(description!.trim())}
                 label="About this course"
+                // The description is written with single line breaks; they
+                // are kept as lines instead of being run into one paragraph.
+                preserveSoftBreaks
                 className="[&>:first-child]:mt-0 max-w-none"
               />
             </div>
@@ -1790,7 +1029,7 @@ function CourseAboutCard({ description }: CourseAboutCardProps) {
             >
               {expanded ? (
                 <>
-                  Show less
+                  See less
                   <CaretDown
                     size={13}
                     weight="bold"
@@ -1799,7 +1038,7 @@ function CourseAboutCard({ description }: CourseAboutCardProps) {
                 </>
               ) : (
                 <>
-                  Show more
+                  See more
                   <CaretDown
                     size={13}
                     weight="bold"
@@ -1822,117 +1061,14 @@ function CourseAboutCard({ description }: CourseAboutCardProps) {
   );
 }
 
-// ─── course curriculum card ──────────────────────────────────────────────────
-
-interface CourseCurriculumCardProps {
-  course: Course;
-  courseSections: CourseSection[];
-  openSections: Set<number>;
-  onToggleSection: (index: number) => void;
-  onExpandAll: () => void;
-  onCollapseAll: () => void;
-  onSelectLesson?: (lessonNumber: number) => void;
-  isReadOnlyPreview?: boolean;
-  isPaidCourse?: boolean;
-}
-
-function CourseCurriculumCard({
-  course,
-  courseSections,
-  openSections,
-  onToggleSection,
-  onExpandAll,
-  onCollapseAll,
-  onSelectLesson,
-  isReadOnlyPreview = false,
-  isPaidCourse = false,
-}: CourseCurriculumCardProps) {
-  const allSectionsExpanded =
-    courseSections.length > 0 && openSections.size === courseSections.length;
-
-  return (
-    <section
-      className="p-[18px_22px] rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-(--surface) shadow-(--card-shadow) max-[640px]:p-[18px_16px]"
-      aria-labelledby="cov-curriculum-heading"
-    >
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div>
-          <h2
-            id="cov-curriculum-heading"
-            className="m-0 mb-2.5 text-(--text) text-[1.1rem] font-bold tracking-[-0.015em]"
-          >
-            Course curriculum
-          </h2>
-          <p className="m-0 mt-0.5 text-(--muted) text-[0.82rem]">
-            {course.sections} Section{course.sections === 1 ? "" : "s"} &bull;{" "}
-            {course.lectures} Lesson{course.lectures === 1 ? "" : "s"} &bull;{" "}
-            {course.duration}
-          </p>
-        </div>
-        <div className="flex items-center shrink-0 pt-1">
-          <button
-            type="button"
-            className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-[color-mix(in_srgb,var(--text)_14%,transparent)] bg-[color-mix(in_srgb,var(--surface)_92%,var(--text))] text-(--muted) cursor-pointer"
-            onClick={allSectionsExpanded ? onCollapseAll : onExpandAll}
-            aria-label={
-              allSectionsExpanded
-                ? "Collapse all sections"
-                : "Expand all sections"
-            }
-            title={
-              allSectionsExpanded
-                ? "Collapse all sections"
-                : "Expand all sections"
-            }
-          >
-            {allSectionsExpanded ? (
-              <ArrowsInLineVertical
-                size={17}
-                weight="bold"
-                aria-hidden="true"
-              />
-            ) : (
-              <ArrowsOutLineVertical
-                size={17}
-                weight="bold"
-                aria-hidden="true"
-              />
-            )}
-          </button>
-        </div>
-      </div>
-
-      {courseSections.length === 0 ? (
-        <div className="p-8 rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-(--surface) text-(--muted) text-center text-[0.88rem] italic">
-          No sections added yet
-        </div>
-      ) : (
-        <div className="flex flex-col gap-1.5" role="list">
-          {courseSections.map((section, index) => (
-            <CurriculumSectionItem
-              key={section.id}
-              section={section}
-              index={index}
-              isOpen={openSections.has(index)}
-              onToggle={() => onToggleSection(index)}
-              onSelectLesson={onSelectLesson}
-              shouldVirtualizeLessons={course.lectures >= 80}
-              isReadOnlyPreview={isReadOnlyPreview}
-              isPaidCourse={isPaidCourse}
-            />
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
 // ─── main page ───────────────────────────────────────────────────────────────
 
 export interface CourseOverviewPageProps {
   courseSlug?: string | undefined;
   initialOverview?: CourseOverviewResponse;
   onNavigateCourses?: () => void;
+  /** The menu page the back link returns to, as the menu names it. */
+  backSection?: string;
   onNavigatePage?: NavigateTo;
   onSelectLesson?: (lessonNumber: number) => void;
   role?: CourseRole;
@@ -2188,81 +1324,6 @@ export function adaptPreviewDataToOverview(
   };
 }
 
-export function CourseOverviewSkeleton({
-  onNavigateCourses,
-}: {
-  onNavigateCourses?: () => void;
-}) {
-  return (
-    <div
-      className="w-full max-w-275 mx-auto flex flex-col gap-6 max-[900px]:gap-4.5 max-[640px]:gap-4 box-border text-(--text) animate-pulse"
-      data-testid="course-overview-skeleton"
-    >
-      <div className="grid grid-cols-1 min-[1200px]:grid-cols-2 gap-8 items-start relative max-[1200px]:flex max-[1200px]:flex-col max-[1200px]:gap-5.5 max-[640px]:gap-4.5 w-full">
-        {/* Left Column Skeleton */}
-        <div className="flex flex-col min-w-0 w-full gap-4 max-[1200px]:contents">
-          {/* Top Back button skeleton */}
-          {onNavigateCourses && (
-            <div className="flex items-center gap-2.5 flex-wrap max-[1200px]:order-0 max-[1200px]:w-full">
-              <div className="w-9.5 h-9.5 rounded-xl bg-[color-mix(in_srgb,var(--text)_10%,transparent)]" />
-            </div>
-          )}
-
-          <div className="flex flex-col min-w-0 w-full gap-3.5 max-[1200px]:contents">
-            {/* Title & Metadata row skeleton */}
-            <div className="flex flex-col min-w-0 shrink-0 max-[1200px]:order-1 max-[1200px]:w-full gap-2.5">
-              <div className="flex flex-col gap-2">
-                <div className="h-9 w-11/12 rounded-lg bg-[color-mix(in_srgb,var(--text)_12%,transparent)]" />
-                <div className="h-9 w-3/5 rounded-lg bg-[color-mix(in_srgb,var(--text)_12%,transparent)]" />
-              </div>
-
-              <div className="flex items-center gap-3 py-1">
-                <div className="h-5 w-28 rounded-md bg-[color-mix(in_srgb,var(--text)_8%,transparent)]" />
-                <div className="h-5 w-24 rounded-md bg-[color-mix(in_srgb,var(--text)_8%,transparent)]" />
-                <div className="h-5 w-20 rounded-md bg-[color-mix(in_srgb,var(--text)_8%,transparent)]" />
-              </div>
-            </div>
-
-            {/* Pricing Box skeleton */}
-            <div className="flex flex-col min-h-0 rounded-[14px] border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-[color-mix(in_srgb,var(--surface)_95%,transparent)] shadow-(--card-shadow) w-full box-border max-[1200px]:order-3 max-[1200px]:w-full max-[1200px]:mt-0 max-[640px]:p-[16px_14px] max-[640px]:gap-3 p-[18px_20px] gap-3.5">
-              <div className="flex items-baseline gap-3 mb-2">
-                <div className="h-9 w-32 rounded-lg bg-[color-mix(in_srgb,var(--text)_14%,transparent)]" />
-                <div className="h-6 w-20 rounded-md bg-[color-mix(in_srgb,var(--text)_8%,transparent)]" />
-              </div>
-              <div className="h-11 w-full rounded-xl bg-[color-mix(in_srgb,var(--accent)_30%,transparent)] mb-2" />
-              <div className="flex flex-col gap-2.5 pt-3 border-t border-[color-mix(in_srgb,var(--text)_8%,transparent)]">
-                <div className="h-4 w-48 rounded bg-[color-mix(in_srgb,var(--text)_8%,transparent)]" />
-                <div className="h-4 w-40 rounded bg-[color-mix(in_srgb,var(--text)_8%,transparent)]" />
-                <div className="h-4 w-52 rounded bg-[color-mix(in_srgb,var(--text)_8%,transparent)]" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: 16:9 Course Trailer Video Placeholder */}
-        <div className="flex items-end justify-center w-full min-w-0 min-[1200px]:h-full max-[1200px]:order-2 max-[1200px]:w-full max-[640px]:-mx-3.5 max-[640px]:w-[calc(100%+28px)] max-[640px]:max-w-none">
-          <div className="w-full aspect-video overflow-hidden border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-[color-mix(in_srgb,var(--surface)_60%,#000)] shadow-(--card-shadow) relative flex items-center justify-center rounded-[14px] max-[640px]:rounded-none max-[640px]:border-x-0" />
-        </div>
-      </div>
-
-      {/* Lower section: Description & Curriculum skeletons */}
-      <div className="mt-6 max-[640px]:mt-2 flex flex-col gap-6 max-[640px]:gap-4 w-full">
-        <div className="rounded-[14px] border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-(--surface) p-6 max-[640px]:p-4 shadow-(--card-shadow) flex flex-col gap-3">
-          <div className="h-7 w-48 rounded-lg bg-[color-mix(in_srgb,var(--text)_12%,transparent)] mb-1" />
-          <div className="h-4 w-full rounded bg-[color-mix(in_srgb,var(--text)_8%,transparent)]" />
-          <div className="h-4 w-5/6 rounded bg-[color-mix(in_srgb,var(--text)_8%,transparent)]" />
-          <div className="h-4 w-4/6 rounded bg-[color-mix(in_srgb,var(--text)_8%,transparent)]" />
-        </div>
-
-        <div className="rounded-[14px] border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-(--surface) p-6 max-[640px]:p-4 shadow-(--card-shadow) flex flex-col gap-4">
-          <div className="h-7 w-56 rounded-lg bg-[color-mix(in_srgb,var(--text)_12%,transparent)] mb-1" />
-          <div className="h-14 w-full rounded-xl border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--canvas)_50%,var(--surface))]" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function CourseOverviewPage(props: CourseOverviewPageProps) {
   const { courseSlug: routeCourseSlug } = useParams();
   const courseSlug = props.courseSlug ?? routeCourseSlug;
@@ -2316,23 +1377,25 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
     enabled: Boolean(authUser) && props.role !== "creator",
   });
 
-  const isEnrolled = useMemo(() => {
-    if (!enrolledData?.courses) return false;
-    return enrolledData.courses.some(
-      (ec) =>
-        ec.courseId === course?.id ||
-        ec.courseSlug === courseSlug ||
-        (course?.slug && ec.courseSlug === course.slug),
-    );
-  }, [enrolledData, course, courseSlug]);
+  const enrolledCourse = useMemo(
+    () =>
+      enrolledData?.courses.find(
+        (ec) =>
+          ec.courseId === course?.id ||
+          ec.courseSlug === courseSlug ||
+          (course?.slug && ec.courseSlug === course.slug),
+      ),
+    [enrolledData, course, courseSlug],
+  );
 
   const courseWithEnrollment = useMemo(() => {
     if (!course) return undefined;
     return {
       ...course,
-      enrolled: isEnrolled || course.enrolled,
+      enrolled: Boolean(enrolledCourse) || course.enrolled,
+      progress: enrolledCourse?.progress ?? course.progress,
     };
-  }, [course, isEnrolled]);
+  }, [course, enrolledCourse]);
 
   if (
     isOverviewLoading &&
@@ -2341,7 +1404,10 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
     !props.customCourse
   ) {
     return (
-      <CourseOverviewSkeleton onNavigateCourses={props.onNavigateCourses} />
+      <CourseOverviewSkeleton
+        onNavigateCourses={props.onNavigateCourses}
+        heroPlacement={props.isReadOnlyPreview ? "card" : "edge"}
+      />
     );
   }
 
@@ -2412,7 +1478,6 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
       key={courseWithEnrollment.id}
       course={courseWithEnrollment}
       courseSlug={courseSlug}
-      defaultInstructorName={defaultInstructorName}
       adaptedFromPreview={activeAdapted}
       isCreator={isCreator}
     />
@@ -2422,7 +1487,6 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
 type CourseOverviewContentProps = CourseOverviewPageProps & {
   course: Course;
   courseSlug: string | undefined;
-  defaultInstructorName: string;
   adaptedFromPreview: AdaptedOverviewData | null;
   isCreator?: boolean;
 };
@@ -2430,17 +1494,14 @@ type CourseOverviewContentProps = CourseOverviewPageProps & {
 function CourseOverviewContent({
   course,
   courseSlug,
-  defaultInstructorName,
   adaptedFromPreview,
   onNavigateCourses,
+  backSection,
   onNavigatePage,
   onSelectLesson,
   customCourse,
-  customInstructor,
   customDescription,
   customShortDescription,
-  customCategoryName,
-  customLanguage,
   customSections,
   customIncludes,
   customInclusions,
@@ -2450,6 +1511,7 @@ function CourseOverviewContent({
   isCreator = false,
   isPaidCourse: propIsPaidCourse,
 }: CourseOverviewContentProps) {
+  const user = useAuthStore((state) => state.user);
   const handleSelectLesson = (lessonNumber: number) => {
     if (isReadOnlyPreview) return;
     onSelectLesson?.(lessonNumber);
@@ -2491,18 +1553,6 @@ function CourseOverviewContent({
     course.thumbnail;
   const shortDescription =
     adaptedFromPreview?.shortDescription ?? customShortDescription ?? undefined;
-  const categoryName =
-    adaptedFromPreview !== null
-      ? adaptedFromPreview?.categoryName
-      : (customCategoryName ??
-        (!isReadOnlyPreview && course.category ? course.category : undefined));
-  const instructorName =
-    adaptedFromPreview !== null
-      ? adaptedFromPreview?.instructorName
-      : customInstructor !== undefined
-        ? customInstructor
-        : defaultInstructorName;
-  const language = adaptedFromPreview?.language ?? customLanguage ?? undefined;
   const courseSections = adaptedFromPreview?.sections ?? customSections ?? [];
   const activeDescription =
     adaptedFromPreview?.description ?? customDescription ?? course.description;
@@ -2583,51 +1633,125 @@ function CourseOverviewContent({
     (course as { trailerMediaId?: string | null }).trailerMediaId ??
     null;
 
+  // Someone who manages the course has nothing to save for later or to try
+  // before buying, and neither has a learner who is already enrolled.
+  const managesCourse = isCreator && !isReadOnlyPreview;
+  const isEnrolled = Boolean(user && course.enrolled);
+  // What a visitor can watch before buying: the lessons a paid course marks
+  // as free previews (the ones the curriculum labels "Free").
+  const firstFreeLessonNumber = isPaidCourse
+    ? courseSections
+        .flatMap((section) => section.lessons)
+        .find((lesson) => lesson[4])?.[0]
+    : undefined;
+  const canPreview =
+    Boolean(trailerMediaId) ||
+    (!managesCourse && !isEnrolled && firstFreeLessonNumber !== undefined);
+  const openPreview = () => {
+    if (isReadOnlyPreview || !onNavigatePage) return;
+    const courseKey = getCourseRouteKey(course);
+    onNavigatePage(
+      trailerMediaId || firstFreeLessonNumber === undefined
+        ? `/learn/${encodeURIComponent(courseKey)}`
+        : getCoursePlayerPath(courseKey, firstFreeLessonNumber),
+    );
+  };
+
+  // On the course page the hero touches the frame; in the course editor's
+  // preview window it is a card in the column with the rest.
+  const hero = (
+    <CourseOverviewHero
+      placement={isReadOnlyPreview ? "card" : "edge"}
+      title={title}
+      shortDescription={shortDescription}
+      sections={course.sections}
+      lessons={course.lectures}
+      duration={course.duration}
+      thumbnail={thumbnail}
+      thumbnailSrcSet={course.thumbnailSrcSet}
+      onBack={onNavigateCourses}
+      // The link names the page it returns to. The course list is "All
+      // courses" from here, where one course is open; any other page keeps
+      // the name the menu gives it. In the editor's preview it closes the
+      // preview.
+      backLabel={
+        isReadOnlyPreview
+          ? "Back to editor"
+          : !backSection || backSection === "Courses"
+            ? "All courses"
+            : backSection
+      }
+      wishlist={
+        managesCourse
+          ? undefined
+          : {
+              wishlisted,
+              disabled: isReadOnlyPreview,
+              onToggle: toggleWishlist,
+            }
+      }
+      preview={
+        canPreview
+          ? { onOpen: openPreview, disabled: isReadOnlyPreview }
+          : undefined
+      }
+    />
+  );
+
   return (
     <div
       data-course-overview
-      className={`w-full max-w-275 mx-auto flex flex-col gap-6 box-border text-(--text) ${
+      className={`flex w-full flex-col gap-4 text-(--text) ${
         isReadOnlyPreview
-          ? "p-[36px_24px_48px] max-[900px]:p-[24px_16px_48px] max-[900px]:gap-4.5 max-[640px]:p-[16px_14px_40px] max-[640px]:gap-4"
-          : "max-[900px]:gap-4.5 max-[640px]:gap-4"
+          ? "p-[36px_24px_48px] max-[900px]:p-[24px_16px_48px] max-[640px]:p-[16px_14px_40px]"
+          : ""
       }`}
     >
-      {/* 1. Two-Column Hero Section with Info & Pricing on Left, Trailer on Right */}
-      <CourseHeroSection
-        course={course}
-        title={title}
-        thumbnail={thumbnail}
-        trailerMediaId={trailerMediaId}
-        wishlisted={wishlisted}
-        instructorName={instructorName}
-        shortDescription={shortDescription}
-        categoryName={categoryName}
-        language={language}
-        pricing={activePricing}
-        inclusions={inclusions}
-        onNavigateCourses={onNavigateCourses}
-        onToggleWishlist={toggleWishlist}
-        onNavigatePage={onNavigatePage}
-        isReadOnlyPreview={isReadOnlyPreview}
-        isCreator={isCreator}
-        canSelfEnroll={adaptedFromPreview?.canSelfEnroll}
-      />
+      {/* 1. Title and course facts over the thumbnail */}
+      {isReadOnlyPreview ? null : hero}
 
-      {/* 2. About This Course */}
-      <CourseAboutCard description={activeDescription} />
+      <div className={overviewColumnClasses} data-fixed-radius>
+        {isReadOnlyPreview ? hero : null}
 
-      {/* 3. Course Curriculum */}
-      <CourseCurriculumCard
-        course={course}
-        courseSections={courseSections}
-        openSections={openSections}
-        onToggleSection={toggleSection}
-        onExpandAll={expandAllSections}
-        onCollapseAll={collapseAllSections}
-        onSelectLesson={handleSelectLesson}
-        isReadOnlyPreview={isReadOnlyPreview}
-        isPaidCourse={isPaidCourse}
-      />
+        {/* 2. For an enrolled learner, where they are in the course;
+            otherwise the price, the coupon and the button that buys it. */}
+        {isEnrolled && !managesCourse ? (
+          <CourseLearnerProgressBar
+            courseKey={getCourseRouteKey(course)}
+            courseTitle={title}
+            progress={course.progress ?? 0}
+            totalLessons={course.lectures}
+            onNavigatePage={onNavigatePage}
+          />
+        ) : (
+          <CoursePurchaseSection
+            course={course}
+            pricing={activePricing}
+            inclusions={inclusions}
+            onNavigatePage={onNavigatePage}
+            isReadOnlyPreview={isReadOnlyPreview}
+            isCreator={isCreator}
+            canSelfEnroll={adaptedFromPreview?.canSelfEnroll}
+          />
+        )}
+
+        {/* 3. About This Course */}
+        <CourseAboutCard description={activeDescription} />
+
+        {/* 4. Course Curriculum */}
+        <CourseOverviewCurriculum
+          sectionCount={course.sections}
+          lessonCount={course.lectures}
+          courseSections={courseSections}
+          openSections={openSections}
+          onToggleSection={toggleSection}
+          onExpandAll={expandAllSections}
+          onCollapseAll={collapseAllSections}
+          onSelectLesson={handleSelectLesson}
+          isReadOnlyPreview={isReadOnlyPreview}
+          isPaidCourse={isPaidCourse}
+        />
+      </div>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { PaperPlaneTiltIcon as PaperPlaneTilt } from "@phosphor-icons/react/Pape
 import { ThumbsUpIcon as ThumbsUp } from "@phosphor-icons/react/ThumbsUp";
 import { LoadingSpinnerIcon } from "../components/LoadingSpinner";
 import {
+  memo,
   useCallback,
   useContext,
   useEffect,
@@ -23,6 +24,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { flushSync } from "react-dom";
 import { QueryClientContext } from "@tanstack/react-query";
 import { Swiper, SwiperSlide } from "swiper/react";
 import type { Swiper as SwiperInstance } from "swiper/types";
@@ -78,6 +80,7 @@ import { CommentFormattingToolbar } from "./CommentFormattingToolbar";
 import { DiscussionAvatar } from "./DiscussionAvatar";
 import {
   DiscussionEditor,
+  preloadDiscussionEditor,
   type DiscussionEditorController,
 } from "./discussion-editor/DiscussionEditor";
 import { DiscussionMarkdown } from "./discussion-editor/DiscussionMarkdown";
@@ -91,14 +94,16 @@ import {
 import { SurfaceTopRightAccentGlow } from "./SurfaceTopRightAccentGlow";
 import type { LessonParticipationState } from "./Discussion";
 
-const THREAD_PANEL_MIN_WIDTH = 440;
-const THREAD_PANEL_MAX_WIDTH = 1080;
-const THREAD_PANEL_DEFAULT_WIDTH = 860;
-const THREAD_PANEL_WIDTH_KEY = "veolms-discussion-thread-panel-width";
 const THREAD_PANEL_MIN_HEIGHT = 360;
 const THREAD_PANEL_PHONE_QUERY = "(max-width: 639px)";
 const THREAD_PANEL_MOBILE_SNAP_RATIO = 0.72;
 const THREAD_PANEL_SLIDE_DURATION = 320;
+// The panel reports when it has finished opening. This is the wait before it
+// is taken as open anyway, for the case where that report never comes.
+const THREAD_PANEL_OPEN_SETTLE_TIMEOUT = 1000;
+// How many frames in a row the lesson's sides may stay put before the panel
+// stops checking them at the start of every frame.
+const THREAD_PANEL_FOLLOW_REST_FRAMES = 12;
 const THREAD_PANEL_INITIAL_VIEWPORT: ViewportBounds = {
   top: 0,
   height: 768,
@@ -124,6 +129,8 @@ interface DiscussionThreadPanelProps {
   onParticipationAction?: () => void;
   focusComposerOnOpen?: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The panel has finished sliding shut and is no longer on screen. */
+  onCloseComplete?: () => void;
   onActiveEntryChange: (entryId: string | number) => void;
   onLike: (id: string | number, liked: boolean) => void;
   onAddReply: (entryId: string | number, reply: CommentReply) => void;
@@ -171,8 +178,8 @@ interface DiscussionThreadPanelProps {
 
 export function DiscussionThreadPanel({
   open,
-  activeEntryId,
-  entries,
+  activeEntryId: latestActiveEntryId,
+  entries: latestEntries,
   isBackendMode = false,
   currentUserId,
   userRole,
@@ -183,6 +190,7 @@ export function DiscussionThreadPanel({
   onParticipationAction,
   focusComposerOnOpen = false,
   onOpenChange,
+  onCloseComplete,
   onActiveEntryChange,
   onLike,
   onAddReply,
@@ -204,21 +212,43 @@ export function DiscussionThreadPanel({
   lessonId,
 }: DiscussionThreadPanelProps) {
   const isPhone = useThreadPanelPhoneLayout();
+  const drawerKey = isPhone
+    ? "phone-discussion-thread"
+    : "desktop-discussion-thread";
+  // A drawer that is already open on its first render is shown without its
+  // opening transition. So each drawer starts closed and is opened once it
+  // is in place, which is what makes the panel slide in.
+  const [placedDrawerKey, setPlacedDrawerKey] = useState<string | null>(null);
+  const drawerOpen = open && placedDrawerKey === drawerKey;
+  // While the panel slides shut it keeps showing the thread it had open; by
+  // then the page has already cleared its selection.
+  const [shown, setShown] = useState({
+    entries: latestEntries,
+    activeEntryId: latestActiveEntryId,
+  });
+  if (
+    open &&
+    (shown.entries !== latestEntries ||
+      shown.activeEntryId !== latestActiveEntryId)
+  ) {
+    setShown({ entries: latestEntries, activeEntryId: latestActiveEntryId });
+  }
+  const entries = open ? latestEntries : shown.entries;
+  const activeEntryId = open ? latestActiveEntryId : shown.activeEntryId;
+  // Set once the panel has finished sliding in. Until then it renders only
+  // what its first frame shows (the open thread, without the reply editor),
+  // so it starts moving as soon as it is asked for.
+  const [openSettled, setOpenSettled] = useState(false);
   const viewport = useVisualViewportBounds();
-  const [surfaceBoundsFrozen, setSurfaceBoundsFrozen] = useState(open);
-  const surfaceBounds = useThreadPanelSurfaceBounds(
-    viewport,
-    surfaceBoundsFrozen,
-  );
+  const surfaceBounds = useThreadPanelSurfaceBounds(viewport);
   const swiperRef = useRef<SwiperInstance | null>(null);
-  const widthResizeRef = useRef<PanelWidthResize | null>(null);
+  const handleSwiperReady = useCallback((swiper: SwiperInstance) => {
+    swiperRef.current = swiper;
+  }, []);
   const heightResizeRef = useRef<PanelHeightResize | null>(null);
   const wasOpenRef = useRef(false);
-  const [panelWidth, setPanelWidth] = useState(getInitialPanelWidth);
   const [panelHeight, setPanelHeight] = useState<number | null>(null);
-  const [resizingAxis, setResizingAxis] = useState<"width" | "height" | null>(
-    null,
-  );
+  const [resizingHeight, setResizingHeight] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const mobileCollapsedSnapPoint = Math.min(
     viewport.height,
@@ -266,21 +296,31 @@ export function DiscussionThreadPanel({
   );
 
   useThreadPanelLayoutEffect(() => {
-    if (open) setSurfaceBoundsFrozen(true);
-  }, [open]);
+    setPlacedDrawerKey(drawerKey);
+  }, [drawerKey]);
 
-  const clampPanelWidth = useCallback(
-    (width: number) => {
-      const availableWidth = Math.max(1, surfaceBounds.lesson.width);
-      const minimumWidth = Math.min(THREAD_PANEL_MIN_WIDTH, availableWidth);
-      return Math.min(
-        availableWidth,
-        THREAD_PANEL_MAX_WIDTH,
-        Math.max(minimumWidth, width),
-      );
-    },
-    [surfaceBounds.lesson.width],
-  );
+  const hasOpenedRef = useRef(false);
+  useEffect(() => {
+    if (drawerOpen) hasOpenedRef.current = true;
+    // Asked to close before it ever opened: there is no slide to wait for.
+    else if (!open && !hasOpenedRef.current) onCloseComplete?.();
+  }, [drawerOpen, onCloseComplete, open]);
+
+  useEffect(() => {
+    if (!drawerOpen || openSettled) return;
+    const timer = window.setTimeout(
+      () => setOpenSettled(true),
+      THREAD_PANEL_OPEN_SETTLE_TIMEOUT,
+    );
+    return () => window.clearTimeout(timer);
+  }, [drawerOpen, openSettled]);
+
+  useEffect(() => {
+    // Fetched while the panel slides in, so the reply editor is ready to be
+    // put in place when it stops.
+    if (canParticipate) preloadDiscussionEditor();
+  }, [canParticipate]);
+
   const clampPanelHeight = useCallback(
     (height: number) => {
       const availableHeight = Math.max(1, surfaceBounds.app.height);
@@ -323,11 +363,10 @@ export function DiscussionThreadPanel({
 
   useEffect(() => {
     if (isPhone) return;
-    setPanelWidth((current) => clampPanelWidth(current));
     setPanelHeight((current) =>
       current === null ? null : clampPanelHeight(current),
     );
-  }, [clampPanelHeight, clampPanelWidth, isPhone]);
+  }, [clampPanelHeight, isPhone]);
 
   useEffect(() => {
     if (!open || !isPhone) return;
@@ -335,57 +374,10 @@ export function DiscussionThreadPanel({
     setMobileSnapPoint(mobileCollapsedSnapPoint);
   }, [isPhone, mobileCollapsedSnapPoint, open]);
 
-  const commitPanelWidth = useCallback((width: number) => {
-    const nextWidth = Math.min(
-      THREAD_PANEL_MAX_WIDTH,
-      Math.max(THREAD_PANEL_MIN_WIDTH, width),
-    );
-    setPanelWidth(nextWidth);
-    try {
-      window.localStorage.setItem(THREAD_PANEL_WIDTH_KEY, String(nextWidth));
-    } catch {
-      // The panel still resizes when storage is unavailable.
-    }
-  }, []);
-
   const commitPanelHeight = useCallback(
     (height: number) => setPanelHeight(clampPanelHeight(height)),
     [clampPanelHeight],
   );
-
-  const beginWidthResize = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (isPhone || expanded) return;
-    event.preventDefault();
-    widthResizeRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startWidth: panelWidth,
-    };
-    setResizingAxis("width");
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const moveWidthResize = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const resize = widthResizeRef.current;
-    if (!resize || resize.pointerId !== event.pointerId) return;
-    setPanelWidth(
-      Math.min(
-        THREAD_PANEL_MAX_WIDTH,
-        Math.max(0, resize.startWidth + (resize.startX - event.clientX)),
-      ),
-    );
-  };
-
-  const endWidthResize = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const resize = widthResizeRef.current;
-    if (!resize || resize.pointerId !== event.pointerId) return;
-    widthResizeRef.current = null;
-    setResizingAxis(null);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    commitPanelWidth(clampPanelWidth(panelWidth));
-  };
 
   const beginHeightResize = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (isPhone || expanded) return;
@@ -395,7 +387,7 @@ export function DiscussionThreadPanel({
       startY: event.clientY,
       startHeight: clampPanelHeight(panelHeight ?? surfaceBounds.lesson.height),
     };
-    setResizingAxis("height");
+    setResizingHeight(true);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
@@ -414,7 +406,7 @@ export function DiscussionThreadPanel({
       resize.startHeight + (resize.startY - event.clientY),
     );
     heightResizeRef.current = null;
-    setResizingAxis(null);
+    setResizingHeight(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -422,11 +414,10 @@ export function DiscussionThreadPanel({
   };
 
   const activeSurface = expanded ? surfaceBounds.app : surfaceBounds.lesson;
-  const resolvedPanelWidth = isPhone
-    ? viewport.width
-    : expanded
-      ? activeSurface.width
-      : clampPanelWidth(panelWidth);
+  // The panel is as wide as the lesson it belongs to, touching both of its
+  // edges (or as wide as the whole page while expanded). Only its height is
+  // the reader's to set.
+  const resolvedPanelWidth = isPhone ? viewport.width : activeSurface.width;
   const resolvedPanelHeight = isPhone
     ? viewport.height
     : expanded
@@ -475,15 +466,16 @@ export function DiscussionThreadPanel({
 
   return (
     <Drawer
-      key={isPhone ? "phone-discussion-thread" : "desktop-discussion-thread"}
-      open={open}
+      key={drawerKey}
+      open={drawerOpen}
       onOpenChange={onOpenChange}
       onOpenChangeComplete={(nextOpen) => {
+        setOpenSettled(nextOpen);
         if (!nextOpen) {
-          setSurfaceBoundsFrozen(false);
           setExpanded(false);
           setPanelHeight(null);
           setMobileSnapPoint(mobileCollapsedSnapPoint);
+          onCloseComplete?.();
         }
       }}
       snapPoints={isPhone ? mobileSnapPoints : undefined}
@@ -511,8 +503,7 @@ export function DiscussionThreadPanel({
         viewportStyle={panelViewportStyle}
         data-base-ui-swipe-ignore={isPhone ? undefined : ""}
         data-panel-expanded={expanded || undefined}
-        data-panel-surface-frozen={surfaceBoundsFrozen || undefined}
-        data-panel-resizing={resizingAxis ? "true" : undefined}
+        data-panel-resizing={resizingHeight ? "true" : undefined}
         className={`m-0! overflow-hidden border-0! [--drawer-bleed-background:color-mix(in_srgb,var(--app-shell)_92%,transparent)] [--stack-scale:1]! bg-[color-mix(in_srgb,var(--app-shell)_92%,transparent)] shadow-[0_30px_90px_rgba(0,0,0,0.55)] backdrop-blur-[calc(var(--sidebar-floating-base-blur,6px)+var(--sidebar-backdrop-blur,8px))] backdrop-saturate-[1.2] data-[panel-resizing=true]:transition-none! data-expanded:rounded-none! data-[swipe-axis=x]:flex-col! data-[swipe-direction=right]:rounded-none! sm:border! sm:border-[color-mix(in_srgb,var(--text)_14%,transparent)] sm:shadow-[0_30px_90px_rgba(0,0,0,0.55),0_0_0_1px_color-mix(in_srgb,var(--text)_5%,transparent)] sm:data-[swipe-direction=right]:rounded-xl! motion-reduce:transition-none! ${
           isPhone
             ? ""
@@ -520,44 +511,6 @@ export function DiscussionThreadPanel({
         }`}
       >
         <SurfaceTopRightAccentGlow />
-
-        {!isPhone && !expanded && (
-          <div
-            data-base-ui-swipe-ignore=""
-            data-learning-swipe-ignore=""
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize discussion thread"
-            aria-valuemin={THREAD_PANEL_MIN_WIDTH}
-            aria-valuemax={THREAD_PANEL_MAX_WIDTH}
-            aria-valuenow={Math.round(resolvedPanelWidth)}
-            tabIndex={0}
-            title="Resize discussion thread"
-            className="group/resize absolute inset-y-0 left-0 z-30 flex w-5 cursor-ew-resize touch-none items-center justify-start focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--accent)"
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                onOpenChange(false);
-                return;
-              }
-              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
-                return;
-              }
-              event.preventDefault();
-              commitPanelWidth(
-                clampPanelWidth(
-                  panelWidth + (event.key === "ArrowLeft" ? 24 : -24),
-                ),
-              );
-            }}
-            onPointerDown={beginWidthResize}
-            onPointerMove={moveWidthResize}
-            onPointerUp={endWidthResize}
-            onPointerCancel={endWidthResize}
-          >
-            <span className="h-[calc(100%-28px)] w-0.5 rounded-full bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--accent)_54%,var(--border))_16%,color-mix(in_srgb,var(--accent)_54%,var(--border))_84%,transparent)] opacity-0 shadow-[0_0_0_transparent] transition-[width,opacity,box-shadow] duration-160 group-hover/resize:w-0.75 group-hover/resize:opacity-100 group-hover/resize:shadow-[0_0_14px_color-mix(in_srgb,var(--accent)_42%,transparent)]" />
-          </div>
-        )}
 
         {!isPhone && !expanded && (
           <div
@@ -673,83 +626,152 @@ export function DiscussionThreadPanel({
           }
           className="relative z-10 min-h-0 flex-1 touch-pan-y"
         >
-          <Swiper
-            className="h-full"
-            slidesPerView={1}
-            initialSlide={activeIndex}
-            speed={THREAD_PANEL_SLIDE_DURATION}
-            resistanceRatio={0.72}
-            allowTouchMove
-            nested
-            threshold={12}
-            touchAngle={35}
-            touchStartPreventDefault={false}
-            touchMoveStopPropagation
-            noSwiping
-            noSwipingSelector="button,a,input,textarea,select,[contenteditable=true],[role=menu],[data-discussion-atomic-editor],.swiper-no-swiping"
-            onSwiper={(swiper) => {
-              swiperRef.current = swiper;
-              swiper.slideTo(activeIndex, 0);
-            }}
-            onSlideChange={(swiper) => {
-              const entry = entries[swiper.activeIndex];
-              if (entry) onActiveEntryChange(getClientEntityId(entry));
-            }}
-          >
-            {entries.map((entry) => (
-              <SwiperSlide key={getClientEntityId(entry)} className="h-full!">
-                <ThreadSlide
-                  entry={entry}
-                  active={matchesEntryIdentity(entry, activeEntryId)}
-                  isBackendMode={isBackendMode}
-                  currentUserId={currentUserId}
-                  userRole={userRole}
-                  currentUser={currentUser}
-                  canParticipate={canParticipate}
-                  participationState={participationState}
-                  participationActionLabel={participationActionLabel}
-                  onParticipationAction={onParticipationAction}
-                  focusRequest={
-                    String(composerFocusRequest.entryId) ===
-                    getClientEntityId(entry)
-                      ? composerFocusRequest.id
-                      : 0
-                  }
-                  onFocusComposer={requestComposerFocus}
-                  onComposerFocusHandled={handleComposerFocusHandled}
-                  onLike={onLike}
-                  onAddReply={onAddReply}
-                  onEditEntry={(comment) => {
-                    onOpenChange(false);
-                    onEditEntry(comment);
-                  }}
-                  onDeleteEntry={(id) => {
-                    onDeleteEntry(id);
-                    onOpenChange(false);
-                  }}
-                  onEditReply={onEditReply}
-                  onDeleteReply={onDeleteReply}
-                  onReport={onReport}
-                  onToggleAcceptReply={onToggleAcceptReply}
-                  onToggleLockThread={onToggleLockThread}
-                  onToggleBookmark={onToggleBookmark}
-                  onToggleFollow={onToggleFollow}
-                  onSeekToTimestamp={onSeekToTimestamp}
-                  onCopyTextNotice={onCopyTextNotice}
-                  onReplyCreateError={onReplyCreateError}
-                  onReplyEditError={onReplyEditError}
-                  onReplyDeleteError={onReplyDeleteError}
-                  courseId={courseId}
-                  lessonId={lessonId}
-                />
-              </SwiperSlide>
-            ))}
-          </Swiper>
+          <ThreadPanelSlides
+            entries={entries}
+            activeEntryId={activeEntryId}
+            activeIndex={activeIndex}
+            openSettled={openSettled}
+            composerFocusRequest={composerFocusRequest}
+            onSwiperReady={handleSwiperReady}
+            onOpenChange={onOpenChange}
+            onActiveEntryChange={onActiveEntryChange}
+            onFocusComposer={requestComposerFocus}
+            onComposerFocusHandled={handleComposerFocusHandled}
+            isBackendMode={isBackendMode}
+            currentUserId={currentUserId}
+            userRole={userRole}
+            currentUser={currentUser}
+            canParticipate={canParticipate}
+            participationState={participationState}
+            participationActionLabel={participationActionLabel}
+            onParticipationAction={onParticipationAction}
+            onLike={onLike}
+            onAddReply={onAddReply}
+            onEditEntry={onEditEntry}
+            onDeleteEntry={onDeleteEntry}
+            onEditReply={onEditReply}
+            onDeleteReply={onDeleteReply}
+            onReport={onReport}
+            onToggleAcceptReply={onToggleAcceptReply}
+            onToggleLockThread={onToggleLockThread}
+            onToggleBookmark={onToggleBookmark}
+            onToggleFollow={onToggleFollow}
+            onSeekToTimestamp={onSeekToTimestamp}
+            onCopyTextNotice={onCopyTextNotice}
+            onReplyCreateError={onReplyCreateError}
+            onReplyEditError={onReplyEditError}
+            onReplyDeleteError={onReplyDeleteError}
+            courseId={courseId}
+            lessonId={lessonId}
+          />
         </div>
       </DrawerContent>
     </Drawer>
   );
 }
+
+interface ThreadPanelSlidesProps extends Omit<
+  ThreadSlideProps,
+  "entry" | "active" | "focusRequest" | "editorReady"
+> {
+  entries: Comment[];
+  activeEntryId: string | number | null;
+  activeIndex: number;
+  /** The panel has finished sliding in. */
+  openSettled: boolean;
+  composerFocusRequest: { id: number; entryId: string | number | null };
+  onSwiperReady: (swiper: SwiperInstance) => void;
+  onOpenChange: (open: boolean) => void;
+  onActiveEntryChange: (entryId: string | number) => void;
+}
+
+/**
+ * The threads of the lesson, one slide each. They are kept apart from the
+ * panel around them so that a change to the panel alone (its height while it
+ * is dragged taller, its width while the sidebar or the course content beside
+ * the lesson is resized) does not render the threads again.
+ */
+const ThreadPanelSlides = memo(function ThreadPanelSlides({
+  entries,
+  activeEntryId,
+  activeIndex,
+  openSettled,
+  composerFocusRequest,
+  onSwiperReady,
+  onOpenChange,
+  onActiveEntryChange,
+  onEditEntry,
+  onDeleteEntry,
+  ...slideProps
+}: ThreadPanelSlidesProps) {
+  // Every thread has a slide, but only the ones that can be on screen are
+  // filled in: the open thread, the two a swipe can reach, and the one just
+  // left, which is still in view while the next slides in.
+  const [slideTrail, setSlideTrail] = useState({
+    current: activeIndex,
+    previous: activeIndex,
+  });
+  if (slideTrail.current !== activeIndex) {
+    setSlideTrail({ current: activeIndex, previous: slideTrail.current });
+  }
+  const isSlideFilled = (index: number) =>
+    index === activeIndex ||
+    (openSettled &&
+      (Math.abs(index - activeIndex) === 1 || index === slideTrail.previous));
+
+  return (
+    <Swiper
+      className="h-full"
+      slidesPerView={1}
+      initialSlide={activeIndex}
+      speed={THREAD_PANEL_SLIDE_DURATION}
+      resistanceRatio={0.72}
+      allowTouchMove
+      nested
+      threshold={12}
+      touchAngle={35}
+      touchStartPreventDefault={false}
+      touchMoveStopPropagation
+      noSwiping
+      noSwipingSelector="button,a,input,textarea,select,[contenteditable=true],[role=menu],[data-discussion-atomic-editor],.swiper-no-swiping"
+      onSwiper={(swiper) => {
+        onSwiperReady(swiper);
+        swiper.slideTo(activeIndex, 0);
+      }}
+      onSlideChange={(swiper) => {
+        const entry = entries[swiper.activeIndex];
+        if (entry) onActiveEntryChange(getClientEntityId(entry));
+      }}
+    >
+      {entries.map((entry, index) => (
+        <SwiperSlide key={getClientEntityId(entry)} className="h-full!">
+          {isSlideFilled(index) ? (
+            <ThreadSlide
+              {...slideProps}
+              entry={entry}
+              active={matchesEntryIdentity(entry, activeEntryId)}
+              focusRequest={
+                String(composerFocusRequest.entryId) ===
+                getClientEntityId(entry)
+                  ? composerFocusRequest.id
+                  : 0
+              }
+              editorReady={openSettled}
+              onEditEntry={(comment) => {
+                onOpenChange(false);
+                onEditEntry(comment);
+              }}
+              onDeleteEntry={(id) => {
+                onDeleteEntry(id);
+                onOpenChange(false);
+              }}
+            />
+          ) : null}
+        </SwiperSlide>
+      ))}
+    </Swiper>
+  );
+});
 
 interface ThreadSlideProps {
   entry: Comment;
@@ -766,6 +788,8 @@ interface ThreadSlideProps {
   participationActionLabel?: string;
   onParticipationAction?: () => void;
   focusRequest: number;
+  /** The panel has stopped moving, so the reply editor can be put in. */
+  editorReady: boolean;
   onFocusComposer: (entryId: string | number) => void;
   onComposerFocusHandled: (entryId: string | number, requestId: number) => void;
   onLike: (id: string | number, liked: boolean) => void;
@@ -824,6 +848,7 @@ function ThreadSlide({
   participationActionLabel,
   onParticipationAction,
   focusRequest,
+  editorReady,
   onFocusComposer,
   onComposerFocusHandled,
   onLike,
@@ -1228,6 +1253,8 @@ function ThreadSlide({
             entry={entry}
             currentUser={currentUser}
             focusRequest={focusRequest}
+            editorReady={editorReady}
+            onRequestFocus={focusComposer}
             onFocusHandled={onComposerFocusHandled}
             onSubmit={handleAddReply}
             courseId={courseId}
@@ -1798,6 +1825,8 @@ function ThreadReplyComposer({
   entry,
   currentUser,
   focusRequest,
+  editorReady,
+  onRequestFocus,
   onFocusHandled,
   onSubmit,
   courseId,
@@ -1805,6 +1834,8 @@ function ThreadReplyComposer({
   entry: Comment;
   currentUser?: { name: string; avatar: string };
   focusRequest: number;
+  editorReady: boolean;
+  onRequestFocus: () => void;
   onFocusHandled: (entryId: string | number, requestId: number) => void;
   onSubmit: (
     draft: DiscussionDraft,
@@ -1834,6 +1865,15 @@ function ThreadReplyComposer({
     useState<DiscussionFormattingState>(EMPTY_FORMATTING_STATE);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  // The editor is the heaviest part of the panel. Its place is held by a
+  // look-alike until the panel has stopped sliding in, or until the reader
+  // goes to write, whichever comes first.
+  const [editorMounted, setEditorMounted] = useState(editorReady);
+  if (editorReady && !editorMounted) setEditorMounted(true);
+  const openEditor = () => {
+    setEditorMounted(true);
+    onRequestFocus();
+  };
 
   useEffect(() => {
     replyAttachmentsRef.current = replyAttachments;
@@ -1946,32 +1986,58 @@ function ThreadReplyComposer({
 
   const composerAvatar = currentUser?.avatar || "";
 
+  // Sized and set like the empty editor (its measures are in
+  // `atomic-editor.css`, its font is the editor's own rule), so nothing
+  // moves or changes face when the editor takes its place. It is a text box
+  // to assistive technology too, and turns into the editor as soon as it is
+  // clicked or tabbed into.
+  const editorPlaceholder = (
+    <div
+      role="textbox"
+      tabIndex={0}
+      data-thread-reply-editor-placeholder
+      aria-multiline="true"
+      aria-label={`Reply to ${entry.name}`}
+      aria-placeholder={REPLY_PLACEHOLDER_TEXT}
+      onClick={openEditor}
+      onFocus={openEditor}
+      className="min-h-11 w-full cursor-text px-4 py-2.5 font-[family-name:var(--atomic-editor-font,system-ui,-apple-system,BlinkMacSystemFont,sans-serif)] text-[0.9375rem] leading-[1.6] text-(--muted) outline-none"
+    >
+      {REPLY_PLACEHOLDER_TEXT}
+    </div>
+  );
+
   return (
     <div
       data-thread-reply-composer
       className="-mx-4 -mb-4 mt-0 grid shrink-0 grid-rows-[auto_auto] overflow-hidden rounded-t-xl bg-[color-mix(in_srgb,var(--surface)_72%,transparent)] transition-colors duration-150 focus-within:bg-[color-mix(in_srgb,var(--surface)_90%,var(--canvas))] sm:mx-0 sm:mb-0 sm:rounded-xl"
     >
-      <DiscussionEditor
-        documentId={
-          draftRestoreToken === 0
-            ? `thread-reply-${entry.id}`
-            : `thread-reply-${entry.id}-restored-${draftRestoreToken}`
-        }
-        resetToken={composerKey}
-        value={draft}
-        label={`Reply to ${entry.name}`}
-        placeholderText="Write a reply…"
-        autoGrow
-        courseId={courseId}
-        mentionsEnabled={true}
-        onChange={setDraft}
-        onControllerChange={handleControllerChange}
-        onFormattingStateChange={setFormattingState}
-        onAttachmentError={(message) => setSubmitError(message ?? "")}
-        onAttachmentSelected={(attachment) => {
-          setReplyAttachments((prev) => [...prev, attachment]);
-        }}
-      />
+      {editorMounted ? (
+        <DiscussionEditor
+          documentId={
+            draftRestoreToken === 0
+              ? `thread-reply-${entry.id}`
+              : `thread-reply-${entry.id}-restored-${draftRestoreToken}`
+          }
+          resetToken={composerKey}
+          value={draft}
+          label={`Reply to ${entry.name}`}
+          placeholderText={REPLY_PLACEHOLDER_TEXT}
+          autoGrow
+          courseId={courseId}
+          mentionsEnabled={true}
+          fallback={editorPlaceholder}
+          onChange={setDraft}
+          onControllerChange={handleControllerChange}
+          onFormattingStateChange={setFormattingState}
+          onAttachmentError={(message) => setSubmitError(message ?? "")}
+          onAttachmentSelected={(attachment) => {
+            setReplyAttachments((prev) => [...prev, attachment]);
+          }}
+        />
+      ) : (
+        editorPlaceholder
+      )}
       <AttachmentComposerPreview
         attachments={replyAttachments}
         onRemove={(id) => {
@@ -1989,12 +2055,11 @@ function ThreadReplyComposer({
       )}
       <div className="flex min-h-14 min-w-0 items-center gap-1.5 overflow-hidden bg-[color-mix(in_srgb,var(--surface)_66%,transparent)] px-2.5 py-2 sm:gap-2 sm:px-3">
         <DiscussionAvatar src={composerAvatar} className="size-9 sm:size-10" />
-        {editorController && (
-          <CommentFormattingToolbar
-            editor={editorController}
-            formattingState={formattingState}
-          />
-        )}
+        <CommentFormattingToolbar
+          editor={editorController}
+          formattingState={formattingState}
+          onEditorNeeded={openEditor}
+        />
         <button
           type="button"
           aria-label="Post reply"
@@ -2019,12 +2084,6 @@ function matchesEntryIdentity(
     getClientEntityId(entry) === identity ||
     getServerEntityId(entry) === identity
   );
-}
-
-interface PanelWidthResize {
-  pointerId: number;
-  startX: number;
-  startWidth: number;
 }
 
 interface PanelHeightResize {
@@ -2057,52 +2116,121 @@ interface ThreadPanelSurfaceBounds {
   app: PanelSurfaceRect;
 }
 
-function useThreadPanelSurfaceBounds(
-  viewport: ViewportBounds,
-  frozen: boolean,
-) {
+function useThreadPanelSurfaceBounds(viewport: ViewportBounds) {
   const measure = useCallback(
     (): ThreadPanelSurfaceBounds => getThreadPanelSurfaceBounds(viewport),
     [viewport],
   );
   const [bounds, setBounds] = useState<ThreadPanelSurfaceBounds>(() =>
-    getThreadPanelFallbackSurfaceBounds(viewport),
+    getThreadPanelSurfaceBounds(viewport),
   );
 
+  // Measured when the panel is put on the page and whenever the window
+  // changes. Not when the page behind the open panel is scrolled: the lesson
+  // then moves under the panel, and the panel must stay where it is.
   useThreadPanelLayoutEffect(() => {
-    setBounds(measure());
+    setBounds((current) => keepSamePanelSurfaceBounds(current, measure()));
   }, [measure]);
 
+  const boundsRef = useRef(bounds);
   useThreadPanelLayoutEffect(() => {
-    let frame = 0;
+    boundsRef.current = bounds;
+  }, [bounds]);
+
+  // A resize is a different matter. When the sidebar or the course content
+  // beside the lesson is resized, the lesson gets wider or narrower, and the
+  // panel keeps touching both of its edges (and keeps starting where the
+  // lesson's text does, under a video that has changed height with it).
+  //
+  // It follows from inside the frame: the lesson is measured at the start of
+  // each frame, after the drag has moved it and before anything is drawn, so
+  // the panel is drawn at the lesson's new sides in that same frame and
+  // never trails it. That check runs while something could be resizing (a
+  // held pointer is moving, a key was just pressed, the lesson's size was
+  // just seen to change) and for a few frames after, then rests. Acting from
+  // the size notice alone would be a frame late, and resizing the panel
+  // inside that notice makes the browser report a "ResizeObserver loop".
+  useThreadPanelLayoutEffect(() => {
     const lesson = document.querySelector<HTMLElement>(
       "[data-discussion-panel-anchor]",
     );
     const app = document.querySelector<HTMLElement>("#courses-main-scrollport");
-    const sync = () => {
-      window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(() => setBounds(measure()));
+    let frame = 0;
+    let framesAtRest = 0;
+    const follow = () => {
+      frame = 0;
+      const measured = measure();
+      const current = boundsRef.current;
+      // With its sides, the lesson's whole place is taken: the video above
+      // it grows and shrinks with its width, so where the panel starts has
+      // moved as well. With the sides where they were, nothing is taken.
+      const next =
+        hasSamePanelSurfaceSides(current.app, measured.app) &&
+        hasSamePanelSurfaceSides(current.lesson, measured.lesson)
+          ? current
+          : measured;
+      if (next !== current) {
+        boundsRef.current = next;
+        flushSync(() => setBounds(next));
+        framesAtRest = 0;
+      } else {
+        framesAtRest += 1;
+      }
+      if (framesAtRest < THREAD_PANEL_FOLLOW_REST_FRAMES) {
+        frame = window.requestAnimationFrame(follow);
+      }
     };
-    const syncSurface = () => {
-      if (!frozen) sync();
+    const wake = () => {
+      framesAtRest = 0;
+      if (!frame) frame = window.requestAnimationFrame(follow);
+    };
+    const wakeWhileDragging = (event: PointerEvent) => {
+      if (event.buttons !== 0) wake();
     };
     const resizeObserver =
-      typeof ResizeObserver === "undefined"
-        ? null
-        : new ResizeObserver(syncSurface);
-
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(wake);
     if (lesson) resizeObserver?.observe(lesson);
     if (app) resizeObserver?.observe(app);
-    document.addEventListener("scroll", syncSurface, true);
+    const listening = { capture: true, passive: true } as const;
+    document.addEventListener("pointerdown", wake, listening);
+    document.addEventListener("pointermove", wakeWhileDragging, listening);
+    document.addEventListener("keydown", wake, listening);
 
     return () => {
       window.cancelAnimationFrame(frame);
       resizeObserver?.disconnect();
-      document.removeEventListener("scroll", syncSurface, true);
+      document.removeEventListener("pointerdown", wake, listening);
+      document.removeEventListener("pointermove", wakeWhileDragging, listening);
+      document.removeEventListener("keydown", wake, listening);
     };
-  }, [frozen, measure]);
+  }, [measure]);
 
   return bounds;
+}
+
+function hasSamePanelSurfaceSides(a: PanelSurfaceRect, b: PanelSurfaceRect) {
+  return a.right === b.right && a.width === b.width;
+}
+
+// An unchanged measurement keeps the same object, so it does not render the
+// panel again.
+function keepSamePanelSurfaceBounds(
+  current: ThreadPanelSurfaceBounds,
+  next: ThreadPanelSurfaceBounds,
+) {
+  return isSamePanelSurfaceRect(current.app, next.app) &&
+    isSamePanelSurfaceRect(current.lesson, next.lesson)
+    ? current
+    : next;
+}
+
+function isSamePanelSurfaceRect(a: PanelSurfaceRect, b: PanelSurfaceRect) {
+  return (
+    a.top === b.top &&
+    a.right === b.right &&
+    a.width === b.width &&
+    a.height === b.height
+  );
 }
 
 function getThreadPanelSurfaceBounds(
@@ -2176,20 +2304,16 @@ function getThreadPanelFallbackSurfaceBounds(
   return { app: surface, lesson: surface };
 }
 
-function getInitialPanelWidth() {
-  if (typeof window === "undefined") return THREAD_PANEL_DEFAULT_WIDTH;
-  try {
-    const stored = Number(window.localStorage.getItem(THREAD_PANEL_WIDTH_KEY));
-    return Number.isFinite(stored) && stored > 0
-      ? stored
-      : THREAD_PANEL_DEFAULT_WIDTH;
-  } catch {
-    return THREAD_PANEL_DEFAULT_WIDTH;
-  }
-}
-
+// The panel is only put on the page in the browser, after a thread has been
+// asked for, so these two read the screen for their first value. The panel
+// then has its real layout and size from its first frame, instead of
+// starting as a desktop panel of a made-up size and being rebuilt.
 function useThreadPanelPhoneLayout() {
-  const [isPhone, setIsPhone] = useState(false);
+  const [isPhone, setIsPhone] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia(THREAD_PANEL_PHONE_QUERY).matches,
+  );
   useEffect(() => {
     const media = window.matchMedia(THREAD_PANEL_PHONE_QUERY);
     const sync = () => setIsPhone(media.matches);
@@ -2200,36 +2324,49 @@ function useThreadPanelPhoneLayout() {
   return isPhone;
 }
 
+function readVisualViewportBounds(): ViewportBounds {
+  if (typeof window === "undefined") return THREAD_PANEL_INITIAL_VIEWPORT;
+  const visualViewport = window.visualViewport;
+  const layoutWidth =
+    document.documentElement.clientWidth ||
+    document.body.clientWidth ||
+    window.innerWidth;
+  return {
+    top: Math.max(0, Math.round(visualViewport?.offsetTop ?? 0)),
+    height: Math.max(
+      1,
+      Math.round(
+        visualViewport?.height ??
+          document.documentElement.clientHeight ??
+          window.innerHeight,
+      ),
+    ),
+    width: Math.max(
+      1,
+      Math.round(Math.min(visualViewport?.width ?? layoutWidth, layoutWidth)),
+    ),
+  };
+}
+
 function useVisualViewportBounds() {
-  const getBounds = useCallback(() => {
-    const visualViewport = window.visualViewport;
-    const layoutWidth =
-      document.documentElement.clientWidth ||
-      document.body.clientWidth ||
-      window.innerWidth;
-    return {
-      top: Math.max(0, Math.round(visualViewport?.offsetTop ?? 0)),
-      height: Math.max(
-        1,
-        Math.round(
-          visualViewport?.height ??
-            document.documentElement.clientHeight ??
-            window.innerHeight,
-        ),
-      ),
-      width: Math.max(
-        1,
-        Math.round(Math.min(visualViewport?.width ?? layoutWidth, layoutWidth)),
-      ),
-    };
-  }, []);
-  const [bounds, setBounds] = useState(THREAD_PANEL_INITIAL_VIEWPORT);
+  const [bounds, setBounds] = useState(readVisualViewportBounds);
 
   useEffect(() => {
     let frame = 0;
     const sync = () => {
       window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(() => setBounds(getBounds()));
+      frame = window.requestAnimationFrame(() =>
+        // An unchanged reading keeps the same object, so it does not render
+        // the panel and its threads again.
+        setBounds((current) => {
+          const next = readVisualViewportBounds();
+          return current.top === next.top &&
+            current.height === next.height &&
+            current.width === next.width
+            ? current
+            : next;
+        }),
+      );
     };
     window.addEventListener("resize", sync);
     window.visualViewport?.addEventListener("resize", sync);
@@ -2241,10 +2378,12 @@ function useVisualViewportBounds() {
       window.visualViewport?.removeEventListener("resize", sync);
       window.visualViewport?.removeEventListener("scroll", sync);
     };
-  }, [getBounds]);
+  }, []);
 
   return bounds;
 }
+
+const REPLY_PLACEHOLDER_TEXT = "Write a reply…";
 
 const EMPTY_FORMATTING_STATE: DiscussionFormattingState = {
   bold: false,

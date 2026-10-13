@@ -324,13 +324,22 @@ export function MiniPlayerControls({
 
       {/* Desktop Controls (> 640px): shown on hover, on keyboard focus, or
           after a tap. Hidden ones are not merely transparent, or a tap
-          could land on a button nobody can see. */}
+          could land on a button nobody can see.
+
+          The "these controls contain…" conditions below are written as
+          `[:where(<the controls>):has(…)_&]` and not with Tailwind's
+          `group-has-[…]`. Both match the same elements with the same
+          weight, but the rule `group-has` writes made Chrome restyle the
+          whole page whenever any element was added or removed anywhere, on
+          every page, mini player or not: about 20 ms each time on a lesson
+          page. */}
       <div
         className={cn(
           "pointer-events-none absolute inset-0 hidden min-[641px]:block",
           "invisible opacity-0 transition-[opacity,visibility] duration-200",
           "group-hover/mini-player:visible group-hover/mini-player:opacity-100",
-          "group-has-[:focus-visible]/mini-player:visible group-has-[:focus-visible]/mini-player:opacity-100",
+          "[:where([data-learning-mini-player-controls-ready]):has(:focus-visible)_&]:visible",
+          "[:where([data-learning-mini-player-controls-ready]):has(:focus-visible)_&]:opacity-100",
           "data-[tapped-open=true]:visible data-[tapped-open=true]:opacity-100",
         )}
         data-learning-mini-player-controls-overlay=""
@@ -402,9 +411,9 @@ export function MiniPlayerControls({
         <div
           className={cn(
             "absolute left-3 bottom-3 z-20 pointer-events-none transition-opacity duration-150",
-            "group-has-[[data-learning-mini-player-timeline]:hover]/mini-player:opacity-0",
-            "group-has-[[data-learning-mini-player-timeline]:focus-within]/mini-player:opacity-0",
-            "group-has-[[data-learning-mini-player-timeline]_[data-scrubbing=true]]/mini-player:opacity-0",
+            "[:where([data-learning-mini-player-controls-ready]):has([data-learning-mini-player-timeline]:hover)_&]:opacity-0",
+            "[:where([data-learning-mini-player-controls-ready]):has([data-learning-mini-player-timeline]:focus-within)_&]:opacity-0",
+            "[:where([data-learning-mini-player-controls-ready]):has([data-learning-mini-player-timeline]_[data-scrubbing=true])_&]:opacity-0",
           )}
           data-learning-mini-player-fixed-time=""
         >
@@ -428,7 +437,7 @@ export function MiniPlayerControls({
         <Timeline
           ariaLabel="Mini player timeline"
           showPreview={true}
-          className="pointer-events-none group-hover/mini-player:[&_[role=slider]]:pointer-events-auto group-has-[:focus-visible]/mini-player:[&_[role=slider]]:pointer-events-auto group-has-[[data-tapped-open=true]]/mini-player:[&_[role=slider]]:pointer-events-auto [&_[data-timeline-buffered-range]]:rounded-none [&_[data-timeline-progress]]:rounded-none [&_[data-timeline-track]]:bottom-0 [&_[data-timeline-track]]:top-auto [&_[data-timeline-track]]:h-0.5 [&_[data-timeline-track]]:translate-y-0 [&_[data-timeline-track]]:rounded-none [&_[data-timeline-thumb]]:!hidden"
+          className="pointer-events-none group-hover/mini-player:[&_[role=slider]]:pointer-events-auto [:where([data-learning-mini-player-controls-ready]):has(:focus-visible)_&]:[&_[role=slider]]:pointer-events-auto [:where([data-learning-mini-player-controls-ready]):has([data-tapped-open=true])_&]:[&_[role=slider]]:pointer-events-auto [&_[data-timeline-buffered-range]]:rounded-none [&_[data-timeline-progress]]:rounded-none [&_[data-timeline-track]]:bottom-0 [&_[data-timeline-track]]:top-auto [&_[data-timeline-track]]:h-0.5 [&_[data-timeline-track]]:translate-y-0 [&_[data-timeline-track]]:rounded-none [&_[data-timeline-thumb]]:!hidden"
         />
       </div>
     </div>

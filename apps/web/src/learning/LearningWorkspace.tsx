@@ -134,7 +134,8 @@ import {
 } from "./learningShellPreferences";
 import { useLearningProgress } from "./useLearningProgress";
 import {
-  NO_VIDEO_NOTICE,
+  getLessonReading,
+  noVideoNoticeFor,
   planLessonStage,
   viewerMayRecordProgress,
 } from "./lessonWithoutVideo";
@@ -1020,6 +1021,9 @@ export function LearningWorkspace({
     : courseQuizAssignments.data === undefined
       ? undefined
       : false;
+  // The lesson as the course lists it: what the stage is planned from, and
+  // where a reading lesson's text comes from.
+  const stageLesson = adaptedCurriculum?.lessonsByNumber.get(selectedLesson);
   const lessonStagePlan = useMemo(() => {
     const course = courseOverview?.course;
     const holdsCourse = enrolledCoursesQuery.isFetched
@@ -1180,7 +1184,9 @@ export function LearningWorkspace({
 
     // A lesson the course lists with no video says so, whatever a request
     // made before the course had loaded came back with.
-    if (!courseNotFound && !requestsLessonPlayback) return NO_VIDEO_NOTICE;
+    if (!courseNotFound && !requestsLessonPlayback) {
+      return noVideoNoticeFor(stageLesson);
+    }
 
     if (!playbackBootstrapError) return courseNotFound;
 
@@ -1228,7 +1234,7 @@ export function LearningWorkspace({
     // The same statement as when the course itself says the lesson has no
     // video: it is asked for only while the course is still loading.
     if (playbackBootstrapError.code === "MEDIA_NOT_FOUND") {
-      return NO_VIDEO_NOTICE;
+      return noVideoNoticeFor(stageLesson);
     }
 
     return {
@@ -1245,6 +1251,7 @@ export function LearningWorkspace({
     requestsLessonPlayback,
     retryCourseOverview,
     retryPlaybackBootstrap,
+    stageLesson,
   ]);
   const playbackBootstrapPending = Boolean(
     protectedPlayback &&
@@ -1632,6 +1639,7 @@ export function LearningWorkspace({
     return adaptedCurriculum.lessonsByNumber.get(selectedLesson) ?? null;
   }, [adaptedCurriculum, selectedLesson]);
   const selectedLessonDescription = selectedLessonRecord?.description ?? null;
+  const selectedLessonReading = getLessonReading(selectedLessonRecord);
   const courseId = courseOverview?.course.id;
   const backendLessonId = selectedLessonRecord?.id;
   const isLearningDeepLinkReady =
@@ -3195,13 +3203,17 @@ export function LearningWorkspace({
         <section className="learning-workspace__lesson-column">
           <div
             ref={playerWrapRef}
-            // Above phone width the video stays at the top of the page while
-            // the title and description scroll away beneath it. (On a phone
-            // the page does not scroll; the area under the video does.) The
-            // player itself is positioned on this slot, so it follows. The
-            // slot sits above the page that scrolls behind it, so the strip
-            // that resizes the video is never covered.
-            className={`learning-workspace__player-wrap ${stickyPlayer ? "min-[641px]:sticky! min-[641px]:top-0 min-[641px]:z-40" : ""}`}
+            // Above phone width a video at its full height scrolls away with
+            // the page. Once the viewer has resized it (the grip, or the
+            // title on a touch screen) it stays at the top while the title
+            // and description scroll away beneath it. (On a phone the page
+            // does not scroll; the area under the video does.) The grip marks
+            // the slot inside while it is dragged, before the new height is
+            // saved, so the rule reads that mark. The player itself is
+            // positioned on this slot, so it follows. The slot sits above the
+            // page that scrolls behind it, so the strip that resizes the
+            // video is never covered.
+            className={`learning-workspace__player-wrap ${stickyPlayer ? "min-[641px]:z-40 min-[641px]:has-[[data-learning-player-shortened]]:sticky! min-[641px]:has-[[data-learning-player-shortened]]:top-0" : ""}`}
             data-learning-player-motion-target=""
           >
             {showingQuiz ? (
@@ -3369,7 +3381,11 @@ export function LearningWorkspace({
                     true,
                     isLearningBootstrapLoading,
                   )}
-                  lessonDescription={selectedLessonDescription}
+                  // A reading is shown in the player; the card under it
+                  // would say the same text a second time.
+                  lessonDescription={
+                    selectedLessonReading ? null : selectedLessonDescription
+                  }
                   isLessonDescriptionLoading={
                     (isApiRoute && isCourseOverviewLoading) ||
                     isLearningBootstrapLoading
