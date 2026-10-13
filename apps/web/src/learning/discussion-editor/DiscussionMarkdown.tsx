@@ -5,8 +5,14 @@ import type {
   HighlighterCore,
 } from "@shikijs/core";
 import type { DescriptionChapterDeclaration } from "@veolms/video-player";
-import React, { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { DiscussionContent } from "./types";
 import {
@@ -505,6 +511,241 @@ function preparePlainChapterMarkdown(
   return output.join("\n");
 }
 
+/** What differs from one piece of Markdown to the next. */
+interface MarkdownRenderOptions extends InlineTimestampRenderOptions {
+  linkedAttachments?: readonly DiscussionAttachmentItem[];
+  chapterDeclarations?: readonly DescriptionChapterDeclaration[];
+}
+
+const MarkdownRenderOptionsContext = createContext<MarkdownRenderOptions>({
+  enableInlineTimestamps: false,
+});
+
+function isGeneratedAttachmentMarkdown(
+  linkedAttachments: MarkdownRenderOptions["linkedAttachments"],
+  url: string | undefined,
+  label: string | undefined,
+) {
+  return Boolean(
+    url &&
+    label &&
+    linkedAttachments?.some(
+      (attachment) =>
+        attachment.fileUrl === url && attachment.fileName === label,
+    ),
+  );
+}
+
+/** The text of a Markdown element, with its timestamps and mentions live. */
+function MarkdownInlineContent({
+  children,
+  mentions = false,
+}: {
+  children: React.ReactNode;
+  mentions?: boolean;
+}) {
+  const options = useContext(MarkdownRenderOptionsContext);
+  return mentions
+    ? renderInlineContent(children, options)
+    : renderInlineTimestampsInNode(children, options);
+}
+
+function MarkdownLink({ href, children }: React.ComponentProps<"a">) {
+  const { chapterDeclarations, linkedAttachments, onSeekToTimestamp } =
+    useContext(MarkdownRenderOptionsContext);
+  const chapterIndex = chapterMarkerIndex(href);
+  const chapter =
+    chapterIndex === null ? undefined : chapterDeclarations?.[chapterIndex];
+  if (chapter) {
+    const value = flattenMarkdownText(children) ?? "";
+    return (
+      <InlineTimestampButton
+        value={value}
+        seconds={chapter.startTime}
+        ariaLabel={`Seek to ${value} — ${chapter.title}`}
+        onSeekToTimestamp={onSeekToTimestamp}
+      />
+    );
+  }
+
+  const linkLabel = flattenMarkdownText(children);
+  if (isGeneratedAttachmentMarkdown(linkedAttachments, href, linkLabel)) {
+    return null;
+  }
+  return (
+    <a
+      href={href}
+      target={href?.startsWith("#") ? undefined : "_blank"}
+      rel={href?.startsWith("#") ? undefined : "noopener noreferrer"}
+      className="font-medium text-(--accent-ink,var(--accent)) underline decoration-[color-mix(in_srgb,var(--accent)_45%,transparent)] underline-offset-2 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
+    >
+      {children}
+    </a>
+  );
+}
+
+function MarkdownImage({ src, alt }: React.ComponentProps<"img">) {
+  const { linkedAttachments } = useContext(MarkdownRenderOptionsContext);
+  if (!src) return null;
+  const linkedImageAttachment = linkedAttachments?.find(
+    (attachment) =>
+      attachment.fileUrl === src &&
+      (attachment.mediaType === "image" ||
+        attachment.kind === "image" ||
+        attachment.kind === "screenshot" ||
+        attachment.mimeType.startsWith("image/")),
+  );
+  const imageWidth = linkedImageAttachment?.width;
+  const imageHeight = linkedImageAttachment?.height;
+  const hasTrustedDimensions =
+    typeof imageWidth === "number" &&
+    Number.isInteger(imageWidth) &&
+    imageWidth > 0 &&
+    typeof imageHeight === "number" &&
+    Number.isInteger(imageHeight) &&
+    imageHeight > 0;
+  const attachmentLabel = alt?.toLowerCase().startsWith("video:")
+    ? alt.slice(6).trim()
+    : alt;
+  if (isGeneratedAttachmentMarkdown(linkedAttachments, src, attachmentLabel)) {
+    return null;
+  }
+  if (alt?.toLowerCase().startsWith("video:")) {
+    return (
+      <video
+        src={src}
+        title={alt.slice(6).trim() || "Attached video"}
+        controls
+        playsInline
+        preload="metadata"
+        className="my-3 max-h-96 w-full rounded-xl bg-black object-contain"
+      />
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt ?? ""}
+      loading="lazy"
+      width={hasTrustedDimensions ? imageWidth : undefined}
+      height={hasTrustedDimensions ? imageHeight : undefined}
+      style={
+        hasTrustedDimensions
+          ? { aspectRatio: `${imageWidth} / ${imageHeight}` }
+          : undefined
+      }
+      className="my-3 max-h-96 max-w-full rounded-xl object-contain"
+    />
+  );
+}
+
+// How each Markdown element is drawn. These are made once, here, and not
+// inside `DiscussionMarkdown`: React treats a renderer that is a new function
+// as a different kind of element, so it threw away and rebuilt every
+// paragraph, link, image, video and code block of every comment each time
+// anything above them rendered. What differs per comment (its attachments,
+// chapters and timestamp handler) reaches the renderers through context.
+const MARKDOWN_COMPONENTS: Components = {
+  a: MarkdownLink,
+  blockquote: ({ children }) => (
+    <blockquote className="my-3 border-l-3 border-(--accent) pl-4 text-(--muted)">
+      <MarkdownInlineContent mentions>{children}</MarkdownInlineContent>
+    </blockquote>
+  ),
+  code: ({ className: codeClassName, children }) => {
+    const code = String(children).replace(/\n$/, "");
+    const language = /language-([^\s]+)/.exec(codeClassName ?? "")?.[1];
+    if (!language && !code.includes("\n")) {
+      return (
+        <code className="rounded bg-[color-mix(in_srgb,var(--text)_9%,transparent)] px-1.5 py-0.5 font-mono text-[0.9em] text-(--text)">
+          {children}
+        </code>
+      );
+    }
+    return <HighlightedCodeBlock code={code} language={language} />;
+  },
+  h1: ({ children }) => (
+    <h1 className="my-3 text-xl font-bold tracking-tight text-(--text) sm:text-2xl">
+      <MarkdownInlineContent>{children}</MarkdownInlineContent>
+    </h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="my-2.5 text-lg font-bold tracking-tight text-(--text) sm:text-xl">
+      <MarkdownInlineContent>{children}</MarkdownInlineContent>
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="my-2 text-base font-semibold text-(--text) sm:text-lg">
+      <MarkdownInlineContent>{children}</MarkdownInlineContent>
+    </h3>
+  ),
+  hr: () => (
+    <hr className="my-4 border-t [border-color:color-mix(in_srgb,var(--text)_12%,transparent)]" />
+  ),
+  img: MarkdownImage,
+  li: ({ children }) => (
+    <li className="pl-1">
+      <MarkdownInlineContent mentions>{children}</MarkdownInlineContent>
+    </li>
+  ),
+  ol: ({ children }) => (
+    <ol className="my-2 list-decimal space-y-1 pl-6">{children}</ol>
+  ),
+  p: ({ children }) => (
+    <p className="my-1.5 first:mt-0 last:mb-0">
+      <MarkdownInlineContent mentions>{children}</MarkdownInlineContent>
+    </p>
+  ),
+  pre: ({ children }) => <>{children}</>,
+  table: ({ children }) => (
+    <div className="my-3 max-w-full overflow-x-auto rounded-lg shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--text)_12%,transparent)]">
+      <table className="w-full border-collapse text-left text-sm">
+        {children}
+      </table>
+    </div>
+  ),
+  td: ({ children }) => (
+    <td className="border-t px-3 py-2 [border-color:color-mix(in_srgb,var(--text)_10%,transparent)]">
+      <MarkdownInlineContent mentions>{children}</MarkdownInlineContent>
+    </td>
+  ),
+  th: ({ children }) => (
+    <th className="border-b px-3 py-2 font-semibold text-(--text) [border-color:color-mix(in_srgb,var(--text)_14%,transparent)]">
+      <MarkdownInlineContent mentions>{children}</MarkdownInlineContent>
+    </th>
+  ),
+  strong: ({ children }) => (
+    <strong>
+      <MarkdownInlineContent>{children}</MarkdownInlineContent>
+    </strong>
+  ),
+  em: ({ children }) => (
+    <em>
+      <MarkdownInlineContent>{children}</MarkdownInlineContent>
+    </em>
+  ),
+  del: ({ children }) => (
+    <del>
+      <MarkdownInlineContent>{children}</MarkdownInlineContent>
+    </del>
+  ),
+  mark: ({ children }) => (
+    <mark className="rounded-[0.2em] bg-[color-mix(in_srgb,var(--accent)_22%,transparent)] box-decoration-clone px-0.5 text-inherit">
+      <MarkdownInlineContent>{children}</MarkdownInlineContent>
+    </mark>
+  ),
+  ul: ({ children }) => (
+    <ul className="my-2 list-disc space-y-1 pl-6">{children}</ul>
+  ),
+};
+
+const MARKDOWN_PLUGINS = [remarkGfm, remarkHighlightMarks];
+const MARKDOWN_SOFT_BREAK_PLUGINS = [
+  remarkGfm,
+  remarkHighlightMarks,
+  remarkLessonDescriptionSoftBreaks,
+];
+
 export function DiscussionMarkdown({
   content,
   label,
@@ -516,19 +757,6 @@ export function DiscussionMarkdown({
   preserveSoftBreaks = false,
   className = "",
 }: DiscussionMarkdownProps) {
-  const isGeneratedAttachmentMarkdown = (
-    url: string | undefined,
-    label: string | undefined,
-  ) =>
-    Boolean(
-      url &&
-      label &&
-      linkedAttachments?.some(
-        (attachment) =>
-          attachment.fileUrl === url && attachment.fileName === label,
-      ),
-    );
-
   const rawText =
     typeof content === "string"
       ? content
@@ -542,10 +770,37 @@ export function DiscussionMarkdown({
   const { data: linkPreview } = useLinkPreview(detectedUrl, {
     enabled: enableLinkPreview,
   });
-  const inlineTimestampOptions = {
-    enableInlineTimestamps,
-    onSeekToTimestamp,
-  } satisfies InlineTimestampRenderOptions;
+  const renderOptions = useMemo<MarkdownRenderOptions>(
+    () => ({
+      enableInlineTimestamps,
+      onSeekToTimestamp,
+      linkedAttachments,
+      chapterDeclarations,
+    }),
+    [
+      chapterDeclarations,
+      enableInlineTimestamps,
+      linkedAttachments,
+      onSeekToTimestamp,
+    ],
+  );
+  // The text is parsed again only when it changes, not on every render of
+  // the comment around it.
+  const renderedMarkdown = useMemo(
+    () => (
+      <ReactMarkdown
+        remarkPlugins={
+          preserveSoftBreaks ? MARKDOWN_SOFT_BREAK_PLUGINS : MARKDOWN_PLUGINS
+        }
+        skipHtml
+        urlTransform={safeMarkdownUrl}
+        components={MARKDOWN_COMPONENTS}
+      >
+        {chapterMarkdown}
+      </ReactMarkdown>
+    ),
+    [chapterMarkdown, preserveSoftBreaks],
+  );
 
   return (
     <div
@@ -553,196 +808,9 @@ export function DiscussionMarkdown({
       aria-label={label}
       className={`max-w-[72ch] wrap-anywhere text-sm leading-6 text-(--text-secondary) sm:text-[15px] ${className}`}
     >
-      <ReactMarkdown
-        remarkPlugins={
-          preserveSoftBreaks
-            ? [
-                remarkGfm,
-                remarkHighlightMarks,
-                remarkLessonDescriptionSoftBreaks,
-              ]
-            : [remarkGfm, remarkHighlightMarks]
-        }
-        skipHtml
-        urlTransform={safeMarkdownUrl}
-        components={{
-          a: ({ href, children }) => {
-            const chapterIndex = chapterMarkerIndex(href);
-            const chapter =
-              chapterIndex === null
-                ? undefined
-                : chapterDeclarations?.[chapterIndex];
-            if (chapter) {
-              const value = flattenMarkdownText(children) ?? "";
-              return (
-                <InlineTimestampButton
-                  value={value}
-                  seconds={chapter.startTime}
-                  ariaLabel={`Seek to ${value} — ${chapter.title}`}
-                  onSeekToTimestamp={onSeekToTimestamp}
-                />
-              );
-            }
-
-            const linkLabel = flattenMarkdownText(children);
-            if (isGeneratedAttachmentMarkdown(href, linkLabel)) return null;
-            return (
-              <a
-                href={href}
-                target={href?.startsWith("#") ? undefined : "_blank"}
-                rel={href?.startsWith("#") ? undefined : "noopener noreferrer"}
-                className="font-medium text-(--accent-ink,var(--accent)) underline decoration-[color-mix(in_srgb,var(--accent)_45%,transparent)] underline-offset-2 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
-              >
-                {children}
-              </a>
-            );
-          },
-          blockquote: ({ children }) => (
-            <blockquote className="my-3 border-l-3 border-(--accent) pl-4 text-(--muted)">
-              {renderInlineContent(children, inlineTimestampOptions)}
-            </blockquote>
-          ),
-          code: ({ className: codeClassName, children }) => {
-            const code = String(children).replace(/\n$/, "");
-            const language = /language-([^\s]+)/.exec(codeClassName ?? "")?.[1];
-            if (!language && !code.includes("\n")) {
-              return (
-                <code className="rounded bg-[color-mix(in_srgb,var(--text)_9%,transparent)] px-1.5 py-0.5 font-mono text-[0.9em] text-(--text)">
-                  {children}
-                </code>
-              );
-            }
-            return <HighlightedCodeBlock code={code} language={language} />;
-          },
-          h1: ({ children }) => (
-            <h1 className="my-3 text-xl font-bold tracking-tight text-(--text) sm:text-2xl">
-              {renderInlineTimestampsInNode(children, inlineTimestampOptions)}
-            </h1>
-          ),
-          h2: ({ children }) => (
-            <h2 className="my-2.5 text-lg font-bold tracking-tight text-(--text) sm:text-xl">
-              {renderInlineTimestampsInNode(children, inlineTimestampOptions)}
-            </h2>
-          ),
-          h3: ({ children }) => (
-            <h3 className="my-2 text-base font-semibold text-(--text) sm:text-lg">
-              {renderInlineTimestampsInNode(children, inlineTimestampOptions)}
-            </h3>
-          ),
-          hr: () => (
-            <hr className="my-4 border-t [border-color:color-mix(in_srgb,var(--text)_12%,transparent)]" />
-          ),
-          img: ({ src, alt }) => {
-            if (!src) return null;
-            const linkedImageAttachment = linkedAttachments?.find(
-              (attachment) =>
-                attachment.fileUrl === src &&
-                (attachment.mediaType === "image" ||
-                  attachment.kind === "image" ||
-                  attachment.kind === "screenshot" ||
-                  attachment.mimeType.startsWith("image/")),
-            );
-            const imageWidth = linkedImageAttachment?.width;
-            const imageHeight = linkedImageAttachment?.height;
-            const hasTrustedDimensions =
-              typeof imageWidth === "number" &&
-              Number.isInteger(imageWidth) &&
-              imageWidth > 0 &&
-              typeof imageHeight === "number" &&
-              Number.isInteger(imageHeight) &&
-              imageHeight > 0;
-            const attachmentLabel = alt?.toLowerCase().startsWith("video:")
-              ? alt.slice(6).trim()
-              : alt;
-            if (isGeneratedAttachmentMarkdown(src, attachmentLabel)) {
-              return null;
-            }
-            if (alt?.toLowerCase().startsWith("video:")) {
-              return (
-                <video
-                  src={src}
-                  title={alt.slice(6).trim() || "Attached video"}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  className="my-3 max-h-96 w-full rounded-xl bg-black object-contain"
-                />
-              );
-            }
-            return (
-              <img
-                src={src}
-                alt={alt ?? ""}
-                loading="lazy"
-                width={hasTrustedDimensions ? imageWidth : undefined}
-                height={hasTrustedDimensions ? imageHeight : undefined}
-                style={
-                  hasTrustedDimensions
-                    ? { aspectRatio: `${imageWidth} / ${imageHeight}` }
-                    : undefined
-                }
-                className="my-3 max-h-96 max-w-full rounded-xl object-contain"
-              />
-            );
-          },
-          li: ({ children }) => (
-            <li className="pl-1">
-              {renderInlineContent(children, inlineTimestampOptions)}
-            </li>
-          ),
-          ol: ({ children }) => (
-            <ol className="my-2 list-decimal space-y-1 pl-6">{children}</ol>
-          ),
-          p: ({ children }) => (
-            <p className="my-1.5 first:mt-0 last:mb-0">
-              {renderInlineContent(children, inlineTimestampOptions)}
-            </p>
-          ),
-          pre: ({ children }) => <>{children}</>,
-          table: ({ children }) => (
-            <div className="my-3 max-w-full overflow-x-auto rounded-lg shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--text)_12%,transparent)]">
-              <table className="w-full border-collapse text-left text-sm">
-                {children}
-              </table>
-            </div>
-          ),
-          td: ({ children }) => (
-            <td className="border-t px-3 py-2 [border-color:color-mix(in_srgb,var(--text)_10%,transparent)]">
-              {renderInlineContent(children, inlineTimestampOptions)}
-            </td>
-          ),
-          th: ({ children }) => (
-            <th className="border-b px-3 py-2 font-semibold text-(--text) [border-color:color-mix(in_srgb,var(--text)_14%,transparent)]">
-              {renderInlineContent(children, inlineTimestampOptions)}
-            </th>
-          ),
-          strong: ({ children }) => (
-            <strong>
-              {renderInlineTimestampsInNode(children, inlineTimestampOptions)}
-            </strong>
-          ),
-          em: ({ children }) => (
-            <em>
-              {renderInlineTimestampsInNode(children, inlineTimestampOptions)}
-            </em>
-          ),
-          del: ({ children }) => (
-            <del>
-              {renderInlineTimestampsInNode(children, inlineTimestampOptions)}
-            </del>
-          ),
-          mark: ({ children }) => (
-            <mark className="rounded-[0.2em] bg-[color-mix(in_srgb,var(--accent)_22%,transparent)] box-decoration-clone px-0.5 text-inherit">
-              {renderInlineTimestampsInNode(children, inlineTimestampOptions)}
-            </mark>
-          ),
-          ul: ({ children }) => (
-            <ul className="my-2 list-disc space-y-1 pl-6">{children}</ul>
-          ),
-        }}
-      >
-        {chapterMarkdown}
-      </ReactMarkdown>
+      <MarkdownRenderOptionsContext.Provider value={renderOptions}>
+        {renderedMarkdown}
+      </MarkdownRenderOptionsContext.Provider>
 
       {linkPreview && (
         <div className="mt-3">

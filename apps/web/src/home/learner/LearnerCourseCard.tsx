@@ -26,9 +26,15 @@ const plural = (count: number, one: string, many: string) =>
  * The card's action, drawn as the catalogue's card draws its own. It and
  * the picture both go into the course, so it lights up under the pointer on
  * either (`data-course-start` marks the two).
+ *
+ * "The card contains a hovered way in" is written as
+ * `[:where(<the card>):has(…)_&]` here and on the picture, not with
+ * Tailwind's `group-has-[…]`: the rule that writes made Chrome restyle the
+ * whole page whenever any element was added or removed, on every page (see
+ * `MiniPlayerControls`).
  */
 const actionClasses =
-  "relative z-20 flex min-h-9 w-full items-center justify-center gap-2.5 rounded-[10px] border border-[color-mix(in_srgb,var(--accent)_70%,transparent)] bg-(--accent) px-3.25 text-sm font-semibold text-(--on-accent) shadow-[0_10px_22px_color-mix(in_srgb,var(--accent-shadow)_48%,transparent)] transition-colors duration-150 group-has-[[data-course-start]:hover]/card:bg-(--accent-hover) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) @lg/courses:min-h-11 @lg/courses:gap-3 @lg/courses:text-[15px]";
+  "relative z-20 flex min-h-9 w-full items-center justify-center gap-2.5 rounded-[10px] border border-[color-mix(in_srgb,var(--accent)_70%,transparent)] bg-(--accent) px-3.25 text-sm font-semibold text-(--on-accent) shadow-[0_10px_22px_color-mix(in_srgb,var(--accent-shadow)_48%,transparent)] transition-colors duration-150 [:where([data-learner-course-card]):has([data-course-start]:hover)_&]:bg-(--accent-hover) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) @lg/courses:min-h-11 @lg/courses:gap-3 @lg/courses:text-[15px]";
 
 /**
  * One of the learner's courses. Its picture and its action go back into the
@@ -93,6 +99,7 @@ export function LearnerCourseCard({
   return (
     <article
       {...getPinCourseDragProps(course.courseId)}
+      data-learner-course-card=""
       aria-label={
         started
           ? `${course.courseTitle}, ${progress}% complete`
@@ -104,7 +111,7 @@ export function LearnerCourseCard({
         <LearnerCourseThumbnail course={course} priority={priority} />
         <span
           aria-hidden="true"
-          className="absolute inset-0 hidden place-items-center bg-slate-950/50 opacity-0 transition-opacity duration-200 group-has-[[data-course-start]:focus-visible]/card:opacity-100 group-has-[[data-course-start]:hover]/card:opacity-100 motion-reduce:transition-none @lg/courses:grid"
+          className="absolute inset-0 hidden place-items-center bg-slate-950/50 opacity-0 transition-opacity duration-200 [:where([data-learner-course-card]):has([data-course-start]:focus-visible)_&]:opacity-100 [:where([data-learner-course-card]):has([data-course-start]:hover)_&]:opacity-100 motion-reduce:transition-none @lg/courses:grid"
         >
           <span className="grid size-14 place-items-center rounded-full bg-black/70 text-white shadow-[0_10px_28px_rgb(0_0_0/0.5)]">
             <Play size={26} weight="fill" />
