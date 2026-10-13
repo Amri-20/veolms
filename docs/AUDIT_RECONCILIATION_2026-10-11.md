@@ -871,6 +871,9 @@ Each of these was seen in the browser against the local API.
 - Sign-up at a phone-sized window, with a six-digit code inserted in one go, as a phone's one-tap fill does.
 - Free enrolment lands on the lesson page.
 - Purchase History shows the invoice number and "No payment needed" for a free order.
+- As an admin, the Orders page shows the refund notice for a transfer reported on an order that was then paid another way.
+- Refund Order on an order paid by bank transfer opens "Record Refund", asks for the transfer reference, and the order becomes Refunded. The revenue cards follow.
+- "Reject request" in the notice asks to confirm, and the entry leaves the list.
 
 A phone-sized window is not a phone. The SMS one-tap fill on a real iPhone and a real Android phone is still on the staging list.
 
