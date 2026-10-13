@@ -42,6 +42,7 @@ import { MiniPlayerResizeHandles } from "./MiniPlayerResizeHandles";
 import { MiniPlayerInfoBar } from "./MiniPlayerInfoBar";
 import { MiniPlayerReadingModeEffects } from "./MiniPlayerReadingModeEffects";
 import { useLearningPlayerMinimizeShortcut } from "./useLearningPlayerMinimizeShortcut";
+import { LESSON_READING_SCROLL_ATTRIBUTE } from "./useLessonPlayerMinimizeGesture";
 import { useMiniPlayerCurriculumSections } from "./useMiniPlayerCurriculumSections";
 import { Curriculum } from "../Curriculum";
 import type { CourseSection, Lesson } from "../courseContent";
@@ -402,6 +403,21 @@ export function PersistentLearningPlayerHost({
         )
       ) {
         return;
+      }
+
+      // A reading scrolls inside the player. While it has further to go in
+      // the wheel's direction the wheel is its own; at either end, and when
+      // the text fits, the wheel moves the page as it does over a video.
+      const reading =
+        target instanceof Element
+          ? target.closest<HTMLElement>(`[${LESSON_READING_SCROLL_ATTRIBUTE}]`)
+          : null;
+      if (reading) {
+        const room =
+          event.deltaY > 0
+            ? reading.scrollHeight - reading.clientHeight - reading.scrollTop
+            : reading.scrollTop;
+        if (room > 1) return;
       }
 
       const deltaUnit =

@@ -1807,6 +1807,9 @@ export default function AcademyLayout() {
         learningMotionStageRef={learningMotionStageRef}
         onNavigatePage={navigateTo}
         onNavigateBack={navigateBackToOrigin}
+        navigateBackSection={
+          hasValidNavigationOrigin ? (originSectionValue as string) : undefined
+        }
         onExitSettings={exitSettings}
         onOpenCourse={openCourse}
         renderMain={

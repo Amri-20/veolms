@@ -34,7 +34,7 @@ export type CourseWishlistHeartButtonProps = {
   disabled?: boolean;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   title?: string;
-  variant: "card-media" | "overview-surface";
+  variant: "card-media" | "overview-hero";
 };
 
 export function CourseWishlistHeartButton({
@@ -45,7 +45,7 @@ export function CourseWishlistHeartButton({
   variant,
   "aria-label": ariaLabel,
 }: CourseWishlistHeartButtonProps) {
-  const heartSize = variant === "card-media" ? 23 : 20;
+  const heartSize = variant === "card-media" ? 23 : 22;
 
   if (variant === "card-media") {
     return (
@@ -66,10 +66,10 @@ export function CourseWishlistHeartButton({
   return (
     <button
       type="button"
-      className={`group/wishlist inline-flex h-9.5 w-9.5 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--text)_16%,transparent)] bg-[color-mix(in_srgb,var(--surface)_80%,transparent)] text-(--muted) transition-[border-color,color,background-color] duration-160 ease-out hover:border-[color-mix(in_srgb,var(--text)_32%,transparent)] hover:bg-(--hover) hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) ${
-        wishlisted
-          ? "border-[color-mix(in_srgb,#ff6684_55%,transparent)]! bg-[color-mix(in_srgb,#ff6684_14%,transparent)]! text-[#ff6684]!"
-          : ""
+      // On the course page's hero, which is dark by day as well: the same
+      // dark glass as the heart on a course card, placed by the hero.
+      className={`group/wishlist inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-white/18 bg-slate-950/70 text-white transition-[border-color,background-color] duration-160 ease-out hover:bg-slate-950/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-default ${
+        wishlisted ? "border-[color-mix(in_srgb,#ff6684_60%,transparent)]!" : ""
       }`}
       aria-label={ariaLabel}
       aria-pressed={wishlisted}
