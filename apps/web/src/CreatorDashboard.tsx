@@ -51,6 +51,7 @@ import {
 import { formatRelativeTime } from "./learning/learning-notes.adapter";
 import { CourseThumbnailPlaceholder } from "./courses/CourseThumbnailPlaceholder";
 import { useAuthStore } from "./store/auth.store";
+import { rememberDashboardTitle } from "./store/homeHint";
 import { DiscussionWorkspaceCard } from "./workspace/DiscussionsWorkspace";
 import "./styles/features/creator-dashboard.css";
 import "./styles/features/dashboard-discussion-preview.css";
@@ -2838,6 +2839,29 @@ export const CreatorDashboard = memo(function CreatorDashboard({
     currentUser?.username?.trim() ||
     "Your name";
   const dashboardGreeting = getDashboardGreeting();
+  // The heading puts the name on a second line when it does not fit beside
+  // the greeting. What stands in for the dashboard before it arrives has to
+  // wrap at the same width without knowing the name, so the two lengths are
+  // kept for it (see store/homeHint.ts).
+  const greetingWordsRef = useRef<HTMLSpanElement>(null);
+  const greetingNameRef = useRef<HTMLSpanElement>(null);
+  const greetingNameKnown = Boolean(currentUser);
+  useLayoutEffect(() => {
+    const words = greetingWordsRef.current;
+    const name = greetingNameRef.current;
+    if (!words || !name || !greetingNameKnown) return;
+    const remember = () => {
+      const fontSize = Number.parseFloat(getComputedStyle(words).fontSize);
+      if (!(fontSize > 0)) return;
+      rememberDashboardTitle(
+        words.getBoundingClientRect().width / fontSize,
+        name.getBoundingClientRect().width / fontSize,
+      );
+    };
+    remember();
+    // The heading's face arrives after the first paint and changes both.
+    void document.fonts.ready.then(remember);
+  }, [dashboardDisplayName, dashboardGreeting, greetingNameKnown]);
   const chartThemeKey = `${academyTheme}:${resolvedTheme}`;
   const handleDashboardRefresh = async () => {
     if (refreshInFlightRef.current) return;
@@ -2913,8 +2937,11 @@ export const CreatorDashboard = memo(function CreatorDashboard({
         <div>
           <h1>
             <span className="creator-dashboard-greeting">
-              {dashboardGreeting},{" "}
-              <span className="creator-dashboard-greeting-name">
+              <span ref={greetingWordsRef}>{dashboardGreeting},</span>{" "}
+              <span
+                ref={greetingNameRef}
+                className="creator-dashboard-greeting-name"
+              >
                 {dashboardDisplayName}{" "}
                 <span
                   className="creator-dashboard-greeting-emoji"

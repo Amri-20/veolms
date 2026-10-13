@@ -40,6 +40,7 @@ export type ShellPage =
   | "workspace"
   | "students"
   | "student-details"
+  | "progress"
   | "public-profile";
 
 export interface ShellRouteDescriptor {
@@ -192,6 +193,20 @@ export const routeDescriptors = {
     section: "Students",
     title: "Student profile",
     description: "Review learner details, enrolled courses, and progress.",
+  },
+  progress: {
+    kind: "shell",
+    page: "progress",
+    section: "Progress",
+    title: "Progress",
+    description: "Your learning day by day, and the goals you have met.",
+  },
+  "progress-learner": {
+    kind: "shell",
+    page: "progress",
+    section: "Progress",
+    title: "Progress",
+    description: "A learner's days of learning and the goals they have met.",
   },
   "public-profile": {
     kind: "shell",
@@ -420,6 +435,8 @@ export const destinationPaths: Readonly<Record<string, string>> = {
   "edit-course": "/courses/:courseId/edit/basics",
   students: "/students",
   "student-details": "/students/:username",
+  progress: "/progress",
+  "progress-learner": "/progress/:username",
   "public-profile": "/:username",
   reviews: "/reviews",
   quizzes: "/quizzes",
@@ -442,6 +459,7 @@ export const destinationPaths: Readonly<Record<string, string>> = {
   "Home Page": "/home-page",
   "/my-learning": "/courses",
   Students: "/students",
+  Progress: "/progress",
   Reviews: "/reviews",
   Discussions: "/discussions",
   Analytics: "/analytics",
@@ -474,6 +492,8 @@ const canonicalPathsByRouteId = {
   wishlist: "/wishlist",
   students: "/students",
   "student-details": "/students/:username",
+  progress: "/progress",
+  "progress-learner": "/progress/:username",
   reviews: "/reviews",
   quizzes: "/quizzes",
   "quiz-create": "/quizzes/create",
@@ -578,6 +598,12 @@ export const getEffectiveRouteId = (
 
   if (routeId === "student-details") {
     return /^\/students\/[^/]+$/.test(normalizedPath)
+      ? routeId
+      : "home-fallback";
+  }
+
+  if (routeId === "progress-learner") {
+    return /^\/progress\/[^/]+$/.test(normalizedPath)
       ? routeId
       : "home-fallback";
   }

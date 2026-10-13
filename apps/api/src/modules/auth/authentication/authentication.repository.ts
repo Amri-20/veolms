@@ -11,6 +11,42 @@ export function findUserById(database: Executor, userId: string) {
 }
 
 /**
+ * Name, username and avatar of each of a list of users: what a list that
+ * shows people needs, and no more of the row than that.
+ */
+export function listUserCardsByIds(
+  database: Executor,
+  userIds: readonly string[],
+) {
+  if (userIds.length === 0) {
+    return Promise.resolve(
+      [] as {
+        id: string;
+        username: string;
+        display_name: string;
+        avatar_data_url: string | null;
+      }[],
+    );
+  }
+  return database
+    .selectFrom("users")
+    .select(["id", "username", "display_name", "avatar_data_url"])
+    .where("id", "in", [...userIds])
+    .where("is_deleted", "=", false)
+    .execute();
+}
+
+/** The same of one user, found by their username. */
+export function findUserCardByUsername(database: Executor, username: string) {
+  return database
+    .selectFrom("users")
+    .select(["id", "username", "display_name", "avatar_data_url"])
+    .where("username", "=", username)
+    .where("is_deleted", "=", false)
+    .executeTakeFirst();
+}
+
+/**
  * Bulk display-name lookup for fan-out callers (quiz analytics, lists).
  * Narrow select on purpose: callers that loop findUserById per row pull the
  * full selectAll row — including avatar_data_url — once per user.

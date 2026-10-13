@@ -43,6 +43,27 @@ export function HeroPicture({
 }
 
 /**
+ * A hero's copy is centred in the hero's height. A page built ahead of time
+ * reaches the browser in pieces, and one that is drawn when only the first
+ * of the copy has arrived centres that much, then moves it up as the rest
+ * comes in. So where the copy is centred it is not drawn until the last of
+ * it is there: `HeroCopyEnd` goes last in whatever carries one of these
+ * classes. (A browser without `:has()` ignores the rule and draws the copy
+ * as before.)
+ *
+ * The guest's hero centres its copy from the `sm` breakpoint up, and the
+ * learner's where the copy stands beside the picture.
+ */
+export const guestHeroCopyWhenComplete =
+  "sm:[&:not(:has(>[data-hero-copy-end]))]:invisible";
+export const learnerHeroCopyWhenComplete =
+  "@[50rem]/home:[&:not(:has(>[data-hero-copy-end]))]:invisible";
+
+export function HeroCopyEnd() {
+  return <span data-hero-copy-end="" hidden />;
+}
+
+/**
  * The hero's own box, whatever stands in it: the picture's navy by night
  * (dark theme) and the sunlit wall by day.
  */

@@ -260,10 +260,14 @@
   color: var(--muted);
 }
 
+/* Two equal columns with the cards' own gap between them, so each panel
+   stands exactly under the cards above it. The placeholder shown before the
+   dashboard arrives repeats these sizes (home/creator/
+   CreatorDashboardSkeleton.tsx): change both together. */
 .creator-dashboard-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.07fr) minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 12px;
   margin-top: 16px;
 }
 
@@ -742,6 +746,10 @@
   align-items: center;
   gap: 3px;
   min-width: 0;
+  /* As tall as the arrow a loaded figure has beside it, so the dash that
+     stands in while loading takes the same line and the panel does not grow
+     when the figures arrive. */
+  min-height: 14px;
   color: var(--success);
   font-size: 0.62rem;
   font-weight: 600;

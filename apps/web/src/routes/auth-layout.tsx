@@ -4,6 +4,7 @@ import "../styles/components/toast-notification.css";
 import { Outlet, redirect } from "react-router";
 import { useAuthAppearance } from "../auth/useAuthAppearance";
 import { queryClient } from "../lib/query-client";
+import { loginDialogBody } from "../routing/prerenderedBodies";
 import { AuthRouteGuard } from "../routing/RouteGuards";
 import {
   buildLoginDialogPath,
@@ -56,6 +57,9 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   // pop-up open. A session still waiting on two-factor is left to the route
   // guard, which either keeps it on this screen or calls the sign-in off.
   if (!user && path === LOGIN_PATH) {
+    // The pop-up's code is asked for now instead of once that page has
+    // rendered and found it is wanted.
+    void loginDialogBody.preload();
     return redirect(buildLoginDialogPath(url.searchParams.get("returnTo")));
   }
 

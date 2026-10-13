@@ -3,7 +3,10 @@ import { flushSync } from "react-dom";
 import { hydrateRoot } from "react-dom/client";
 import { HydratedRouter } from "react-router/dom";
 import { prepareDocumentForHydration } from "./bootstrap/documentHydration";
-import { preloadPrerenderedBodies } from "./routing/prerenderedBodies";
+import {
+  loginDialogBody,
+  preloadPrerenderedBodies,
+} from "./routing/prerenderedBodies";
 
 const hydrateApplication = () => {
   // Extensions such as Dark Mode mutate the SSR document at document_start
@@ -65,6 +68,15 @@ const hydrateWhenReady = () => {
   Promise.all([bodies, waitForFirstFrame()]).then(start, start);
   setTimeout(start, BODY_PRELOAD_BUDGET_MS);
 };
+
+// A page opened with the login pop-up asked for (`?login=1`, which is also
+// where the login address leads) shows it as soon as the app has started.
+// Its code is fetched alongside the app's instead of after it. The name is
+// `LOGIN_DIALOG_PARAM`, written out so this entry does not import the
+// routing rules for one word.
+if (new URLSearchParams(window.location.search).has("login")) {
+  void loginDialogBody.preload();
+}
 
 // The generated route context is streamed through scripts at the end of the
 // document. The async entry module can finish before the parser reaches those

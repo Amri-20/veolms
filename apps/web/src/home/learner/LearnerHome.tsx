@@ -137,7 +137,7 @@ export function LearnerHome({
     <LearnerGoalScreen
       summary={summaryQuery.data}
       isLoading={sessionPending || summaryQuery.isLoading}
-      onSetGoal={() => onNavigatePage("/settings/learning")}
+      onEditGoal={() => onNavigatePage("/settings/learning")}
     />
   );
 
