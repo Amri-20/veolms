@@ -51,7 +51,7 @@ Updated 13 Oct 2026, after the fourth round. The full record is `docs/AUDIT_RECO
 - [x] No extra request after sign-out (A6).
 - [x] No wasted request after a quiz is handed in (F8).
 - [x] A moderator's delete removes the reply's mentions (B5c).
-- [x] The whole app was run in a browser against a local API. Wrong addresses, the restricted course, the amount box, sign-up at phone size, free enrolment and Purchase History were seen working.
+- [x] The whole app was run in a browser against a local API. Wrong addresses, the restricted course, the amount box, sign-up at phone size, free enrolment, Purchase History, the staff refund notice, the bank-transfer refund dialog and the Reject button were seen working.
 
 ## A. Right after each push
 
