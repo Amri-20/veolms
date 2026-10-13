@@ -249,10 +249,7 @@ export function PopoverMenu({
   }, [getItems, isMobileSheet, isOpen]);
 
   useLayoutEffect(() => {
-    if (!isOpen || isMobileSheet) {
-      setPanelLayout(null);
-      return;
-    }
+    if (!isOpen || isMobileSheet) return;
     const trigger = triggerRef.current;
     if (!trigger) return;
 
@@ -272,6 +269,9 @@ export function PopoverMenu({
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", update);
+      // The layout is only ever set by `update` above, so clearing it here
+      // covers every way the anchored panel stops being shown.
+      setPanelLayout(null);
     };
   }, [align, isMobileSheet, isOpen, side]);
 

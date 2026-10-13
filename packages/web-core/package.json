@@ -8,7 +8,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@veolms/plugin-sdk": "workspace:*",
-    "axios": "^1.7.9"
+    "@veolms/plugin-sdk": "workspace:*"
   }
 }
