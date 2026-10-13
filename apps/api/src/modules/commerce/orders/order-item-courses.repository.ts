@@ -26,3 +26,22 @@ export async function recordOrderItemCourses(
     )
     .execute();
 }
+
+/**
+ * The courses an order item granted when its order was fulfilled. Empty for
+ * an item nothing was noted for: a bundle item of an order paid before this
+ * record was kept.
+ */
+export async function listCourseIdsGrantedByOrderItem(
+  database: Executor,
+  orderItemId: string,
+): Promise<string[]> {
+  const rows = await database
+    .selectFrom("order_item_courses")
+    .select("course_id")
+    .where("order_item_id", "=", orderItemId)
+    .orderBy("granted_at", "asc")
+    .orderBy("course_id", "asc")
+    .execute();
+  return rows.map((row) => row.course_id);
+}

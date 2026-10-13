@@ -52,6 +52,7 @@ import {
 import { createMediaService, type MediaService } from "../../media/index.ts";
 import { resolveAliasedBasicsUpdate } from "./basics-aliased-field.ts";
 import { resolveBasicsCategoryUpdate } from "./basics-category.ts";
+import { resolveDetailsLevelUpdate } from "./details-level.ts";
 import {
   getLessonDurationSeconds,
   presentAccessRule,
@@ -1344,9 +1345,9 @@ export function createCourseService({
       updates.description = payload.description;
     if (payload.categoryId !== undefined)
       updates.category_id = payload.categoryId;
-    if (payload.level !== undefined && payload.level !== "all_levels") {
-      updates.difficulty = payload.level;
-    }
+    // "all_levels" is stored as no level (see resolveDetailsLevelUpdate).
+    const difficulty = resolveDetailsLevelUpdate(payload.level);
+    if (difficulty !== undefined) updates.difficulty = difficulty;
 
     await courseRepo.updateCourseDirect(database, courseId, updates);
     const updated = await courseRepo.findCourseById(database, courseId);

@@ -1,6 +1,6 @@
 # Audit reconciliation — 11 Oct 2026
 
-> **Read sections 19 to 22 first, then `docs/AUDIT_REMAINING_CHECKLIST.md`.** Section 19 is the current status of the audit findings and sections 20 to 22 the bug-fix rounds that followed. Section 19 was written on 13 Oct 2026 after every "FIXED" below was re-checked against the code. Sections 2 to 9 are the picture on the morning of 11 Oct, before any fix, and are kept as the record of what was found. Sections 10 to 17 record the first round of fixes; twenty of their "FIXED" entries were wrong and are corrected in section 19.
+> **Read sections 19 to 23 first, then `docs/AUDIT_REMAINING_CHECKLIST.md`.** Section 19 is the current status of the audit findings and sections 20 to 23 the bug-fix rounds that followed. Section 19 was written on 13 Oct 2026 after every "FIXED" below was re-checked against the code. Sections 2 to 9 are the picture on the morning of 11 Oct, before any fix, and are kept as the record of what was found. Sections 10 to 17 record the first round of fixes; twenty of their "FIXED" entries were wrong and are corrected in section 19.
 
 Reconciles the application audit of 9 Oct 2026 (findings S1–S16, C1–C13, A1–A7, F1–F18, B1–B9, P1–P5, X1–X6, R1–R6) against the code on `dev` at `8252933c`. Investigation only: no application code, migration, dependency or data was changed.
 
@@ -821,3 +821,61 @@ On `fix/audit-decisions-3`, after the owner answered the three questions left by
 - Staff can refund an order paid by bank transfer from the Orders page, by recording the transfer they made.
 - The staff refund notice has two more kinds of entry.
 - One new migration runs on deploy: `20261013120000-create-order-item-courses`. It creates a table and copies in one row per paid course item. It does not change existing data and can be rolled back.
+
+## 23. Fourth round: the open bugs, one more decision, and the first run in a real browser: 13 Oct 2026
+
+On `fix/audit-round-4`, after the owner asked for every open bug to be closed and for phases 4 and 5 to start.
+
+**The owner's decision.**
+
+11. Approving a learner's refund request on an order paid by bank transfer takes the transfer reference in the same step.
+
+**How it was verified.** As in sections 20 to 22: each fix reproduced before and after on a local throwaway database, money paths through the real services with a stub gateway, and the reruns repeated after review. Whole tree: `tsc --noEmit` in every package, `eslint .` with 0 errors and 31 warnings, 98 of 98 API tests.
+
+New this round: the whole app was run in a browser. A local API on a local database, and the web dev server pointed at it. All 250 requests of the session went to `localhost`; nothing reached the deployed API. No real email or SMS was sent: every local run uses the console mail transport.
+
+**Not verified:** a real phone, a real gateway, real object storage, production data.
+
+### 23.1 Open bugs from section D of the checklist
+
+| Item                                                  | Status                  | What changed                                                                                                                                                                                                                                                                                                    | What is left                                                                                                                                                 |
+| ----------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Refunding one item of a bundle edited after the sale  | FIXED                   | The refund revokes the courses recorded for that order item in `order_item_courses`, and the "does another paid order still cover this course" check reads the same record. Before: a buyer lost a course added to the bundle later and kept one that was removed. After: exactly the courses sold are revoked. | An order with no record falls back to the bundle's contents today.                                                                                           |
+| Refund request on a bank-transfer order (decision 11) | FIXED in the API        | Approve takes `outsideRefund: { reference }`. It is required for a bank-transfer order and refused for a gateway order. A refused approval leaves the request pending. The staff list of requests marks the ones paid by manual transfer.                                                                       | **The web has no screen where staff see or approve refund requests.** The client hook exists and is unused. Until a screen is built, staff use Refund Order. |
+| Reject button needs the admin role                    | FIXED                   | Staff with billing access who are not admins see "Ask an admin to reject this request." instead of a button that refuses.                                                                                                                                                                                       | Not rendered in a browser.                                                                                                                                   |
+| `level: "all_levels"` on the direct course update     | FIXED                   | Stores no level, as the details form does.                                                                                                                                                                                                                                                                      | —                                                                                                                                                            |
+| Local file store: two uploads with one name           | FIXED                   | The upload that loses the race no longer removes the winner's file.                                                                                                                                                                                                                                             | Real storage was never affected.                                                                                                                             |
+| A buyer can still pay twice                           | CANNOT BE FIXED IN CODE | The gateway offers no way to withdraw an order already handed to the buyer. It stays flagged on the staff refund list.                                                                                                                                                                                          | —                                                                                                                                                            |
+| Bundle orders paid before 13 Oct                      | CANNOT BE FIXED         | What they contained when sold was never recorded. The same bundle paid twice is still found.                                                                                                                                                                                                                    | —                                                                                                                                                            |
+| Accounts sharing an email in different letter case    | WAITING                 | No merge code, by decision 3.                                                                                                                                                                                                                                                                                   | The count from check 5 on production. It could not be run from here: there is no production access and no copy of the data.                                  |
+
+### 23.2 First items from the put-off list
+
+| Item                                 | Status                 | What changed                                                                                                                                                                                     |
+| ------------------------------------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| F2 Purchase History                  | FIXED, seen in the app | Status and search go to the API (`statuses`, `search`), which pages over the filtered result. Search covers order number, invoice number and course title. A learner only gets their own orders. |
+| F17 Page titles                      | FIXED, seen in the app | The tab shows the course title, and the lesson title on a lesson page. Share tags are unchanged.                                                                                                 |
+| F18 Analytics trend label            | FIXED, replayed        | A UTC day is formatted as that UTC day. West of UTC it showed the day before.                                                                                                                    |
+| A6 Extra request after sign-out      | FIXED, replayed        | No second `/auth/me` when sign-out succeeded. It still re-checks when sign-out failed.                                                                                                           |
+| F8 Wasted request after a quiz       | FIXED, replayed        | The cached attempt takes the result instead of a refetch that can only answer 409.                                                                                                               |
+| B5c Moderator delete leaves mentions | FIXED, over HTTP       | The moderator's delete removes the reply's mentions, as the author's does.                                                                                                                       |
+| B8 (part)                            | FIXED                  | See `all_levels` above. Version checks on the direct update are still open.                                                                                                                      |
+
+### 23.3 Checks in the real app
+
+Each of these was seen in the browser against the local API.
+
+- Signed out: `/abcde`, `/a/b/c` and `/auth` say "Page not found". `/orders/abc` asks to sign in, and says "Page not found" once signed in.
+- A restricted free course says "Enrollment in this course is by invitation." and has no enrol button. Its catalogue card says "View Course".
+- The amount box on a paid course refuses `199.50` and `50`.
+- Sign-up at a phone-sized window, with a six-digit code inserted in one go, as a phone's one-tap fill does.
+- Free enrolment lands on the lesson page.
+- Purchase History shows the invoice number and "No payment needed" for a free order.
+
+A phone-sized window is not a phone. The SMS one-tap fill on a real iPhone and a real Android phone is still on the staging list.
+
+**Behaviour changes to know.**
+
+- `GET /orders` accepts `statuses` (comma-separated) and, for a learner, `search`.
+- The refund-request review endpoint accepts `outsideRefund`, and each refund request carries `paidByManualTransfer`.
+- No new migration this round.

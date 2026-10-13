@@ -3,6 +3,7 @@ import type {
   ManualTransferForPaidOrderNeedsRefund,
   NeedsRefundEntry,
 } from "@veolms/contracts";
+import { hasAdminRole } from "../shell/workspaceRole";
 import { formatCurrency, formatOrderDate } from "./orderHelpers";
 
 /** A transfer a learner reported that staff can no longer verify. */
@@ -73,6 +74,22 @@ export function isReportedTransfer(
     entry.kind === "manual_transfer_for_paid_order" ||
     entry.kind === "manual_transfer_for_closed_order"
   );
+}
+
+/** Shown in place of the Reject button to staff who cannot use it. */
+export const ASK_ADMIN_TO_REJECT_TRANSFER =
+  "Ask an admin to reject this request.";
+
+/**
+ * Whether this viewer can reject a reported transfer from the notice. The
+ * notice is read with billing access, but answering a transfer request is
+ * for admins only: other staff are told to ask one, instead of being given
+ * a button the server refuses.
+ */
+export function canRejectTransferRequests(
+  viewerRoles: readonly string[] | null | undefined,
+): boolean {
+  return hasAdminRole(viewerRoles);
 }
 
 /**

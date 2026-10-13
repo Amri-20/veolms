@@ -735,6 +735,15 @@ export function createModerationService({
         } else if (input.action === "delete") {
           const deleted = await repliesRepo.deleteReply(trx, replyId);
           if (deleted) {
+            // As when its author deletes it: nobody stays mentioned in a
+            // reply that is gone. Left behind, the mention came back in the
+            // mentioned person's Mentions if the reply was ever made active
+            // again.
+            await trx
+              .deleteFrom("learning_mentions")
+              .where("source_type", "=", "reply")
+              .where("source_id", "=", replyId)
+              .execute();
             await trx
               .updateTable("learning_attachments")
               .set({ status: "deleted" })

@@ -209,6 +209,7 @@ export function createRefundReconciliationWorker({
               );
               if (targetItem) {
                 await courseAccessService.revokeAccessForOrderItem(trx, order, {
+                  id: targetItem.id,
                   item_type: targetItem.item_type,
                   course_id: targetItem.course_id,
                   bundle_id: targetItem.bundle_id,

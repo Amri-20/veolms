@@ -361,6 +361,7 @@ export function createPaymentWorker({
             transaction,
             order,
             {
+              id: targetItem.id,
               item_type: targetItem.item_type,
               course_id: targetItem.course_id,
               bundle_id: targetItem.bundle_id,

@@ -188,6 +188,8 @@ const refundRoutes: RoutePlugin = async (app, options) => {
         operationId: "reviewRefundRequest",
         tags: ["Commerce - Refund Requests"],
         summary: "Approve or reject student refund request",
+        description:
+          "Approving issues the refund. For an order paid by manual transfer, send outsideRefund with the reference of the transfer staff made: the refund is recorded and no money is moved. A refused approval leaves the request pending.",
         params: z.object({ requestId: z.uuid() }),
         body: reviewRefundRequestSchema,
         response: {
@@ -196,6 +198,9 @@ const refundRoutes: RoutePlugin = async (app, options) => {
           401: errorResponse("Unauthorized"),
           403: errorResponse("Forbidden - Admin required"),
           404: errorResponse("Refund request not found"),
+          409: errorResponse(
+            "An outside refund with this reference is already recorded",
+          ),
         },
       },
     },
