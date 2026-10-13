@@ -8,7 +8,10 @@ import { z } from "zod";
  * because of it. An entry leaves the list once the money is back: a surplus
  * payment when the gateway has reported refunds covering all of it, a
  * duplicate purchase when either order has been refunded in full or the
- * later one has been refunded at least what it charged for the course.
+ * later one has been refunded at least what it charged for the course. A
+ * reported transfer for an order paid another way is money the platform
+ * never recorded, so it cannot see it go back: that entry leaves when staff
+ * reject the request (`POST /manual-payments/:requestId/verify`, `reject`).
  *
  * Every amount is in MINOR units (paise), like every other order response.
  */
@@ -95,9 +98,50 @@ export type DuplicatePurchaseNeedsRefund = z.infer<
   typeof duplicatePurchaseNeedsRefundSchema
 >;
 
+/**
+ * A bank or UPI transfer a buyer reported for an order (a manual payment
+ * request) that is still waiting for review while the order has been paid
+ * another way: usually the buyer also completed the gateway payment, and it
+ * landed first. The request can no longer be verified (the order is not
+ * payable), so if the transfer did arrive, that money sits in the academy's
+ * bank account with nothing in the platform to show for it. Staff check the
+ * bank, return the transfer outside the platform if it arrived, and reject
+ * the request; rejecting it is what takes it off this list.
+ *
+ * Not listed: a request whose reference is already recorded as a verified
+ * manual payment (for this order or any other). That transfer is on a
+ * payment row; the request is only a second mention of it.
+ */
+export const manualTransferForPaidOrderNeedsRefundSchema = z.strictObject({
+  kind: z.literal("manual_transfer_for_paid_order"),
+  /** The manual payment request's id: the one to reject. */
+  id: z.uuid(),
+  buyer: needsRefundBuyerSchema,
+  /** What the order was for: its item titles, joined. */
+  courseTitle: z.string(),
+  /** The order the transfer was reported for. It is paid another way. */
+  order: needsRefundOrderRefSchema,
+  /**
+   * What the buyer says they sent, in minor units: the order's total. A
+   * request carries no amount of its own.
+   */
+  amount: z.number().int().nonnegative(),
+  currency: z.string().length(3),
+  /** `upi` or `bank_transfer`, as the buyer gave it. */
+  paymentMethod: z.string(),
+  /** The reference (UTR) the buyer gave: what to look for at the bank. */
+  transactionReference: z.string(),
+  /** When the buyer reported the transfer. */
+  submittedAt: z.string().or(z.date()),
+});
+export type ManualTransferForPaidOrderNeedsRefund = z.infer<
+  typeof manualTransferForPaidOrderNeedsRefundSchema
+>;
+
 export const needsRefundEntrySchema = z.discriminatedUnion("kind", [
   surplusPaymentNeedsRefundSchema,
   duplicatePurchaseNeedsRefundSchema,
+  manualTransferForPaidOrderNeedsRefundSchema,
 ]);
 export type NeedsRefundEntry = z.infer<typeof needsRefundEntrySchema>;
 
@@ -110,7 +154,10 @@ export type NeedsRefundListQueryInput = z.input<
 >;
 export type NeedsRefundListQuery = z.output<typeof needsRefundListQuerySchema>;
 
-/** Newest first by `paidAt`. `nextCursor` is null on the last page. */
+/**
+ * Newest first by `paidAt` (`submittedAt` for a reported transfer).
+ * `nextCursor` is null on the last page.
+ */
 export const needsRefundListResponseSchema = z.strictObject({
   entries: z.array(needsRefundEntrySchema),
   nextCursor: z.string().nullable(),

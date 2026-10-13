@@ -27,6 +27,7 @@ import {
 } from "../shared/courses.utils.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
 import { ADMIN_ROLE } from "../../auth/index.ts";
+import { lessonMediaPublishIssue } from "./lesson-media-publish-issue.ts";
 
 export interface LifecycleServiceOptions {
   database: Kysely<Database>;
@@ -136,40 +137,18 @@ export function createLifecycleService({
       }
     }
 
-    // Quiz lessons are self-contained and intentionally do not have a media
-    // asset. Video/document lessons still use the existing media validation.
+    // A lesson needs no media to be published; media that is attached must
+    // be the creator's and finished. See `lessonMediaPublishIssue`.
     for (const lesson of lessons) {
-      if (lesson.content_type === "quiz") {
-        continue;
-      }
-      if (!lesson.content_media_id) {
-        report(
-          curriculumErrors,
-          `Lesson "${lesson.title}" does not have media content attached.`,
-        );
-      } else {
-        const media = mediaMap.get(lesson.content_media_id);
-        if (!media || (!isAdmin && media.owner_id !== course.creator_id)) {
-          report(
-            curriculumErrors,
-            `Media for lesson "${lesson.title}" was not found.`,
-          );
-        } else if (lesson.content_type === "video") {
-          if (media.status !== "ready") {
-            report(
-              curriculumErrors,
-              `Video for lesson "${lesson.title}" is still processing or failed.`,
-            );
-          }
-        } else if (lesson.content_type === "document") {
-          if (media.status !== "uploaded" && media.status !== "ready") {
-            report(
-              curriculumErrors,
-              `Document for lesson "${lesson.title}" is not completely uploaded.`,
-            );
-          }
-        }
-      }
+      const issue = lessonMediaPublishIssue({
+        lesson,
+        media: lesson.content_media_id
+          ? mediaMap.get(lesson.content_media_id)
+          : undefined,
+        courseCreatorId: course.creator_id,
+        actorIsAdmin: Boolean(isAdmin),
+      });
+      if (issue) report(curriculumErrors, issue);
     }
 
     // 4. Access Rules Validation

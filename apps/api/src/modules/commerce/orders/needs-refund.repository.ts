@@ -1,5 +1,6 @@
 import { sql } from "kysely";
 import type { Executor } from "../shared/repository.types.ts";
+import { MANUAL_PAYMENT_ID_PREFIX } from "../payments/manual-payment.repository.ts";
 import { SURPLUS_CAPTURE_ERROR_CODE } from "../payments/surplus-payment.ts";
 
 /**
@@ -96,6 +97,103 @@ export async function listSurplusPaymentsToReturn(
         : sql`true`
     }
     order by s.paid_at desc, s.id desc
+    limit ${limit}
+  `.execute(database);
+  return result.rows;
+}
+
+export interface ManualTransferForPaidOrderRow {
+  /** The manual payment request. */
+  id: string;
+  order_id: string;
+  order_number: string;
+  user_id: string;
+  /** Major units, as order columns are stored. */
+  total_amount: number;
+  currency: string;
+  payment_method: string;
+  transaction_reference: string;
+  item_titles: string | null;
+  submitted_at: Date;
+  /** This row's place in the list: when the request was submitted. */
+  paid_at_cursor: string;
+}
+
+/**
+ * Transfers reported for an order that was then paid another way, newest
+ * first by when they were reported: manual payment requests still `pending`
+ * whose order is `paid`, `partially_refunded` or `refunded`. A pending
+ * request has paid for nothing, so whatever paid the order was a different
+ * payment, and verifying the request is refused from then on. If the buyer
+ * did send the transfer, the academy holds it with no row to show for it.
+ *
+ * What counts, and why:
+ *
+ *  - Only `pending` requests. Rejecting one (the review action that
+ *    already exists) is how staff say it has been dealt with, and takes it
+ *    off the list. A verified one is the payment that paid its order.
+ *  - Only orders that were paid. A request waiting on an unpaid order is
+ *    the ordinary review queue, not money to return.
+ *  - A refunded order still counts: the refund returned the other payment,
+ *    not this transfer.
+ *  - Not a request whose reference is already recorded as a verified manual
+ *    payment, for this order or any other, compared as the verify step
+ *    compares it (payment.repository.ts's findManualPaymentByReference).
+ *    One reference is one transfer, and that transfer is on a payment row.
+ *
+ * How it is read: in two steps inside one statement, on purpose. `waiting`
+ * is found first, from the pending requests (there is an index on the
+ * status) and each one's order by its key, so its cost follows the review
+ * queue. Only those rows have their references looked up among the manual
+ * payments, which is a pass over the payments table: there is no index on
+ * a reference as the verify step compares it. Written as one join, that
+ * pass was made on every request, with the queue's whole length to compare
+ * and usually nothing to find; kept apart, it is not made at all while no
+ * request is waiting on a paid order.
+ */
+export async function listManualTransfersForPaidOrders(
+  database: Executor,
+  { cursor, limit }: NeedsRefundPage,
+): Promise<ManualTransferForPaidOrderRow[]> {
+  const result = await sql<ManualTransferForPaidOrderRow>`
+    with waiting as materialized (
+      select
+        m.id,
+        m.order_id,
+        o.order_number,
+        o.user_id,
+        o.total_amount,
+        o.currency,
+        m.payment_method,
+        m.transaction_reference,
+        m.created_at as submitted_at
+      from manual_payment_requests m
+      join orders o on o.id = m.order_id
+      where m.status = 'pending'
+        and o.status in ('paid', 'partially_refunded', 'refunded')
+        and ${
+          cursor
+            ? sql`(m.created_at, m.id) < (${cursor.paidAt}::timestamptz, ${cursor.id}::uuid)`
+            : sql`true`
+        }
+    )
+    select
+      w.*,
+      (
+        select string_agg(oi.title_snapshot, ', ' order by oi.created_at, oi.id)
+        from order_items oi
+        where oi.order_id = w.order_id
+      ) as item_titles,
+      ${cursorText("w.submitted_at")} as paid_at_cursor
+    from waiting w
+    where not exists (
+      select 1
+      from payments p
+      where p.gateway_provider = 'manual'
+        and upper(regexp_replace(p.gateway_payment_id, '[[:space:]]+', '', 'g'))
+          = upper(${MANUAL_PAYMENT_ID_PREFIX}::text || regexp_replace(w.transaction_reference, '[[:space:]]+', '', 'g'))
+    )
+    order by w.submitted_at desc, w.id desc
     limit ${limit}
   `.execute(database);
   return result.rows;

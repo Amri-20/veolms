@@ -11,6 +11,7 @@ import {
   isDuplicateStillOwed,
   toCursorTime,
   toDuplicatePurchaseEntry,
+  toManualTransferForPaidOrderEntry,
   toSurplusPaymentEntry,
 } from "./needs-refund.mapper.ts";
 import * as needsRefundRepo from "./needs-refund.repository.ts";
@@ -18,7 +19,8 @@ import * as needsRefundRepo from "./needs-refund.repository.ts";
 export interface NeedsRefundService {
   /**
    * Money staff have to return by hand, newest first: surplus payments
-   * still to be returned and duplicate purchases. Read-only; nothing is
+   * still to be returned, duplicate purchases, and transfers reported for
+   * an order that was then paid another way. Read-only; nothing is
    * refunded and no access changes because something is on this list.
    */
   listNeedsRefund(
@@ -55,14 +57,18 @@ export function createNeedsRefundService({
     }
 
     // One more than a page of each kind. Whatever the mix, the newest
-    // `limit` of the two together are then in hand, and anything beyond
+    // `limit` of them all together are then in hand, and anything beyond
     // them means there is another page.
-    const [surplusRows, allDuplicateRows] = await Promise.all([
+    const [surplusRows, allDuplicateRows, transferRows] = await Promise.all([
       needsRefundRepo.listSurplusPaymentsToReturn(database, {
         cursor: decoded,
         limit: limit + 1,
       }),
       needsRefundRepo.listDuplicatePurchases(database),
+      needsRefundRepo.listManualTransfersForPaidOrders(database, {
+        cursor: decoded,
+        limit: limit + 1,
+      }),
     ]);
     const after = decoded && {
       paid_at_cursor: decoded.paidAt,
@@ -76,6 +82,7 @@ export function createNeedsRefundService({
     const merged = [
       ...surplusRows.map((row) => ({ kind: "surplus" as const, row })),
       ...duplicateRows.map((row) => ({ kind: "duplicate" as const, row })),
+      ...transferRows.map((row) => ({ kind: "transfer" as const, row })),
     ].sort((a, b) => compareNewestFirst(a.row, b.row));
     const pageRows = merged.slice(0, limit);
     if (pageRows.length === 0) {
@@ -87,14 +94,16 @@ export function createNeedsRefundService({
     ]);
     const buyersById = new Map(buyers.map((buyer) => [buyer.id, buyer]));
 
-    const entries: NeedsRefundEntry[] = pageRows.map((entry) =>
-      entry.kind === "surplus"
-        ? toSurplusPaymentEntry(entry.row, buyersById.get(entry.row.user_id))
-        : toDuplicatePurchaseEntry(
-            entry.row,
-            buyersById.get(entry.row.user_id),
-          ),
-    );
+    const entries: NeedsRefundEntry[] = pageRows.map((entry) => {
+      const buyer = buyersById.get(entry.row.user_id);
+      if (entry.kind === "surplus") {
+        return toSurplusPaymentEntry(entry.row, buyer);
+      }
+      if (entry.kind === "duplicate") {
+        return toDuplicatePurchaseEntry(entry.row, buyer);
+      }
+      return toManualTransferForPaidOrderEntry(entry.row, buyer);
+    });
 
     const last = pageRows[pageRows.length - 1]!.row;
     return {

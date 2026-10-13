@@ -10,6 +10,7 @@ import { ShellProfileAvatar } from "./ShellProfileAvatar";
 import { UsersIcon as Users } from "@phosphor-icons/react/Users";
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import type { AvatarImageVariant } from "@veolms/contracts";
+import { isValidPublicProfileUsername } from "@veolms/contracts/username-rules";
 import type { CourseRole } from "../courses/catalogue";
 import { getRoleDisplayName } from "./workspaceRole";
 
@@ -37,7 +38,13 @@ export function ProfileMenuIdentity({
   onNavigate,
   onClose,
 }: ProfileMenuIdentityProps) {
-  const profilePath = `/${encodeURIComponent(username)}`;
+  // A username that cannot be a profile address (an old account's, shorter
+  // than a profile address allows) has no profile page to open. The link
+  // goes to the profile settings instead, where a line under the username
+  // field says why and lets them choose another.
+  const profilePath = isValidPublicProfileUsername(username)
+    ? `/${encodeURIComponent(username)}`
+    : "/settings/profile";
   const handleProfileClick = (event: MouseEvent<HTMLAnchorElement>) => {
     if (
       event.button !== 0 ||

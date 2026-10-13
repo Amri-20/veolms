@@ -9,11 +9,13 @@ import {
   isDuplicateStillOwed,
   toCursorTime,
   toDuplicatePurchaseEntry,
+  toManualTransferForPaidOrderEntry,
   toNeedsRefundBuyer,
   toSurplusPaymentEntry,
 } from "./needs-refund.mapper.ts";
 import type {
   DuplicatePurchaseRow,
+  ManualTransferForPaidOrderRow,
   SurplusPaymentToReturnRow,
 } from "./needs-refund.repository.ts";
 
@@ -57,6 +59,20 @@ const duplicateRow: DuplicatePurchaseRow = {
   refunded_amount: "10000",
   gateway_provider: "razorpay",
   gateway_payment_id: "pay_second_1",
+};
+
+const transferRow: ManualTransferForPaidOrderRow = {
+  id: "88888888-8888-4888-8888-888888888888",
+  order_id: "99999999-9999-4999-8999-999999999999",
+  order_number: "ORD-20261013-PAID01",
+  user_id: "33333333-3333-4333-8333-333333333333",
+  total_amount: 499,
+  currency: "INR",
+  payment_method: "bank_transfer",
+  transaction_reference: "utr 4411 9020",
+  item_titles: "Node.js",
+  submitted_at: new Date("2026-10-13T07:45:00.000Z"),
+  paid_at_cursor: "2026-10-13T07:45:00.000000Z",
 };
 
 await test("a surplus payment keeps its minor-unit amount and reads its refunds from the note", () => {
@@ -119,10 +135,44 @@ await test("a zero-decimal currency is not multiplied by 100", () => {
   assert.equal(entry.orderTotalAmount, 850);
 });
 
-await test("both kinds satisfy the strict response contract once serialised", () => {
+await test("a reported transfer claims the order's total in minor units and keeps the reference as the buyer typed it", () => {
+  const entry = toManualTransferForPaidOrderEntry(transferRow, buyer);
+  assert.equal(entry.kind, "manual_transfer_for_paid_order");
+  assert.equal(entry.id, transferRow.id);
+  // 499 rupees on the order: major units in storage.
+  assert.equal(entry.amount, 49900);
+  assert.equal(entry.currency, "INR");
+  assert.equal(entry.paymentMethod, "bank_transfer");
+  assert.equal(entry.transactionReference, "utr 4411 9020");
+  assert.equal(entry.courseTitle, "Node.js");
+  assert.deepEqual(entry.order, {
+    id: transferRow.order_id,
+    orderNumber: "ORD-20261013-PAID01",
+  });
+  assert.equal(entry.submittedAt, transferRow.submitted_at);
+  assert.deepEqual(entry.buyer, {
+    name: "Asha Rao",
+    email: "asha@example.test",
+    username: "asha",
+  });
+
+  // Zero-decimal currency: 499 yen is 499 minor units.
+  assert.equal(
+    toManualTransferForPaidOrderEntry({ ...transferRow, currency: "JPY" })
+      .amount,
+    499,
+  );
+});
+
+await test("every kind satisfies the strict response contract once serialised", () => {
   for (const entry of [
     toSurplusPaymentEntry(surplusRow, buyer),
     toDuplicatePurchaseEntry(duplicateRow, buyer),
+    toManualTransferForPaidOrderEntry(transferRow, buyer),
+    toManualTransferForPaidOrderEntry(
+      { ...transferRow, item_titles: null },
+      undefined,
+    ),
     toSurplusPaymentEntry({ ...surplusRow, item_titles: null }, undefined),
     toDuplicatePurchaseEntry(
       { ...duplicateRow, gateway_provider: null, gateway_payment_id: null },
@@ -146,6 +196,15 @@ await test("a buyer is named by display name, then username, and a missing accou
     email: null,
     username: null,
   });
+});
+
+await test("the three kinds sort into one list by their own times: a transfer by when it was reported", () => {
+  const rows = [surplusRow, transferRow, duplicateRow];
+  assert.deepEqual(
+    [...rows].sort(compareNewestFirst).map((row) => row.id),
+    // Paid 09:00, paid 08:00, reported 07:45.
+    [duplicateRow.id, surplusRow.id, transferRow.id],
+  );
 });
 
 await test("entries of both kinds sort newest first, ties broken by id", () => {

@@ -139,6 +139,7 @@ export function adaptCourseSummaryToCatalogueCourse(
     pricing: formatCoursePricing(summary.pricing),
     certificateAvailable: summary.certificateEnabled,
     isApi: true,
+    canSelfEnroll: summary.canSelfEnroll,
   };
 }
 

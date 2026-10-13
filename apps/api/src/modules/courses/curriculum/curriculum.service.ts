@@ -12,11 +12,13 @@ import type { AppServices } from "../../../services/index.ts";
 import * as curriculumRepo from "./curriculum.repository.ts";
 import * as courseRepo from "../course/course.repository.ts";
 import { createMediaService } from "../../media/index.ts";
+import { createLessonProgressResetService } from "../../learning-progress/index.ts";
 import { createChapterSyncService } from "../chapters/chapters.service.ts";
 import {
   assertOptimisticUpdate,
   getCourseAndVerifyOwner as verifyCourseOwner,
 } from "../shared/courses.utils.ts";
+import { givesLessonItsFirstMedia } from "./lesson-first-media.ts";
 
 export interface CurriculumServiceOptions {
   database: Kysely<Database>;
@@ -29,6 +31,7 @@ export function createCurriculumService({
 }: CurriculumServiceOptions) {
   const mediaService = createMediaService({ database, services });
   const chapterSyncService = createChapterSyncService({ database, services });
+  const lessonProgressResetService = createLessonProgressResetService();
 
   /**
    * Re-derives a lesson's chapters from its description. Chapters are a
@@ -332,7 +335,7 @@ export function createCurriculumService({
     }
 
     const now = new Date();
-    await curriculumRepo.updateLesson(database, lessonId, courseId, {
+    const lessonUpdate = {
       title: payload.title,
       description: payload.description,
       content_type: payload.contentType,
@@ -341,7 +344,28 @@ export function createCurriculumService({
       is_preview: payload.isPreview,
       is_published: payload.isPublished,
       updated_at: now,
-    });
+    };
+    if (givesLessonItsFirstMedia(lesson.content_media_id, effectiveMediaId)) {
+      // A lesson with no video is finished by opening it. Now that it has
+      // one, nobody has watched it: learners' progress on the lesson is
+      // cleared together with the change, or neither happens.
+      await database.transaction().execute(async (trx) => {
+        await curriculumRepo.updateLesson(
+          trx,
+          lessonId,
+          courseId,
+          lessonUpdate,
+        );
+        await lessonProgressResetService.clearLessonProgress(trx, lessonId);
+      });
+    } else {
+      await curriculumRepo.updateLesson(
+        database,
+        lessonId,
+        courseId,
+        lessonUpdate,
+      );
+    }
 
     if (payload.description !== undefined || mediaChanged || typeChanged) {
       await syncLessonChapters(

@@ -50,7 +50,7 @@ export interface ManualPaymentService {
  * transfer from paying for two orders.
  */
 function manualGatewayPaymentId(transactionReference: string): string {
-  return `manual_pay_${transactionReference.replace(/\s+/gu, "").toUpperCase()}`;
+  return `${manualPaymentRepo.MANUAL_PAYMENT_ID_PREFIX}${transactionReference.replace(/\s+/gu, "").toUpperCase()}`;
 }
 
 function referenceAlreadyUsed(): AppError {

@@ -1,5 +1,6 @@
 import type {
   DuplicatePurchaseNeedsRefund,
+  ManualTransferForPaidOrderNeedsRefund,
   NeedsRefundBuyer,
   SurplusPaymentNeedsRefund,
 } from "@veolms/contracts";
@@ -7,6 +8,7 @@ import { refundedSoFar } from "../payments/surplus-payment.ts";
 import { toMinorUnits } from "../shared/currency.ts";
 import type {
   DuplicatePurchaseRow,
+  ManualTransferForPaidOrderRow,
   SurplusPaymentToReturnRow,
 } from "./needs-refund.repository.ts";
 
@@ -80,6 +82,25 @@ export function toDuplicatePurchaseEntry(
   };
 }
 
+export function toManualTransferForPaidOrderEntry(
+  row: ManualTransferForPaidOrderRow,
+  user?: BuyerRowLike,
+): ManualTransferForPaidOrderNeedsRefund {
+  return {
+    kind: "manual_transfer_for_paid_order",
+    id: row.id,
+    buyer: toNeedsRefundBuyer(user),
+    courseTitle: row.item_titles ?? "",
+    order: { id: row.order_id, orderNumber: row.order_number },
+    // A request carries no amount: the buyer was paying for the order.
+    amount: toMinorUnits(row.total_amount, row.currency),
+    currency: row.currency,
+    paymentMethod: row.payment_method,
+    transactionReference: row.transaction_reference,
+    submittedAt: row.submitted_at,
+  };
+}
+
 /**
  * Whether a duplicate purchase still has money to go back. It has until
  * the later order has been refunded what it charged for the course: in
@@ -100,8 +121,8 @@ export function isDuplicateStillOwed(
 }
 
 /**
- * Newest first, by the same (time, id) pair the two queries order and page
- * by. The time is Postgres text of fixed width and the ids are lower-case
+ * Newest first, by the same (time, id) pair the queries order and page by.
+ * The time is Postgres text of fixed width and the ids are lower-case
  * UUIDs, so comparing them as strings is comparing them as Postgres does.
  */
 export function compareNewestFirst(

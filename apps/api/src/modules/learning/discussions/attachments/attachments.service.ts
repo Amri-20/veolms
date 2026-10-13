@@ -33,6 +33,7 @@ import { getAttachmentDimensionFields } from "../shared/discussion-attachment-me
 import { withWriteTransaction } from "../shared/discussion.mentions.ts";
 import {
   exceedsUploadQuota,
+  isUnrecordedUpload,
   supersededUploadFileName,
 } from "./attachment-upload-rules.ts";
 import { fetchSafeHtml, extractLinkMetadata } from "./attachments.preview.ts";
@@ -577,12 +578,14 @@ export function createAttachmentsService(
         );
       }
       const fileUrl = discussionUploadPublicUrl(sanitizedName);
+      const storedStorageKey = discussionUploadStorageKey(sanitizedName);
 
+      let slotFilled: boolean;
       try {
-        await db
+        const result = await db
           .updateTable("learning_attachments")
           .set({
-            storage_key: discussionUploadStorageKey(sanitizedName),
+            storage_key: storedStorageKey,
             file_name: file.filename,
             file_url: fileUrl,
             mime_type: file.mimetype,
@@ -599,10 +602,45 @@ export function createAttachmentsService(
             ),
           })
           .where("id", "=", attachmentId)
-          .execute();
+          // Only while the slot is still open, as checked above: the file
+          // took a while to arrive, and the slot may have been filled since.
+          .where("status", "=", "uploading")
+          .where("target_id", "is", null)
+          .executeTakeFirst();
+        slotFilled = Number(result.numUpdatedRows) > 0;
       } catch (error) {
         await uploadStore.remove(sanitizedName);
         throw error;
+      }
+
+      // The slot was filled while this file was arriving: two files posted
+      // to one slot at the same moment both pass the check above. Both used
+      // to be accepted, the record kept whichever was written last, and the
+      // other stayed in storage with no record pointing at it, where the
+      // clean-up job, which works from the records, never finds it. This
+      // file is now refused like one posted after the slot was filled, and
+      // removed. The refusal is the answer either way, so a failure to
+      // remove is recorded, not returned.
+      if (!slotFilled) {
+        const current = await attachmentsRepo.findAttachmentById(
+          db,
+          attachmentId,
+        );
+        if (isUnrecordedUpload(storedStorageKey, current?.storageKey)) {
+          try {
+            await uploadStore.removeOrThrow(sanitizedName);
+          } catch (error) {
+            logger?.warn(
+              { err: error, attachmentId, storageKey: storedStorageKey },
+              "Could not remove a file sent to an upload slot that was already filled",
+            );
+          }
+        }
+        throw httpError(
+          400,
+          "UPLOAD_SLOT_CLOSED",
+          "This attachment can no longer receive a file.",
+        );
       }
 
       // The record now points at the file just stored. If bytes were also
@@ -613,7 +651,7 @@ export function createAttachmentsService(
       // returned.
       const supersededName = supersededUploadFileName(
         existing.storageKey,
-        discussionUploadStorageKey(sanitizedName),
+        storedStorageKey,
       );
       if (supersededName) {
         try {
