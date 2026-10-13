@@ -1,5 +1,8 @@
 import { useSyncExternalStore } from "react";
-import { forgetAccountBrowserState } from "./accountBrowserState";
+import {
+  claimLastOpenedLessons,
+  forgetAccountBrowserState,
+} from "./accountBrowserState";
 import { readSessionPresence, writeSessionPresence } from "./sessionPresence";
 import type { LoginResponse, UserProfileResponse } from "@veolms/contracts";
 
@@ -183,7 +186,12 @@ export const authStore = {
   setUser(user: AuthUser | null, options?: { refresh?: boolean }) {
     const sameAccount = (state.user?.id ?? null) === (user?.id ?? null);
     if (!(options?.refresh && sameAccount)) writeGeneration += 1;
-    if (user) lastSignedInUserId = user.id;
+    if (user) {
+      lastSignedInUserId = user.id;
+      // The lessons this browser remembers stay with the account that
+      // opened them; another account signing in does not inherit them.
+      claimLastOpenedLessons(user.id);
+    }
     identityHint = createIdentityHintFromUser(user);
     writeIdentityHint(identityHint);
     state = {

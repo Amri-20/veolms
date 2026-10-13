@@ -30,6 +30,7 @@ import * as userRepository from "./authentication.repository.ts";
 import type { OtpService } from "../otp/otp.service.ts";
 import type { SessionService } from "../session/session.service.ts";
 import { normalizePhoneIdentifier } from "../shared/auth.utils.ts";
+import { evictCachedUserSessions } from "../shared/session-auth-cache.ts";
 import {
   AVATAR_CONTENT_TYPES,
   AVATAR_UPLOAD_MAX_BYTES,
@@ -284,12 +285,27 @@ export function createAuthService({
     userId: string,
     fn: (executor: DatabaseExecutor) => Promise<T>,
   ): Promise<T> {
-    return database.transaction().execute(async (trx) => {
+    const result = await database.transaction().execute(async (trx) => {
       await sql`select pg_advisory_xact_lock(hashtext(${`veolms:user-avatar:${userId}`}))`.execute(
         trx,
       );
       return fn(trx);
     });
+    // Every avatar change is saved through here. See forgetCachedAccount.
+    forgetCachedAccount(userId);
+    return result;
+  }
+
+  /**
+   * Drops the account's cached sign-in details once a change to them has
+   * been saved. `/auth/me` answers from that cache, so without this it kept
+   * returning the old name, photo, number or verified state until the entry
+   * expired, in the session that made the change and in the account's other
+   * sessions alike. Called after the write has committed: dropped any
+   * sooner, a request arriving in between would cache the old row again.
+   */
+  function forgetCachedAccount(userId: string): void {
+    evictCachedUserSessions(userId);
   }
 
   /**
@@ -462,7 +478,9 @@ export function createAuthService({
         withAvatarDatabaseLock(userId, (trx) => performUpdate(trx)),
       );
     }
-    return performUpdate();
+    const updated = await performUpdate();
+    forgetCachedAccount(userId);
+    return updated;
   }
 
   /**
@@ -665,6 +683,7 @@ export function createAuthService({
     if (!updatedUser) {
       throw new AppError(404, "USER_NOT_FOUND", "User account was not found.");
     }
+    forgetCachedAccount(userId);
   }
 
   async function verifyPhoneNumber(
@@ -737,6 +756,7 @@ export function createAuthService({
     if (!updatedUser) {
       throw new AppError(404, "USER_NOT_FOUND", "User account was not found.");
     }
+    forgetCachedAccount(userId);
   }
 
   async function deactivateAccount(userId: string): Promise<void> {
@@ -772,6 +792,10 @@ export function createAuthService({
         payload: { recipientUserId: userId },
       });
     });
+    // The sessions were dropped from the cache inside the transaction. A
+    // request arriving before the commit can have cached one again, so they
+    // are dropped once more now that the deactivation is saved.
+    forgetCachedAccount(userId);
   }
 
   async function getUserRoles(userId: string): Promise<string[]> {

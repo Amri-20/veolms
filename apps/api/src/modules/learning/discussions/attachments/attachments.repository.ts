@@ -84,6 +84,19 @@ export interface AttachmentsRepository {
   ): Promise<number>;
 
   /**
+   * Holds the account's upload allowance for the rest of the caller's
+   * transaction: another transaction asking for the same account waits
+   * until this one ends. Counting the allowance and recording an upload
+   * under it are then one step, where two requests arriving together used
+   * to count the same total and both go through. Call it inside a
+   * transaction; outside one it holds nothing.
+   */
+  lockOwnerUploadAllowance(
+    db: DatabaseExecutor,
+    ownerId: string,
+  ): Promise<void>;
+
+  /**
    * Uploads that were never attached to a post and are older than
    * `olderThan`, in id order, after `afterId`. Paged by id because an id
    * compares exactly; a timestamp read into the application loses the
@@ -213,6 +226,12 @@ export function createAttachmentsRepository(): AttachmentsRepository {
         .executeTakeFirst();
 
       return Number(row?.bytes ?? 0);
+    },
+
+    async lockOwnerUploadAllowance(db, ownerId) {
+      await sql`select pg_advisory_xact_lock(hashtext(${`veolms:discussion-upload-allowance:${ownerId}`}))`.execute(
+        db,
+      );
     },
 
     async listUnattachedAttachments(db, input) {

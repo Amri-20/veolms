@@ -7,13 +7,23 @@ import {
   SealCheckIcon as SealCheck,
   UserIcon as User,
 } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { PublicProfileResponse } from "@veolms/contracts";
 import { PageHeading } from "../components/PageHeading";
 import { PublicProfileCard } from "../components/PublicProfileCard";
 import { ResponsiveAvatar } from "../components/ResponsiveAvatar";
+import { NOT_FOUND_SECTION } from "../routing/routeDescriptors";
 import { usePublicProfile } from "../services/auth";
+import { resolvePublicProfileView } from "./publicProfileView";
 import "../styles/features/profile.css";
+
+// The app's own not-found screen, the one an address no page answers to
+// shows. Loaded only when a lookup finds no profile.
+const NotFoundPage = lazy(() =>
+  import("../courses/PlaceholderPage").then((module) => ({
+    default: module.PlaceholderPage,
+  })),
+);
 
 interface PublicProfilePageProps {
   username?: string;
@@ -113,10 +123,26 @@ export function PublicProfilePage({
 }: PublicProfilePageProps) {
   const {
     data: profile,
+    error,
     isError,
     isLoading,
     refetch,
   } = usePublicProfile(username);
+  const view = resolvePublicProfileView({
+    isLoading,
+    isError,
+    errorStatus: error?.status,
+    hasProfile: Boolean(profile),
+  });
+
+  if (view === "not-found") {
+    return (
+      <Suspense fallback={null}>
+        {/* The not-found screen is the same for every role. */}
+        <NotFoundPage section={NOT_FOUND_SECTION} role="student" />
+      </Suspense>
+    );
+  }
 
   return (
     <main
@@ -130,7 +156,7 @@ export function PublicProfilePage({
         onNavigateBack={onNavigateBack}
       />
 
-      {isLoading ? (
+      {view === "loading" ? (
         <section
           className="settings-profile__public-card"
           aria-label="Loading public profile"
@@ -145,7 +171,7 @@ export function PublicProfilePage({
             <span className="sr-only">Loading public profile</span>
           </div>
         </section>
-      ) : isError || !profile ? (
+      ) : view === "unavailable" || !profile ? (
         <section
           className="settings-profile__public-card"
           aria-label="Public profile details"

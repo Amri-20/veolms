@@ -10,6 +10,7 @@ import {
 import {
   Outlet,
   useLocation,
+  useMatches,
   useNavigate,
   useSearchParams,
 } from "react-router";
@@ -25,9 +26,10 @@ import {
   buildLoginDialogPath,
   resolveCourseAuthorRouteFallback,
   shouldRedirectFromCourseAuthorPath,
+  guestMayView,
   isGuestLandingPath,
+  isUnknownAddress,
   normalizeAppPath,
-  requiresAcademyAuth,
   resolveAuthenticatedDestination,
   resolveSessionAccess,
   hasCourseAuthorRole,
@@ -92,11 +94,14 @@ export function useAcademyRouteGuardState(): AcademyRouteGuardState {
 
 export function AcademyRouteGuard({ children }: { children: ReactNode }) {
   const location = useLocation();
+  const matches = useMatches();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { access, user, pending } = useSessionAccess();
   const path = normalizeAppPath(location.pathname);
-  const authenticationRequired = requiresAcademyAuth(path);
+  // An address no page answers to shows the not-found screen to everyone.
+  const addressUnknown = isUnknownAddress(matches, location.pathname);
+  const authenticationRequired = !guestMayView(path, addressUnknown);
   const isDashboardPath =
     path === "/" && access.isAuthenticated && hasCourseAuthorRole(user?.roles);
   const dashboardCapabilities = useCapabilities({
@@ -126,7 +131,7 @@ export function AcademyRouteGuard({ children }: { children: ReactNode }) {
     }
 
     if (!access.isAuthenticated) {
-      if (requiresAcademyAuth(path) && !isGuestLandingPath(path)) {
+      if (authenticationRequired && !isGuestLandingPath(path)) {
         const returnPath = `${location.pathname}${location.search}`;
         const destination = shouldPromptLoginFor(path)
           ? buildLoginDialogPath(returnPath)
@@ -158,6 +163,7 @@ export function AcademyRouteGuard({ children }: { children: ReactNode }) {
     access.isAuthenticated,
     access.isSessionReady,
     access.needsMfaChallenge,
+    authenticationRequired,
     courseAuthorRouteDenied,
     location.pathname,
     location.search,
@@ -172,7 +178,7 @@ export function AcademyRouteGuard({ children }: { children: ReactNode }) {
     (isDashboardPath && dashboardCapabilityPending) ||
     (!isGuestLandingPath(path) &&
       ((pending && authenticationRequired) ||
-        shouldBlockAcademyRender(path, access) ||
+        shouldBlockAcademyRender(path, access, addressUnknown) ||
         courseAuthorRouteDenied));
 
   const academyRouteGuardState = useMemo(
