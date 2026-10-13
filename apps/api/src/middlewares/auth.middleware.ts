@@ -1,4 +1,9 @@
-import type { FastifyReply, FastifyRequest } from "fastify";
+import type {
+  FastifyInstance,
+  FastifyReply,
+  FastifyRequest,
+  preValidationHookHandler,
+} from "fastify";
 import { config } from "../config.ts";
 import { httpError } from "../lib/errors.ts";
 import { ADMIN_ROLE } from "../modules/auth/shared/auth.constants.ts";
@@ -23,6 +28,58 @@ export interface AuthMiddleware {
   requireRoles: (
     roles: string[],
   ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+}
+
+/**
+ * The guards built in this file. They read the session cookie and the
+ * signed-in user only, never the params, query or body, so they are safe to
+ * run on input that has not been validated yet.
+ */
+const sessionGuards = new WeakSet<object>();
+
+function sessionGuard<Guard extends object>(guard: Guard): Guard {
+  sessionGuards.add(guard);
+  return guard;
+}
+
+/**
+ * Makes every route check the session before it validates the request.
+ *
+ * Routes list their guards under `preHandler`, which runs after validation,
+ * so a caller who was not signed in (or lacked the role) was told what was
+ * wrong with the request, field by field, instead of 401 or 403. The session
+ * guards a route starts its `preHandler` list with are moved to
+ * `preValidation`, in the same order. Everything from the first other guard
+ * on (permission checks that look a course or a lesson up by id, rate limits
+ * counted per account) stays after validation, so no unvalidated id reaches
+ * the database.
+ *
+ * Call it before the routes are registered.
+ */
+export function checkSessionBeforeValidation(app: FastifyInstance): void {
+  app.addHook("onRoute", (routeOptions) => {
+    const { preHandler, preValidation } = routeOptions;
+    if (!preHandler) return;
+
+    const handlers = Array.isArray(preHandler) ? preHandler : [preHandler];
+    let count = 0;
+    while (count < handlers.length && sessionGuards.has(handlers[count]!)) {
+      count += 1;
+    }
+    if (count === 0) return;
+
+    const earlier = preValidation
+      ? Array.isArray(preValidation)
+        ? preValidation
+        : [preValidation]
+      : [];
+    // New arrays: modules share one guard list between many routes.
+    routeOptions.preValidation = [
+      ...earlier,
+      ...(handlers.slice(0, count) as preValidationHookHandler[]),
+    ];
+    routeOptions.preHandler = handlers.slice(count);
+  });
 }
 
 export function createAuthMiddleware(
@@ -124,10 +181,10 @@ export function createAuthMiddleware(
    * be used AFTER authenticate + requireAuthenticated in the preHandler chain.
    */
   function requireRoles(roles: string[]) {
-    return async (
+    return sessionGuard(async function requireRolesGuard(
       request: FastifyRequest,
       reply: FastifyReply,
-    ): Promise<void> => {
+    ): Promise<void> {
       const user = request.user;
       if (sessionHasPendingMfa(request)) {
         return sendMfaRequired(reply);
@@ -144,14 +201,16 @@ export function createAuthMiddleware(
             ).toJSON(),
           );
       }
-    };
+    });
   }
 
   return {
-    authenticate,
-    requireAuthenticated,
-    requireMfaVerified,
-    requireMfaVerifiedIfAuthenticated,
+    authenticate: sessionGuard(authenticate),
+    requireAuthenticated: sessionGuard(requireAuthenticated),
+    requireMfaVerified: sessionGuard(requireMfaVerified),
+    requireMfaVerifiedIfAuthenticated: sessionGuard(
+      requireMfaVerifiedIfAuthenticated,
+    ),
     requireRoles,
   };
 }

@@ -1285,6 +1285,15 @@ export function createCourseService({
   }
 
   /**
+   * Id and slug of the published courses among those named (each by id or
+   * slug): what a learner may be told exists. For lists that only name
+   * courses, such as a wishlist.
+   */
+  async function listPublishedCourseRefs(courseIdsOrSlugs: readonly string[]) {
+    return courseRepo.findPublishedCourseRefs(database, courseIdsOrSlugs);
+  }
+
+  /**
    * Owner, status, access type and pricing type of a course addressed by id
    * or slug, in one query, for services that decide access themselves.
    */
@@ -1310,14 +1319,40 @@ export function createCourseService({
    * were guarded by a route permission only, so anyone holding that
    * permission could change ANY course. They go through the same ownership
    * gate as every other course mutation.
+   *
+   * Thumbnail and details accept the course `version` the caller last read.
+   * When it is sent, a course that has changed since is refused with the
+   * same 409 as the basics form; a caller that sends none is not checked.
    */
+  function assertDirectUpdateVersion(
+    course: { version: number },
+    expectedVersion: number | undefined,
+  ) {
+    if (expectedVersion !== undefined && course.version !== expectedVersion) {
+      throw new AppError(
+        409,
+        "OPTIMISTIC_LOCK_CONFLICT",
+        "Course has been updated by another action. Please reload.",
+      );
+    }
+  }
+
   async function updateCourseThumbnail(
     courseId: string,
     creatorId: string,
     userRoles: readonly string[] | undefined,
-    payload: { thumbnailUrl: string; thumbnailMediaId?: string | null },
+    payload: {
+      thumbnailUrl: string;
+      thumbnailMediaId?: string | null;
+      version?: number;
+    },
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    const course = await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+    );
+    assertDirectUpdateVersion(course, payload.version);
 
     // Same rule as updateCourseBasics: the asset must be an image the caller
     // owns. Unchecked, any media id could be attached here — and a media
@@ -1342,10 +1377,17 @@ export function createCourseService({
       }
     }
 
-    await courseRepo.updateCourseDirect(database, courseId, {
-      thumbnail_url: payload.thumbnailUrl,
-      thumbnail_media_id: payload.thumbnailMediaId ?? null,
-    });
+    const updateResult = await courseRepo.updateCourseDirect(
+      database,
+      courseId,
+      {
+        thumbnail_url: payload.thumbnailUrl,
+        thumbnail_media_id: payload.thumbnailMediaId ?? null,
+      },
+      payload.version,
+    );
+    // A write that landed between the read above and this one.
+    if (payload.version !== undefined) assertOptimisticUpdate(updateResult);
 
     const updated = await courseRepo.findCourseById(database, courseId);
     return await formatCourseDto(updated!);
@@ -1362,9 +1404,15 @@ export function createCourseService({
       language?: string;
       level?: "beginner" | "intermediate" | "advanced" | "all_levels";
       categoryId?: string | null;
+      version?: number;
     },
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    const course = await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+    );
+    assertDirectUpdateVersion(course, payload.version);
     await assertCategoryExists(payload.categoryId);
 
     const updates: Record<string, unknown> = {};
@@ -1379,7 +1427,13 @@ export function createCourseService({
     const difficulty = resolveDetailsLevelUpdate(payload.level);
     if (difficulty !== undefined) updates.difficulty = difficulty;
 
-    await courseRepo.updateCourseDirect(database, courseId, updates);
+    const updateResult = await courseRepo.updateCourseDirect(
+      database,
+      courseId,
+      updates,
+      payload.version,
+    );
+    if (payload.version !== undefined) assertOptimisticUpdate(updateResult);
     const updated = await courseRepo.findCourseById(database, courseId);
     return await formatCourseDto(updated!);
   }
@@ -1423,6 +1477,7 @@ export function createCourseService({
     findLessonById,
     findCourseById,
     listCourseCardsByIds,
+    listPublishedCourseRefs,
     findCourseAccessByIdOrSlug,
   };
 }

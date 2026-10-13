@@ -143,6 +143,7 @@ export const updateCourseDetailsSchema = z
       .enum(["beginner", "intermediate", "advanced", "all_levels"])
       .optional(),
     categoryId: z.string().uuid().optional().nullable(),
+    version: z.number().int().positive().optional(),
   })
   .strict();
 
@@ -154,6 +155,7 @@ export const updateCourseThumbnailSchema = z
   .object({
     thumbnailUrl: z.string().url().max(2048),
     thumbnailMediaId: z.string().uuid().optional().nullable(),
+    version: z.number().int().positive().optional(),
   })
   .strict();
 
