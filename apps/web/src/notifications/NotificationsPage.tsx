@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { CheckIcon as Check } from "@phosphor-icons/react/Check";
 import { BellIcon as Bell } from "@phosphor-icons/react/Bell";
 import { WarningCircleIcon as WarningCircle } from "@phosphor-icons/react/WarningCircle";
 import { ArrowClockwiseIcon as ArrowClockwise } from "@phosphor-icons/react/ArrowClockwise";
+import { usePageSearchShortcut } from "../hooks/usePageSearchShortcut";
 import type { NavigateTo } from "../routing/navigation";
 import { PageHeading } from "../components/PageHeading";
 import { NotificationCard } from "./NotificationCard";
@@ -68,26 +69,7 @@ export function NotificationsPage({
 
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  // Keyboard shortcut listener (/ or Cmd+K to search)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeTag = (document.activeElement?.tagName || "").toLowerCase();
-      const isInput =
-        activeTag === "input" ||
-        activeTag === "textarea" ||
-        (document.activeElement as HTMLElement)?.isContentEditable;
-
-      if (!isInput) {
-        if (e.key === "/" || ((e.metaKey || e.ctrlKey) && e.key === "k")) {
-          e.preventDefault();
-          document.getElementById("notifications-search-input")?.focus();
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  usePageSearchShortcut("notifications-search-input");
 
   return (
     <div

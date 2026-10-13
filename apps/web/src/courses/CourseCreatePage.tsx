@@ -2756,6 +2756,36 @@ export interface CourseCreatePageProps {
   bottomNavHidden?: boolean;
 }
 
+const getLessonInitialState = (les: CurriculumLessonItem): LessonSnapshot => {
+  return (
+    les.initialState || {
+      title: les.title,
+      description: les.description || "",
+      contentType: les.contentType,
+      contentMediaId: les.contentMediaId ?? null,
+      isPublished: les.isPublished !== undefined ? les.isPublished : true,
+      isPreview: les.isPreview !== undefined ? les.isPreview : false,
+    }
+  );
+};
+
+const isLessonDirty = (les: CurriculumLessonItem): boolean => {
+  const init = getLessonInitialState(les);
+  const isPub = les.isPublished !== undefined ? les.isPublished : true;
+  const isPrev = les.isPreview !== undefined ? les.isPreview : false;
+  const initPub = init.isPublished !== undefined ? init.isPublished : true;
+  const initPrev = init.isPreview !== undefined ? init.isPreview : false;
+
+  return (
+    les.title.trim() !== init.title.trim() ||
+    (les.description || "") !== (init.description || "") ||
+    les.contentType !== init.contentType ||
+    (les.contentMediaId ?? null) !== (init.contentMediaId ?? null) ||
+    isPub !== initPub ||
+    isPrev !== initPrev
+  );
+};
+
 export function CourseCreatePage({
   courseId: propCourseId,
   editCourseId: propEditCourseId,
@@ -3497,12 +3527,15 @@ export function CourseCreatePage({
   };
 
   useEffect(() => {
+    // The record is only ever mutated, never replaced: timers added after
+    // this point are in it when the cleanup runs.
+    const basicsFieldTimers = basicsFieldTimersRef.current;
     return () => {
       if (titleCreationDebounceTimerRef.current) {
         clearTimeout(titleCreationDebounceTimerRef.current);
         titleCreationDebounceTimerRef.current = null;
       }
-      Object.values(basicsFieldTimersRef.current).forEach((timer) => {
+      Object.values(basicsFieldTimers).forEach((timer) => {
         if (timer) clearTimeout(timer);
       });
       if (basicsSavedBrieflyTimerRef.current) {
@@ -3888,37 +3921,6 @@ export function CourseCreatePage({
     }
   };
 
-  // Curriculum Data interfaces
-  const getLessonInitialState = (les: CurriculumLessonItem): LessonSnapshot => {
-    return (
-      les.initialState || {
-        title: les.title,
-        description: les.description || "",
-        contentType: les.contentType,
-        contentMediaId: les.contentMediaId ?? null,
-        isPublished: les.isPublished !== undefined ? les.isPublished : true,
-        isPreview: les.isPreview !== undefined ? les.isPreview : false,
-      }
-    );
-  };
-
-  const isLessonDirty = (les: CurriculumLessonItem): boolean => {
-    const init = getLessonInitialState(les);
-    const isPub = les.isPublished !== undefined ? les.isPublished : true;
-    const isPrev = les.isPreview !== undefined ? les.isPreview : false;
-    const initPub = init.isPublished !== undefined ? init.isPublished : true;
-    const initPrev = init.isPreview !== undefined ? init.isPreview : false;
-
-    return (
-      les.title.trim() !== init.title.trim() ||
-      (les.description || "") !== (init.description || "") ||
-      les.contentType !== init.contentType ||
-      (les.contentMediaId ?? null) !== (init.contentMediaId ?? null) ||
-      isPub !== initPub ||
-      isPrev !== initPrev
-    );
-  };
-
   // Curriculum Step state
   const [sections, setSections] = useState<CurriculumSectionItem[]>([]);
   const sectionsRef = useRef(sections);
@@ -4110,8 +4112,11 @@ export function CourseCreatePage({
   };
 
   useEffect(() => {
+    // The record is only ever mutated, never replaced: timers added after
+    // this point are in it when the cleanup runs.
+    const curriculumItemTimers = curriculumItemTimersRef.current;
     return () => {
-      Object.values(curriculumItemTimersRef.current).forEach((timer) => {
+      Object.values(curriculumItemTimers).forEach((timer) => {
         if (timer) clearTimeout(timer);
       });
       if (curriculumSavedBrieflyTimerRef.current) {
@@ -4311,8 +4316,11 @@ export function CourseCreatePage({
   };
 
   useEffect(() => {
+    // The record is only ever mutated, never replaced: timers added after
+    // this point are in it when the cleanup runs.
+    const accessControlTimers = accessControlTimersRef.current;
     return () => {
-      Object.values(accessControlTimersRef.current).forEach((timer) => {
+      Object.values(accessControlTimers).forEach((timer) => {
         if (timer) clearTimeout(timer);
       });
       if (accessRulesSavedBrieflyTimerRef.current) {
@@ -4540,8 +4548,11 @@ export function CourseCreatePage({
   };
 
   useEffect(() => {
+    // The record is only ever mutated, never replaced: timers added after
+    // this point are in it when the cleanup runs.
+    const pricingControlTimers = pricingControlTimersRef.current;
     return () => {
-      Object.values(pricingControlTimersRef.current).forEach((timer) => {
+      Object.values(pricingControlTimers).forEach((timer) => {
         if (timer) clearTimeout(timer);
       });
       if (pricingSavedBrieflyTimerRef.current) {
@@ -4735,8 +4746,11 @@ export function CourseCreatePage({
   };
 
   useEffect(() => {
+    // The record is only ever mutated, never replaced: timers added after
+    // this point are in it when the cleanup runs.
+    const publishControlTimers = publishControlTimersRef.current;
     return () => {
-      Object.values(publishControlTimersRef.current).forEach((timer) => {
+      Object.values(publishControlTimers).forEach((timer) => {
         if (timer) clearTimeout(timer);
       });
       if (publishSavedBrieflyTimerRef.current) {
@@ -4813,8 +4827,11 @@ export function CourseCreatePage({
   };
 
   useEffect(() => {
+    // The record is only ever mutated, never replaced: timers added after
+    // this point are in it when the cleanup runs.
+    const extrasControlTimers = extrasControlTimersRef.current;
     return () => {
-      Object.values(extrasControlTimersRef.current).forEach((timer) => {
+      Object.values(extrasControlTimers).forEach((timer) => {
         if (timer) clearTimeout(timer);
       });
       if (extrasSavedBrieflyTimerRef.current) {

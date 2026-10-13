@@ -2,6 +2,7 @@ import {
   defaultRangeExtractor,
   useVirtualizer,
   useWindowVirtualizer,
+  type VirtualItem,
 } from "@tanstack/react-virtual";
 import {
   useCallback,
@@ -22,6 +23,7 @@ const LESSON_ROW_GAP = 10;
 // A zero-size first measurement mounts only the overscan rows until the
 // scroll element reports its actual viewport size.
 const INITIAL_VIRTUALIZER_RECT = { width: 1024, height: 768 };
+const NO_VIRTUAL_ITEMS: VirtualItem[] = [];
 const LESSON_FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"], audio[controls], video[controls], summary';
 
@@ -281,7 +283,9 @@ export function VirtualizedLessonList<T>({
   const virtualizer = useWindowScroll
     ? windowVirtualizer
     : scrollportVirtualizer;
-  const virtualItems = virtualized ? virtualizer.getVirtualItems() : [];
+  const virtualItems = virtualized
+    ? virtualizer.getVirtualItems()
+    : NO_VIRTUAL_ITEMS;
   const totalSize = virtualizer.getTotalSize();
 
   useLayoutEffect(() => {

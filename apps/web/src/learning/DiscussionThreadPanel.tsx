@@ -1909,7 +1909,7 @@ function ThreadReplyComposer({
     });
     setComposerKey(0);
     setSubmitError("");
-  }, [entry.clientId ?? entry.id]);
+  }, [entryKey]);
 
   useEffect(() => {
     if (!editorController || focusRequest <= 0) return;

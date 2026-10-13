@@ -746,6 +746,7 @@ function DiscussionInner({
           entity,
         );
       }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deletionRevision is not read here: it changes when the deletion coordinator read above does
     [deletionRevision, unifiedDiscussionItems],
   );
   useEffect(() => {
@@ -3996,6 +3997,7 @@ function ThreadSurface({
     });
 
     return indices;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deletionRevision is not read here: it changes when the deletion coordinator read above does
   }, [deletionRevision, editingEntryId, entries, noteDeepLinkTargetId]);
 
   const focusedNoteDeepLinkRef = useRef<string | null>(null);

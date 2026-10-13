@@ -3,16 +3,19 @@ import { useLocation, useMatches, useParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { CourseOverviewResponse } from "@veolms/contracts";
 import { courseKeys } from "../services/courses";
-import { getCourseDocumentTitle } from "./routeDescriptors";
+import { getCourseDocumentTitle, getCourseHeadTags } from "./routeDescriptors";
+import { useDocumentHeadTags } from "./useDocumentHeadTags";
 import { useDocumentTitle } from "./useDocumentTitle";
 
-const getServerCourseTitle = () => undefined;
+const getServerCourse = () => undefined;
 
 /**
  * On the course overview page, puts the course's own name in the tab title
- * once the page has fetched the course. It only reads what the page's own
- * request left in the query cache: it makes no request and does not take
- * part in that query, so the page loads exactly as before.
+ * and its description, picture and address in the head's description, share
+ * (`og:`) and canonical tags once the page has fetched the course; leaving
+ * the page puts those tags back. It only reads what the page's own request
+ * left in the query cache: it makes no request and does not take part in
+ * that query, so the page loads exactly as before.
  */
 export function useCourseOverviewDocumentTitle(active: boolean): void {
   const matches = useMatches();
@@ -25,20 +28,16 @@ export function useCourseOverviewDocumentTitle(active: boolean): void {
     (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
     [queryClient],
   );
-  const getCourseTitle = useCallback(
+  const getCourse = useCallback(
     () =>
       slug
         ? queryClient.getQueryData<CourseOverviewResponse>(
             courseKeys.overview(slug),
-          )?.course.title
+          )?.course
         : undefined,
     [queryClient, slug],
   );
-  const courseTitle = useSyncExternalStore(
-    subscribe,
-    getCourseTitle,
-    getServerCourseTitle,
-  );
+  const course = useSyncExternalStore(subscribe, getCourse, getServerCourse);
 
   useDocumentTitle(
     slug
@@ -47,8 +46,13 @@ export function useCourseOverviewDocumentTitle(active: boolean): void {
           { courseSlug: slug },
           pathname,
           matches,
-          { courseTitle },
+          { courseTitle: course?.title },
         )
+      : undefined,
+  );
+  useDocumentHeadTags(
+    course?.title.trim()
+      ? getCourseHeadTags(course, window.location.origin)
       : undefined,
   );
 }

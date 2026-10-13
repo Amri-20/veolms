@@ -3,8 +3,8 @@ import { useEffect } from "react";
 /**
  * Focuses a page's own search box on "/" or Ctrl/Cmd+K, unless something is
  * being typed into. The shell's shortcut (`useGlobalSearchShortcut`) takes
- * Ctrl+K or Cmd+K first, whichever the platform uses; this adds "/" and the
- * other modifier on the pages that had their own copy of it.
+ * Ctrl+K and Cmd+K first when it finds a search box to focus; this adds "/"
+ * and answers both modifiers when it does not.
  */
 export function usePageSearchShortcut(searchInputId: string) {
   useEffect(() => {
