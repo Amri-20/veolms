@@ -190,6 +190,7 @@ export function createOrderController({
       reason: request.body.reason,
       preserveAccess: request.body.preserveAccess ?? false,
       idempotencyKey: headerKey ?? bodyKey,
+      outsideRefund: request.body.outsideRefund,
     });
     return toRefundResult(refund);
   }

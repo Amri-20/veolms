@@ -5,7 +5,9 @@ import { CopyIcon as Copy } from "@phosphor-icons/react/Copy";
 import { WarningCircleIcon as WarningCircle } from "@phosphor-icons/react/WarningCircle";
 import {
   describeNeedsRefundEntry,
+  isReportedTransfer,
   needsRefundHeadline,
+  transferRejectionNote,
 } from "./needsRefundHelpers";
 import { RejectTransferRequestAction } from "./RejectTransferRequestAction";
 
@@ -25,10 +27,11 @@ const rowDividerClass =
 /**
  * Shown at the top of the staff Orders screen only while there is money to
  * return by hand: a gateway payment taken for an order that was already
- * paid, a course a learner paid for twice, or a transfer a learner reported
- * for an order that was then paid another way. Nothing here acts on its
- * own; it says what happened and what to do, and opens the order. The one
- * thing it does itself is close a reported transfer, when staff ask it to.
+ * paid, a course or a bundle a learner paid for twice, or a transfer a
+ * learner reported for an order that was then paid another way, cancelled
+ * or failed. Nothing here acts on its own; it says what happened and what
+ * to do, and opens the order. The one thing it does itself is close a
+ * reported transfer, when staff ask it to.
  */
 export const NeedsRefundNotice = memo(function NeedsRefundNotice({
   entries,
@@ -97,11 +100,12 @@ export const NeedsRefundNotice = memo(function NeedsRefundNotice({
                 <p className="mt-1 text-xs font-semibold leading-5 text-(--text)">
                   {lines.action}
                 </p>
-                {entry.kind === "manual_transfer_for_paid_order" && (
+                {isReportedTransfer(entry) && (
                   <div className="mt-2">
                     <RejectTransferRequestAction
                       requestId={entry.id}
                       orderNumber={lines.orderNumber}
+                      adminNotes={transferRejectionNote(entry)}
                       setNotice={setNotice}
                     />
                   </div>

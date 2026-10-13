@@ -95,7 +95,10 @@ import { ShellDragSurface } from "./shell/ShellDragSurface";
 import { SidebarResizeReadout } from "./shell/SidebarResizeReadout";
 import { SidebarToggleIcon } from "./shell/SidebarToggleIcon";
 import { useCurrentUser, useSignOut } from "./services/auth";
-import { COURSE_CATALOGUE_SEARCH_SESSION_KEY } from "./store/accountBrowserState";
+import {
+  COURSE_CATALOGUE_SEARCH_SESSION_KEY,
+  forgetLegacyLearningProgress,
+} from "./store/accountBrowserState";
 import {
   authStore,
   useAuthIdentityHint,
@@ -245,6 +248,8 @@ import {
   useSessionStorageState,
 } from "./learning/useSessionStorageState";
 import { LearningBackgroundSurface } from "./learning/LearningBackgroundSurface";
+import { getCatalogueCardProgressPercent } from "./learning/catalogueCardProgress";
+import { readLearningProgress } from "./learning/learningProgressStorage";
 import {
   persistReadingModePreferences,
   readReadingModePreferences,
@@ -2886,6 +2891,12 @@ export function CoursesPage({
     };
   }, [compactNavigation, effectiveRole, navigation, sidebarMode]);
 
+  // The course cards no longer read the player's old browser-wide progress
+  // maps; what earlier visits left behind is removed.
+  useEffect(() => {
+    forgetLegacyLearningProgress();
+  }, []);
+
   const allCourses = useMemo(() => {
     if (effectiveRole !== "creator") {
       const enrolledSet = new Set<string>();
@@ -2899,55 +2910,25 @@ export function CoursesPage({
         }
       }
       if (typeof window !== "undefined") {
+        const signedInUserId = authUser?.id;
         for (const ec of enrolledCoursesData?.courses || []) {
-          try {
-            const courseKey = encodeURIComponent(ec.courseSlug);
-            const serverProgress =
-              typeof ec.progress === "number" && Number.isFinite(ec.progress)
-                ? Math.max(0, Math.min(100, Math.round(ec.progress)))
-                : null;
-            const total = ec.totalLessons > 0 ? ec.totalLessons : 84;
-            let localEstimate: number | null = null;
+          // The server's figure, plus what this account has watched here
+          // and not sent yet (see `getCatalogueCardProgressPercent`).
+          //
+          // The last-opened lesson is a resume pointer, not progress. It
+          // used to stand in for it: opening lesson 45 of 50 showed 90%
+          // on a course the learner had barely started.
+          const nextProgress = getCatalogueCardProgressPercent({
+            signedIn: Boolean(signedInUserId),
+            serverPercent: ec.progress,
+            totalLessons: ec.totalLessons,
+            localItems: readLearningProgress(signedInUserId, ec.courseSlug)
+              .items,
+          });
 
-            const detailedProgStr = localStorage.getItem(
-              `veolms-learning-${courseKey}-progress`,
-            );
-            if (detailedProgStr) {
-              const progMap = JSON.parse(detailedProgStr) as Record<
-                string,
-                number
-              >;
-              const vals = Object.values(progMap).filter(
-                (value) => typeof value === "number" && Number.isFinite(value),
-              );
-              // Sparse session maps (often 1 lesson) must not replace server %.
-              // Only trust local when it covers a meaningful share of the course.
-              if (
-                vals.length > 0 &&
-                vals.length >= Math.min(10, total * 0.05)
-              ) {
-                const sum = vals.reduce((a, b) => a + b, 0);
-                localEstimate = Math.min(100, Math.round(sum / total));
-              }
-            }
-
-            // The last-opened lesson is a resume pointer, not progress. It
-            // used to stand in for it: opening lesson 45 of 50 showed 90%
-            // on a course the learner had barely started.
-
-            const nextProgress =
-              serverProgress == null
-                ? localEstimate
-                : localEstimate == null
-                  ? serverProgress
-                  : Math.max(serverProgress, localEstimate);
-
-            if (nextProgress != null) {
-              progressMap.set(ec.courseId, nextProgress);
-              if (ec.courseSlug) progressMap.set(ec.courseSlug, nextProgress);
-            }
-          } catch {
-            // Ignore storage errors
+          if (nextProgress != null) {
+            progressMap.set(ec.courseId, nextProgress);
+            if (ec.courseSlug) progressMap.set(ec.courseSlug, nextProgress);
           }
         }
       }
@@ -2962,6 +2943,7 @@ export function CoursesPage({
     }
     return (myCoursesData?.courses || []).map(adaptApiCourseToCatalogueCourse);
   }, [
+    authUser?.id,
     deletedCoursesData?.courses,
     effectiveRole,
     enrollmentFilter,

@@ -134,6 +134,21 @@ export interface OrderItemTable {
   created_at: Generated<Date>;
 }
 
+/**
+ * Which courses an order item granted when its order was fulfilled: one row
+ * for a course item, one per course for a bundle item (its contents at that
+ * moment). Append-only. See the migration that creates it for what is and is
+ * not filled in for orders paid before it existed.
+ */
+export interface OrderItemCourseTable {
+  id: Generated<string>;
+  order_item_id: string;
+  order_id: string;
+  user_id: string;
+  course_id: string;
+  granted_at: Generated<Date>;
+}
+
 export interface PaymentTable {
   id: string;
   order_id: string;

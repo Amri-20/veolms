@@ -8,12 +8,13 @@ export interface RejectTransferRequestActionProps {
   requestId: string;
   /** The order it was reported for, as the row shows it: "#ORD-...". */
   orderNumber: string;
+  /**
+   * Kept with the request, so the review queue says why it was closed: the
+   * order was paid another way, was cancelled, or failed.
+   */
+  adminNotes: string;
   setNotice?: (message: string) => void;
 }
-
-/** Kept with the request, so the review queue says why it was closed. */
-const REJECTION_NOTE =
-  "Rejected from the Orders screen: the order was paid another way.";
 
 const actionClass =
   "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 transition-colors cursor-pointer disabled:pointer-events-none disabled:opacity-50";
@@ -27,8 +28,9 @@ const labelClass = "text-[11px] font-semibold";
 
 /**
  * Closes a transfer a learner reported for an order that was then paid
- * another way: the last step of dealing with one, after the bank account
- * has been checked and anything that arrived has been sent back. Asks once
+ * another way, cancelled or failed: the last step of dealing with one,
+ * after the bank account has been checked and anything that arrived has
+ * been sent back (or the learner has been asked to buy again). Asks once
  * more first, because a rejected request cannot be reopened. Rejecting
  * changes nothing else: the order, its payment and the learner's access
  * stay as they are.
@@ -41,6 +43,7 @@ export const RejectTransferRequestAction = memo(
   function RejectTransferRequestAction({
     requestId,
     orderNumber,
+    adminNotes,
     setNotice,
   }: RejectTransferRequestActionProps) {
     const rejectRequest = useRejectManualPayment();
@@ -50,10 +53,7 @@ export const RejectTransferRequestAction = memo(
     // the time this settles, and callbacks of an unmounted row do not run.
     const reject = async () => {
       try {
-        await rejectRequest.mutateAsync({
-          requestId,
-          adminNotes: REJECTION_NOTE,
-        });
+        await rejectRequest.mutateAsync({ requestId, adminNotes });
         setNotice?.(`Transfer request for order ${orderNumber} rejected.`);
       } catch (error) {
         setConfirming(false);

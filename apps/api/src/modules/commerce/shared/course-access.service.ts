@@ -7,6 +7,7 @@ import * as courseConfigRepo from "../../courses/configuration/configuration.rep
 import * as bundleRepo from "../bundles/bundle.repository.ts";
 import * as enrollmentRepo from "../enrollments/enrollment.repository.ts";
 import * as orderRepo from "../orders/order.repository.ts";
+import * as orderItemCoursesRepo from "../orders/order-item-courses.repository.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -20,6 +21,11 @@ export interface OrderItemRefLike {
   course_id: string | null;
   bundle_id: string | null;
   quiz_pricing_id?: string | null;
+}
+
+/** An order item being fulfilled: the row itself, so what it grants can be noted against it. */
+export interface FulfilledOrderItemLike extends OrderItemRefLike {
+  id: string;
 }
 
 /**
@@ -38,11 +44,20 @@ export interface CourseAccessService {
    * items resolve to (expanding bundle items to their member courses and fulfilling quizzes).
    * Returns the flat list of granted course IDs (callers use the count for
    * FinalizePaymentResult.enrollmentCount).
+   *
+   * Also notes, in `order_item_courses`, which courses each item granted:
+   * a course item its course, a bundle item every course it holds right
+   * now. That is the only record of what a bundle order was sold with (the
+   * grant and the enrollment are one row per buyer and course, taken over
+   * by each later purchase), and it is what lets two paid orders be
+   * compared course by course. Written with the same executor as the grant,
+   * so inside the caller's transaction; running this again for the same
+   * order adds nothing and changes nothing already noted.
    */
   grantAccessForOrder(
     database: Executor,
     order: OrderRefLike,
-    orderItems: OrderItemRefLike[],
+    orderItems: FulfilledOrderItemLike[],
     validFrom?: Date,
   ): Promise<string[]>;
 
@@ -153,11 +168,21 @@ export function createCourseAccessService({
   async function grantAccessForOrder(
     database: Executor,
     order: OrderRefLike,
-    orderItems: OrderItemRefLike[],
+    orderItems: FulfilledOrderItemLike[],
     validFrom?: Date,
   ): Promise<string[]> {
     const now = validFrom ?? new Date();
     const enrolledCourseIds: string[] = [];
+    const granted: orderItemCoursesRepo.OrderItemCourseRecord[] = [];
+    const noteGranted = (item: FulfilledOrderItemLike, courseId: string) => {
+      granted.push({
+        order_item_id: item.id,
+        order_id: order.id,
+        user_id: order.user_id,
+        course_id: courseId,
+        granted_at: now,
+      });
+    };
 
     for (const item of orderItems) {
       if (item.item_type === "course" && item.course_id) {
@@ -187,6 +212,7 @@ export function createCourseAccessService({
           updated_at: now,
         });
         enrolledCourseIds.push(item.course_id);
+        noteGranted(item, item.course_id);
       } else if (item.item_type === "bundle" && item.bundle_id) {
         const bundleCourses = await bundleRepo.listBundleCourses(
           database,
@@ -219,6 +245,7 @@ export function createCourseAccessService({
             updated_at: now,
           });
           enrolledCourseIds.push(bc.course_id);
+          noteGranted(item, bc.course_id);
         }
       } else if (item.item_type === "quiz" && item.quiz_pricing_id) {
         const offering = await quizPricingRepo.findPricingById(
@@ -243,6 +270,8 @@ export function createCourseAccessService({
         }
       }
     }
+
+    await orderItemCoursesRepo.recordOrderItemCourses(database, granted);
 
     return enrolledCourseIds;
   }

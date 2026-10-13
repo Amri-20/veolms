@@ -1,10 +1,11 @@
 import type { FastifyBaseLogger } from "fastify";
+import { withoutCoursesOfDuplicateBundles } from "../orders/needs-refund.mapper.ts";
 import * as needsRefundRepo from "../orders/needs-refund.repository.ts";
 import type { Executor } from "../shared/repository.types.ts";
 
 /**
  * A duplicate purchase: one buyer, two paid orders, the same course in
- * both.
+ * both (on its own or inside a bundle), or the same bundle in both.
  *
  * It happens because a gateway order cannot be withdrawn. When a new
  * checkout replaces a buyer's older unpaid order for the same items, the
@@ -24,11 +25,9 @@ import type { Executor } from "../shared/repository.types.ts";
  * This file is the alert raised at the moment a capture creates one.
  */
 export const DUPLICATE_PURCHASE_LOG_MESSAGE =
-  "Order paid for a course the buyer already holds another paid order for; nothing was refunded and access is unchanged. Refund the later order from the Orders screen";
+  "Order paid for a course or bundle the buyer already holds another paid order for; nothing was refunded and access is unchanged. Refund the later order from the Orders screen";
 
-export interface DuplicatePurchaseNotice {
-  courseId: string;
-  courseTitle: string;
+interface DuplicateOrdersNotice {
   /** The later-paid order: the one to refund. */
   refundOrderId: string;
   refundOrderNumber: string;
@@ -36,32 +35,70 @@ export interface DuplicatePurchaseNotice {
   earlierOrderNumber: string;
 }
 
+/** One course that both orders granted. */
+export interface DuplicateCourseNotice extends DuplicateOrdersNotice {
+  courseId: string;
+  courseTitle: string;
+  /** The bundle the later order holds the course in, when it does. */
+  bundleTitle: string | null;
+  /** The bundle the earlier order holds the course in, when it does. */
+  earlierBundleTitle: string | null;
+}
+
+/** One bundle that both orders hold: said once, not once per course. */
+export interface DuplicateBundleNotice extends DuplicateOrdersNotice {
+  bundleId: string;
+  bundleTitle: string;
+}
+
+export type DuplicatePurchaseNotice =
+  DuplicateCourseNotice | DuplicateBundleNotice;
+
 /** The duplicate purchases, if any, that `orderId` is one half of. */
 export async function findDuplicatePurchasesForOrder(
   database: Executor,
   order: { id: string; userId: string },
 ): Promise<DuplicatePurchaseNotice[]> {
-  const rows = await needsRefundRepo.listDuplicatePurchases(database, {
-    userId: order.userId,
+  const { courses, bundles } = await needsRefundRepo.listDuplicatePurchases(
+    database,
+    { userId: order.userId },
+  );
+  const isAboutOrder = (row: { order_id: string; earlier_order_id: string }) =>
+    row.order_id === order.id || row.earlier_order_id === order.id;
+  const orders = (row: {
+    order_id: string;
+    order_number: string;
+    earlier_order_id: string;
+    earlier_order_number: string;
+  }): DuplicateOrdersNotice => ({
+    refundOrderId: row.order_id,
+    refundOrderNumber: row.order_number,
+    earlierOrderId: row.earlier_order_id,
+    earlierOrderNumber: row.earlier_order_number,
   });
-  return rows
-    .filter(
-      (row) => row.order_id === order.id || row.earlier_order_id === order.id,
-    )
-    .map((row) => ({
-      courseId: row.course_id,
-      courseTitle: row.title_snapshot,
-      refundOrderId: row.order_id,
-      refundOrderNumber: row.order_number,
-      earlierOrderId: row.earlier_order_id,
-      earlierOrderNumber: row.earlier_order_number,
-    }));
+  return [
+    ...bundles.filter(isAboutOrder).map((row) => ({
+      bundleId: row.bundle_id,
+      bundleTitle: row.title_snapshot,
+      ...orders(row),
+    })),
+    // As on the staff list: the same bundle in both orders is told once.
+    ...withoutCoursesOfDuplicateBundles(courses, bundles)
+      .filter(isAboutOrder)
+      .map((row) => ({
+        courseId: row.course_id,
+        courseTitle: row.title_snapshot,
+        bundleTitle: row.bundle_title,
+        earlierBundleTitle: row.earlier_bundle_title,
+        ...orders(row),
+      })),
+  ];
 }
 
 /**
  * Called after a capture has made an order paid. Logs, as an error on
  * purpose (someone has to return this money), when that left the buyer with
- * two paid orders for one course.
+ * two paid orders for one course or one bundle.
  *
  * Run after the payment's transaction has committed and never allowed to
  * fail it: the payment is final by now, and the Orders screen lists the

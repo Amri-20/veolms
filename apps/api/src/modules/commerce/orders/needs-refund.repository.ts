@@ -102,11 +102,29 @@ export async function listSurplusPaymentsToReturn(
   return result.rows;
 }
 
-export interface ManualTransferForPaidOrderRow {
+/** Order statuses in which the order was paid, by some other payment. */
+const PAID_ORDER_STATUSES = ["paid", "partially_refunded", "refunded"] as const;
+
+/**
+ * Order statuses that were never paid and cannot be paid any more:
+ * verifying a transfer for one is refused (order.repository.ts's
+ * markOrderPaidIfPending takes `pending`, `payment_processing` and
+ * `expired` only).
+ */
+export const CLOSED_UNPAID_ORDER_STATUSES = [
+  "cancelled",
+  "payment_failed",
+] as const;
+export type ClosedUnpaidOrderStatus =
+  (typeof CLOSED_UNPAID_ORDER_STATUSES)[number];
+
+export interface StuckManualTransferRow {
   /** The manual payment request. */
   id: string;
   order_id: string;
   order_number: string;
+  /** Why the request can no longer be verified. */
+  order_status: (typeof PAID_ORDER_STATUSES)[number] | ClosedUnpaidOrderStatus;
   user_id: string;
   /** Major units, as order columns are stored. */
   total_amount: number;
@@ -120,20 +138,28 @@ export interface ManualTransferForPaidOrderRow {
 }
 
 /**
- * Transfers reported for an order that was then paid another way, newest
- * first by when they were reported: manual payment requests still `pending`
- * whose order is `paid`, `partially_refunded` or `refunded`. A pending
- * request has paid for nothing, so whatever paid the order was a different
- * payment, and verifying the request is refused from then on. If the buyer
- * did send the transfer, the academy holds it with no row to show for it.
+ * Reported transfers that can no longer be verified, newest first by when
+ * they were reported: manual payment requests still `pending` whose order
+ * will not take a payment any more. Two ways that happens:
+ *
+ *  - the order was paid another way (`paid`, `partially_refunded` or
+ *    `refunded`). A pending request has paid for nothing, so whatever paid
+ *    the order was a different payment;
+ *  - the order was closed without being paid (`cancelled` or
+ *    `payment_failed`). Nothing was granted for it.
+ *
+ * Either way verifying the request is refused from then on, so it would
+ * wait for good; and if the buyer did send the transfer, the academy holds
+ * it with no row to show for it. `order_status` says which of the two it is.
  *
  * What counts, and why:
  *
  *  - Only `pending` requests. Rejecting one (the review action that
  *    already exists) is how staff say it has been dealt with, and takes it
  *    off the list. A verified one is the payment that paid its order.
- *  - Only orders that were paid. A request waiting on an unpaid order is
- *    the ordinary review queue, not money to return.
+ *  - Not an order that is still open (`pending`, `payment_processing`) or
+ *    has only run out of time (`expired`): verifying the request still pays
+ *    that order. That is the ordinary review queue, not money to return.
  *  - A refunded order still counts: the refund returned the other payment,
  *    not this transfer.
  *  - Not a request whose reference is already recorded as a verified manual
@@ -151,16 +177,21 @@ export interface ManualTransferForPaidOrderRow {
  * and usually nothing to find; kept apart, it is not made at all while no
  * request is waiting on a paid order.
  */
-export async function listManualTransfersForPaidOrders(
+export async function listStuckManualTransfers(
   database: Executor,
   { cursor, limit }: NeedsRefundPage,
-): Promise<ManualTransferForPaidOrderRow[]> {
-  const result = await sql<ManualTransferForPaidOrderRow>`
+): Promise<StuckManualTransferRow[]> {
+  const stuckOrderStatuses = [
+    ...PAID_ORDER_STATUSES,
+    ...CLOSED_UNPAID_ORDER_STATUSES,
+  ];
+  const result = await sql<StuckManualTransferRow>`
     with waiting as materialized (
       select
         m.id,
         m.order_id,
         o.order_number,
+        o.status as order_status,
         o.user_id,
         o.total_amount,
         o.currency,
@@ -170,7 +201,7 @@ export async function listManualTransfersForPaidOrders(
       from manual_payment_requests m
       join orders o on o.id = m.order_id
       where m.status = 'pending'
-        and o.status in ('paid', 'partially_refunded', 'refunded')
+        and o.status = any(${stuckOrderStatuses}::text[])
         and ${
           cursor
             ? sql`(m.created_at, m.id) < (${cursor.paidAt}::timestamptz, ${cursor.id}::uuid)`
@@ -199,11 +230,8 @@ export async function listManualTransfersForPaidOrders(
   return result.rows;
 }
 
-export interface DuplicatePurchaseRow {
-  /** The later order's item for the course. */
-  id: string;
-  course_id: string;
-  title_snapshot: string;
+/** What the two kinds of duplicate have in common: the two orders. */
+interface DuplicateOrdersRow {
   user_id: string;
   currency: string;
   /** The later-paid order: the one to refund. */
@@ -220,26 +248,106 @@ export interface DuplicatePurchaseRow {
   /** Major units. */
   earlier_final_amount: number;
   earlier_paid_at: Date;
-  /** Minor units, like every refund amount. Text: a Postgres bigint. */
+  /**
+   * Every processed refund on the later order. Minor units, like every
+   * refund amount. Text: a Postgres bigint.
+   */
   refunded_amount: string;
   gateway_provider: string | null;
   gateway_payment_id: string | null;
 }
 
+export interface DuplicatePurchaseRow extends DuplicateOrdersRow {
+  /**
+   * The later order's item for the course; when that item is a bundle, the
+   * record of it granting this course (one bundle item, several courses).
+   */
+  id: string;
+  /** The later order's item that holds the course. */
+  order_item_id: string;
+  course_id: string;
+  /** The course's name: as the order names it, for a course item. */
+  title_snapshot: string;
+  /** Set when the later order holds the course inside a bundle. */
+  bundle_title: string | null;
+  /** Set when the earlier order holds the course inside a bundle. */
+  earlier_bundle_title: string | null;
+  /**
+   * Processed refunds on the later order that were not made against one of
+   * its items. Minor units, as text.
+   */
+  order_level_refunded_amount: string;
+}
+
+export interface DuplicateBundlePurchaseRow extends DuplicateOrdersRow {
+  /** The later order's item for the bundle. */
+  id: string;
+  bundle_id: string;
+  /** The bundle's name, as the later order names it. */
+  title_snapshot: string;
+}
+
+export interface DuplicatePurchases {
+  /** One course granted by two paid orders. */
+  courses: DuplicatePurchaseRow[];
+  /** One bundle held by two paid orders. */
+  bundles: DuplicateBundlePurchaseRow[];
+}
+
+/** An item that has been refunded, or has a refund under way. */
+const itemRefunded = (itemId: string) => sql`
+  exists (
+    select 1
+    from refunds r
+    where r.order_item_id = ${sql.ref(itemId)}
+      and r.status in ('pending', 'processed')
+  )`;
+
+/**
+ * What both duplicate queries end with: the later order's refunds so far and
+ * the payment that paid it. Reads from a CTE named `later`.
+ */
+const laterOrderMoney = sql`
+      (
+        select coalesce(sum(r.amount), 0)::bigint
+        from refunds r
+        where r.order_id = later.order_id and r.status = 'processed'
+      ) as refunded_amount,
+      pay.gateway_provider,
+      pay.gateway_payment_id
+    from later
+    left join lateral (
+      select p.gateway_provider, p.gateway_payment_id
+      from payments p
+      where p.order_id = later.order_id
+        and p.status = 'captured'
+        and p.error_code is distinct from ${SURPLUS_CAPTURE_ERROR_CODE}
+      order by p.created_at desc, p.id desc
+      limit 1
+    ) pay on true`;
+
 /**
  * Duplicate purchases, newest first: a buyer holding two orders, each paid
- * (`paid` or `partially_refunded`), that both contain the same course as a
- * course item. One row per later order; `earlier_*` is the order holding
- * that course that was paid just before it. (A course paid for three times
- * gives two rows: the second order against the first, the third against
- * the second.)
+ * (`paid` or `partially_refunded`), that both granted the same course
+ * (`courses`) or both contain the same bundle (`bundles`). One row per
+ * later order's course or bundle; `earlier_*` is the order holding it that
+ * was paid just before. (A course paid for three times gives two rows: the
+ * second order against the first, the third against the second.)
  *
  * What counts, and why:
  *
- *  - Course items only. A course that is also inside a bought bundle is not
- *    a duplicate: checkout allows a bundle while some of its courses are
- *    already owned, and `course_bundle_items` is the bundle as it is today,
- *    not as it was sold.
+ *  - Courses are compared through `order_item_courses`, the note written
+ *    when an order is fulfilled of which courses each of its items granted
+ *    (course-access.service.ts's grantAccessForOrder): a course item's
+ *    course, and every course a bundle item held at that moment. So a
+ *    course bought on its own and again inside a bundle, or inside two
+ *    different bundles, is a duplicate, and a bundle that was edited after
+ *    it was sold is compared as it was sold. `course_bundle_items` is the
+ *    bundle as it is today and is not used.
+ *  - A bundle order paid before that note existed has no rows (what it was
+ *    sold with is not known) and is not compared course by course.
+ *  - Bundles are compared by `order_items.bundle_id` alone, which every
+ *    order has, whatever its age.
  *  - An item that has itself been refunded (or has a refund under way) no
  *    longer holds the course, exactly as in order.repository.ts's
  *    findOtherPaidOrderCoveringCourse. A fully refunded order is not
@@ -248,10 +356,15 @@ export interface DuplicatePurchaseRow {
  *    paid: both were open at once. That is the only way one course gets
  *    paid for twice by accident. Once an order is paid the buyer holds the
  *    course, and checkout refuses to create or continue another order for
- *    it; an order created after that means the buyer no longer held the
- *    course (access ran out or was taken away) and chose to buy it again,
- *    which is not money to return.
+ *    it (for a bundle: once every course in it is held); an order created
+ *    after that means the buyer chose to buy again, which is not money to
+ *    return.
  *  - A later item that cost nothing leaves nothing to return.
+ *
+ * The two lists overlap on purpose: two orders holding the same bundle are
+ * in `bundles` once and, when both have their notes, in `courses` once per
+ * course of the bundle. Which of those to show is not decided here (see
+ * needs-refund.mapper.ts's withoutCoursesOfDuplicateBundles).
  *
  * How it is read: in two steps, on purpose. Comparing every paid order's
  * items with every other's is a join over the whole orders table, so the
@@ -273,15 +386,109 @@ export interface DuplicatePurchaseRow {
 export async function listDuplicatePurchases(
   database: Executor,
   { userId }: { userId?: string } = {},
-): Promise<DuplicatePurchaseRow[]> {
+): Promise<DuplicatePurchases> {
   const candidateOrderIds = await listOverlappingPaidOrderIds(database, userId);
-  if (candidateOrderIds.length === 0) return [];
+  if (candidateOrderIds.length === 0) return { courses: [], bundles: [] };
 
-  const result = await sql<DuplicatePurchaseRow>`
+  const courses = await sql<DuplicatePurchaseRow>`
     with later as (
       select
-        oi.id as item_id,
-        oi.course_id,
+        case when oi.item_type = 'course' then oi.id else oic.id end as id,
+        oi.id as order_item_id,
+        oic.course_id,
+        case
+          when oi.item_type = 'course' then oi.title_snapshot
+          else c.title
+        end as title_snapshot,
+        case
+          when oi.item_type = 'bundle' then oi.title_snapshot
+        end as bundle_title,
+        oi.final_amount,
+        o.id as order_id,
+        o.order_number,
+        o.user_id,
+        o.currency,
+        o.total_amount,
+        coalesce(o.paid_at, o.created_at) as paid_at,
+        earlier.order_id as earlier_order_id,
+        earlier.order_number as earlier_order_number,
+        earlier.final_amount as earlier_final_amount,
+        earlier.bundle_title as earlier_bundle_title,
+        earlier.paid_at as earlier_paid_at
+      from orders o
+      join order_items oi on oi.order_id = o.id
+      join order_item_courses oic on oic.order_item_id = oi.id
+      join courses c on c.id = oic.course_id
+      join lateral (
+        -- The order that granted this course and was paid just before.
+        select
+          e.id as order_id,
+          e.order_number,
+          ei.final_amount,
+          case
+            when ei.item_type = 'bundle' then ei.title_snapshot
+          end as bundle_title,
+          coalesce(e.paid_at, e.created_at) as paid_at
+        from order_item_courses eic
+        join orders e on e.id = eic.order_id
+        join order_items ei on ei.id = eic.order_item_id
+        where eic.user_id = o.user_id
+          and eic.course_id = oic.course_id
+          and e.id <> o.id
+          and e.status in ('paid', 'partially_refunded')
+          and (coalesce(e.paid_at, e.created_at), e.created_at, e.id)
+            < (coalesce(o.paid_at, o.created_at), o.created_at, o.id)
+          and not ${itemRefunded("ei.id")}
+        order by
+          coalesce(e.paid_at, e.created_at) desc,
+          e.created_at desc,
+          e.id desc,
+          -- One order holding the course twice: its course item speaks.
+          ei.item_type = 'course' desc,
+          ei.id
+        limit 1
+      ) earlier on true
+      where o.id = any(${candidateOrderIds}::uuid[])
+        and o.status in ('paid', 'partially_refunded')
+        and oi.final_amount > 0
+        and o.created_at < earlier.paid_at
+        and not ${itemRefunded("oi.id")}
+    )
+    select
+      later.id,
+      later.order_item_id,
+      later.course_id,
+      later.title_snapshot,
+      later.bundle_title,
+      later.user_id,
+      later.currency,
+      later.order_id,
+      later.order_number,
+      later.final_amount,
+      later.total_amount,
+      later.paid_at,
+      ${cursorText("later.paid_at")} as paid_at_cursor,
+      later.earlier_order_id,
+      later.earlier_order_number,
+      later.earlier_final_amount,
+      later.earlier_bundle_title,
+      later.earlier_paid_at,
+      (
+        select coalesce(sum(r.amount), 0)::bigint
+        from refunds r
+        where r.order_id = later.order_id
+          and r.status = 'processed'
+          and r.order_item_id is null
+      ) as order_level_refunded_amount,
+      ${laterOrderMoney}
+    order by later.paid_at desc, later.id desc
+  `.execute(database);
+
+  const bundles = await sql<DuplicateBundlePurchaseRow>`
+    with later as (
+      select
+        oi.id,
+        oi.bundle_id,
         oi.title_snapshot,
         oi.final_amount,
         o.id as order_id,
@@ -297,7 +504,7 @@ export async function listDuplicatePurchases(
       from orders o
       join order_items oi on oi.order_id = o.id
       join lateral (
-        -- The order holding this course that was paid just before.
+        -- The order holding this bundle that was paid just before.
         select
           e.id as order_id,
           e.order_number,
@@ -308,34 +515,29 @@ export async function listDuplicatePurchases(
         where e.user_id = o.user_id
           and e.id <> o.id
           and e.status in ('paid', 'partially_refunded')
-          and ei.item_type = 'course'
-          and ei.course_id = oi.course_id
+          and ei.item_type = 'bundle'
+          and ei.bundle_id = oi.bundle_id
           and (coalesce(e.paid_at, e.created_at), e.created_at, e.id)
             < (coalesce(o.paid_at, o.created_at), o.created_at, o.id)
-          and not exists (
-            select 1
-            from refunds r
-            where r.order_item_id = ei.id
-              and r.status in ('pending', 'processed')
-          )
-        order by coalesce(e.paid_at, e.created_at) desc, e.created_at desc, e.id desc
+          and not ${itemRefunded("ei.id")}
+        order by
+          coalesce(e.paid_at, e.created_at) desc,
+          e.created_at desc,
+          e.id desc,
+          ei.id
         limit 1
       ) earlier on true
       where o.id = any(${candidateOrderIds}::uuid[])
         and o.status in ('paid', 'partially_refunded')
-        and oi.item_type = 'course'
+        and oi.item_type = 'bundle'
+        and oi.bundle_id is not null
         and oi.final_amount > 0
         and o.created_at < earlier.paid_at
-        and not exists (
-          select 1
-          from refunds r
-          where r.order_item_id = oi.id
-            and r.status in ('pending', 'processed')
-        )
+        and not ${itemRefunded("oi.id")}
     )
     select
-      later.item_id as id,
-      later.course_id,
+      later.id,
+      later.bundle_id,
       later.title_snapshot,
       later.user_id,
       later.currency,
@@ -349,26 +551,11 @@ export async function listDuplicatePurchases(
       later.earlier_order_number,
       later.earlier_final_amount,
       later.earlier_paid_at,
-      (
-        select coalesce(sum(r.amount), 0)::bigint
-        from refunds r
-        where r.order_id = later.order_id and r.status = 'processed'
-      ) as refunded_amount,
-      pay.gateway_provider,
-      pay.gateway_payment_id
-    from later
-    left join lateral (
-      select p.gateway_provider, p.gateway_payment_id
-      from payments p
-      where p.order_id = later.order_id
-        and p.status = 'captured'
-        and p.error_code is distinct from ${SURPLUS_CAPTURE_ERROR_CODE}
-      order by p.created_at desc, p.id desc
-      limit 1
-    ) pay on true
-    order by later.paid_at desc, later.item_id desc
+      ${laterOrderMoney}
+    order by later.paid_at desc, later.id desc
   `.execute(database);
-  return result.rows;
+
+  return { courses: courses.rows, bundles: bundles.rows };
 }
 
 /**

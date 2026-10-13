@@ -48,11 +48,15 @@ export function isAccountSessionStorageKey(key: string): boolean {
 }
 
 /**
- * Local-storage keys forgotten with the session: the per-course progress map
- * written by the player (`veolms-learning-<course>-progress`,
- * `learning/LearningWorkspace.tsx`). It carries no account, and the course
- * cards show the higher of it and the server's figure, so the next account
- * was shown the previous one's progress. The server holds the real figure.
+ * Local-storage keys forgotten with the session, and on the next page load
+ * (`forgetLegacyLearningProgress`): the per-course progress map the player
+ * used to write (`veolms-learning-<course>-progress`). Nothing writes or
+ * reads it any more. It carried no account and was never lowered, and the
+ * course cards showed the higher of it and the server's figure: the next
+ * account was shown the previous one's progress, and a learner whose lesson
+ * the server had cleared went on seeing the old percent. The cards now take
+ * the server's figure, plus what the account-scoped store below holds as
+ * not sent yet (`learning/catalogueCardProgress.ts`).
  *
  * The account-scoped progress store (`veolms-learning-progress-v1:<user>:…`,
  * `learning/learningProgressStorage.ts`) is not matched: it is the only key
@@ -123,6 +127,26 @@ export function forgetAccountBrowserState(): void {
   }
   try {
     removeMatchingKeys(window.localStorage, isAccountLocalStorageKey);
+  } catch {
+    // Local storage can be unavailable in privacy-restricted contexts.
+  }
+}
+
+/**
+ * Removes the progress maps the player used to leave under
+ * `veolms-learning-<course>-progress` (see `isAccountLocalStorageKey`).
+ * Nothing reads them any more; this clears what earlier visits left behind,
+ * whoever is signed in.
+ */
+export function forgetLegacyLearningProgress(
+  storage: Pick<
+    Storage,
+    "removeItem" | "key" | "length"
+  > | null = typeof window === "undefined" ? null : window.localStorage,
+): void {
+  if (!storage) return;
+  try {
+    removeMatchingKeys(storage as Storage, isAccountLocalStorageKey);
   } catch {
     // Local storage can be unavailable in privacy-restricted contexts.
   }

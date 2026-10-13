@@ -202,7 +202,8 @@ const orderRoutes: RoutePlugin = async (app, options) => {
         operationId: "refundOrder",
         tags: ["Commerce - Orders"],
         summary: "Refund an order",
-        description: "Processes a full or partial refund for a paid order.",
+        description:
+          "Processes a full or partial refund for a paid order. An order paid through the payment gateway is refunded through it. An order paid by manual transfer has no gateway payment: staff return the money themselves and send outsideRefund with the reference of that transfer, which records the refund without moving any money (the order is marked refunded, a credit note is issued, the buyer is notified and access follows preserveAccess). outsideRefund is refused for an order that was not paid by manual transfer, and an order paid by manual transfer is refused without it. One reference can be recorded once.",
         params: z.object({ orderId: z.string().uuid() }),
         body: orderDirectRefundRequestSchema,
         headers: z
@@ -220,7 +221,7 @@ const orderRoutes: RoutePlugin = async (app, options) => {
           403: errorResponse("Forbidden - billing.manage required"),
           404: errorResponse("Order not found"),
           409: errorResponse(
-            "Idempotency key already used for a different refund request",
+            "Idempotency key already used for a different refund request, or an outside refund with this reference is already recorded",
           ),
         },
       },

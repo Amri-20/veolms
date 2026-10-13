@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { refundSchema } from "./refund.ts";
+import { outsideRefundSchema, refundSchema } from "./refund.ts";
 
 export const bundleStatusSchema = z.enum(["draft", "published", "archived"]);
 export type BundleStatus = z.infer<typeof bundleStatusSchema>;
@@ -746,6 +746,12 @@ export const orderDirectRefundRequestSchema = z.strictObject({
   reason: z.string().max(500).optional(),
   preserveAccess: z.boolean().default(false),
   idempotencyKey: z.string().min(1).max(255).optional(),
+  /**
+   * Records a refund staff already made outside the platform instead of
+   * sending one through the gateway. Only for an order paid by manual
+   * transfer; refused for any other, and such an order is refused without it.
+   */
+  outsideRefund: outsideRefundSchema.optional(),
 });
 export type OrderDirectRefundRequest = z.infer<
   typeof orderDirectRefundRequestSchema

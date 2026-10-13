@@ -31,7 +31,9 @@ export function createCurriculumService({
 }: CurriculumServiceOptions) {
   const mediaService = createMediaService({ database, services });
   const chapterSyncService = createChapterSyncService({ database, services });
-  const lessonProgressResetService = createLessonProgressResetService();
+  const lessonProgressResetService = createLessonProgressResetService({
+    database,
+  });
 
   /**
    * Re-derives a lesson's chapters from its description. Chapters are a
@@ -348,7 +350,8 @@ export function createCurriculumService({
     if (givesLessonItsFirstMedia(lesson.content_media_id, effectiveMediaId)) {
       // A lesson with no video is finished by opening it. Now that it has
       // one, nobody has watched it: learners' progress on the lesson is
-      // cleared together with the change, or neither happens.
+      // cleared together with the change, or neither happens. Learners who
+      // passed the lesson's quiz keep theirs (see the reset service).
       await database.transaction().execute(async (trx) => {
         await curriculumRepo.updateLesson(
           trx,

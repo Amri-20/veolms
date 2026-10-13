@@ -1,6 +1,6 @@
 # What is left after the audit: checklist
 
-Updated 13 Oct 2026, after the open-bug round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 21. This file is the short list to work from. Tick a box when it is done.
+Updated 13 Oct 2026, after the third round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 22. This file is the short list to work from. Tick a box when it is done.
 
 ## Done in phases 1 to 3 (13 Oct)
 
@@ -29,11 +29,20 @@ Updated 13 Oct 2026, after the open-bug round. The full record is `docs/AUDIT_RE
 - [x] Settings tells an account when its username is too short for a profile page.
 - [x] Checked, no change needed: a quiz stays when a lesson becomes a video lesson, and a lesson can have both.
 
+## Done in the third round (13 Oct)
+
+- [x] Staff can record a refund they made outside the platform, for an order paid by bank transfer. Full or partial. The buyer is told and gets a credit note.
+- [x] Learners who passed a lesson's quiz keep their tick when the lesson gets a video later.
+- [x] The same bundle paid twice is on the staff refund list.
+- [x] A course bought directly and again inside a bundle is on the staff refund list.
+- [x] A bank transfer reported for a cancelled or failed order is on the staff refund list.
+- [x] The catalogue card shows the true progress percent.
+
 ## A. Right after each push
 
 Pushing `dev` deploys the API and the web together.
 
-- [ ] Confirm the deploy finished and these two migrations ran: `20261013100000-shorten-legacy-user-names` and `20261013110000-lowercase-user-emails`.
+- [ ] Confirm the deploy finished and these three migrations ran: `20261013100000-shorten-legacy-user-names`, `20261013110000-lowercase-user-emails` and `20261013120000-create-order-item-courses`.
 - [ ] Run the count file on the production database. It only counts, and writes nothing:
 
   ```bash
@@ -57,6 +66,8 @@ None of this could be tried from here.
 - [ ] Change the amount on a course, pay the old and the new gateway order. Both should appear as one "paid twice" entry.
 - [ ] Open a lesson whose quiz was deleted. It should say it has no video, and get its tick.
 - [ ] Open a restricted free course as a learner. No enrol button.
+- [ ] Refund an order that was paid by bank transfer: the dialog should ask for the transfer reference, and the order should become Refunded.
+- [ ] Buy a course, then a bundle that contains it. It should appear in the refund notice.
 - [ ] Sign in with Google and with GitHub using one email address written in different letter case. It should be one account.
 - [ ] Run the upload clean-up once against real storage before turning it on.
 
@@ -68,21 +79,17 @@ None of this could be tried from here.
 - [ ] **Per-creator payment gateways (C4).** Build it, or remove the endpoints?
 - [ ] **Dashboard numbers (F5).** Which definition of progress and of net revenue is the official one?
 - [ ] **Upload clean-up (S16).** Turn it on? Set `DISCUSSION_UPLOAD_PURGE_INTERVAL_HOURS=24`. It is off by default.
-- [ ] **API tests.** `apps/api` has a `test` script again (82 tests). Keep it?
-- [ ] **Refund of an order paid by bank transfer.** The app cannot record it today. Allow staff to record "money returned outside the platform"? If yes: partial amounts too? Tell the buyer? Issue a credit note?
-- [ ] **Learners who passed a lesson's quiz.** When that lesson later gets its first video, their tick is cleared too and they must watch it. Keep it that way, or let them keep the tick?
-- [ ] **A bundle bought twice.** Should the same bundle paid for twice appear on the staff refund list? It needs a new kind of entry.
+- [ ] **API tests.** `apps/api` has a `test` script again (94 tests). Keep it?
+- [ ] **A learner's own refund request on a bank-transfer order.** Approving it is still refused; staff use Refund Order instead. Should approving it also ask for the transfer reference?
 
 ## D. Bugs still open
 
 Most important first.
 
 - [ ] **A buyer can still pay twice.** The old gateway order cannot be withdrawn. It is flagged for staff; nothing can stop it.
-- [ ] **Two orders both paid by bank transfer** for one course are listed, but cannot be refunded in the app. Waits for the decision above.
-- [ ] **Bundles are not compared** when looking for a course paid twice. The system does not record which courses a bundle order gave. Fixing it needs a new table.
-- [ ] **A bank transfer reported for a cancelled or failed order** also stays pending for good. The buyer has no access there. Not on the staff list yet.
+- [ ] **Refunding one item of a bundle that was edited after the sale** acts on the bundle's contents today, not as sold. The new record makes a fix possible.
+- [ ] **Bundle orders paid before 13 Oct** are not compared course by course. What they contained when sold was never recorded.
 - [ ] **Accounts that share an email in different letter case** were left alone. Wait for the count from check 5.
-- [ ] **Catalogue card can show an old progress percent** on the browser that opened a lesson before it got its video. Home and the lesson page are right.
 - [ ] **`level: "all_levels"` on the direct course update** does not clear the level. The web does not use that endpoint.
 - [ ] **Local file store only:** two uploads with the same name at once can lose the file. Real storage is not affected.
 - [ ] **The Reject button needs the admin role**, but staff with billing access can see the row. They get a refusal message.

@@ -43,7 +43,7 @@ const refundRoutes: RoutePlugin = async (app, options) => {
         tags: ["Commerce - Refunds"],
         summary: "Initiate full or partial refund",
         description:
-          "Initiates a refund via the payment gateway and records refund state.",
+          "Initiates a refund via the payment gateway and records refund state. For an order paid by manual transfer, send outsideRefund with the reference of the transfer staff made: the refund is recorded and no money is moved.",
         body: createRefundRequestSchema,
         response: {
           200: jsonResponse(
@@ -54,6 +54,9 @@ const refundRoutes: RoutePlugin = async (app, options) => {
           401: errorResponse("Unauthorized"),
           403: errorResponse("Forbidden - Admin required"),
           404: errorResponse("Order or payment not found"),
+          409: errorResponse(
+            "Idempotency key already used for a different refund request, or an outside refund with this reference is already recorded",
+          ),
         },
       },
     },
