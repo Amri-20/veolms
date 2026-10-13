@@ -1,6 +1,6 @@
 # What is left after the audit: checklist
 
-Updated 14 Oct 2026, after the fifth round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 24. This file is the short list to work from. Tick a box when it is done.
+Updated 14 Oct 2026, after the sixth round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 25. This file is the short list to work from. Tick a box when it is done.
 
 ## Done in phases 1 to 3 (13 Oct)
 
@@ -69,6 +69,13 @@ Updated 14 Oct 2026, after the fifth round. The full record is `docs/AUDIT_RECON
 - [x] Checked, no change needed: notifications already stop polling in a hidden tab; the two unused payment statuses harm nothing (C10.4).
 - [x] Razorpay test mode: orders are created, bad signatures are refused, a refused refund leaves the order paid.
 
+## Done in the sixth round (14 Oct)
+
+- [x] The login page shows its frame and a loading card while the session is checked (A2).
+- [x] The Courses filter stays where it was after the course editor (F14).
+- [x] Razorpay test purchase done by the owner: declined, successful, refund. All worked.
+- [x] Production counts run by the owner: all zero.
+
 ## A. Right after each push
 
 Pushing `dev` deploys the API and the web together.
@@ -92,7 +99,8 @@ The first, third and ninth were seen in a local browser run in the fourth round.
 - [ ] Sign in with a code that arrives by SMS, on an iPhone and on an Android phone.
 - [ ] Open `/orders/abc`, `/courses/a/b/c`, `/settings/privacy` and `/abcde`, signed in and signed out. Each should say "not found".
 - [ ] End a session from another device, then sign in as a different account on the same tab.
-- [ ] One test-mode purchase with Razorpay in a normal browser: a declined attempt, then a successful one, then a refund. This could not be done from here: Razorpay's checkout screen does not draw in the browser I use.
+- [x] One test-mode purchase with Razorpay in a normal browser: a declined attempt, then a successful one, then a refund. Done by the owner on 14 Oct.
+- [ ] Open `/login` in a private window after the deploy. It should show the page frame with a loading card, not a blank page.
 - [ ] Look at the accent text colour on a few themes, light and dark. It was changed by calculation, not by eye.
 - [ ] Play a video: play, pause, seek, open the quality menu, watch the buffering spinner. The player code was changed to satisfy the linter.
 - [ ] Take a timed quiz to the end and let the time run out.
@@ -108,8 +116,6 @@ The first, third and ninth were seen in a local browser run in the fourth round.
 
 ## C. Decisions only you can make
 
-- [ ] **Blank login page while the session is checked (A2).** A fix is written and held back, because `apps/web/AGENTS.md` says to leave the initial loading unchanged. Apply it?
-- [ ] **A filter that resets (F14).** Is this the bug: on Courses, a creator picks "Draft", opens the editor, comes back, and the filter is "All" again?
 - [ ] **A screen for refund requests.** Skipped for now by your decision. The API is ready.
 - [ ] **Downloads (S3).** Should the "allow downloads" setting on a course be enforced? It is stored today and does nothing.
 - [ ] **Archived courses (B1).** Should people who bought a course keep access after it is archived?

@@ -1,6 +1,6 @@
 # Audit reconciliation — 11 Oct 2026
 
-> **Read sections 19 to 24 first, then `docs/AUDIT_REMAINING_CHECKLIST.md`.** Section 19 is the current status of the audit findings and sections 20 to 24 the bug-fix rounds that followed. Section 19 was written on 13 Oct 2026 after every "FIXED" below was re-checked against the code. Sections 2 to 9 are the picture on the morning of 11 Oct, before any fix, and are kept as the record of what was found. Sections 10 to 17 record the first round of fixes; twenty of their "FIXED" entries were wrong and are corrected in section 19.
+> **Read sections 19 to 25 first, then `docs/AUDIT_REMAINING_CHECKLIST.md`.** Section 19 is the current status of the audit findings and sections 20 to 25 the bug-fix rounds that followed. Section 19 was written on 13 Oct 2026 after every "FIXED" below was re-checked against the code. Sections 2 to 9 are the picture on the morning of 11 Oct, before any fix, and are kept as the record of what was found. Sections 10 to 17 record the first round of fixes; twenty of their "FIXED" entries were wrong and are corrected in section 19.
 
 Reconciles the application audit of 9 Oct 2026 (findings S1–S16, C1–C13, A1–A7, F1–F18, B1–B9, P1–P5, X1–X6, R1–R6) against the code on `dev` at `8252933c`. Investigation only: no application code, migration, dependency or data was changed.
 
@@ -932,3 +932,19 @@ Run against a local database with the test keys, loaded alone from the environme
 - Signed-out API callers get 401 where they used to get 400 for a bad request.
 - Accent text is slightly darker in light themes and lighter in dark themes on 17 palette and mode combinations. The default dark theme goes from `#7193ff` to `#92acff`.
 - A signed-in learner's wishlist hearts fill once the server answers, not instantly.
+
+## 25. Sixth round: two owner answers, the production counts and the Razorpay test: 14 Oct 2026
+
+On `fix/audit-round-6`.
+
+**The owner's answers.**
+
+12. Apply the fix for the blank login page while the session is checked (A2).
+13. The filter that resets (F14) is the Courses status filter going back to "All" after the course editor.
+
+| Item                      | Status                 | What changed                                                                                                                                                                                                                                                                                  | What is left                                                                                            |
+| ------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| A2 Blank login page       | FIXED, not seen        | The auth layout has its own loading state: the auth page frame with the loading card, shown while the session is checked on `/login`, `/register`, `/mfa-setup` and `/auth/callback`. Before, these pages were an empty canvas until the check answered. The root loading state is untouched. | It only shows in a production build; the dev server ignores it. Look at `/login` once after the deploy. |
+| F14 Courses filter resets | FIXED, seen in the app | The status and enrolment filters were cleared every time the page or section changed. They are now cleared only when the account or the workspace view changes. Seen: "Published" picked, course editor opened, back to Courses, still "Published".                                           | —                                                                                                       |
+| Twin-email accounts       | CLOSED                 | The owner ran `docs/audit-pre-push-checks.sql` on production on 14 Oct. Every count is 0, including accounts sharing an email in different letter case.                                                                                                                                       | —                                                                                                       |
+| Razorpay test purchase    | CONFIRMED BY THE OWNER | The owner tested in a normal browser with the test keys: a declined payment, a successful payment and a refund. All three worked.                                                                                                                                                             | —                                                                                                       |
