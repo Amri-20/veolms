@@ -2,6 +2,7 @@ import { ArrowLeftIcon as ArrowLeft } from "@phosphor-icons/react/ArrowLeft";
 import { ArrowSquareOutIcon as ArrowSquareOut } from "@phosphor-icons/react/ArrowSquareOut";
 import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { CalendarBlankIcon as CalendarBlank } from "@phosphor-icons/react/CalendarBlank";
+import { ChartLineUpIcon as ChartLineUp } from "@phosphor-icons/react/ChartLineUp";
 import { CheckCircleIcon as CheckCircle } from "@phosphor-icons/react/CheckCircle";
 import { ClockIcon as Clock } from "@phosphor-icons/react/Clock";
 import { EnvelopeSimpleIcon as EnvelopeSimple } from "@phosphor-icons/react/EnvelopeSimple";
@@ -14,7 +15,9 @@ import { TrendUpIcon as TrendUp } from "@phosphor-icons/react/TrendUp";
 import { WarningCircleIcon as WarningCircle } from "@phosphor-icons/react/WarningCircle";
 import type { StudentCourseDetail } from "@veolms/contracts";
 import type { NavigateTo } from "../routing/navigation";
+import { useCurrentUser } from "../services/auth";
 import { useStudent } from "../services/students";
+import { hasAdminRole } from "../shell/workspaceRole";
 import { StudentDetailsSkeleton } from "./StudentDetailsSkeleton";
 
 export interface StudentDetailsPageProps {
@@ -29,6 +32,9 @@ export function StudentDetailsPage({
   setNotice,
 }: StudentDetailsPageProps) {
   const { data, isLoading, isError, refetch } = useStudent(username);
+  // A learner's day-by-day progress is theirs to share; an admin can open
+  // it either way. Anyone else here would only be told it is private.
+  const canOpenProgress = hasAdminRole(useCurrentUser().data?.roles);
 
   const student = data?.student;
   const metrics = data?.metrics;
@@ -235,8 +241,22 @@ export function StudentDetailsPage({
                 </div>
               </div>
 
-              {/* Right: Social links */}
+              {/* Right: Progress, and social links */}
               <div className="flex items-center gap-2 sm:self-start shrink-0 pt-2 sm:pt-0">
+                {canOpenProgress ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onNavigatePage?.(
+                        `/progress/${encodeURIComponent(student.username)}`,
+                      )
+                    }
+                    className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-[color-mix(in_srgb,var(--surface)_75%,transparent)] px-3 text-xs font-semibold text-(--text) transition-colors hover:border-(--accent) hover:text-(--accent) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
+                  >
+                    <ChartLineUp size={16} weight="bold" aria-hidden="true" />
+                    View progress
+                  </button>
+                ) : null}
                 {student.socials?.githubUrl && (
                   <a
                     href={student.socials.githubUrl}

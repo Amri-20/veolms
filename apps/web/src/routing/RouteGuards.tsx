@@ -73,12 +73,20 @@ export function useSessionAccess() {
 interface AcademyRouteGuardState {
   canAccessDashboard: boolean;
   dashboardCapabilitiesResolved: boolean;
+  /**
+   * The home page is held back only until it is known whether this account
+   * may see the dashboard. The shell shows the dashboard's placeholder
+   * meanwhile, or the learner's home when that is the view the account is
+   * in, rather than a spinner in place of either.
+   */
+  dashboardPermissionPending: boolean;
   routeContentBlocked: boolean;
 }
 
 const defaultAcademyRouteGuardState: AcademyRouteGuardState = {
   canAccessDashboard: false,
   dashboardCapabilitiesResolved: false,
+  dashboardPermissionPending: false,
   routeContentBlocked: false,
 };
 
@@ -168,8 +176,10 @@ export function AcademyRouteGuard({ children }: { children: ReactNode }) {
     user,
   ]);
 
+  const dashboardPermissionPending =
+    isDashboardPath && dashboardCapabilityPending;
   const routeContentBlocked =
-    (isDashboardPath && dashboardCapabilityPending) ||
+    dashboardPermissionPending ||
     (!isGuestLandingPath(path) &&
       ((pending && authenticationRequired) ||
         shouldBlockAcademyRender(path, access) ||
@@ -179,9 +189,15 @@ export function AcademyRouteGuard({ children }: { children: ReactNode }) {
     () => ({
       canAccessDashboard,
       dashboardCapabilitiesResolved,
+      dashboardPermissionPending,
       routeContentBlocked,
     }),
-    [canAccessDashboard, dashboardCapabilitiesResolved, routeContentBlocked],
+    [
+      canAccessDashboard,
+      dashboardCapabilitiesResolved,
+      dashboardPermissionPending,
+      routeContentBlocked,
+    ],
   );
 
   return (

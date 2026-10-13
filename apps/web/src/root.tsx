@@ -5,6 +5,7 @@ import {
   Links,
   Meta,
   Outlet,
+  PrefetchPageLinks,
   Scripts,
   useLocation,
   useRouteError,
@@ -35,6 +36,7 @@ import { QueryProvider } from "./providers/query-provider";
 import { ReadingModeEffects } from "./reading-mode/ReadingModeEffects";
 import { getSessionPresenceBootstrapScript } from "./store/sessionPresence";
 import { getLearnerStartedBootstrapScript } from "./home/learner/learnerCoursesSubtitle";
+import { getHomeHintBootstrapScript } from "./store/homeHint";
 import { getReadingModeBootstrapScript } from "./reading-mode/readingModePreferences";
 import {
   getControlRadiusBootstrapScript,
@@ -248,7 +250,7 @@ export function Layout({ children }: LayoutProps) {
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `${getSessionPresenceBootstrapScript()}${getLearnerStartedBootstrapScript()}${getSidebarShellBootstrapScript()}${getSidebarCollapsedMarkupBootstrapScript()}${getSidebarPresentationBootstrapScript()}${getLearningShellBootstrapScript()}${getLearningPlayerBootstrapScript()}`,
+            __html: `${getSessionPresenceBootstrapScript()}${getLearnerStartedBootstrapScript()}${getHomeHintBootstrapScript()}${getSidebarShellBootstrapScript()}${getSidebarCollapsedMarkupBootstrapScript()}${getSidebarPresentationBootstrapScript()}${getLearningShellBootstrapScript()}${getLearningPlayerBootstrapScript()}`,
           }}
         />
         <Meta />
@@ -307,6 +309,11 @@ export function Layout({ children }: LayoutProps) {
           }}
         />
         <Links />
+        {/* The login address only ever leads on to a page with the login
+            pop-up over it, the home page for most visitors. Its code is
+            asked for with this document, so it is loading while the session
+            check is still out, not only after the check has answered. */}
+        {pathname === "/login" ? <PrefetchPageLinks page="/" /> : null}
       </head>
       <body {...initialLayoutDomState.bodyAttributes}>
         <div id="root">{children}</div>

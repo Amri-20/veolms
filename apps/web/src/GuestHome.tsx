@@ -140,6 +140,11 @@ export function GuestHome({
       <GuestHomeHero
         hero={hero}
         greeting={isNewLearner ? getNewLearnerGreeting(learnerName) : undefined}
+        returningLearnerHero={
+          configuredHero && !isNewLearner
+            ? getNewLearnerHero(configuredHero)
+            : undefined
+        }
         onNavigatePage={onNavigatePage}
         freeCoursesSectionId={
           showFreeCourses ? FREE_COURSES_SECTION_ID : undefined

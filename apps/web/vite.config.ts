@@ -19,6 +19,7 @@ const shellPhosphorIcons = new Set([
   "CaretDown",
   "CaretRight",
   "ChartBar",
+  "ChartLineUp",
   "ChatCircleDots",
   "ChatTeardropDots",
   "Check",
@@ -48,7 +49,6 @@ const shellPhosphorIcons = new Set([
 ]);
 const homePhosphorIcons = new Set([
   "ArrowRight",
-  "ChartLineUp",
   "CheckCircle",
   "Clock",
   "Fire",
@@ -429,6 +429,10 @@ export default defineConfig(({ command, mode }) => {
         "axios",
         "clsx",
         "tailwind-merge",
+        // The login card's icon registry imports from the package's index,
+        // which re-exports every icon. Served as source that is about 1,900
+        // requests before the card can show; prebundled it is one.
+        "lucide-react",
         // The markdown pipeline (unified/micromark) reaches CommonJS packages
         // such as `debug` and `extend`. With discovery disabled they would be
         // served as raw ESM and fail with a missing `default` export.

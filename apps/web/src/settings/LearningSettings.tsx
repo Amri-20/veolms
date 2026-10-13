@@ -5,6 +5,7 @@ import { ClosedCaptioningIcon as ClosedCaptioning } from "@phosphor-icons/react/
 import { PlayCircleIcon as PlayCircle } from "@phosphor-icons/react/PlayCircle";
 import { AppSlider } from "../AppSlider";
 import { CurriculumTestControls } from "./CurriculumTestControls";
+import { LaptopWallpaperSettingsCard } from "./LaptopWallpaperSettingsCard";
 import { LearningGoalSettingsCard } from "./LearningGoalSettingsCard";
 import { PlayerThemePicker } from "./PlayerThemePicker";
 import { LearningSelectRow, LearningToggleRow } from "./SettingsControls";
@@ -219,6 +220,8 @@ export function LearningSettings({
         </section>
 
         <LearningGoalSettingsCard isAuthenticated={isAuthenticated} />
+
+        <LaptopWallpaperSettingsCard />
 
         <section
           className="settings-learning-card"
