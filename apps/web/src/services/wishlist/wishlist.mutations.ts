@@ -21,6 +21,13 @@ interface WishlistChange {
   saved: WishlistItem | undefined;
 }
 
+/**
+ * Wishlist requests of one learner run one after another. Each answers with
+ * the whole list, so two in flight together would have the older answer
+ * undo what the newer click showed.
+ */
+const wishlistMutationScope = { id: "wishlist" };
+
 function findWishlistItem(
   items: readonly WishlistItem[],
   course: WishlistCourseRef,
@@ -49,8 +56,20 @@ export function useToggleWishlistItem(userId: string | undefined) {
     WishlistChange,
     { previous: WishlistResponse | undefined }
   >({
+    scope: wishlistMutationScope,
     mutationFn: ({ course, saved }) => {
-      if (saved) return wishlistService.remove(saved.courseId);
+      if (saved) {
+        // The item as the list has it now: one clicked off before its save
+        // was answered is known here only by what the page called it.
+        const current =
+          findWishlistItem(
+            queryClient.getQueryData<WishlistResponse>(queryKey)?.items ?? [],
+            course,
+          ) ?? saved;
+        return COURSE_ID_PATTERN.test(current.courseId)
+          ? wishlistService.remove(current.courseId)
+          : wishlistService.list();
+      }
       // A page that knows only the slug saves by it; the server finds the id.
       return COURSE_ID_PATTERN.test(course.id)
         ? wishlistService.add(course.id)
@@ -96,13 +115,19 @@ export function useToggleWishlistItem(userId: string | undefined) {
 }
 
 /** Sends the courses a browser had saved, and shows the list that results. */
-export function useImportWishlistCourses(userId: string | undefined) {
+export function useImportWishlistCourses(
+  userId: string | undefined,
+  /** Called with what was sent, also when the caller has left the page. */
+  onImported?: (courses: string[]) => void,
+) {
   const queryClient = useQueryClient();
   const queryKey = wishlistKeys.items(userId ?? "");
 
   return useMutation<WishlistResponse, ApiError, string[]>({
+    scope: wishlistMutationScope,
     mutationFn: wishlistService.importCourses,
-    onSuccess: async (wishlist) => {
+    onSuccess: async (wishlist, courses) => {
+      onImported?.(courses);
       // A list asked for before the import would not have these courses.
       await queryClient.cancelQueries({ queryKey });
       queryClient.setQueryData(queryKey, wishlist);
