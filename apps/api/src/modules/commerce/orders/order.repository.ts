@@ -7,6 +7,7 @@ import type {
 } from "@veolms/contracts";
 import type { Executor } from "../shared/repository.types.ts";
 import { toMinorUnits } from "../shared/currency.ts";
+import { CHECKOUT_HAND_OUT_ATTEMPT_STATUS } from "../shared/open-orders.ts";
 import { escapeLikePattern } from "../../../lib/like-pattern.ts";
 
 export interface ListOrdersOptions {
@@ -558,7 +559,8 @@ export async function lockBuyerCheckout(
  *    `handedOutSince`, so a payment window for it may still be open.
  *
  * `checkout_handed_out_at` is the last time the gateway order was returned
- * to the buyer: every hand-out records a payment attempt.
+ * to the buyer: every hand-out records a payment attempt. Attempts that
+ * record a failed or captured payment are not hand-outs.
  */
 export async function listOrdersAwaitingPayment(
   database: Executor,
@@ -574,6 +576,7 @@ export async function listOrdersAwaitingPayment(
         .select((sub) => sub.fn.max("a.created_at").as("at"))
         .whereRef("p.order_id", "=", "o.id")
         .where("p.gateway_provider", "not in", ["free", "manual"])
+        .where("a.status", "=", CHECKOUT_HAND_OUT_ATTEMPT_STATUS)
         .as("checkout_handed_out_at"),
       eb
         .exists(
@@ -607,6 +610,7 @@ export async function listOrdersAwaitingPayment(
             .select("a.id")
             .whereRef("p.order_id", "=", "o.id")
             .where("p.gateway_provider", "not in", ["free", "manual"])
+            .where("a.status", "=", CHECKOUT_HAND_OUT_ATTEMPT_STATUS)
             .where("a.created_at", ">", input.handedOutSince),
         ),
       ]),

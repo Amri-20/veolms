@@ -5,7 +5,7 @@ import type {
   VerifyPaymentRequest,
   VerifyPaymentResponse,
 } from "@veolms/contracts";
-import type { Database } from "@veolms/database";
+import type { Database, DatabaseExecutor as Executor } from "@veolms/database";
 import type { FastifyBaseLogger } from "fastify";
 import type { Kysely } from "kysely";
 import {
@@ -14,6 +14,10 @@ import {
 } from "../shared/commerce.errors.ts";
 import { toMinorUnits } from "../shared/currency.ts";
 import { isUniqueViolation } from "../shared/db-errors.ts";
+import {
+  CHECKOUT_HAND_OUT_ATTEMPT_STATUS,
+  isOrderOpen,
+} from "../shared/open-orders.ts";
 import * as paymentRepo from "./payment.repository.ts";
 import * as manualPaymentRepo from "./manual-payment.repository.ts";
 import * as orderRepo from "../orders/order.repository.ts";
@@ -48,8 +52,8 @@ export interface PaymentService {
   initializePayment(params: {
     orderId: string;
     /**
-     * The order row, when the caller has only just written it. Saves reading
-     * back a row that cannot have changed yet.
+     * The order row, when the caller has only just written it. Saves one
+     * read; it is read again before anything is handed out.
      */
     order?: PaymentOrderRow;
     customer: {
@@ -70,9 +74,11 @@ export interface PaymentService {
   /**
    * Notes that a payment's gateway order was returned to the buyer again
    * without going through initializePayment, so the time it was last handed
-   * out stays true (see shared/open-orders.ts).
+   * out stays true (see shared/open-orders.ts). `executor` is the
+   * transaction holding the buyer's checkout lock, when the hand-out is
+   * decided under it.
    */
-  recordCheckoutHandOut(paymentId: string): Promise<void>;
+  recordCheckoutHandOut(paymentId: string, executor?: Executor): Promise<void>;
   verifyPayment(
     userId: string,
     input: VerifyPaymentRequest,
@@ -137,7 +143,7 @@ export function createPaymentService({
     }
 
     // 1. Check if a payment record already exists for this order
-    let payment = await paymentRepo.findPaymentByOrderId(database, orderId);
+    const payment = await paymentRepo.findPaymentByOrderId(database, orderId);
 
     if (payment && payment.status === "captured") {
       throw CommerceErrors.PAYMENT_ALREADY_PROCESSED();
@@ -151,25 +157,98 @@ export function createPaymentService({
     //    payable at the provider, so a user paying it (second tab, slow
     //    checkout page, double click) produced captured money attached to
     //    a gateway order id no payment row references anymore.
-    const isReusable =
-      payment &&
-      (payment.status === "initiated" || payment.status === "processing") &&
-      payment.gateway_order_id !== null &&
-      payment.amount === gatewayAmount &&
-      payment.currency === order.currency &&
-      payment.gateway_provider === paymentGateway.providerName;
+    const isReusable = (row: NonNullable<typeof payment>) =>
+      (row.status === "initiated" || row.status === "processing") &&
+      row.gateway_order_id !== null &&
+      row.amount === gatewayAmount &&
+      row.currency === order.currency &&
+      row.gateway_provider === paymentGateway.providerName;
 
-    if (payment && isReusable) {
-      await recordPaymentAttempt(payment.id);
-      return {
-        gatewayOrder: {
-          provider: toPaymentProvider(payment.gateway_provider),
-          gatewayOrderId: payment.gateway_order_id!,
-          amount: payment.amount,
-          currency: payment.currency,
-          keyId: payment.gateway_key_id ?? undefined,
-        },
-      };
+    /**
+     * Hands a gateway order out, and writes the payment row for a `fresh`
+     * one, only while the order can still be paid. Under the buyer's
+     * checkout lock, so a checkout that closes this order to make another
+     * (see checkout.service.ts) either runs first, and nothing is handed
+     * out for the closed order, or runs after and finds this one in
+     * checkout. The order was read before the gateway was asked, which can
+     * take long enough for it to be closed or cancelled in between; a
+     * gateway order returned for it then could be paid with nothing to
+     * fulfil.
+     *
+     * A row that can be reused is handed out as it is and `fresh` is left
+     * unused (another request wrote it first). Without `fresh`, returns
+     * undefined when there is no such row.
+     */
+    const handOut = (fresh?: {
+      provider: PaymentProvider;
+      gatewayOrderId: string;
+      amount: number;
+      currency: string;
+      keyId?: string;
+    }) =>
+      database.transaction().execute(async (trx) => {
+        await orderRepo.lockBuyerCheckout(trx, order.user_id);
+        const current = await orderRepo.findOrderByIdForUpdate(trx, orderId);
+        if (current?.status === "paid") {
+          throw CommerceErrors.ORDER_ALREADY_PAID();
+        }
+        if (!current || !isOrderOpen(current, new Date())) {
+          throw CommerceErrors.ORDER_EXPIRED();
+        }
+
+        const row = await paymentRepo.findPaymentByOrderId(trx, orderId);
+        if (row?.status === "captured") {
+          throw CommerceErrors.PAYMENT_ALREADY_PROCESSED();
+        }
+        if (row && isReusable(row)) {
+          await recordPaymentAttempt(row.id, trx);
+          return {
+            gatewayOrder: {
+              provider: toPaymentProvider(row.gateway_provider),
+              gatewayOrderId: row.gateway_order_id,
+              amount: row.amount,
+              currency: row.currency,
+              keyId: row.gateway_key_id ?? undefined,
+            },
+          };
+        }
+        if (!fresh) return undefined;
+
+        // A row that cannot be reused (an earlier failed attempt, or the
+        // amount changed) is pointed at the fresh gateway order —
+        // conditionally: if a webhook captured the old gateway order
+        // meanwhile, stomping the row back to "initiated" would orphan that
+        // captured money.
+        const written = row
+          ? await paymentRepo.reinitializePaymentIfNotFinal(trx, row.id, {
+              gateway_order_id: fresh.gatewayOrderId,
+              gateway_key_id: fresh.keyId ?? null,
+              amount: fresh.amount,
+              currency: order.currency,
+            })
+          : await paymentRepo.insertPayment(trx, {
+              id: crypto.randomUUID(),
+              order_id: order.id,
+              gateway_provider: paymentGateway.providerName,
+              gateway_order_id: fresh.gatewayOrderId,
+              gateway_payment_id: null,
+              gateway_key_id: fresh.keyId ?? null,
+              // Persist the gateway amount so refunds and gateway events use
+              // the same minor-unit representation as Razorpay.
+              amount: fresh.amount,
+              currency: order.currency,
+              status: "initiated",
+            });
+        if (!written) {
+          throw CommerceErrors.PAYMENT_ALREADY_PROCESSED();
+        }
+        await recordPaymentAttempt(written.id, trx);
+        return { gatewayOrder: fresh };
+      });
+
+    if (payment && isReusable(payment)) {
+      const reused = await handOut();
+      if (reused) return reused;
     }
 
     // 3. Create upstream order via the gateway abstraction (Razorpay, Stripe, etc.).
@@ -192,94 +271,40 @@ export function createPaymentService({
         throw toClientGatewayError(err);
       });
 
-    if (!payment) {
-      try {
-        payment = await paymentRepo.insertPayment(database, {
-          id: crypto.randomUUID(),
-          order_id: order.id,
-          gateway_provider: paymentGateway.providerName,
-          gateway_order_id: gatewayOrder.gatewayOrderId,
-          gateway_payment_id: null,
-          gateway_key_id: gatewayOrder.keyId ?? null,
-          // Persist the gateway amount so refunds and gateway events use the
-          // same minor-unit representation as Razorpay.
-          amount: gatewayOrder.amount,
-          currency: order.currency,
-          status: "initiated",
-        });
-      } catch (err) {
-        // payments_active_order_unique: a concurrent initializePayment for
-        // the same order inserted its row first. Adopt the winner's row
-        // (and its gateway order) rather than racing it — two live rows
-        // for one order is exactly what the index forbids.
-        if (!isUniqueViolation(err)) throw err;
-        const winner = await paymentRepo.findPaymentByOrderId(
-          database,
-          orderId,
-        );
-        if (!winner || !winner.gateway_order_id) {
-          throw CommerceErrors.PAYMENT_NOT_FOUND(orderId);
-        }
-        if (winner.status === "captured") {
-          throw CommerceErrors.PAYMENT_ALREADY_PROCESSED();
-        }
-        await recordPaymentAttempt(winner.id);
-        return {
-          gatewayOrder: {
-            provider: toPaymentProvider(winner.gateway_provider),
-            gatewayOrderId: winner.gateway_order_id,
-            amount: winner.amount,
-            currency: winner.currency,
-            keyId: winner.gateway_key_id ?? undefined,
-          },
-        };
-      }
-    } else {
-      // A payment row already existed (earlier abandoned/failed attempt, or
-      // the amount/currency changed) and a fresh gateway order was created
-      // above. Persist its id — conditionally: if a webhook captured the
-      // old gateway order between our read and this write, stomping the row
-      // back to "initiated" would orphan that captured money.
-      const updated = await paymentRepo.reinitializePaymentIfNotFinal(
-        database,
-        payment.id,
-        {
-          gateway_order_id: gatewayOrder.gatewayOrderId,
-          gateway_key_id: gatewayOrder.keyId ?? null,
-          amount: gatewayOrder.amount,
-          currency: order.currency,
-        },
-      );
-      if (!updated) {
-        throw CommerceErrors.PAYMENT_ALREADY_PROCESSED();
-      }
-      payment = updated;
-    }
-
-    await recordPaymentAttempt(payment.id);
-
-    return {
-      gatewayOrder: {
-        provider: gatewayOrder.provider,
-        gatewayOrderId: gatewayOrder.gatewayOrderId,
-        amount: gatewayOrder.amount,
-        currency: gatewayOrder.currency,
-        keyId: gatewayOrder.keyId,
-      },
+    const fresh = {
+      provider: gatewayOrder.provider,
+      gatewayOrderId: gatewayOrder.gatewayOrderId,
+      amount: gatewayOrder.amount,
+      currency: gatewayOrder.currency,
+      keyId: gatewayOrder.keyId,
     };
+    const handedOut = await handOut(fresh).catch((err: unknown) => {
+      // payments_active_order_unique: a live row for this order was written
+      // by something that does not take the buyer's lock. Trying again
+      // finds that row and hands it out instead.
+      if (!isUniqueViolation(err)) throw err;
+      return handOut(fresh);
+    });
+    if (!handedOut) {
+      throw CommerceErrors.PAYMENT_NOT_FOUND(orderId);
+    }
+    return handedOut;
   }
 
-  async function recordPaymentAttempt(paymentId: string): Promise<void> {
+  async function recordPaymentAttempt(
+    paymentId: string,
+    executor: Executor = database,
+  ): Promise<void> {
     const attemptCount = await paymentRepo.countPaymentAttempts(
-      database,
+      executor,
       paymentId,
     );
-    await paymentRepo.insertPaymentAttempt(database, {
+    await paymentRepo.insertPaymentAttempt(executor, {
       id: crypto.randomUUID(),
       payment_id: paymentId,
       gateway_payment_id: null,
       attempt_number: attemptCount + 1,
-      status: "initiated",
+      status: CHECKOUT_HAND_OUT_ATTEMPT_STATUS,
     });
   }
 

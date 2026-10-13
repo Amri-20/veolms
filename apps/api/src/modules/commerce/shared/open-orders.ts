@@ -18,6 +18,21 @@ export const CHECKOUT_WINDOW_GRACE_SECONDS = 120;
 export const GATEWAY_ORDER_PENDING_SECONDS = 60;
 
 /**
+ * The payment attempt written each time a gateway order is returned to the
+ * buyer. Attempts are also written for a failed and for a captured payment;
+ * those say nothing about a payment window having been opened.
+ */
+export const CHECKOUT_HAND_OUT_ATTEMPT_STATUS = "initiated";
+
+/** Unpaid and not past its deadline: it can still be paid or continued. */
+export function isOrderOpen(
+  order: { status: string; expires_at: Date | string },
+  now: Date,
+): boolean {
+  return order.status === "pending" && new Date(order.expires_at) > now;
+}
+
+/**
  * Seconds until an unpaid order's payment window is certainly closed; 0 when
  * the order is not in checkout. `handedOutAt` is the last time its gateway
  * order was returned to the buyer (created or resumed). An order with
