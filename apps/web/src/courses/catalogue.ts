@@ -119,6 +119,19 @@ export function courseMatchesWishlist(
   return Boolean(slug && wishlisted.has(slug));
 }
 
+/**
+ * Whether the course belongs on the wish list as the learner sees it: one
+ * they marked and have not enrolled in. A wish list is for courses still to
+ * be taken, so a course leaves it the moment the learner enrols; the mark
+ * itself is kept, and nothing has to be cleaned up when that happens.
+ */
+export function courseIsOnWishlist(
+  course: Pick<Course, "id" | "slug" | "enrolled">,
+  wishlisted: ReadonlySet<string>,
+): boolean {
+  return !course.enrolled && courseMatchesWishlist(course, wishlisted);
+}
+
 function matchesCourseSearch(
   course: Course,
   normalizedSearch: string,
@@ -180,7 +193,7 @@ export function getCourseQuickFilterCounts(
   });
 
   const wishlistPool = pool.filter((course) =>
-    courseMatchesWishlist(course, wishlisted),
+    courseIsOnWishlist(course, wishlisted),
   );
 
   if (role === "student") {
@@ -233,7 +246,7 @@ export function getVisibleCourses(
     if (
       role === "student" &&
       enrollmentFilter === "wishlist" &&
-      !courseMatchesWishlist(course, wishlisted)
+      !courseIsOnWishlist(course, wishlisted)
     )
       return false;
     if (

@@ -6,6 +6,7 @@ import type { AccessService } from "../../access/access.service.ts";
 import { createAccessService } from "../../access/access.service.ts";
 import { createPaymentReconciliationService } from "../payments/payment-reconciliation.service.ts";
 import * as paymentRepo from "../payments/payment.repository.ts";
+import { findGatewayCapture } from "../payments/captured-gateway-payment.ts";
 import { reportDuplicatePurchases } from "../payments/duplicate-purchase.ts";
 import { mapWithConcurrency } from "../../../lib/concurrency.ts";
 
@@ -85,37 +86,10 @@ export function createPaymentRecoveryWorker({
     async function reconcile(
       payment: StalePayment,
     ): Promise<"recovered" | "already-final" | "open"> {
-      const gatewayOrder = await paymentGateway.fetchOrder(
-        payment.gateway_order_id,
-      );
-      if (gatewayOrder.status !== "paid") return "open";
+      const capture = await findGatewayCapture(paymentGateway, payment);
+      if (capture.state === "unpaid") return "open";
 
-      let targetPaymentId = payment.gateway_payment_id;
-      let paymentMethod = payment.payment_method;
-
-      // If no gateway_payment_id locally, query Razorpay for payments on this order
-      if (!targetPaymentId) {
-        const orderPayments = await paymentGateway.fetchOrderPayments(
-          payment.gateway_order_id,
-        );
-        const capturedPayment = orderPayments.find(
-          (p) => p.status === "captured",
-        );
-        if (capturedPayment) {
-          targetPaymentId = capturedPayment.gatewayPaymentId;
-          paymentMethod = capturedPayment.method
-            ? {
-                method: capturedPayment.method,
-                bank: capturedPayment.bank,
-                wallet: capturedPayment.wallet,
-                vpa: capturedPayment.vpa,
-                cardLast4: capturedPayment.cardLast4,
-              }
-            : paymentMethod;
-        }
-      }
-
-      if (!targetPaymentId) {
+      if (capture.state === "paid-unidentified") {
         log?.warn(
           {
             paymentId: payment.id,
@@ -125,6 +99,9 @@ export function createPaymentRecoveryWorker({
         );
         return "open";
       }
+
+      const targetPaymentId = capture.gatewayPaymentId;
+      const paymentMethod = capture.paymentMethod;
 
       const result = await reconciliation.finalizeSuccessfulPayment({
         paymentId: payment.id,

@@ -10,6 +10,7 @@ import type { MouseEvent } from "react";
 import { useParams } from "react-router";
 import { BookOpen } from "@phosphor-icons/react/BookOpen";
 import { CaretDown } from "@phosphor-icons/react/CaretDown";
+import { PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { CircleNotch } from "@phosphor-icons/react/CircleNotch";
 import { Heart } from "@phosphor-icons/react/Heart";
 import { Play } from "@phosphor-icons/react/Play";
@@ -68,12 +69,26 @@ import {
   overviewColumnClasses,
 } from "./overview/CourseOverviewHero";
 import { CourseOverviewSkeleton } from "./overview/CourseOverviewSkeleton";
+import { CourseLoadError } from "./overview/CourseLoadError";
+import { CourseManagerBar } from "./overview/CourseManagerBar";
+import { HoverFillIcon } from "./overview/HoverFillIcon";
+import { PayCardIcon } from "./overview/PayCardIcon";
+import "../services/payments/razorpay-checkout.css";
 import { CoursePriceBar } from "./overview/CoursePriceBar";
+import {
+  bandHeaderClasses,
+  bandLinkClasses,
+  bandTitleClasses,
+  overviewCardClasses,
+  overviewCardPaddingClasses,
+  overviewColumnUnderHeroClasses,
+} from "./overview/overviewStyles";
 import {
   CourseSupportAmountPicker,
   type ContributionPresetId,
 } from "./overview/CourseSupportAmountPicker";
 import { formatPriceWithCurrency } from "./overview/coursePriceFormat";
+import { getCourseEditorPath } from "./courseEditorRouting";
 
 export { CourseOverviewSkeleton };
 
@@ -302,6 +317,16 @@ function CoursePurchaseSection({
   const awaitPaidOrder = useAwaitPaidOrder();
   const paymentConfirmationRef = useRef<AbortController | null>(null);
   useEffect(() => () => paymentConfirmationRef.current?.abort(), []);
+  // The watch kept on the gateway's window while it is open (see
+  // `watchForUnansweredClose`).
+  const checkoutWatchRef = useRef<number | null>(null);
+  const stopCheckoutWatch = () => {
+    if (checkoutWatchRef.current !== null) {
+      window.clearInterval(checkoutWatchRef.current);
+      checkoutWatchRef.current = null;
+    }
+  };
+  useEffect(() => stopCheckoutWatch, []);
   const isEnrolled = Boolean(user && course.enrolled);
 
   const [isPaymentBusy, setIsPaymentBusy] = useState(false);
@@ -527,6 +552,64 @@ function CoursePurchaseSection({
     );
   };
 
+  /**
+   * The gateway's window can go away without telling the page anything: it
+   * calls neither the success handler nor `ondismiss` when the learner
+   * closes it from one of its own error screens ("Uh! oh! Something went
+   * wrong"). The button then stayed on "Processing…" for good. Worse, the
+   * card may already have been charged by then, as it was when this was
+   * found: the gateway had captured the payment and failed afterwards.
+   *
+   * So while the window is open the page watches it, and if it closes
+   * unanswered the button is given back with a message that tells the truth
+   * about what is not known, and the order goes on being watched: the
+   * server's recovery cycle marks a captured payment paid within a few
+   * minutes, and the course then opens without the learner paying twice.
+   */
+  const watchForUnansweredClose = (
+    orderId: string,
+    answered: () => boolean,
+  ) => {
+    stopCheckoutWatch();
+    let seenOpen = false;
+    checkoutWatchRef.current = window.setInterval(() => {
+      if (answered()) return stopCheckoutWatch();
+      const container = document.querySelector(".razorpay-container");
+      const isOpen =
+        container !== null &&
+        window.getComputedStyle(container).display !== "none";
+      if (isOpen) {
+        seenOpen = true;
+        return;
+      }
+      if (!seenOpen) return;
+      stopCheckoutWatch();
+      void followUpUnansweredClose(orderId);
+    }, 500);
+  };
+
+  const followUpUnansweredClose = async (orderId: string) => {
+    paymentConfirmationRef.current?.abort();
+    const confirmation = new AbortController();
+    paymentConfirmationRef.current = confirmation;
+
+    setIsPaymentBusy(false);
+    setPaymentNotice(null);
+    setPaymentError(
+      "The payment window closed before we heard back from it. If your payment went through, this course will unlock by itself within a few minutes, so please check Purchase History before paying again.",
+    );
+
+    const paid = await awaitPaidOrder(orderId, confirmation.signal);
+    if (confirmation.signal.aborted) return;
+    paymentConfirmationRef.current = null;
+    if (paid) {
+      setPaymentError(null);
+      onNavigatePage?.(
+        `/learn/${encodeURIComponent(getCourseRouteKey(course))}`,
+      );
+    }
+  };
+
   const handlePayNow = async (voluntaryContributionAmount?: number) => {
     if (isReadOnlyPreview) return;
     if (!user) {
@@ -582,6 +665,8 @@ function CoursePurchaseSection({
         throw new Error("Payment checkout is unavailable.");
       }
 
+      // Whether the gateway's window has told the page how it ended.
+      let checkoutAnswered = false;
       const rzp = new window.Razorpay({
         key: order.gateway.keyId,
         amount: order.gateway.amount,
@@ -605,6 +690,7 @@ function CoursePurchaseSection({
           razorpay_payment_id: string;
           razorpay_signature: string;
         }) => {
+          checkoutAnswered = true;
           try {
             await verify.mutateAsync({
               orderId: order.order.id,
@@ -626,17 +712,21 @@ function CoursePurchaseSection({
         },
         modal: {
           ondismiss: () => {
+            checkoutAnswered = true;
             // A payment that went through is being confirmed; the gateway
             // closing its own window afterwards is not a cancellation.
             const confirmation = paymentConfirmationRef.current;
             if (confirmation && !confirmation.signal.aborted) return;
-            setPaymentError("Payment cancelled. You can retry.");
+            setPaymentError(
+              "The payment window was closed before the payment was completed. You can try again whenever you are ready.",
+            );
             setIsPaymentBusy(false);
           },
         },
       });
 
       rzp.open();
+      watchForUnansweredClose(order.order.id, () => checkoutAnswered);
     } catch (error) {
       setPaymentError(
         readCheckoutStartError(
@@ -648,15 +738,15 @@ function CoursePurchaseSection({
     }
   };
 
-  // The price stands on the bar beside the button, so the button does not
-  // repeat it. A buyer's own, higher amount is still named, and so is a
-  // coupon that leaves nothing to pay.
+  // "Pay Now", with a card for its icon: the amount stands on the bar
+  // beside the button. A buyer's own, higher amount is still named, and a
+  // coupon that leaves nothing to pay says so instead.
   const paidCtaLabel = (payable: number, currency: string) =>
-    voluntaryAmount > baseNumericPrice
-      ? `Pay ${formatPriceWithCurrency(payable, currency)} & Enroll`
-      : payable === 0
-        ? "Enroll for Free"
-        : "Buy Now";
+    payable === 0
+      ? "Enroll for Free"
+      : voluntaryAmount > baseNumericPrice
+        ? `Pay ${formatPriceWithCurrency(payable, currency)} & Enroll`
+        : "Pay Now";
 
   let ctaLabel = "Continue Learning";
   let ctaIcon: React.ReactNode = (
@@ -737,27 +827,13 @@ function CoursePurchaseSection({
         );
       } else {
         ctaLabel = "Enroll for Free";
-        ctaIcon = (
-          <BookOpen
-            size="1.15em"
-            weight="bold"
-            className="shrink-0"
-            aria-hidden="true"
-          />
-        );
+        ctaIcon = <HoverFillIcon icon={BookOpen} />;
       }
     } else {
       const payable =
         voluntaryAmount > baseNumericPrice ? voluntaryAmount : baseNumericPrice;
       ctaLabel = paidCtaLabel(payable, courseCurrency);
-      ctaIcon = (
-        <ShoppingBag
-          size="1.15em"
-          weight="bold"
-          className="shrink-0"
-          aria-hidden="true"
-        />
-      );
+      ctaIcon = <PayCardIcon />;
     }
     ctaDisabled = false;
     ctaOnClick = undefined; // Preview actions stay non-functional.
@@ -793,12 +869,7 @@ function CoursePurchaseSection({
             aria-hidden="true"
           />
         ) : (
-          <BookOpen
-            size="1.15em"
-            weight="bold"
-            className="shrink-0"
-            aria-hidden="true"
-          />
+          <HoverFillIcon icon={BookOpen} />
         );
         ctaDisabled = isPaymentBusy;
         ctaOnClick = () => handlePayNow(0);
@@ -817,12 +888,7 @@ function CoursePurchaseSection({
           aria-hidden="true"
         />
       ) : (
-        <ShoppingBag
-          size="1.15em"
-          weight="bold"
-          className="shrink-0"
-          aria-hidden="true"
-        />
+        <PayCardIcon />
       );
       ctaDisabled = isPaymentBusy || isCustomUnderPrice;
       ctaOnClick = () => {
@@ -956,14 +1022,16 @@ function CoursePurchaseSection({
 
 interface CourseAboutCardProps {
   description?: string;
+  /** For someone who manages the course: opens the editor's Basics tab. */
+  onEdit?: () => void;
   isReadOnlyPreview?: boolean;
 }
 
 /** Line height × clamp lines = collapsed max-height in px. */
 const CLAMP_LINES = 5;
-const LINE_HEIGHT_PX = 0.88 * 16 * 1.65; // font-size × line-height ≈ 23.2 px
+const LINE_HEIGHT_PX = 0.92 * 16 * 1.65; // font-size × line-height ≈ 24.3 px
 
-function CourseAboutCard({ description }: CourseAboutCardProps) {
+function CourseAboutCard({ description, onEdit }: CourseAboutCardProps) {
   const hasDescription = Boolean(description && description.trim());
   const [expanded, setExpanded] = useState(false);
   const [needsClamp, setNeedsClamp] = useState(() => {
@@ -980,25 +1048,32 @@ function CourseAboutCard({ description }: CourseAboutCardProps) {
 
   const collapsedMaxHeight = `${Math.round(LINE_HEIGHT_PX * CLAMP_LINES)}px`;
 
+  // A box, the page's last: heading, the description, and "See more" once
+  // it is cut, with a fade over the cut in the box's own colour.
   return (
     <section
-      className="p-[18px_24px] rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-(--surface) shadow-(--card-shadow) max-[640px]:p-[18px_16px]"
+      className={`${overviewCardClasses} ${overviewCardPaddingClasses}`}
       aria-labelledby="cov-about-heading"
+      data-fixed-radius
     >
-      <h2
-        id="cov-about-heading"
-        className="m-0 mb-3 text-(--text) text-[1.24rem] font-bold tracking-[-0.015em]"
-      >
-        About this course
-      </h2>
+      <div className={bandHeaderClasses}>
+        <h2 id="cov-about-heading" className={bandTitleClasses}>
+          About this course
+        </h2>
+        {onEdit ? (
+          <button type="button" className={bandLinkClasses} onClick={onEdit}>
+            <PencilSimple size={15} weight="bold" aria-hidden="true" />
+            <span>Edit about</span>
+          </button>
+        ) : null}
+      </div>
 
       {hasDescription ? (
-        <div className="flex flex-col gap-2">
-          {/* Clamp wrapper */}
+        <div className="mt-3.5 flex flex-col gap-2.5">
           <div className="relative">
             <div
               ref={contentRef}
-              className="cov-prose text-[0.88rem] leading-[1.65] overflow-hidden transition-[max-height] duration-300 ease-in-out"
+              className="cov-prose overflow-hidden text-[0.92rem] leading-[1.65] text-(--text-secondary) transition-[max-height] duration-300 ease-in-out"
               style={{
                 maxHeight:
                   needsClamp && !expanded ? collapsedMaxHeight : "9999px",
@@ -1014,52 +1089,40 @@ function CourseAboutCard({ description }: CourseAboutCardProps) {
               />
             </div>
 
-            {/* Gradient fade — only shown when collapsed and clamp is active */}
             {needsClamp && !expanded && (
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-(--surface) to-transparent"
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-(--cov-card) to-transparent"
               />
             )}
           </div>
 
-          {/* Toggle button */}
           {needsClamp && (
             <button
               type="button"
               data-testid="description-toggle"
               onClick={() => setExpanded((prev) => !prev)}
-              className="self-start flex items-center gap-1.5 text-[0.82rem] font-semibold text-(--accent) hover:opacity-80 transition-opacity cursor-pointer bg-transparent border-0 p-0"
+              className={`${bandLinkClasses} self-start`}
             >
-              {expanded ? (
-                <>
-                  See less
-                  <CaretDown
-                    size={13}
-                    weight="bold"
-                    className="rotate-180 transition-transform duration-200"
-                  />
-                </>
-              ) : (
-                <>
-                  See more
-                  <CaretDown
-                    size={13}
-                    weight="bold"
-                    className="transition-transform duration-200"
-                  />
-                </>
-              )}
+              {expanded ? "See less" : "See more"}
+              <CaretDown
+                size={13}
+                weight="bold"
+                className={`transition-transform duration-200 ${
+                  expanded ? "rotate-180" : ""
+                }`}
+                aria-hidden="true"
+              />
             </button>
           )}
         </div>
       ) : (
-        <div
-          className="p-8 rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-(--surface) text-(--muted) text-center text-[0.88rem] italic"
+        <p
+          className="m-0 mt-3.5 text-[0.9rem] text-(--muted)"
           data-testid="course-description-empty"
         >
           No description available yet
-        </div>
+        </p>
       )}
     </section>
   );
@@ -1420,16 +1483,10 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
   // had been removed.
   if (!courseWithEnrollment && overviewError && overviewError.status !== 404) {
     return (
-      <div className="w-full max-w-275 mx-auto box-border text-(--text)">
-        <div className="courses-empty" role="alert">
-          <BookOpen size={34} />
-          <h2>This course could not be loaded</h2>
-          <p>Check your connection and try again.</p>
-          <button type="button" onClick={() => void refetchOverview()}>
-            Try again
-          </button>
-        </div>
-      </div>
+      <CourseLoadError
+        onRetry={() => void refetchOverview()}
+        onBack={props.onNavigateCourses}
+      />
     );
   }
 
@@ -1640,6 +1697,18 @@ function CourseOverviewContent({
   // Someone who manages the course has nothing to save for later or to try
   // before buying, and neither has a learner who is already enrolled.
   const managesCourse = isCreator && !isReadOnlyPreview;
+  // The editor's tabs, for the manager's "Edit" links.
+  const openEditor = (step: "basics" | "curriculum") => () =>
+    onNavigatePage?.(
+      getCourseEditorPath({ mode: "edit", courseId: course.id, step }),
+    );
+  // What the course sells for, as the manager's bar words it.
+  const managerPriceLabel = isFreeCoursePricing(activePricing)
+    ? "Free"
+    : (activePricing?.price ??
+      (typeof activePricing?.amount === "number"
+        ? formatPriceWithCurrency(activePricing.amount, activePricing.currency)
+        : "Paid"));
   const isEnrolled = Boolean(user && course.enrolled);
   // What a visitor can watch before buying: the lessons a paid course marks
   // as free previews (the ones the curriculum labels "Free").
@@ -1685,8 +1754,10 @@ function CourseOverviewContent({
             ? "All courses"
             : backSection
       }
+      // No heart for someone who manages the course, nor for a learner who
+      // is enrolled in it: a wish list is for courses not yet taken.
       wishlist={
-        managesCourse
+        managesCourse || isEnrolled
           ? undefined
           : {
               wishlisted,
@@ -1705,21 +1776,36 @@ function CourseOverviewContent({
   return (
     <div
       data-course-overview
-      className={`flex w-full flex-col gap-4 text-(--text) ${
+      // On the course page the first box touches the hero; in the editor's
+      // preview the hero is a card in the column like the rest.
+      className={`flex w-full flex-col text-(--text) ${
         isReadOnlyPreview
-          ? "p-[36px_24px_48px] max-[900px]:p-[24px_16px_48px] max-[640px]:p-[16px_14px_40px]"
+          ? "gap-4 p-[36px_24px_48px] max-[900px]:p-[24px_16px_48px] max-[640px]:p-[16px_14px_40px]"
           : ""
       }`}
     >
       {/* 1. Title and course facts over the thumbnail */}
       {isReadOnlyPreview ? null : hero}
 
-      <div className={overviewColumnClasses} data-fixed-radius>
+      <div
+        className={`${overviewColumnClasses} ${
+          isReadOnlyPreview ? "" : overviewColumnUnderHeroClasses
+        }`}
+        data-fixed-radius
+      >
         {isReadOnlyPreview ? hero : null}
 
-        {/* 2. For an enrolled learner, where they are in the course;
-            otherwise the price, the coupon and the button that buys it. */}
-        {isEnrolled && !managesCourse ? (
+        {/* 2. For someone who manages the course, its state and the ways
+            into the editor; for an enrolled learner, where they are in the
+            course; otherwise the price, the coupon and the button that
+            buys it. */}
+        {managesCourse ? (
+          <CourseManagerBar
+            course={course}
+            priceLabel={managerPriceLabel}
+            onNavigatePage={onNavigatePage}
+          />
+        ) : isEnrolled ? (
           <CourseLearnerProgressBar
             courseKey={getCourseRouteKey(course)}
             courseTitle={title}
@@ -1739,13 +1825,12 @@ function CourseOverviewContent({
           />
         )}
 
-        {/* 3. About This Course */}
-        <CourseAboutCard description={activeDescription} />
-
-        {/* 4. Course Curriculum */}
+        {/* 3. Course curriculum */}
         <CourseOverviewCurriculum
           sectionCount={course.sections}
           lessonCount={course.lectures}
+          duration={course.duration}
+          onEdit={managesCourse ? openEditor("curriculum") : undefined}
           courseSections={courseSections}
           openSections={openSections}
           onToggleSection={toggleSection}
@@ -1754,6 +1839,12 @@ function CourseOverviewContent({
           onSelectLesson={handleSelectLesson}
           isReadOnlyPreview={isReadOnlyPreview}
           isPaidCourse={isPaidCourse}
+        />
+
+        {/* 4. About this course, under the curriculum */}
+        <CourseAboutCard
+          description={activeDescription}
+          onEdit={managesCourse ? openEditor("basics") : undefined}
         />
       </div>
     </div>

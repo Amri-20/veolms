@@ -25,11 +25,12 @@ const placeholder =
 
 /**
  * What an enrolled learner gets where a visitor gets the price: how far they
- * are, the lesson that comes next, and the button that opens it.
+ * are, and the button that opens the lesson to carry on with, on one line of
+ * the page (they stack when the page is narrow).
  *
  * The percentage comes with the course; the lesson and the count of lessons
  * done are asked for here and arrive a moment later, so their places are held
- * until then and the bar keeps its height.
+ * until then and the band keeps its height.
  */
 export function CourseLearnerProgressBar({
   courseKey,
@@ -54,13 +55,6 @@ export function CourseLearnerProgressBar({
     : hasStarted
       ? "Continue Learning"
       : "Start Learning";
-  // A lesson left part-way is carried on with; one not opened yet comes next.
-  const lessonLead = !hasStarted
-    ? "Start with"
-    : lesson && lesson.progressPercent > 0
-      ? "Continue"
-      : "Up next";
-
   const openCourse = () => {
     onNavigatePage?.(
       lesson
@@ -73,20 +67,45 @@ export function CourseLearnerProgressBar({
     <section
       className={priceBarSurfaceClasses}
       aria-label="Your progress in this course"
+      data-fixed-radius
     >
       <div
-        className={`${priceBarPaddingClasses} flex flex-col gap-3.5 @2xl/price:flex-row @2xl/price:items-center @2xl/price:gap-6`}
+        className={`${priceBarPaddingClasses} flex flex-col gap-5 @2xl/price:flex-row @2xl/price:items-center @2xl/price:justify-between @2xl/price:gap-10 @2xl/price:py-6!`}
       >
-        <div className="flex min-w-0 flex-col gap-2.5 @2xl/price:w-64 @2xl/price:shrink-0">
-          <div className="flex items-baseline gap-2.5">
-            <span className="text-[2.15rem] leading-none font-[850] tracking-[-0.03em] whitespace-nowrap text-(--text) max-[640px]:text-[1.95rem]">
-              {percent}%
+        {/* How far, on one line: "42% complete", then the count of lessons
+            it stands for, with a thick bar under them. Beside the button
+            the bar is as long as that line and no longer (the box takes
+            its width from the words); stacked, it runs the box's width. */}
+        <div className="flex min-w-0 flex-col gap-3 @2xl/price:w-fit @2xl/price:max-w-[60%] @2xl/price:min-w-64 @2xl/price:shrink-0">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="inline-flex items-baseline gap-2 leading-none font-bold tracking-[-0.02em] whitespace-nowrap text-(--text)">
+              {isComplete ? (
+                <CheckCircle
+                  size={24}
+                  weight="fill"
+                  className="self-center text-emerald-500"
+                  aria-hidden="true"
+                />
+              ) : null}
+              <span className="text-[1.7rem] tabular-nums">{percent}%</span>
+              <span className="text-[1.3rem]">complete</span>
             </span>
-            <span className="truncate text-[0.86rem] text-(--muted)">
-              {place
-                ? `${place.completedLessons} of ${lessonCount} lessons done`
-                : "complete"}
-            </span>
+            {place ? (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="self-center text-[0.8rem] text-(--muted) opacity-70"
+                >
+                  •
+                </span>
+                <span className="text-[1.05rem] whitespace-nowrap text-(--muted) tabular-nums">
+                  {place.completedLessons} of {lessonCount} lesson
+                  {lessonCount === 1 ? "" : "s"}
+                </span>
+              </>
+            ) : resume.isPending ? (
+              <span className={`${placeholder} h-4 w-36 self-center`} />
+            ) : null}
           </div>
           <span
             role="progressbar"
@@ -94,57 +113,25 @@ export function CourseLearnerProgressBar({
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={percent}
-            className="block h-1.5 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--text)_12%,transparent)]"
+            className="block h-2.5 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--text)_9%,transparent)]"
           >
             <span
-              className="block h-full rounded-full bg-(--accent)"
+              className={`block h-full rounded-full bg-linear-to-r transition-[width] duration-700 ease-out motion-reduce:transition-none ${
+                percent > 0 ? "min-w-2.5" : ""
+              } ${
+                isComplete
+                  ? "from-emerald-500 to-emerald-400"
+                  : "from-(--accent) to-[color-mix(in_srgb,var(--accent)_78%,white)]"
+              }`}
               style={{ width: `${percent}%` }}
             />
           </span>
         </div>
 
-        <div className="flex min-h-10.5 min-w-0 flex-1 flex-col justify-center gap-1 @2xl/price:border-l @2xl/price:border-[color-mix(in_srgb,var(--text)_12%,transparent)] @2xl/price:pl-6">
-          {isComplete ? (
-            <>
-              <p className="m-0 flex items-center gap-1.5 text-xs font-semibold text-emerald-500">
-                <CheckCircle size={15} weight="fill" aria-hidden="true" />
-                Completed
-              </p>
-              <p className="m-0 truncate text-[0.95rem] font-semibold text-(--text)">
-                You have finished all {lessonCount} lesson
-                {lessonCount === 1 ? "" : "s"}
-              </p>
-            </>
-          ) : lesson ? (
-            <>
-              <p className="m-0 truncate text-xs text-(--muted)">
-                {lessonLead}
-                <span aria-hidden="true" className="mx-1.5">
-                  ·
-                </span>
-                Lesson {lesson.lessonNumber}
-                <span aria-hidden="true" className="mx-1.5">
-                  ·
-                </span>
-                {lesson.sectionTitle}
-              </p>
-              <p
-                className="m-0 truncate text-[0.95rem] font-semibold text-(--text)"
-                title={lesson.title}
-              >
-                {lesson.title}
-              </p>
-            </>
-          ) : resume.isPending ? (
-            <>
-              <span className={`${placeholder} h-3 w-40`} />
-              <span className={`${placeholder} h-4 w-64 max-w-full`} />
-            </>
-          ) : null}
-        </div>
-
+        {/* The way on, as wide as its words need. */}
         <Button
-          className={`${priceBarActionClasses} w-full @2xl/price:w-56`}
+          motion="static"
+          className={`${priceBarActionClasses} w-full @2xl/price:w-auto @2xl/price:min-w-60`}
           onClick={openCourse}
         >
           <Play
