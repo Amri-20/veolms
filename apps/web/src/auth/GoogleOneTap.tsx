@@ -118,7 +118,13 @@ function toOneTapErrorMessage(error: ApiError): string {
   return ONE_TAP_FAILED_MESSAGE;
 }
 
+// Whether this tab has put a One Tap prompt up that has not been called off.
+let oneTapPromptStarted = false;
+
+/** Calls off a One Tap prompt this tab started. Does nothing otherwise. */
 export function cancelGoogleOneTap(): void {
+  if (!oneTapPromptStarted) return;
+  oneTapPromptStarted = false;
   window.google?.accounts?.id?.cancel();
 }
 
@@ -187,6 +193,7 @@ export function GoogleOneTap({
               );
             },
           });
+          oneTapPromptStarted = true;
           googleIdentity.prompt();
         })
         .catch(() => {
@@ -322,6 +329,7 @@ export function GlobalGoogleOneTap() {
               );
             },
           });
+          oneTapPromptStarted = true;
           googleIdentity.prompt();
         })
         .catch(() => {
@@ -334,7 +342,12 @@ export function GlobalGoogleOneTap() {
       cancelScheduledLoad();
       cancelGoogleOneTap();
     };
-  }, [shouldPrompt, clientId, normalizedPath]);
+    // Not the path: where the visitor is only matters through shouldPrompt
+    // (excluded pages) and returnTo (read through a ref). With the path
+    // listed, every navigation called the prompt off and put it up again,
+    // and for a signed-in user asked Google to cancel a prompt that was
+    // never shown.
+  }, [shouldPrompt, clientId]);
 
   return (
     <>

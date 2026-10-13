@@ -119,7 +119,7 @@ export function useOrderHistoryFilter(
       if (!search) return true;
       return [
         order.orderNumber,
-        order.invoiceNumber,
+        order.invoiceNumber ?? "",
         order.courseTitle,
         order.payment.brand,
         order.payment.label,

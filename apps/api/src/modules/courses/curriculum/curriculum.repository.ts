@@ -1,4 +1,4 @@
-import { type Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import type { Database, DatabaseExecutor } from "@veolms/database";
 
 // --- Sections ---
@@ -391,10 +391,45 @@ export async function findResourceByLessonId(
 }
 
 /**
+ * Which of the given ids appear anywhere in course, lesson or lesson-resource
+ * text. Used before removing stored files, to be sure no description links
+ * to one. One pass over the text for the whole set of ids; `ids` must be
+ * lower-case UUIDs.
+ */
+export async function findIdsMentionedInCourseContent(
+  database: Kysely<Database>,
+  ids: readonly string[],
+): Promise<string[]> {
+  if (ids.length === 0) return [];
+
+  const result = await sql<{ id: string }>`
+    select distinct lower(found[1]) as id
+    from (
+      select description as body from course_lessons
+      union all
+      select description from lesson_resources
+      union all
+      select description from courses
+      union all
+      select short_description from courses
+    ) as texts
+    cross join lateral regexp_matches(
+      texts.body,
+      '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})',
+      'g'
+    ) as found
+    where lower(found[1]) = any(${[...ids]}::text[])
+  `.execute(database);
+
+  return result.rows.map((row) => row.id);
+}
+
+/**
  * Every live resource of a course's live lessons, in display order. Reading
  * by course lets a caller fetch resources alongside the lessons instead of
  * waiting for the lesson ids first.
  */
+
 export async function listResourcesByCourseId(
   database: Kysely<Database>,
   courseId: string,

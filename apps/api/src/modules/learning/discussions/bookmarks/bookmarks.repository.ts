@@ -15,6 +15,7 @@ import type {
 } from "@veolms/contracts";
 import type { Nullable, SelectQueryBuilder } from "kysely";
 import { sql } from "kysely";
+import { containsPattern } from "../shared/discussion.utils.ts";
 import {
   type DiscussionListCursor,
   createdAtIdDescSql,
@@ -212,7 +213,7 @@ function applyBookmarkFilters<O>(
   }
 
   if (options.search) {
-    const pattern = `%${options.search.toLowerCase()}%`;
+    const pattern = containsPattern(options.search);
     q = q.where(
       sql<boolean>`(
         lower(coalesce(t.title, '')) like ${pattern}

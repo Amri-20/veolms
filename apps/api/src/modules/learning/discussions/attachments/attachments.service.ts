@@ -19,14 +19,23 @@ import {
   DISCUSSION_DEFAULT_EXTENSION_FOR_MIME,
   isAllowedExtensionForMimeType,
   discussionUploadStorageKey,
+  isSafeDiscussionUploadFileName,
   type DiscussionUploadStore,
 } from "../../../discussion-uploads/index.ts";
+import { config } from "../../../../config.ts";
+import { STUDENT_ROLE } from "../../../auth/index.ts";
 import { DISCUSSION_CONSTANTS } from "../shared/discussion.constants.ts";
 import {
   createDiscussionAccess,
   type DiscussionActor,
 } from "../shared/discussion.access.ts";
 import { getAttachmentDimensionFields } from "../shared/discussion-attachment-metadata.ts";
+import { withWriteTransaction } from "../shared/discussion.mentions.ts";
+import {
+  exceedsUploadQuota,
+  isUnrecordedUpload,
+  supersededUploadFileName,
+} from "./attachment-upload-rules.ts";
 import { fetchSafeHtml, extractLinkMetadata } from "./attachments.preview.ts";
 import type {
   AttachmentRecord,
@@ -102,6 +111,7 @@ export interface AttachmentsService {
     attachmentId: string,
     userId: string,
     file: IncomingAttachmentFile,
+    logger?: AttachmentUploadLogger,
   ): Promise<UploadedAttachment>;
 
   completeUpload(
@@ -118,6 +128,78 @@ export interface AttachmentsService {
   ): Promise<LearningUploadResponse>;
 
   fetchLinkPreview(url: string): Promise<LinkPreviewResponse>;
+
+  /**
+   * Removes uploads that were never attached to a post and that nothing
+   * refers to. With `apply` false it only reports what it would remove.
+   */
+  purgeAbandonedUploads(
+    db: DatabaseExecutor,
+    options: PurgeAbandonedUploadsOptions,
+  ): Promise<PurgeAbandonedUploadsResult>;
+}
+
+export interface PurgeAbandonedUploadsOptions {
+  /** Only uploads created before this moment are considered. */
+  olderThan: Date;
+  /** False reports what would be removed and removes nothing. */
+  apply: boolean;
+  /**
+   * The most uploads one run removes. Every candidate is still looked at:
+   * capping the ones looked at would let uploads that are kept, which stay
+   * candidates on every run, hold back the ones behind them for good.
+   */
+  limit: number;
+  /**
+   * Asks the rest of the platform which of these uploads it refers to (in a
+   * lesson or course description, say). An upload it refers to is kept.
+   */
+  findReferencedElsewhere?: (
+    attachmentIds: readonly string[],
+  ) => Promise<readonly string[]>;
+}
+
+export interface PurgeAbandonedUploadsResult {
+  examined: number;
+  /** Kept because a post, note or other record mentions them. */
+  referenced: number;
+  /** Removed, or with `apply` false, would be. */
+  removable: number;
+  removableBytes: number;
+  /** Attached or removed by someone else while the run was under way. */
+  skipped: number;
+  /**
+   * Left in place because the stored file could not be removed, or is not
+   * where a discussion upload is kept. They stay candidates for the next
+   * run.
+   */
+  failed: number;
+}
+
+/** How long an upload slot from /attachments/initiate accepts its file. */
+const UPLOAD_SLOT_TTL_MS = 60 * 60 * 1000;
+
+const UPLOAD_QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
+const BYTES_PER_MEGABYTE = 1024 * 1024;
+const PURGE_PAGE_SIZE = 100;
+
+/** Any role beyond student posts teaching material and gets the staff allowance. */
+function dailyUploadQuotaBytes(actor: DiscussionActor): number {
+  const isStaff = actor.roles.some(
+    (role) => role.toLowerCase() !== STUDENT_ROLE,
+  );
+  const megabytes = isStaff
+    ? config.DISCUSSION_UPLOAD_DAILY_QUOTA_STAFF_MB
+    : config.DISCUSSION_UPLOAD_DAILY_QUOTA_MB;
+  return megabytes * BYTES_PER_MEGABYTE;
+}
+
+/**
+ * The request logger, as far as an upload needs it: a place to record a
+ * stored file that could not be tidied away, which the caller is not told.
+ */
+export interface AttachmentUploadLogger {
+  warn(details: object, message: string): void;
 }
 
 /**
@@ -196,6 +278,64 @@ export function createAttachmentsService(
       actor,
       context.courseId,
     );
+  }
+
+  /**
+   * Refuses an upload once the account has used its allowance for the last
+   * 24 hours. `incomingBytes` is the size the client declared, where it
+   * declared one; a streamed upload has no size until it is stored, so it
+   * is let through while any allowance is left (0 bytes here) and counted
+   * at its real size by `recordUploadWithinQuota` once stored.
+   *
+   * On its own this is only an early answer: it reads a total that a
+   * request arriving at the same moment does not see yet.
+   */
+  async function assertWithinUploadQuota(
+    db: DatabaseExecutor,
+    actor: DiscussionActor,
+    incomingBytes: number,
+  ): Promise<void> {
+    const quotaBytes = dailyUploadQuotaBytes(actor);
+    if (quotaBytes <= 0) return;
+
+    const usedBytes = await attachmentsRepo.sumOwnerUploadBytesSince(
+      db,
+      actor.userId,
+      new Date(Date.now() - UPLOAD_QUOTA_WINDOW_MS),
+    );
+    if (exceedsUploadQuota(usedBytes, incomingBytes, quotaBytes)) {
+      throw httpError(
+        429,
+        "UPLOAD_QUOTA_EXCEEDED",
+        "You have reached your upload limit for today. Please try again tomorrow.",
+      );
+    }
+  }
+
+  /**
+   * Counts the allowance and records the upload under it as one step per
+   * account, at the size given (the declared size of a slot, the stored
+   * size of a streamed file). Done as two steps, a burst of requests each
+   * read the total before any of them had recorded its upload, and all of
+   * them went through: twelve at once took several times the allowance.
+   * Refused with the same answer as `assertWithinUploadQuota`, and nothing
+   * is recorded.
+   */
+  async function recordUploadWithinQuota(
+    db: DatabaseExecutor,
+    actor: DiscussionActor,
+    attachment: Parameters<AttachmentsRepository["createAttachment"]>[1],
+  ): Promise<void> {
+    if (dailyUploadQuotaBytes(actor) <= 0) {
+      await attachmentsRepo.createAttachment(db, attachment);
+      return;
+    }
+
+    await withWriteTransaction(db, async (trx) => {
+      await attachmentsRepo.lockOwnerUploadAllowance(trx, actor.userId);
+      await assertWithinUploadQuota(trx, actor, attachment.fileSize);
+      await attachmentsRepo.createAttachment(trx, attachment);
+    });
   }
 
   async function resolveLinkPreview(url: string): Promise<LinkPreviewResponse> {
@@ -311,6 +451,8 @@ export function createAttachmentsService(
         );
       }
 
+      await assertWithinUploadQuota(db, actor, input.fileSize);
+
       const dimensions = validateDimensions(input.mimeType, input);
 
       const id = crypto.randomUUID();
@@ -325,7 +467,7 @@ export function createAttachmentsService(
         input.fileSize,
       );
 
-      await attachmentsRepo.createAttachment(db, {
+      await recordUploadWithinQuota(db, actor, {
         id,
         ownerId: actor.userId,
         kind,
@@ -346,7 +488,7 @@ export function createAttachmentsService(
       return { attachmentId: id, uploadUrl };
     },
 
-    async uploadFile(db, attachmentId, userId, file) {
+    async uploadFile(db, attachmentId, userId, file, logger) {
       if (!isSupportedDiscussionUploadMimeType(file.mimetype)) {
         throw httpError(
           415,
@@ -386,6 +528,24 @@ export function createAttachmentsService(
         );
       }
 
+      // The slot was counted against the daily allowance at the size the
+      // client declared for it, and only for a while. Without both checks a
+      // slot declared at one byte took a full-size file, at any later time.
+      const initiatedAt =
+        typeof existing.metadata?.initiatedAt === "string"
+          ? Date.parse(existing.metadata.initiatedAt)
+          : Number.NaN;
+      if (
+        Number.isFinite(initiatedAt) &&
+        Date.now() - initiatedAt > UPLOAD_SLOT_TTL_MS
+      ) {
+        throw httpError(
+          400,
+          "UPLOAD_SLOT_CLOSED",
+          "This attachment can no longer receive a file.",
+        );
+      }
+
       const dimensions = validateDimensions(file.mimetype, file);
       const existingDimensions = getAttachmentDimensionFields(
         existing.metadata,
@@ -407,6 +567,7 @@ export function createAttachmentsService(
       });
       if (
         stored.size > DISCUSSION_CONSTANTS.MAX_ATTACHMENT_SIZE_BYTES ||
+        stored.size > existing.fileSize ||
         file.isTruncated()
       ) {
         await uploadStore.remove(sanitizedName);
@@ -417,12 +578,14 @@ export function createAttachmentsService(
         );
       }
       const fileUrl = discussionUploadPublicUrl(sanitizedName);
+      const storedStorageKey = discussionUploadStorageKey(sanitizedName);
 
+      let slotFilled: boolean;
       try {
-        await db
+        const result = await db
           .updateTable("learning_attachments")
           .set({
-            storage_key: discussionUploadStorageKey(sanitizedName),
+            storage_key: storedStorageKey,
             file_name: file.filename,
             file_url: fileUrl,
             mime_type: file.mimetype,
@@ -439,10 +602,66 @@ export function createAttachmentsService(
             ),
           })
           .where("id", "=", attachmentId)
-          .execute();
+          // Only while the slot is still open, as checked above: the file
+          // took a while to arrive, and the slot may have been filled since.
+          .where("status", "=", "uploading")
+          .where("target_id", "is", null)
+          .executeTakeFirst();
+        slotFilled = Number(result.numUpdatedRows) > 0;
       } catch (error) {
         await uploadStore.remove(sanitizedName);
         throw error;
+      }
+
+      // The slot was filled while this file was arriving: two files posted
+      // to one slot at the same moment both pass the check above. Both used
+      // to be accepted, the record kept whichever was written last, and the
+      // other stayed in storage with no record pointing at it, where the
+      // clean-up job, which works from the records, never finds it. This
+      // file is now refused like one posted after the slot was filled, and
+      // removed. The refusal is the answer either way, so a failure to
+      // remove is recorded, not returned.
+      if (!slotFilled) {
+        const current = await attachmentsRepo.findAttachmentById(
+          db,
+          attachmentId,
+        );
+        if (isUnrecordedUpload(storedStorageKey, current?.storageKey)) {
+          try {
+            await uploadStore.removeOrThrow(sanitizedName);
+          } catch (error) {
+            logger?.warn(
+              { err: error, attachmentId, storageKey: storedStorageKey },
+              "Could not remove a file sent to an upload slot that was already filled",
+            );
+          }
+        }
+        throw httpError(
+          400,
+          "UPLOAD_SLOT_CLOSED",
+          "This attachment can no longer receive a file.",
+        );
+      }
+
+      // The record now points at the file just stored. If bytes were also
+      // put at the address the slot was opened with, under another name,
+      // nothing points at them any more: they go now, because the clean-up
+      // job works from the records and would never find them. The upload
+      // has succeeded either way, so a failure here is recorded, not
+      // returned.
+      const supersededName = supersededUploadFileName(
+        existing.storageKey,
+        storedStorageKey,
+      );
+      if (supersededName) {
+        try {
+          await uploadStore.removeOrThrow(supersededName);
+        } catch (error) {
+          logger?.warn(
+            { err: error, attachmentId, storageKey: existing.storageKey },
+            "Could not remove the file an upload slot was first given",
+          );
+        }
       }
 
       const updated = await attachmentsRepo.findAttachmentById(
@@ -559,6 +778,8 @@ export function createAttachmentsService(
         );
       }
 
+      await assertWithinUploadQuota(db, actor, 0);
+
       const dimensions = validateDimensions(file.mimetype, file);
 
       const id = crypto.randomUUID();
@@ -586,8 +807,11 @@ export function createAttachmentsService(
       }
       const fileUrl = discussionUploadPublicUrl(sanitizedName);
 
+      // The size is known now, so this is where the file is counted. One
+      // that takes the account past its allowance is refused like a slot
+      // declared at that size would have been, and the catch removes it.
       try {
-        await attachmentsRepo.createAttachment(db, {
+        await recordUploadWithinQuota(db, actor, {
           id,
           ownerId: actor.userId,
           kind,
@@ -621,6 +845,101 @@ export function createAttachmentsService(
         width: dimensions?.width ?? null,
         height: dimensions?.height ?? null,
       };
+    },
+
+    async purgeAbandonedUploads(db, options) {
+      const result: PurgeAbandonedUploadsResult = {
+        examined: 0,
+        referenced: 0,
+        removable: 0,
+        removableBytes: 0,
+        skipped: 0,
+        failed: 0,
+      };
+      let afterId: string | undefined;
+
+      while (result.removable < options.limit) {
+        const page = await attachmentsRepo.listUnattachedAttachments(db, {
+          olderThan: options.olderThan,
+          limit: PURGE_PAGE_SIZE,
+          afterId,
+        });
+        if (page.length === 0) break;
+
+        // An upload shown inline in a post, or linked from anywhere else, is
+        // in use even though no post lists it as an attachment. Looked up
+        // for the whole page at once, just before the page is acted on.
+        const pageIds = page.map((attachment) => attachment.id.toLowerCase());
+        const referencedIds = new Set(
+          [
+            ...(await attachmentsRepo.findAttachmentsMentionedInPosts(
+              db,
+              pageIds,
+            )),
+            ...(options.findReferencedElsewhere
+              ? await options.findReferencedElsewhere(pageIds)
+              : []),
+          ].map((id) => id.toLowerCase()),
+        );
+
+        for (const attachment of page) {
+          if (result.removable >= options.limit) break;
+          result.examined += 1;
+          afterId = attachment.id;
+
+          if (referencedIds.has(attachment.id.toLowerCase())) {
+            result.referenced += 1;
+            continue;
+          }
+
+          // Only a file kept where discussion uploads are kept is removed,
+          // and by its own stored address.
+          const fileName = attachment.storageKey.slice(
+            attachment.storageKey.lastIndexOf("/") + 1,
+          );
+          if (
+            attachment.storageKey !== discussionUploadStorageKey(fileName) ||
+            !isSafeDiscussionUploadFileName(fileName)
+          ) {
+            result.failed += 1;
+            continue;
+          }
+
+          if (options.apply) {
+            // The row goes first, and only while it is still unattached: an
+            // upload attached to a post a moment ago is left alone, and a
+            // removed row can no longer be attached, so the file is not
+            // taken from under a post.
+            const marked =
+              await attachmentsRepo.markUnattachedAttachmentDeleted(db, {
+                attachmentId: attachment.id,
+                olderThan: options.olderThan,
+              });
+            if (!marked) {
+              result.skipped += 1;
+              continue;
+            }
+
+            try {
+              await uploadStore.removeOrThrow(fileName);
+            } catch {
+              // The file is still there: the row goes back to what it was,
+              // so the next run tries again instead of losing track of it.
+              await attachmentsRepo.restoreUnattachedAttachment(db, {
+                attachmentId: attachment.id,
+                status: attachment.status,
+              });
+              result.failed += 1;
+              continue;
+            }
+          }
+
+          result.removable += 1;
+          result.removableBytes += Number(attachment.fileSize);
+        }
+      }
+
+      return result;
     },
 
     async fetchLinkPreview(url: string) {

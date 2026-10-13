@@ -5,10 +5,15 @@ import type { AccessService } from "../../access/access.service.ts";
 import { createAccessService } from "../../access/access.service.ts";
 import * as paymentRepo from "./payment.repository.ts";
 import * as orderRepo from "../orders/order.repository.ts";
-import * as couponRepo from "../coupons/coupon.repository.ts";
+import { recordCouponRedemptionForPaidOrder } from "../coupons/coupon-redemption.service.ts";
 import * as cartRepo from "../cart/cart.repository.ts";
 import { createCourseAccessService } from "../shared/course-access.service.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
+import {
+  SURPLUS_CAPTURE_ERROR_CODE,
+  describeSurplusCapture,
+  isOrderAlreadyPaid,
+} from "./surplus-payment.ts";
 
 export interface FinalizePaymentParams {
   /** Internal payment record id */
@@ -23,9 +28,15 @@ export interface FinalizePaymentResult {
   /**
    * "finalized"  — This caller won the race and completed all side-effects.
    * "already_captured" — Another path already captured this payment; nothing to do.
+   * "recorded_as_surplus" — The gateway took this money for an order that had
+   *   already been paid another way. The payment is recorded as captured and
+   *   marked (see surplus-payment.ts); the order, its coupon and its access
+   *   were not touched.
    */
-  outcome: "finalized" | "already_captured";
+  outcome: "finalized" | "already_captured" | "recorded_as_surplus";
   orderId?: string;
+  /** The order's buyer. Set with `orderId`. */
+  userId?: string;
   enrollmentCount?: number;
 }
 
@@ -74,8 +85,25 @@ export function createPaymentReconciliationService({
     const now = new Date();
     let enrolledCourseIds: string[] = [];
     let orderId: string | undefined;
+    let userId: string | undefined;
+    let recordedAsSurplus = false;
 
     await database.transaction().execute(async (trx) => {
+      // ── Lock order: the order row first, then the payment row ───────────
+      // Manual verification (manual-payment.service.ts) writes the order
+      // and then closes its open gateway payment. This path used to claim
+      // the payment and then write the order, so when both ran for one
+      // order at the same moment each held the row the other needed and
+      // Postgres ended one of them with 40P01 (deadlock detected). Taking
+      // the order's row lock before anything else makes the two wait for
+      // each other instead: whichever is second sees what the first did
+      // (the order already paid) and takes its normal branch below. The
+      // refund paths take the same lock first.
+      const target = await paymentRepo.findPaymentById(trx, paymentId);
+      if (target) {
+        await orderRepo.findOrderByIdForUpdate(trx, target.order_id);
+      }
+
       // ── Concurrency gate ────────────────────────────────────────────────
       // Atomically claim the payment. Only one concurrent caller wins.
       // The UPDATE is conditional on the payment not yet being captured,
@@ -117,6 +145,7 @@ export function createPaymentReconciliationService({
             `payment as captured with no fulfillment`,
         );
       }
+      userId = order.user_id;
 
       // 1. Record successful payment attempt
       const attemptCount = await paymentRepo.countPaymentAttempts(
@@ -143,61 +172,54 @@ export function createPaymentReconciliationService({
         // a settled state (cancelled/paid/partially_refunded/refunded) that
         // markOrderPaidIfPending refuses to overwrite. Proceeding past this
         // point would grant access/enrollment for money attached to an order
-        // that's cancelled or already refunded. Abort the whole transaction
-        // — the payment claim rolls back too — so this gets caught and
-        // retried/investigated instead of silently fulfilling.
+        // that's cancelled or already refunded.
+        //
+        // If the order was paid another way (staff verified a manual
+        // transfer, and the buyer then completed the gateway payment too),
+        // the gateway has this money and it will not change its mind.
+        // Throwing here was retried until the event was dead-lettered and
+        // left no record of the money at all. The claim and the captured
+        // attempt above are kept and the payment is marked as surplus:
+        // nothing below runs, so the order, its coupon and its access are
+        // exactly as they were. Read again rather than trusting `order`,
+        // which may predate the change that made the update miss.
+        const settled = await orderRepo.findOrderById(trx, order.id);
+        if (settled && isOrderAlreadyPaid(settled.status)) {
+          await paymentRepo.transitionPaymentStatus(
+            trx,
+            paymentId,
+            "captured",
+            ["captured"],
+            {
+              error_code: SURPLUS_CAPTURE_ERROR_CODE,
+              error_description: describeSurplusCapture(order.order_number),
+              updated_at: now,
+            },
+          );
+          recordedAsSurplus = true;
+          return;
+        }
+
+        // Any other settled state (cancelled, failed): abort the whole
+        // transaction — the payment claim rolls back too — so this gets
+        // caught and retried/investigated instead of silently fulfilling.
         throw new Error(
           `finalizeSuccessfulPayment: order ${order.id} is not in a fulfillable ` +
             `status (was "${order.status}") — refusing to grant access for payment ${paymentId}`,
         );
       }
 
-      // 3. Record coupon redemption — atomic global & per-user usage limit check + idempotent insert
-      if (order.coupon_id) {
-        const coupon = await trx
-          .selectFrom("coupons")
-          .select(["code", "global_usage_limit", "per_user_limit"])
-          .where("id", "=", order.coupon_id)
-          .executeTakeFirst();
-
-        const redemptionResult =
-          await couponRepo.insertCouponRedemptionIfLimitNotReached(trx, {
-            id: crypto.randomUUID(),
-            coupon_id: order.coupon_id,
-            user_id: order.user_id,
-            order_id: order.id,
-            discount_amount: order.discount_amount,
-            global_usage_limit: coupon?.global_usage_limit ?? null,
-            per_user_limit: coupon?.per_user_limit ?? null,
-            created_at: now,
-          });
-
-        if (!redemptionResult.success) {
-          // The gateway has already captured this payment (real money moved)
-          // before this transaction runs. Aborting fulfillment here would
-          // roll back the payment claim/order-paid/access grant while the
-          // customer stays charged, with every retry hitting this same
-          // limit forever. The coupon limit is a soft check enforced up
-          // front at checkout (pricing.service.ts); this final atomic
-          // check only prevents *over*-redemption bookkeeping in a rare
-          // race — it must not block delivering what was already paid for.
-          // Skip recording the redemption and continue fulfilling the order.
-          const couponCode = coupon?.code ?? order.coupon_id;
-          await outbox.publish(trx, {
-            type: "coupon.redemption_limit_exceeded_at_finalization",
-            version: 1,
-            dedupeKey: `coupon.redemption_limit_exceeded:${claimed.id}`,
-            occurredAt: now,
-            payload: {
-              paymentId: claimed.id,
-              orderId: order.id,
-              couponId: order.coupon_id,
-              couponCode,
-              reason: redemptionResult.reason,
-            },
-          });
-        }
-      }
+      // 3. Record coupon redemption — atomic global & per-user usage limit
+      //    check + idempotent insert. The gateway has already captured this
+      //    payment, so a limit reached here never blocks delivering what was
+      //    paid for: the redemption is skipped and an event is published
+      //    instead (see coupon-redemption.service.ts, shared with manual
+      //    payment verification).
+      await recordCouponRedemptionForPaidOrder(trx, {
+        order,
+        paymentId: claimed.id,
+        now,
+      });
 
       // 4. Grant access + enroll for every order item (course + bundle-expanded).
       //    Both access_grants and enrollments use ON CONFLICT DO NOTHING,
@@ -243,9 +265,14 @@ export function createPaymentReconciliationService({
       return { outcome: "already_captured" };
     }
 
+    if (recordedAsSurplus) {
+      return { outcome: "recorded_as_surplus", orderId, userId };
+    }
+
     return {
       outcome: "finalized",
       orderId,
+      userId,
       enrollmentCount: enrolledCourseIds.length,
     };
   }

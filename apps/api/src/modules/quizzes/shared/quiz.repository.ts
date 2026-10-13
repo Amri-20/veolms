@@ -1,5 +1,6 @@
 import type { Database, DatabaseExecutor } from "@veolms/database";
 import { sql, type Insertable, type Updateable } from "kysely";
+import { isOpenFreeCourse } from "../../access/index.ts";
 
 const QUIZ_COLUMNS = [
   "id",
@@ -527,6 +528,12 @@ export async function listAssignmentsForCourses(
     .execute();
 }
 
+/**
+ * Whether a course's quizzes are open to any signed-in learner: it is
+ * published, free, and not access-restricted. A restricted course needs a
+ * grant even when it costs nothing; being free alone used to be enough, so a
+ * restricted free course's quizzes were open to everyone.
+ */
 export async function isPublishedFreeCourse(
   database: DatabaseExecutor,
   courseId: string,
@@ -534,21 +541,48 @@ export async function isPublishedFreeCourse(
   const row = await database
     .selectFrom("courses")
     .innerJoin("course_pricing", "course_pricing.course_id", "courses.id")
-    .select(["courses.status", "course_pricing.pricing_type"])
+    .leftJoin(
+      "course_access_rules",
+      "course_access_rules.course_id",
+      "courses.id",
+    )
+    .select([
+      "courses.status",
+      "course_pricing.pricing_type",
+      "course_access_rules.access_type",
+    ])
     .where("courses.id", "=", courseId)
     .where("courses.deleted_at", "is", null)
     .executeTakeFirst();
-  return row?.status === "published" && row.pricing_type === "free";
+  return (
+    row?.status === "published" &&
+    isOpenFreeCourse({
+      pricing_type: row.pricing_type,
+      access_type: row.access_type,
+    })
+  );
 }
 
 export async function listPublishedFreeCourseIds(database: DatabaseExecutor) {
   const rows = await database
     .selectFrom("courses")
     .innerJoin("course_pricing", "course_pricing.course_id", "courses.id")
+    .leftJoin(
+      "course_access_rules",
+      "course_access_rules.course_id",
+      "courses.id",
+    )
     .select("courses.id")
     .where("courses.status", "=", "published")
     .where("courses.deleted_at", "is", null)
     .where("course_pricing.pricing_type", "=", "free")
+    // Same rule as isPublishedFreeCourse: restricted courses are left out.
+    .where((eb) =>
+      eb.or([
+        eb("course_access_rules.access_type", "is", null),
+        eb("course_access_rules.access_type", "!=", "restricted"),
+      ]),
+    )
     .execute();
   return rows.map((row) => row.id);
 }
@@ -865,6 +899,22 @@ export async function listAnalyticsAttempts(
     .execute();
 }
 
+/**
+ * Passed attempts, each with the lesson its quiz is assigned to. The one
+ * place "passed a lesson's quiz" is defined: a graded attempt marked passed.
+ */
+function passedAttemptsWithLesson(database: DatabaseExecutor) {
+  return database
+    .selectFrom("quiz_attempts")
+    .innerJoin(
+      "quiz_assignments",
+      "quiz_assignments.id",
+      "quiz_attempts.assignment_id",
+    )
+    .where("quiz_attempts.status", "=", "graded")
+    .where("quiz_attempts.is_passed", "=", true);
+}
+
 /** Of these lessons, the ones whose quiz the learner has a passed attempt on. */
 export async function listPassedLessonIds(
   database: DatabaseExecutor,
@@ -872,21 +922,26 @@ export async function listPassedLessonIds(
   lessonIds: readonly string[],
 ): Promise<string[]> {
   if (lessonIds.length === 0) return [];
-  const rows = await database
-    .selectFrom("quiz_attempts")
-    .innerJoin(
-      "quiz_assignments",
-      "quiz_assignments.id",
-      "quiz_attempts.assignment_id",
-    )
+  const rows = await passedAttemptsWithLesson(database)
     .select("quiz_assignments.lesson_id as lessonId")
     .distinct()
     .where("quiz_attempts.user_id", "=", userId)
-    .where("quiz_attempts.status", "=", "graded")
-    .where("quiz_attempts.is_passed", "=", true)
     .where("quiz_assignments.lesson_id", "in", [...lessonIds])
     .execute();
   return rows.map((row) => row.lessonId);
+}
+
+/** The learners who have a passed attempt on the quiz of this lesson. */
+export async function listLearnerIdsWhoPassedLesson(
+  database: DatabaseExecutor,
+  lessonId: string,
+): Promise<string[]> {
+  const rows = await passedAttemptsWithLesson(database)
+    .select("quiz_attempts.user_id as userId")
+    .distinct()
+    .where("quiz_assignments.lesson_id", "=", lessonId)
+    .execute();
+  return rows.map((row) => row.userId);
 }
 
 /**

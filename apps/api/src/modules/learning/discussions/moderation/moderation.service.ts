@@ -723,6 +723,13 @@ export function createModerationService({
 
         if (input.action === "hide") {
           await repliesRepo.setStatus(trx, replyId, "hidden");
+          // A hidden reply is no longer the accepted answer. Left accepted,
+          // the question stayed "answered" by something nobody could read,
+          // and its author could not accept another in its place.
+          if (reply.isAccepted || thread?.acceptedAnswerId === replyId) {
+            await repliesRepo.setAcceptedStatus(trx, replyId, false);
+            await threadsRepo.setAcceptedAnswer(trx, reply.threadId, null);
+          }
         } else if (input.action === "unhide") {
           await repliesRepo.setStatus(trx, replyId, "active");
         } else if (input.action === "delete") {

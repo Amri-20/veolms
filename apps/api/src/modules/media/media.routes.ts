@@ -134,7 +134,7 @@ const mediaRoutes: RoutePlugin = async (app, options) => {
         tags: ["Media"],
         summary: "Resolve an authorized download link for a lesson resource",
         description:
-          "Returns a short-lived link that downloads one resource of the lesson. The same session and course-access rules as lesson playback are applied; the lesson does not need a video.",
+          "Returns a short-lived link that downloads one resource of the lesson. The caller must be signed in and have the course: its owner, an administrator, a learner with access, or any signed-in learner when the course is free and unrestricted. Being able to watch a preview lesson is not enough. The lesson does not need a video.",
         params: z.object({
           idOrSlug: z.string().min(1).max(160),
           lessonNumber: z.coerce.number().int().positive(),

@@ -174,7 +174,11 @@ export interface LessonVideoPlayerProps {
   playbackBootstrap?: VideoPlaybackBootstrap | null;
   /** A classified bootstrap result that prevents unauthorized media loading. */
   playbackAccessError?: {
-    kind: "login" | "access" | "retry";
+    /**
+     * `notice` is a plain statement that is not a failure (a lesson with no
+     * video): shown like `retry`, without being announced as an alert.
+     */
+    kind: "login" | "access" | "retry" | "notice";
     message: string;
     actionLabel: string;
     onAction?: () => void;
@@ -1035,6 +1039,12 @@ export function LessonVideoPlayer({
   if (playbackBootstrapPending || playbackAccessError) {
     const MinimizeIcon = playerTheme.icons.minimize;
     const isPending = !playbackAccessError;
+    // A failure and a plain statement are both words on the bare stage; the
+    // lock, the lesson's picture and the prominent action are for a lesson
+    // that is waiting for the learner to sign in or to get the course.
+    const isPlainGate =
+      playbackAccessError?.kind === "retry" ||
+      playbackAccessError?.kind === "notice";
     const gateTitle = !playbackAccessError
       ? ""
       : playbackAccessError.kind === "login"
@@ -1068,15 +1078,19 @@ export function LessonVideoPlayer({
         data-learning-playback-gate={playbackAccessError?.kind ?? "pending"}
         data-learning-player-motion-surface=""
         {...(presentation === "full" ? minimizeGesture.handlers : {})}
-        role={isPending ? "status" : "alert"}
+        role={
+          isPending
+            ? "status"
+            : playbackAccessError.kind === "notice"
+              ? undefined
+              : "alert"
+        }
         aria-label={isPending ? "Loading video" : undefined}
       >
         {/* A lesson that is waiting for the learner (to sign in, to get the
             course) shows what it is: its own picture, dimmed and out of
             focus behind the message, instead of an empty black screen. */}
-        {playbackAccessError &&
-        playbackAccessError.kind !== "retry" &&
-        media.thumbnailSrc ? (
+        {playbackAccessError && !isPlainGate && media.thumbnailSrc ? (
           <LessonPictureBackdrop src={media.thumbnailSrc} />
         ) : null}
         {presentation === "full" && onMinimize ? (
@@ -1095,8 +1109,7 @@ export function LessonVideoPlayer({
             />
           </PlayerThemeProvider>
         ) : null}
-        {playbackAccessError &&
-        (presentation === "mini" || playbackAccessError.kind !== "retry") ? (
+        {playbackAccessError && (presentation === "mini" || !isPlainGate) ? (
           // The mini window is a few lines tall: it says what is wrong in
           // one line and keeps the action, sized to fit, between the
           // window's tap-to-expand surface and its buttons. The longer

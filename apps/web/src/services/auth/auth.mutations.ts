@@ -36,12 +36,14 @@ import {
   notePendingMfaLogin,
 } from "../../store/pendingMfaLogin";
 import { clearCoursePlayerSessions } from "../../learning/coursePlayerNavigation";
+import { forgetAccountBrowserState } from "../../store/accountBrowserState";
 import { authKeys } from "./auth.keys";
 import { updatePublicProfileCacheFromUser } from "./auth.queries";
 import { authService, type TotpSetupResponse } from "./auth.service";
 // Deliberately not the learning-interactions barrel: these two modules are
 // dependency-light, while the barrel drags the optimistic cache coordinators
 // into the startup bundle of every page.
+import { courseKeys } from "../courses/courses.keys";
 import { learningInteractionKeys } from "../learning-interactions/learning-interactions.keys";
 import { resetRegisteredInteractionState } from "../learning-interactions/interaction-reset-registry";
 
@@ -94,6 +96,10 @@ function persistAuthenticatedSession(
   resetRegisteredInteractionState();
   queryClient.removeQueries({ queryKey: learningInteractionKeys.all });
   queryClient.removeQueries({ queryKey: authKeys.avatars() });
+  // A course overview says more to a learner who has the course than to a
+  // visitor (the names of its lesson files). One fetched before signing in
+  // is the visitor's.
+  void queryClient.invalidateQueries({ queryKey: courseKeys.overviews() });
   queryClient.setQueryData(authKeys.me(), currentUser);
 }
 
@@ -102,6 +108,9 @@ function clearSignedOutState(queryClient: QueryClient) {
   authStore.clearAuth();
   resetRegisteredInteractionState();
   clearCoursePlayerSessions();
+  // `clearAuth` above already does this for a tab it knew was signed in.
+  // Signing out says so outright, so it does not depend on that.
+  forgetAccountBrowserState();
   queryClient.setQueryData(authKeys.me(), null);
   queryClient.removeQueries({ queryKey: authKeys.me() });
   queryClient.removeQueries({ queryKey: authKeys.avatars() });

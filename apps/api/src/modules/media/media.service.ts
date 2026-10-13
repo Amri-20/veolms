@@ -13,7 +13,7 @@ import type {
 import { AppError } from "../../lib/errors.ts";
 import type { AppServices } from "../../services/index.ts";
 import { ADMIN_ROLE } from "../auth/index.ts";
-import { createAccessService } from "../access/index.ts";
+import { createAccessService, isOpenFreeCourse } from "../access/index.ts";
 import { listLessonChaptersForPlayback } from "../courses/chapters/chapters.playback.service.ts";
 import { createChapterSyncService } from "../courses/chapters/chapters.service.ts";
 import { findLessonResourceForDownload } from "../courses/curriculum/lesson-resource.download.service.ts";
@@ -98,6 +98,60 @@ function resolveImageExtension(filename: string, contentType: string): string {
   return mimeSubtype.replace(/[^a-z0-9]/giu, "").slice(0, 12) || "bin";
 }
 
+/**
+ * File extensions a publicly stored object's address may end in. A public
+ * object is fetched by address, and a delivery layer may choose how to serve
+ * it from the ending, so the ending comes from this list or is left off:
+ * never from whatever the uploaded file happened to be called.
+ */
+const PUBLIC_IMAGE_EXTENSIONS: ReadonlySet<string> = new Set([
+  "avif",
+  "bmp",
+  "gif",
+  "heic",
+  "heif",
+  "ico",
+  "jpeg",
+  "jpg",
+  "png",
+  "tif",
+  "tiff",
+  "webp",
+]);
+const PUBLIC_VIDEO_EXTENSIONS: ReadonlySet<string> = new Set([
+  "3gp",
+  "avi",
+  "flv",
+  "m2ts",
+  "m4v",
+  "mkv",
+  "mov",
+  "mp4",
+  "mpeg",
+  "mpg",
+  "mts",
+  "ogv",
+  "ts",
+  "webm",
+  "wmv",
+]);
+
+function resolvePublicImageExtension(
+  filename: string,
+  contentType: string,
+): string {
+  const fromFile = resolveImageExtension(filename, contentType);
+  if (PUBLIC_IMAGE_EXTENSIONS.has(fromFile)) return fromFile;
+
+  const fromType =
+    IMAGE_EXTENSION_BY_MIME_TYPE[baseMimeType(contentType)] ?? "";
+  return PUBLIC_IMAGE_EXTENSIONS.has(fromType) ? fromType : "bin";
+}
+
+function baseMimeType(contentType: string): string {
+  return contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+}
+
 function resolveImageThumbnailPrefix(
   storageKey: string,
   mediaId: string,
@@ -166,20 +220,6 @@ const VIDEO_JOB_FAILED_MESSAGE = "Video processing failed. Please try again.";
 /** One answer for every webhook authentication failure. */
 const WEBHOOK_UNAUTHORIZED_MESSAGE = "Webhook authentication failed.";
 
-/**
- * Whether a course's lessons play without a grant: it is free and not
- * access-restricted. A restricted course needs a grant even when it costs
- * nothing, the same rule learning progress and discussions apply.
- */
-function isOpenFreeCourse(context: {
-  pricing_type: string | null;
-  access_type: string | null;
-}): boolean {
-  return (
-    context.pricing_type === "free" && context.access_type !== "restricted"
-  );
-}
-
 export function createMediaService({
   database,
   services,
@@ -201,17 +241,28 @@ export function createMediaService({
           ?.replace(/[^a-z0-9]/giu, "")
           .toLowerCase()
       : "";
-    const visibilityPrefix =
-      payload.visibility === "public" ? "public" : "protected";
+    const isPublic = payload.visibility === "public";
+    const visibilityPrefix = isPublic ? "public" : "protected";
+    const imageExtension = isPublic
+      ? resolvePublicImageExtension(payload.filename, payload.contentType)
+      : resolveImageExtension(payload.filename, payload.contentType);
+    const fileExtension =
+      isPublic && !(ext && PUBLIC_VIDEO_EXTENSIONS.has(ext)) ? "" : ext;
     const storageKey =
       payload.type === "image"
-        ? `${visibilityPrefix}/thumbnails/${mediaId}/original.${resolveImageExtension(payload.filename, payload.contentType)}`
-        : `${visibilityPrefix}/media/${ownerId}/${mediaId}${ext ? `.${ext}` : ""}`;
+        ? `${visibilityPrefix}/thumbnails/${mediaId}/original.${imageExtension}`
+        : `${visibilityPrefix}/media/${ownerId}/${mediaId}${fileExtension ? `.${fileExtension}` : ""}`;
 
+    // The request was only allowed to declare a picture or a video for a
+    // public upload. The type is signed into the URL as well: otherwise the
+    // upload itself could still be sent as a web page and be stored, and
+    // served to visitors, as one.
     const uploadUrl = await services.storage.getPresignedPutUrl(
       storageKey,
       payload.contentType,
       payload.fileSize,
+      undefined,
+      { bindContentType: isPublic },
     );
 
     await services.storage.ensureBucketCors();
@@ -266,6 +317,24 @@ export function createMediaService({
         400,
         "FILE_NOT_FOUND",
         "File could not be found in storage.",
+      );
+    }
+
+    // A public object is served to anyone under the type it was stored
+    // with. The signed upload URL already holds that to the declared type;
+    // this refuses, and removes, one that differs all the same.
+    if (
+      resolveMediaVisibility(media.storage_key) === "public" &&
+      metadata.contentType &&
+      baseMimeType(metadata.contentType) !== baseMimeType(media.mime_type)
+    ) {
+      await services.storage
+        .deleteObject(media.storage_key)
+        .catch(() => undefined);
+      throw new AppError(
+        400,
+        "FILE_TYPE_MISMATCH",
+        "Uploaded file type does not match the type that was declared.",
       );
     }
 
@@ -411,7 +480,9 @@ export function createMediaService({
           { mediaId: media.id, storageKey: media.storage_key },
           "[media-service] Probing video source with ffprobe to extract size and dimensions before dispatch",
         );
-        const probed = await probeVideoSource(presignedUrl);
+        const probed = await probeVideoSource(presignedUrl, {
+          onWarning: (message) => logger?.warn({ mediaId: media.id }, message),
+        });
         if (probed) {
           if (videoSize <= 0 && probed.sizeBytes > 0) {
             videoSize = probed.sizeBytes;
@@ -594,7 +665,9 @@ export function createMediaService({
         const presignedUrl = await services.storage.getPresignedGetUrl(
           media.storage_key,
         );
-        const probed = await probeVideoSource(presignedUrl);
+        const probed = await probeVideoSource(presignedUrl, {
+          onWarning: (message) => logger?.warn({ mediaId: media.id }, message),
+        });
         if (probed) {
           if (retryVideoSize <= 0 && probed.sizeBytes > 0) {
             retryVideoSize = probed.sizeBytes;
@@ -998,9 +1071,56 @@ export function createMediaService({
   }
 
   /**
+   * Whether the viewer may download a course's lesson files. Being able to
+   * watch a lesson is not enough: a preview lesson, and a free course's
+   * first lesson, play for anyone, signed in or not. The files are for the
+   * people the course itself is open to: its owner, an administrator, a
+   * signed-in learner on a free course that is not restricted, and a
+   * learner who holds access.
+   */
+  async function assertResourceDownloadAccess(
+    context: {
+      course_id: string;
+      course_creator_id: string | null;
+      pricing_type: string | null;
+      access_type: string | null;
+    },
+    user?: PlaybackUser,
+  ): Promise<void> {
+    const isOwner = Boolean(user && context.course_creator_id === user.id);
+    const isAdmin = Boolean(
+      user?.roles?.some((role) => role.toLowerCase() === ADMIN_ROLE),
+    );
+    if (isOwner || isAdmin) return;
+
+    if (!user) {
+      throw new AppError(
+        401,
+        "UNAUTHORIZED",
+        "Sign in to download this lesson's resources.",
+      );
+    }
+
+    if (isOpenFreeCourse(context)) return;
+
+    const hasAccess = await accessService.hasActiveAccess(
+      database,
+      user.id,
+      context.course_id,
+    );
+    if (!hasAccess) {
+      throw new AppError(
+        403,
+        "COURSE_ACCESS_DENIED",
+        "You do not have access to this course.",
+      );
+    }
+  }
+
+  /**
    * Resolves a lesson by its public number and applies the access rules of
-   * watching it. Everything a learner gets from a lesson (the video, its
-   * resources) goes through this, so the rules cannot drift apart.
+   * watching it. A lesson's resources go through this too, and then through
+   * assertResourceDownloadAccess, which asks for more.
    */
   async function resolveAuthorizedLesson(
     courseIdOrSlug: string,
@@ -1087,7 +1207,7 @@ export function createMediaService({
   }
 
   /**
-   * Gives a learner who may watch the lesson a link to download one of its
+   * Gives a learner who has the course a link to download one of a lesson's
    * resources. A lesson does not need a video to have resources.
    */
   async function getLessonResourceDownload(
@@ -1101,6 +1221,8 @@ export function createMediaService({
       lessonNumber,
       user,
     );
+    await assertResourceDownloadAccess(lesson, user);
+
     const resource = await findLessonResourceForDownload(
       database,
       lesson.lesson_id,

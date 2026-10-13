@@ -13,6 +13,9 @@ export type {
 } from "./couponHelpers";
 export { getCouponStatus } from "./couponHelpers";
 
+/** How often coupon statuses are re-read against the clock. */
+const STATUS_CLOCK_INTERVAL_MS = 60_000;
+
 export function useCouponsFilter(options?: {
   courseId?: string | null;
   enabled?: boolean;
@@ -34,11 +37,15 @@ export function useCouponsFilter(options?: {
     [data],
   );
 
+  // "Now" decides each coupon's status (scheduled, active, expired), and
+  // those turn over on the minute. Ticking every five seconds re-filtered
+  // and re-sorted the whole list, and redrew the table, twelve times as
+  // often as anything could change.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => {
       setNow(Date.now());
-    }, 5000);
+    }, STATUS_CLOCK_INTERVAL_MS);
     return () => clearInterval(timer);
   }, []);
 
@@ -124,24 +131,12 @@ export function useCouponsFilter(options?: {
       });
   }, [coupons, now, activeTab, discountTypeFilter, searchQuery, sortBy]);
 
-  useEffect(() => {
-    if (
-      filteredCoupons.length === 0 &&
-      hasNextPage &&
-      !isFetchingNextPage &&
-      !isLoading &&
-      !isError
-    ) {
-      void fetchNextPage();
-    }
-  }, [
-    filteredCoupons.length,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading,
-    isError,
-    fetchNextPage,
-  ]);
+  // Nothing here asks for the next page on its own. When a search or filter
+  // matched none of the coupons loaded so far, an effect used to fetch the
+  // next page, and the next, until something matched or the library ran
+  // out: a search with no match downloaded every coupon there is, and each
+  // of those pages then refetched on the list's timer. The table offers
+  // "Load more" instead.
 
   return {
     coupons: filteredCoupons,

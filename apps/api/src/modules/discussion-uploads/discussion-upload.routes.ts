@@ -6,6 +6,7 @@ import { discussionUploadResponseSchema } from "@veolms/contracts";
 import { AppError, errorResponse, httpError } from "../../lib/errors.ts";
 import { jsonResponse } from "../../lib/responses.ts";
 import type { RoutePlugin } from "../../lib/route-plugin.ts";
+import { DISCUSSION_UPLOAD_RATE_LIMIT } from "../learning/discussions/shared/discussion.constants.ts";
 import { createDiscussionPermissions } from "../learning/discussions/shared/discussion.permissions.ts";
 import {
   createDiscussionAccess,
@@ -119,7 +120,10 @@ const discussionUploadRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/discussion-uploads",
     {
-      preHandler: permissions.requireAuthenticated,
+      config: { rateLimit: DISCUSSION_UPLOAD_RATE_LIMIT },
+      // A list of its own: the limiter is appended to the list it is given,
+      // and the shared one is used by every route in this file.
+      preHandler: [...permissions.requireAuthenticated],
       schema: {
         operationId: "uploadDiscussionAttachment",
         tags: ["Learning Attachments"],

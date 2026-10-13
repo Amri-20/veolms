@@ -157,6 +157,13 @@ export async function listPublishedCourses(
     )
     .leftJoin("course_pricing", "course_pricing.course_id", "courses.id")
     .leftJoin("course_settings", "course_settings.course_id", "courses.id")
+    // One row per course at most (`course_id` is unique), so the join adds
+    // no rows; it is what `canSelfEnroll` is worked out from.
+    .leftJoin(
+      "course_access_rules",
+      "course_access_rules.course_id",
+      "courses.id",
+    )
     .select((eb) => [
       "courses.id",
       "courses.created_at",
@@ -167,6 +174,7 @@ export async function listPublishedCourses(
       "courses.thumbnail_media_id",
       "thumbnail_media.metadata as thumbnail_metadata",
       "thumbnail_media.storage_key as thumbnail_storage_key",
+      "course_access_rules.access_type",
       "course_pricing.pricing_type",
       "course_pricing.price",
       "course_pricing.currency",
@@ -290,6 +298,12 @@ export async function listHomeDiscoveryCourses(
     )
     .leftJoin("course_pricing", "course_pricing.course_id", "courses.id")
     .leftJoin("course_settings", "course_settings.course_id", "courses.id")
+    // As in the catalogue query: at most one row per course.
+    .leftJoin(
+      "course_access_rules",
+      "course_access_rules.course_id",
+      "courses.id",
+    )
     .leftJoin(enrollmentCounts, "enrollment_counts.course_id", "courses.id")
     .select((eb) => [
       "courses.id",
@@ -299,6 +313,7 @@ export async function listHomeDiscoveryCourses(
       "courses.thumbnail_media_id",
       "thumbnail_media.metadata as thumbnail_metadata",
       "thumbnail_media.storage_key as thumbnail_storage_key",
+      "course_access_rules.access_type",
       "course_pricing.pricing_type",
       "course_pricing.price",
       "course_pricing.currency",

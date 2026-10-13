@@ -60,7 +60,8 @@ export function createCartService({
     }));
 
     // Attempt pricing — degrade gracefully if an item became unavailable.
-    let pricingItems: Array<{ title: string; unitPrice: number }> = [];
+    let pricingItems: Array<{ title: string; unitPrice: number } | undefined> =
+      [];
     let subtotalAmount = 0;
     let currency = "INR";
 
@@ -82,12 +83,47 @@ export function createCartService({
         // below; anything else propagates as a real error.
         throw err;
       }
-      // Pricing failed for a business reason (e.g., a course was unpublished);
-      // show items at zero price rather than breaking the whole cart view.
+      // Pricing failed for a business reason (e.g., a course was unpublished).
+      // One item that can no longer be bought used to blank the whole cart to
+      // zero, so each is priced on its own: the others keep their price and
+      // only the unavailable one shows none.
       pricingItems = [];
+      subtotalAmount = 0;
+      for (const input of pricingInputs) {
+        try {
+          const { pricing } = await pricingService.calculatePricing({
+            userId,
+            items: [input],
+          });
+          pricingItems.push(pricing.items[0]);
+          subtotalAmount += pricing.subtotalAmount;
+          currency = pricing.currency;
+        } catch (itemError) {
+          if (!(itemError instanceof AppError)) throw itemError;
+          pricingItems.push(undefined);
+        }
+      }
     }
 
     const enrichedItems: CartItem[] = [];
+
+    // Two lookups for the whole cart, not one per item.
+    const [courseRows, bundleRows] = await Promise.all([
+      courseRepo.findCoursesByIds(
+        database,
+        rawItems.flatMap((it) =>
+          it.item_type === "course" && it.course_id ? [it.course_id] : [],
+        ),
+      ),
+      bundleRepo.findBundlesByIds(
+        database,
+        rawItems.flatMap((it) =>
+          it.item_type === "bundle" && it.bundle_id ? [it.bundle_id] : [],
+        ),
+      ),
+    ]);
+    const coursesById = new Map(courseRows.map((row) => [row.id, row]));
+    const bundlesById = new Map(bundleRows.map((row) => [row.id, row]));
 
     for (let i = 0; i < rawItems.length; i++) {
       const raw = rawItems[i]!;
@@ -97,11 +133,11 @@ export function createCartService({
       let thumbnailMediaId: string | null | undefined = null;
 
       if (raw.item_type === "course" && raw.course_id) {
-        const course = await courseRepo.findCourseById(database, raw.course_id);
+        const course = coursesById.get(raw.course_id);
         slug = course?.slug ?? "";
         thumbnailMediaId = course?.thumbnail_media_id;
       } else if (raw.item_type === "bundle" && raw.bundle_id) {
-        const bundle = await bundleRepo.findBundleById(database, raw.bundle_id);
+        const bundle = bundlesById.get(raw.bundle_id);
         slug = bundle?.slug ?? "";
         thumbnailMediaId = bundle?.thumbnail_media_id;
       }

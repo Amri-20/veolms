@@ -169,14 +169,23 @@ function buildRequestUrl(url: string, params?: object) {
 function combineSignals(
   requestSignal: AbortSignal | undefined,
   timeout: number | undefined,
-): { signal: AbortSignal | undefined; didTimeout: () => boolean } {
+): {
+  signal: AbortSignal | undefined;
+  didTimeout: () => boolean;
+  /** Stops the timeout once the request is over. */
+  release: () => void;
+} {
   let timedOut = false;
   if (!timeout) {
-    return { signal: requestSignal, didTimeout: () => false };
+    return {
+      signal: requestSignal,
+      didTimeout: () => false,
+      release: () => undefined,
+    };
   }
 
   const controller = new AbortController();
-  window.setTimeout(() => {
+  const timer = window.setTimeout(() => {
     timedOut = true;
     controller.abort();
   }, timeout);
@@ -187,7 +196,11 @@ function combineSignals(
         once: true,
       });
   }
-  return { signal: controller.signal, didTimeout: () => timedOut };
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    release: () => window.clearTimeout(timer),
+  };
 }
 
 function redirectToMfaSetup(apiError: ApiError): void {
@@ -212,7 +225,7 @@ function redirectToMfaSetup(apiError: ApiError): void {
 
 function shouldClearAuthOnUnauthorized(
   url: string,
-  apiError: ApiError,
+  apiError: Pick<ApiError, "status" | "code">,
 ): boolean {
   if (apiError.status !== 401) {
     return false;
@@ -255,6 +268,42 @@ function shouldClearAuthOnUnauthorized(
     apiError.code === "SESSION_REVOKED";
 
   return isExplicitSessionFailure || url.endsWith("/auth/me");
+}
+
+/**
+ * Ends the tab's signed-in state when a response says its session is gone.
+ * Every request made through this client is checked here. Code that has to
+ * call `fetch` itself (the video playback requests) passes the response it
+ * got, so a session that ends in the middle of a lesson signs the shell out
+ * there too instead of leaving it signed in with every request failing.
+ */
+export function endSessionIfUnauthorized(
+  url: string,
+  apiError: Pick<ApiError, "status" | "code">,
+  options: {
+    /**
+     * Leave a tab that is not signed in alone. A visitor who was never
+     * signed in gets the same "not signed in" answer for a locked lesson,
+     * and has no session to end.
+     */
+    onlyIfSignedIn?: boolean;
+  } = {},
+): void {
+  if (!shouldClearAuthOnUnauthorized(url, apiError)) return;
+  if (
+    options.onlyIfSignedIn &&
+    !authStore.getState().isAuthenticated &&
+    !queryClient.getQueryData(authKeys.me())
+  ) {
+    return;
+  }
+
+  authStore.clearAuth();
+  // The route guards also read the cached current user. Left in place,
+  // it kept the signed-in shell on screen — every request failing —
+  // until that cache next refreshed, minutes later.
+  queryClient.setQueryData(authKeys.me(), null);
+  resetRegisteredInteractionState();
 }
 
 function isHtmlDocumentBody(body: unknown): boolean {
@@ -315,7 +364,13 @@ async function request<T>(
     }
   }
 
-  const { signal, didTimeout } = combineSignals(config.signal, config.timeout);
+  // The timeout covers the response body as well, so it is only stopped
+  // once that has been read. It used to be left running after every
+  // request, to fire later on a request that had long finished.
+  const { signal, didTimeout, release } = combineSignals(
+    config.signal,
+    config.timeout,
+  );
 
   let response: Response;
   try {
@@ -327,6 +382,7 @@ async function request<T>(
       signal,
     });
   } catch (error) {
+    release();
     const aborted =
       error instanceof DOMException && error.name === "AbortError";
     const code = aborted
@@ -343,7 +399,7 @@ async function request<T>(
     throw getApiError(createHttpError(message, { code, config: { url } }));
   }
 
-  const responseBody = await readResponseBody(response);
+  const responseBody = await readResponseBody(response).finally(release);
 
   if (!response.ok) {
     const apiError = getApiError(
@@ -357,14 +413,7 @@ async function request<T>(
       }),
     );
     redirectToMfaSetup(apiError);
-    if (shouldClearAuthOnUnauthorized(url, apiError)) {
-      authStore.clearAuth();
-      // The route guards also read the cached current user. Left in place,
-      // it kept the signed-in shell on screen — every request failing —
-      // until that cache next refreshed, minutes later.
-      queryClient.setQueryData(authKeys.me(), null);
-      resetRegisteredInteractionState();
-    }
+    endSessionIfUnauthorized(url, apiError);
     throw apiError;
   }
 

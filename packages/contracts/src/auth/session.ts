@@ -1,12 +1,10 @@
 import { z } from "zod";
+import { emailInput } from "./email-input.ts";
 import { authUserSchema } from "./user.ts";
 
 export const loginRequestSchema = z
   .object({
-    email: z
-      .email("Invalid email address")
-      .max(255)
-      .toLowerCase()
+    email: emailInput("Invalid email address")
       .meta({ example: "ada@example.com" })
       .optional(),
     phoneNo: z
@@ -31,6 +29,7 @@ export const oauthUrlRequestSchema = z.object({
   provider: oauthProviderSchema,
   redirectUri: z
     .url()
+    .max(2048)
     .meta({ example: "https://app.example.com/oauth/callback" }),
 });
 
@@ -47,6 +46,7 @@ export const oauthCallbackRequestSchema = z.object({
   state: z.string().meta({ example: "8f14e45fceea167a" }).optional(),
   redirectUri: z
     .string()
+    .max(2048)
     .meta({ example: "https://app.example.com/oauth/callback" })
     .optional(),
 });
@@ -113,15 +113,43 @@ export const sessionParamsSchema = z.object({
 });
 
 // Passkeys & MFA
+
+/**
+ * The least a WebAuthn credential must carry for the server to look it up:
+ * a credential id and the authenticator's response object. Everything else
+ * is left to the WebAuthn library, which authenticators and password
+ * managers extend with fields of their own.
+ */
+function isWebAuthnCredentialPayload(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const { id, response } = value as { id?: unknown; response?: unknown };
+  return (
+    typeof id === "string" &&
+    id.length > 0 &&
+    id.length <= 2048 &&
+    typeof response === "object" &&
+    response !== null &&
+    !Array.isArray(response)
+  );
+}
+
+const WEBAUTHN_PAYLOAD_MESSAGE =
+  "A WebAuthn credential with an id and a response is required";
+
 export const passkeyRegisterVerifyRequestSchema = z.object({
   response: z
     .any()
+    .refine(isWebAuthnCredentialPayload, WEBAUTHN_PAYLOAD_MESSAGE)
     .meta({ description: "WebAuthn PublicKeyCredential registration payload" }),
 });
 
 export const passkeyLoginVerifyRequestSchema = z.object({
   response: z
     .any()
+    .refine(isWebAuthnCredentialPayload, WEBAUTHN_PAYLOAD_MESSAGE)
     .meta({ description: "WebAuthn PublicKeyCredential assertion payload" }),
 });
 
@@ -141,9 +169,12 @@ export const totpEnableRequestSchema = z.object({
     .length(6, "TOTP code must be 6 digits")
     .regex(/^\d+$/, "TOTP code must contain only digits")
     .meta({ example: "123456" }),
+  // The secret comes back unchanged from the setup step, which issues
+  // base32. Anything else decodes to a short or empty key.
   secret: z
     .string()
     .min(1, "TOTP secret is required")
+    .regex(/^[A-Z2-7]{16,64}$/, "TOTP secret is not valid")
     .meta({ example: "JBSWY3DPEHPK3PXP" }),
 });
 

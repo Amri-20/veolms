@@ -75,6 +75,10 @@ async function linkOwnedAttachments(
     .updateTable("learning_attachments")
     .set({ target_type: "note", target_id: noteId })
     .where("id", "in", validIds)
+    // Held to the same conditions as the check above, so an upload removed
+    // or attached elsewhere in between is not attached here.
+    .where("status", "=", "ready")
+    .where("target_id", "is", null)
     .execute();
 }
 
@@ -303,10 +307,12 @@ export function createNotesService(
       );
       await courseAccess.assertNotesEnabled(db, input.courseId);
 
+      // Not under a lesson that has been removed (see threads.service.ts).
       const lesson = await db
         .selectFrom("course_lessons")
         .select("course_id")
         .where("id", "=", input.lessonId)
+        .where("deleted_at", "is", null)
         .executeTakeFirst();
 
       if (!lesson || lesson.course_id !== input.courseId) {

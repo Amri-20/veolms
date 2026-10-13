@@ -4,10 +4,12 @@ import type {
   OrderScope,
   OrderStatsQuery,
   OrderDirectRefundRequest,
+  NeedsRefundListQuery,
 } from "@veolms/contracts";
 import { ADMIN_ROLE } from "../../auth/index.ts";
 import { httpError } from "../../../lib/errors.ts";
 import type { OrderService } from "./order.service.ts";
+import type { NeedsRefundService } from "./needs-refund.service.ts";
 import type { InvoiceService } from "../invoices/invoice.service.ts";
 import type { RefundService } from "../refunds/refund.service.ts";
 import { toRefundResult } from "../refunds/refund.mapper.ts";
@@ -17,11 +19,13 @@ type BillingPermission = "billing.read" | "billing.manage";
 
 export function createOrderController({
   service,
+  needsRefundService,
   invoiceService,
   refundService,
   authorizationService,
 }: {
   service: OrderService;
+  needsRefundService: NeedsRefundService;
   invoiceService: InvoiceService;
   refundService: RefundService;
   authorizationService: AuthorizationService;
@@ -100,6 +104,17 @@ export function createOrderController({
     return await service.getOrderStats(scope, request.query);
   }
 
+  async function listNeedsRefund(
+    request: FastifyRequest<{ Querystring: NeedsRefundListQuery }>,
+  ) {
+    await requireBillingPermission(
+      request,
+      "billing.read",
+      "view payments that need a refund",
+    );
+    return await needsRefundService.listNeedsRefund(request.query);
+  }
+
   async function getOrder(
     request: FastifyRequest<{
       Params: { orderId: string };
@@ -175,6 +190,7 @@ export function createOrderController({
       reason: request.body.reason,
       preserveAccess: request.body.preserveAccess ?? false,
       idempotencyKey: headerKey ?? bodyKey,
+      outsideRefund: request.body.outsideRefund,
     });
     return toRefundResult(refund);
   }
@@ -182,6 +198,7 @@ export function createOrderController({
   return {
     listOrders,
     getOrderStats,
+    listNeedsRefund,
     getOrder,
     getInvoice,
     downloadInvoice,

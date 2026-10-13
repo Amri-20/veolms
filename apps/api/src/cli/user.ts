@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- an operator CLI: the terminal is its output */
 import crypto from "node:crypto";
 import readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
@@ -344,7 +345,8 @@ async function main() {
           .split("@")[0]!
           .toLowerCase()
           .replace(/[^a-z0-9_]/g, "_")
-          .slice(0, 30) || selectedRole;
+          // Room for the "_N" suffix below within the 30 a username may be.
+          .slice(0, 26) || selectedRole;
 
       username = baseUsername;
       let suffix = 1;

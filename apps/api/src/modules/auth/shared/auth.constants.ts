@@ -28,6 +28,9 @@ export const OTP_MAX_ATTEMPTS = 3;
 export const OTP_DAILY_LIMIT = 10;
 export const OTP_DAILY_WINDOW_MS = DAY_MS;
 
+/** The window OTP_IP_WINDOW_LIMIT counts a network address's requests over. */
+export const OTP_IP_WINDOW_MS = 10 * MINUTE_MS;
+
 /**
  * Hard daily ceiling for one identifier and purpose across ALL requesters.
  * Bounds delivery cost (and inbox flooding) when requests for the same
@@ -47,6 +50,10 @@ export const OTP_USER_DAILY_LIMIT = 10;
 export const SESSION_TTL_DAYS = 30;
 export const SESSION_TTL_MS = SESSION_TTL_DAYS * DAY_MS;
 export const SESSION_TTL_SECONDS = SESSION_TTL_DAYS * 24 * 60 * 60;
+
+/** What `sessionResponseSchema` allows for a session's device details. */
+export const SESSION_USER_AGENT_MAX_LENGTH = 255;
+export const SESSION_IP_ADDRESS_MAX_LENGTH = 45;
 
 /**
  * `last_used_at` is only refreshed once a session is older than this, to keep
@@ -88,3 +95,6 @@ export const STUDENT_ROLE = "student";
 
 /** Bounded so a pathological username prefix cannot spin indefinitely. */
 export const USERNAME_SUFFIX_ATTEMPTS = 10;
+
+/** The longest display name a response may carry (`authUserSchema`). */
+export const DISPLAY_NAME_MAX_LENGTH = 100;

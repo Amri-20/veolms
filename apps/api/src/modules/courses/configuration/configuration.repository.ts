@@ -20,6 +20,19 @@ export async function findAccessRuleByCourseId(
     .executeTakeFirst();
 }
 
+/** The access type of each course that has an access rule. */
+export async function findAccessTypesByCourseIds(
+  database: DatabaseExecutor,
+  courseIds: string[],
+) {
+  if (courseIds.length === 0) return [];
+  return await database
+    .selectFrom("course_access_rules")
+    .select(["course_id", "access_type"])
+    .where("course_id", "in", courseIds)
+    .execute();
+}
+
 export async function upsertAccessRule(
   database: Kysely<Database>,
   values: {

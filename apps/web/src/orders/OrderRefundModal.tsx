@@ -13,6 +13,11 @@ import {
   toMajorUnits,
 } from "@veolms/contracts/commerce/money";
 import { formatCurrency, getCurrencySymbol } from "./orderHelpers";
+import {
+  OUTSIDE_REFUND_REFERENCE_MAX_LENGTH,
+  isPaidByManualTransfer,
+  toOutsideRefundInput,
+} from "./orderRefundHelpers";
 
 // 3D design system surface tokens: 0 borders, pure tactile depth via theme-adaptive shadows & highlights
 const MODAL_FRAME_CLASS =
@@ -40,6 +45,7 @@ export const OrderRefundModal = memo(function OrderRefundModal({
   const [refundType, setRefundType] = useState<"full" | "partial">("full");
   const [partialAmountInr, setPartialAmountInr] = useState<string>("");
   const [reason, setReason] = useState<string>("");
+  const [transferReference, setTransferReference] = useState<string>("");
   const [preserveAccess, setPreserveAccess] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -84,6 +90,9 @@ export const OrderRefundModal = memo(function OrderRefundModal({
   const totalPaid = toMajorUnits(order.totalAmount, order.currency);
   // The field was labelled ₹ whatever currency the order was paid in.
   const currencySymbol = getCurrencySymbol(order.currency);
+  // An order paid by manual transfer has no gateway payment to refund: staff
+  // send the money back themselves and this dialog only records it.
+  const paidByManualTransfer = isPaidByManualTransfer(order);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,6 +114,15 @@ export const OrderRefundModal = memo(function OrderRefundModal({
       amountPaise = Math.round(parsedInr * minorUnitsPerMajor(order.currency));
     }
 
+    const outside = toOutsideRefundInput(
+      paidByManualTransfer,
+      transferReference,
+    );
+    if (!outside.ok) {
+      setErrorMessage(outside.message);
+      return;
+    }
+
     try {
       await refundMutation.mutateAsync({
         orderId: order.id,
@@ -113,15 +131,23 @@ export const OrderRefundModal = memo(function OrderRefundModal({
           reason: reason.trim() || undefined,
           preserveAccess,
           idempotencyKey,
+          outsideRefund: outside.outsideRefund,
         },
       });
 
       setNotice?.(
-        `Refund processed successfully for order ${order.orderNumber}.`,
+        paidByManualTransfer
+          ? `Refund recorded successfully for order ${order.orderNumber}.`
+          : `Refund processed successfully for order ${order.orderNumber}.`,
       );
       onClose();
     } catch (err) {
-      setErrorMessage(getApiError(err).message || "Failed to process refund.");
+      setErrorMessage(
+        getApiError(err).message ||
+          (paidByManualTransfer
+            ? "Failed to record refund."
+            : "Failed to process refund."),
+      );
     }
   };
 
@@ -148,7 +174,7 @@ export const OrderRefundModal = memo(function OrderRefundModal({
                 id="refund-modal-title"
                 className="m-0 truncate text-[0.98rem] sm:text-[1.05rem] font-semibold tracking-[-0.01em] text-(--text)"
               >
-                Issue Refund
+                {paidByManualTransfer ? "Record Refund" : "Issue Refund"}
               </h2>
               <p className="m-0 mt-0.5 truncate text-[0.72rem] sm:text-[0.74rem] text-(--muted) font-mono">
                 Order #{order.orderNumber}
@@ -179,6 +205,21 @@ export const OrderRefundModal = memo(function OrderRefundModal({
                   className="shrink-0 text-rose-500"
                 />
                 <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {/* Manual transfer: the app moves no money */}
+            {paidByManualTransfer && (
+              <div
+                className={`${RAISED_CARD_CLASS} p-3 sm:p-3.5 text-[0.76rem] leading-snug text-(--text-secondary)`}
+              >
+                <span className="block font-semibold text-(--text)">
+                  This order was paid by manual transfer.
+                </span>
+                <span className="block mt-1">
+                  No money is moved by the app. Send the refund to the student
+                  yourself, then record it here.
+                </span>
               </div>
             )}
 
@@ -270,6 +311,28 @@ export const OrderRefundModal = memo(function OrderRefundModal({
               </div>
             )}
 
+            {/* Transfer Reference Field (manual transfer only) */}
+            {paidByManualTransfer && (
+              <div>
+                <label
+                  htmlFor="refund-reference"
+                  className="block text-[0.78rem] font-semibold text-(--text-secondary) mb-1.5"
+                >
+                  Transfer Reference
+                </label>
+                <input
+                  id="refund-reference"
+                  type="text"
+                  maxLength={OUTSIDE_REFUND_REFERENCE_MAX_LENGTH}
+                  placeholder="e.g. UTR of the transfer you sent to the student"
+                  value={transferReference}
+                  onChange={(e) => setTransferReference(e.target.value)}
+                  className="w-full rounded-[12px] border-none bg-[color-mix(in_srgb,var(--canvas)_75%,var(--surface))] px-3.5 py-2.5 text-[0.82rem] sm:text-[0.85rem] text-(--text) outline-none placeholder:text-(--muted) shadow-[inset_0_2px_4px_color-mix(in_srgb,black_20%,transparent),inset_0_0_0_1px_color-mix(in_srgb,var(--text)_10%,transparent)] focus:shadow-[inset_0_0_0_1.5px_var(--accent),0_0_0_3px_color-mix(in_srgb,var(--accent)_20%,transparent)] transition-all"
+                  required
+                />
+              </div>
+            )}
+
             {/* Reason Field */}
             <div>
               <label
@@ -318,7 +381,9 @@ export const OrderRefundModal = memo(function OrderRefundModal({
               {refundMutation.isPending && (
                 <CircleNotch size={14} className="animate-spin" />
               )}
-              <span>Confirm Refund</span>
+              <span>
+                {paidByManualTransfer ? "Record Refund" : "Confirm Refund"}
+              </span>
             </button>
           </div>
         </form>

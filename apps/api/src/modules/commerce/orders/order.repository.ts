@@ -7,6 +7,7 @@ import type {
 } from "@veolms/contracts";
 import type { Executor } from "../shared/repository.types.ts";
 import { toMinorUnits } from "../shared/currency.ts";
+import { escapeLikePattern } from "../../../lib/like-pattern.ts";
 
 export interface ListOrdersOptions {
   cursor?: OrderCursorPayload;
@@ -37,6 +38,11 @@ export interface OrderStatsRow {
   uniqueBuyers: number;
   /** Gross of successful orders only (excludes fully refunded / cancelled / failed). */
   grossPaid: number;
+  /**
+   * What the academy has kept from successful orders: an order's stored
+   * after-commission amount where it has one, otherwise its total less the
+   * refunds processed against it. See getOrderStatsByCurrency.
+   */
   totalEarnings: number;
   /** All processed refunds (Refunded Amount card). */
   refundedAmount: number;
@@ -239,7 +245,11 @@ export async function listOrders(
 
   // 6. Search filter (order number for students, plus student details for admin)
   if (search && search.trim()) {
-    const term = `%${search.trim()}%`;
+    // "%" and "_" mean "anything" to ILIKE, so a search for "100%" or "a_b"
+    // matched far more than was typed. They are escaped, with the escape
+    // character itself (backslash is ILIKE's default escape), as the other
+    // search screens do.
+    const term = `%${escapeLikePattern(search.trim())}%`;
     if (scope.type === "user") {
       query = query.where(sql<boolean>`o.order_number ILIKE ${term}`);
     } else {
@@ -318,9 +328,26 @@ export async function getOrderStatsByCurrency(
         "gross_paid",
       ),
       // Creator earnings: successful only (matches TagMango Total Earnings).
-      sql<number>`coalesce(sum(case when o.status in ('paid', 'partially_refunded') then coalesce(o.after_commission_amount, 0) else 0 end), 0)::bigint`.as(
-        "total_earnings",
+      //
+      // after_commission_amount is only present on orders that were
+      // imported with one; nothing in this codebase writes it, and there is
+      // no commission to take off an order placed here. Summing the column
+      // alone therefore showed 0 for every order placed here. An order
+      // without a stored amount now counts for what was received for it:
+      // its total, less the refunds processed against it. The two kinds are
+      // summed apart because the stored amount and refunds are minor units
+      // and the total is major (converted below, like gross_paid).
+      sql<number>`coalesce(sum(case when o.status in ('paid', 'partially_refunded') then o.after_commission_amount else 0 end), 0)::bigint`.as(
+        "stored_earnings",
       ),
+      sql<number>`coalesce(sum(case when o.status in ('paid', 'partially_refunded') and o.after_commission_amount is null then o.total_amount else 0 end), 0)::bigint`.as(
+        "unstored_gross",
+      ),
+      sql<number>`coalesce(sum(case when o.status in ('paid', 'partially_refunded') and o.after_commission_amount is null then (
+        select coalesce(sum(r.amount), 0)
+        from refunds r
+        where r.order_id = o.id and r.status = 'processed'
+      ) else 0 end), 0)::bigint`.as("unstored_refunded"),
       sql<number>`coalesce(sum((
         select coalesce(sum(r.amount), 0)
         from refunds r
@@ -377,7 +404,15 @@ export async function getOrderStatsByCurrency(
     // the gross is converted here; subtracting the raw values gave nonsense
     // (a ₹499 order with a ₹100 refund netted to -9501).
     grossPaid: toMinorUnits(Number(row.gross_paid), row.currency),
-    totalEarnings: Number(row.total_earnings),
+    // Never below zero: refunds cannot exceed what an order was paid, and
+    // the response does not allow a negative figure.
+    totalEarnings:
+      Number(row.stored_earnings) +
+      Math.max(
+        0,
+        toMinorUnits(Number(row.unstored_gross), row.currency) -
+          Number(row.unstored_refunded),
+      ),
     refundedAmount: Number(row.refunded_amount),
     refundedAgainstPaid: Number(row.refunded_against_paid),
   }));
@@ -478,30 +513,30 @@ export async function findOrderByIdempotencyKey(
 }
 
 /**
- * Unpaid, unexpired orders that carry a coupon. A coupon use is only
+ * A buyer's unpaid, unexpired orders, newest first: the ones a new checkout
+ * for the same items either continues or replaces.
+ */
+export async function listPendingOrdersForUser(
+  database: Executor,
+  input: { userId: string; now: Date },
+) {
+  return await database
+    .selectFrom("orders")
+    .selectAll()
+    .where("user_id", "=", input.userId)
+    .where("status", "=", "pending")
+    .where("expires_at", ">", input.now)
+    .orderBy("created_at", "desc")
+    .execute();
+}
+
+/**
+ * How many unpaid, unexpired orders carry a coupon. A coupon use is only
  * recorded as a redemption when the order is paid, so until then these
  * orders are what is holding it: they count against the coupon's limits.
  * An order stops counting when it is paid (it becomes a redemption),
  * expires, or is cancelled.
  */
-export async function listPendingOrdersUsingCoupon(
-  database: Executor,
-  input: { couponId: string; userId?: string; now: Date },
-) {
-  let query = database
-    .selectFrom("orders")
-    .selectAll()
-    .where("coupon_id", "=", input.couponId)
-    .where("status", "=", "pending")
-    .where("expires_at", ">", input.now);
-
-  if (input.userId) {
-    query = query.where("user_id", "=", input.userId);
-  }
-  return await query.orderBy("created_at", "desc").execute();
-}
-
-/** How many orders `listPendingOrdersUsingCoupon` would return. */
 export async function countPendingOrdersUsingCoupon(
   database: Executor,
   input: { couponId: string; userId?: string; now: Date },
@@ -705,6 +740,73 @@ export async function cancelFreeOrder(database: Executor, orderId: string) {
     .where("status", "=", "paid")
     .where("total_amount", "=", 0)
     .returningAll()
+    .executeTakeFirst();
+}
+
+/**
+ * Takes an order's idempotency key away, so a repeat of the request that
+ * created it starts a new order. For an order nobody can continue: expired,
+ * cancelled or refunded.
+ */
+export async function releaseOrderIdempotencyKey(
+  database: Executor,
+  orderId: string,
+) {
+  await database
+    .updateTable("orders")
+    .set({ idempotency_key: null, updated_at: new Date() })
+    .where("id", "=", orderId)
+    .execute();
+}
+
+/**
+ * Ends unpaid orders early, as the expiry job would at their deadline. An
+ * expired order no longer holds its coupon, and a payment that still arrives
+ * for one is honoured (see markOrderPaidIfPending).
+ */
+export async function expirePendingOrders(
+  database: Executor,
+  orderIds: string[],
+  now: Date,
+) {
+  if (orderIds.length === 0) return;
+  await database
+    .updateTable("orders")
+    .set({ status: "expired", updated_at: now })
+    .where("id", "in", orderIds)
+    .where("status", "=", "pending")
+    .execute();
+}
+
+/**
+ * Cancels an order that was created a moment ago and never got a payment to
+ * go with it, and gives up its idempotency key. Does nothing once a payment
+ * row exists: that order can still be continued.
+ */
+export async function cancelOrderWithoutPayment(
+  database: Executor,
+  orderId: string,
+) {
+  return await database
+    .updateTable("orders")
+    .set({
+      status: "cancelled",
+      idempotency_key: null,
+      updated_at: new Date(),
+    })
+    .where("id", "=", orderId)
+    .where("status", "=", "pending")
+    .where((eb) =>
+      eb.not(
+        eb.exists(
+          eb
+            .selectFrom("payments")
+            .select("payments.id")
+            .whereRef("payments.order_id", "=", "orders.id"),
+        ),
+      ),
+    )
+    .returning("id")
     .executeTakeFirst();
 }
 

@@ -6,6 +6,10 @@ import { exactCursorTimestamp } from "../../../../lib/keyset.ts";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
+// Lives in lib/ so the searches outside Discussions (notifications,
+// students) can use it without importing this feature's internals.
+export { containsPattern } from "../../../../lib/like-pattern.ts";
+
 export interface DiscussionListCursor {
   id: string;
   createdAt: Date;

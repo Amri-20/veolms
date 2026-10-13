@@ -374,6 +374,9 @@ export function createAssignmentService(options: QuizServiceOptions) {
         }),
       );
       if (assignment.lesson_id) {
+        // As when the quiz itself is deleted (`deleteQuiz`): the lesson
+        // stays published as a video lesson with no media, which the
+        // learner's lesson page shows as a lesson with no video.
         await trx
           .updateTable("course_lessons")
           .set({ content_type: "video", updated_at: new Date() })

@@ -98,6 +98,11 @@ import { ThemedSelect } from "../ThemedSelect";
 import { SettingsToggle } from "../settings/SettingsControls";
 import type { NavigateTo } from "../routing/navigation";
 import { getCourseEditorPath } from "./courseEditorRouting";
+import {
+  categoryChangeToSend,
+  draftCategoryAfterReload,
+} from "./basicsCategoryDraft";
+import { basicsChangeToSend, draftValueAfterReload } from "./basicsDraftChange";
 import { handleRovingTabKeyDown } from "../accessibility/rovingTabFocus";
 import {
   getNumberShortcutIndex,
@@ -5008,6 +5013,8 @@ export function CourseCreatePage({
             ? editorData.settings.showInstructorName
             : true,
       });
+      const previouslyConfirmedCategoryId = serverBasicsRef.current.categoryId;
+      const previouslyConfirmedDifficulty = serverBasicsRef.current.difficulty;
       setServerBasics(confirmedBasics);
       serverBasicsRef.current = confirmedBasics;
       setCourseVersion(c.version || 1);
@@ -5037,6 +5044,29 @@ export function CourseCreatePage({
       if (!isBasicsDirtyRef.current && !isBasicsSavingActive) {
         setBasicsDraft(confirmedBasics);
         basicsDraftRef.current = confirmedBasics;
+      } else {
+        // The draft is kept for its unsaved edit. A category the creator
+        // has not touched still follows the course, so a later save cannot
+        // send an outdated (or empty) one as if they had chosen it.
+        const categoryId = draftCategoryAfterReload(
+          basicsDraftRef.current.categoryId,
+          previouslyConfirmedCategoryId,
+          confirmedBasics.categoryId,
+        );
+        if (categoryId !== basicsDraftRef.current.categoryId) {
+          setBasicsDraft((prev) => ({ ...prev, categoryId }));
+          basicsDraftRef.current = { ...basicsDraftRef.current, categoryId };
+        }
+        // The level follows the course in the same way.
+        const difficulty = draftValueAfterReload(
+          basicsDraftRef.current.difficulty,
+          previouslyConfirmedDifficulty,
+          confirmedBasics.difficulty,
+        );
+        if (difficulty !== basicsDraftRef.current.difficulty) {
+          setBasicsDraft((prev) => ({ ...prev, difficulty }));
+          basicsDraftRef.current = { ...basicsDraftRef.current, difficulty };
+        }
       }
       setIsPublished(c.status === "published");
 
@@ -8312,7 +8342,9 @@ export function CourseCreatePage({
       area: "pricing",
       label: "Pricing",
       summary:
-        pricing.pricingType === "free" ? "Free" : `₹${pricing.sellingPrice}`,
+        pricing.pricingType === "free"
+          ? "Free"
+          : `${currencySymbol}${pricing.sellingPrice}`,
     },
     {
       area: "extras",
@@ -8401,8 +8433,18 @@ export function CourseCreatePage({
         title: trimmedTitle,
         shortDescription: latestDraft.shortDescription.trim() || null,
         description: latestDraft.description.trim() || null,
-        categoryId: latestDraft.categoryId || null,
-        difficulty: latestDraft.difficulty || null,
+        // Only a category the creator changed is sent; see the helper.
+        ...categoryChangeToSend(
+          latestDraft.categoryId,
+          serverBasicsRef.current.categoryId,
+        ),
+        // The level likewise: it used to go out on every save, `null` when
+        // the draft held none, which now removes the stored level.
+        ...basicsChangeToSend(
+          "difficulty",
+          latestDraft.difficulty,
+          serverBasicsRef.current.difficulty,
+        ),
         instructorAlias: latestDraft.instructorAlias.trim() || null,
         version: currentVersion,
       };

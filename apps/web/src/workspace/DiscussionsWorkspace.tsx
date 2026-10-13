@@ -2098,6 +2098,13 @@ export function DiscussionsWorkspace({
     });
   };
 
+  // What "Clear filters" can undo: the search, the course, and on Q&A the
+  // status.
+  const hasClearableDiscussionFilters =
+    Boolean(query.trim()) ||
+    selectedCourseId !== "all" ||
+    (isQnaTab && qnaStatus !== "all");
+
   const resetDiscussionFilters = () => {
     const nextPathSearch = new URLSearchParams(searchParams);
     nextPathSearch.delete("course");
@@ -2397,7 +2404,7 @@ export function DiscussionsWorkspace({
 
       const discussionStatus = thread.status ?? "open";
       const StatusIcon = statusIcons[discussionStatus];
-      return activeTab === "q-and-a" ? (
+      return isQnaTab ? (
         <DiscussionWorkspaceQuestionCard
           thread={thread}
           onNavigatePage={onNavigatePage}
@@ -2477,12 +2484,12 @@ export function DiscussionsWorkspace({
       );
     },
     [
-      activeTab,
       isBookmarksTab,
       isCommentsTab,
       isFollowingTab,
       isMentionsTab,
       isNotesTab,
+      isQnaTab,
       onNavigatePage,
       openThread,
       openMobileActions,
@@ -2937,9 +2944,13 @@ export function DiscussionsWorkspace({
                               ? "No notes found"
                               : "No notes yet"
                             : isCommentsTab
-                              ? "No comments match these filters"
+                              ? hasClearableDiscussionFilters
+                                ? "No comments match these filters"
+                                : "No comments yet"
                               : isMentionsTab
-                                ? "No mentions match these filters"
+                                ? hasClearableDiscussionFilters
+                                  ? "No mentions match these filters"
+                                  : "No mentions yet"
                                 : isFollowingTab
                                   ? query.trim() || selectedCourseId !== "all"
                                     ? "No followed discussions found"
@@ -2948,30 +2959,45 @@ export function DiscussionsWorkspace({
                                     ? query.trim() || selectedCourseId !== "all"
                                       ? "No bookmarks found"
                                       : "No bookmarks yet"
-                                    : "No discussions match these filters"}
+                                    : hasClearableDiscussionFilters ||
+                                        effectiveOwnership === "mine"
+                                      ? "No discussions match these filters"
+                                      : "No discussions yet"}
                         </h2>
                         <p>
                           {isNotesTab
                             ? "Try clearing a filter or choosing another course."
                             : isCommentsTab
-                              ? "Try clearing a filter or choosing another course."
-                              : isMentionsTab
+                              ? hasClearableDiscussionFilters
                                 ? "Try clearing a filter or choosing another course."
+                                : "Comments on lessons will appear here."
+                              : isMentionsTab
+                                ? hasClearableDiscussionFilters
+                                  ? "Try clearing a filter or choosing another course."
+                                  : "Mentions of you will appear here."
                                 : isFollowingTab
                                   ? "Try clearing a filter or choosing another course."
                                   : isBookmarksTab
                                     ? "Bookmarked discussions and notes will appear here."
-                                    : "Try clearing a filter or start a new question for the course."}
+                                    : hasClearableDiscussionFilters ||
+                                        effectiveOwnership === "mine"
+                                      ? "Try clearing a filter or start a new question for the course."
+                                      : "Questions asked in your courses will appear here."}
                         </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setQuery("");
-                            resetDiscussionFilters();
-                          }}
-                        >
-                          Clear filters
-                        </button>
+                        {/* Offered only when there is something to clear.
+                            With no search, course or status chosen it sat
+                            under "match these filters" and did nothing. */}
+                        {hasClearableDiscussionFilters ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setQuery("");
+                              resetDiscussionFilters();
+                            }}
+                          >
+                            Clear filters
+                          </button>
+                        ) : null}
                       </div>
                     )}
                     <div

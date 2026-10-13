@@ -52,6 +52,18 @@ export function ToastNotification({
   const remainingTimeRef = useRef(duration);
   const startTimeRef = useRef<number>(Date.now());
 
+  const handleStartExit = () => {
+    setIsExiting(true);
+    if (exitTimerRef.current) {
+      window.clearTimeout(exitTimerRef.current);
+    }
+    exitTimerRef.current = window.setTimeout(() => {
+      setCurrentNotice(null);
+      setIsExiting(false);
+      onDismiss?.();
+    }, 240); // Matches toastSlideOut duration
+  };
+
   // Handle incoming message changes
   useEffect(() => {
     if (message) {
@@ -80,18 +92,6 @@ export function ToastNotification({
       if (exitTimerRef.current) window.clearTimeout(exitTimerRef.current);
     };
   }, [message, duration, type]);
-
-  const handleStartExit = () => {
-    setIsExiting(true);
-    if (exitTimerRef.current) {
-      window.clearTimeout(exitTimerRef.current);
-    }
-    exitTimerRef.current = window.setTimeout(() => {
-      setCurrentNotice(null);
-      setIsExiting(false);
-      onDismiss?.();
-    }, 240); // Matches toastSlideOut duration
-  };
 
   const handleMouseEnter = () => {
     isPausedRef.current = true;

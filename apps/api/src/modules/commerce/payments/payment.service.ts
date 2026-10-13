@@ -6,6 +6,7 @@ import type {
   VerifyPaymentResponse,
 } from "@veolms/contracts";
 import type { Database } from "@veolms/database";
+import type { FastifyBaseLogger } from "fastify";
 import type { Kysely } from "kysely";
 import {
   CommerceErrors,
@@ -17,6 +18,7 @@ import * as paymentRepo from "./payment.repository.ts";
 import * as orderRepo from "../orders/order.repository.ts";
 import { createPaymentReconciliationService } from "./payment-reconciliation.service.ts";
 import { toPaymentProvider } from "./payment.mapper.ts";
+import { reportDuplicatePurchases } from "./duplicate-purchase.ts";
 
 /**
  * Course pricing is currently stored in major currency units (for example,
@@ -73,11 +75,14 @@ export interface PaymentService {
 export interface PaymentServiceOptions {
   database: Kysely<Database>;
   paymentGateway: PaymentGateway;
+  /** Where a duplicate purchase found on verification is reported. */
+  logger?: FastifyBaseLogger;
 }
 
 export function createPaymentService({
   database,
   paymentGateway,
+  logger,
 }: PaymentServiceOptions): PaymentService {
   const reconciliation = createPaymentReconciliationService({ database });
   /**
@@ -357,7 +362,7 @@ export function createPaymentService({
     //    Both this path and the webhook worker converge here.
     //    The reconciliation service uses a conditional UPDATE as its concurrency gate
     //    so payment capture + order paid + coupon + access + enrollments happen exactly once.
-    await reconciliation.finalizeSuccessfulPayment({
+    const result = await reconciliation.finalizeSuccessfulPayment({
       paymentId: payment.id,
       gatewayPaymentId,
       paymentMethod: paymentDetails.method
@@ -370,6 +375,23 @@ export function createPaymentService({
           }
         : null,
     });
+
+    if (result.outcome === "finalized") {
+      // This payment may be for an order the buyer had already replaced and
+      // paid again (see duplicate-purchase.ts). The buyer's answer is the
+      // same either way; staff are told, and refund one of the two.
+      await reportDuplicatePurchases({
+        database,
+        log: logger?.child({ job: "payment-verify" }),
+        order: { id: order.id, userId: order.user_id },
+        payment: {
+          id: payment.id,
+          gatewayPaymentId,
+          amount: payment.amount,
+          currency: payment.currency,
+        },
+      });
+    }
 
     return { verified: true, orderStatus: "paid" };
   }

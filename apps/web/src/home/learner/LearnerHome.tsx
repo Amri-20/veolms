@@ -235,7 +235,9 @@ export function LearnerHome({
         />
 
         {showExplore &&
-        (publishedQuery.isLoading || coursesToExplore.length > 0) ? (
+        (publishedQuery.isLoading ||
+          publishedQuery.isError ||
+          coursesToExplore.length > 0) ? (
           <GuestHomeCourseSection
             id="learner-home-explore-courses"
             title="Explore More Courses"
@@ -244,7 +246,10 @@ export function LearnerHome({
             viewAllHref="/courses/not-enrolled"
             cardActions={courseCardActions}
             isLoading={publishedQuery.isLoading}
-            isError={false}
+            // A failed load used to be passed on as "no error", and the
+            // section was left out altogether: nothing said the courses had
+            // failed to load and the retry below could never be reached.
+            isError={publishedQuery.isError && coursesToExplore.length === 0}
             onRetry={() => void publishedQuery.refetch()}
             onNavigatePage={onNavigatePage}
           />

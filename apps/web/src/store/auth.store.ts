@@ -1,4 +1,8 @@
 import { useSyncExternalStore } from "react";
+import {
+  claimLastOpenedLessons,
+  forgetAccountBrowserState,
+} from "./accountBrowserState";
 import { readSessionPresence, writeSessionPresence } from "./sessionPresence";
 import type { LoginResponse, UserProfileResponse } from "@veolms/contracts";
 
@@ -182,7 +186,12 @@ export const authStore = {
   setUser(user: AuthUser | null, options?: { refresh?: boolean }) {
     const sameAccount = (state.user?.id ?? null) === (user?.id ?? null);
     if (!(options?.refresh && sameAccount)) writeGeneration += 1;
-    if (user) lastSignedInUserId = user.id;
+    if (user) {
+      lastSignedInUserId = user.id;
+      // The lessons this browser remembers stay with the account that
+      // opened them; another account signing in does not inherit them.
+      claimLastOpenedLessons(user.id);
+    }
     identityHint = createIdentityHintFromUser(user);
     writeIdentityHint(identityHint);
     state = {
@@ -210,6 +219,12 @@ export const authStore = {
   },
 
   clearAuth() {
+    // Every way out of a session ends here, so this is where the browser
+    // forgets what it kept for that account. A visitor who was never signed
+    // in also passes through (each `/auth/me` that finds no session) and
+    // has nothing to forget: their catalogue search is theirs to keep.
+    const hadAccount =
+      state.isAuthenticated || identityHint !== null || readSessionPresence();
     writeGeneration += 1;
     identityHint = null;
     writeIdentityHint(null);
@@ -218,6 +233,7 @@ export const authStore = {
       isAuthenticated: false,
       isLoading: false,
     };
+    if (hadAccount) forgetAccountBrowserState();
     if (typeof window !== "undefined") {
       try {
         // Remove the legacy cache so older builds cannot reintroduce stale

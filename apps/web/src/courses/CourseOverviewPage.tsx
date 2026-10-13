@@ -43,6 +43,18 @@ import {
   type CourseLifecycleStatus,
   type CourseRole,
 } from "./catalogue";
+import {
+  checkoutCourseItem,
+  describeCouponSaving,
+  isCouponTotalStale,
+  payableBeforeCoupon,
+  type AppliedCoupon,
+} from "./couponTotal";
+import {
+  INVITATION_ONLY_MESSAGE,
+  resolveCourseEnrollmentOffer,
+} from "./courseEnrollmentOffer";
+import { readCustomAmount } from "./customAmountEntry";
 import { toggleWishlistCourse, useCourseWishlisted } from "./wishlistStorage";
 import { CourseWishlistHeartButton } from "./CourseWishlistHeartButton";
 import { CourseThumbnailPlaceholder } from "./CourseThumbnailPlaceholder";
@@ -56,6 +68,7 @@ import { useCourseOverview } from "../services/courses";
 import { useEnrolledCourses } from "../services/enrollments";
 import { getApiError } from "../lib/api-error";
 import {
+  readCheckoutStartError,
   useCheckoutPreview,
   useAwaitPaidOrder,
   useCreateCheckoutOrder,
@@ -133,7 +146,9 @@ export function formatPriceWithCurrency(
   currency: string = "INR",
 ): string {
   const sym = getCurrencySymbol(currency);
-  return `${sym}${amount.toLocaleString("en-US")}`;
+  // Rupees are grouped the Indian way (1,00,000), not in thousands.
+  const locale = currency.toUpperCase() === "INR" ? "en-IN" : "en-US";
+  return `${sym}${amount.toLocaleString(locale)}`;
 }
 
 export function isCourseSaleActive(
@@ -257,21 +272,11 @@ function toOverviewPricingProps(
 
 type ContributionPresetId = "0" | "100" | "250" | "500" | "custom";
 
-function checkoutCourseItem(
-  courseId: string,
-  options: { isFree: boolean; amount: number; catalogPrice: number },
-) {
-  const includeCustom =
-    options.amount > 0 &&
-    (options.isFree || options.amount >= options.catalogPrice);
-  return {
-    itemType: "course" as const,
-    courseId,
-    ...(includeCustom ? { customAmount: options.amount } : {}),
-  };
-}
-
-function appliedCouponFromPreview(code: string, res: CheckoutPreviewResponse) {
+function appliedCouponFromPreview(
+  code: string,
+  res: CheckoutPreviewResponse,
+  pricedForAmount: number,
+): AppliedCoupon {
   const discountAmount = res.pricing.discountAmount;
   const currency = res.pricing.currency || "INR";
   const totalAmount = res.pricing.totalAmount;
@@ -290,6 +295,7 @@ function appliedCouponFromPreview(code: string, res: CheckoutPreviewResponse) {
     totalAmount,
     currency,
     discountLabel,
+    pricedForAmount,
   };
 }
 
@@ -417,8 +423,14 @@ function CurriculumSectionItem({
                           if (isReadOnlyPreview) return;
                           onSelectLesson?.(number);
                         }}
-                        aria-label={`Lesson ${number}: ${title}${duration ? `, ${duration}` : ""}`}
                       >
+                        {/* The row is named by what it shows, with the lesson
+                            number added for screen readers. A separate
+                            aria-label used to replace the visible text with
+                            wording of its own ("Lesson 1: Title, 12:30"),
+                            which voice control cannot match to what is on
+                            screen and which left the "Free" badge out. */}
+                        <span className="sr-only">{`Lesson ${number}: `}</span>
                         {/* Content type icon */}
                         <span
                           className={`inline-flex w-5 shrink-0 items-center justify-center text-(--muted) transition-colors duration-140 ${
@@ -515,6 +527,8 @@ interface CourseHeroSectionProps {
   onNavigatePage?: NavigateTo;
   isReadOnlyPreview?: boolean;
   isCreator?: boolean;
+  /** The overview's `canSelfEnroll`; only `false` closes enrolment. */
+  canSelfEnroll?: boolean;
 }
 
 function CourseHeroSection({
@@ -534,6 +548,7 @@ function CourseHeroSection({
   onNavigatePage,
   isReadOnlyPreview = false,
   isCreator = false,
+  canSelfEnroll,
 }: CourseHeroSectionProps) {
   const user = useAuthStore((state) => state.user);
   const preview = useCheckoutPreview();
@@ -555,18 +570,17 @@ function CourseHeroSection({
     useState<ContributionPresetId>("0");
   const [voluntaryAmount, setVoluntaryAmount] = useState<number>(0);
   const [customAmountInput, setCustomAmountInput] = useState<string>("");
+  const [customAmountError, setCustomAmountError] = useState<string | null>(
+    null,
+  );
 
   const [couponInputOpen, setCouponInputOpen] = useState(false);
   const [couponCodeInput, setCouponCodeInput] = useState("");
   const [couponBusy, setCouponBusy] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
-  const [appliedCoupon, setAppliedCoupon] = useState<{
-    code: string;
-    discountAmount: number;
-    totalAmount: number;
-    currency: string;
-    discountLabel?: string;
-  } | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(
+    null,
+  );
 
   const courseCurrency = pricing?.currency ?? "INR";
   const currencySymbol = getCurrencySymbol(courseCurrency);
@@ -574,6 +588,17 @@ function CourseHeroSection({
   const isPreview = Boolean(isReadOnlyPreview);
   const isCreatorNormal = Boolean(isCreator && !isPreview);
   const isFree = isFreeCoursePricing(pricing);
+  // A restricted course with no price is entered by a grant from staff and
+  // checkout refuses it, so the card offers no enrolment, amount or coupon
+  // for it: one line says how the course is entered.
+  const isInvitationOnly =
+    resolveCourseEnrollmentOffer({
+      managesCourse: isCreatorNormal,
+      isPreview,
+      isEnrolled,
+      isFree,
+      canSelfEnroll,
+    }) === "invitation-only";
 
   const checkoutItem = useMemo(
     () =>
@@ -585,21 +610,28 @@ function CourseHeroSection({
     [course.id, isFree, voluntaryAmount, baseNumericPrice],
   );
 
-  const lastPreviewedAmount = useRef(voluntaryAmount);
+  // What a payment would charge before the coupon, and whether the coupon
+  // total on the card was worked out for it. Both are read during render, so
+  // the pay button is already held on the render that follows a change of
+  // amount; it does not wait for the effect below.
+  const payableAmount = payableBeforeCoupon(voluntaryAmount, baseNumericPrice);
+  const couponTotalIsStale =
+    !isFree && isCouponTotalStale(appliedCoupon, payableAmount);
+  const appliedCouponCode = appliedCoupon?.code;
+  // `preview` is a new object on every render, and starting the request
+  // causes a render. As a dependency it cancelled the effect's own request,
+  // so the answer was dropped and the old total stayed. The function is the
+  // same one for the life of the component.
+  const previewCheckout = preview.mutateAsync;
   useEffect(() => {
-    if (!appliedCoupon?.code || isFree) {
-      lastPreviewedAmount.current = voluntaryAmount;
-      return;
-    }
-    if (lastPreviewedAmount.current === voluntaryAmount) return;
-    lastPreviewedAmount.current = voluntaryAmount;
+    if (!appliedCouponCode || !couponTotalIsStale) return;
 
     let cancelled = false;
     const handle = window.setTimeout(async () => {
       try {
-        const res = await preview.mutateAsync({
+        const res = await previewCheckout({
           items: [checkoutItem],
-          couponCode: appliedCoupon.code,
+          couponCode: appliedCouponCode,
         });
         if (cancelled) return;
         if (res.couponValidation && !res.couponValidation.valid) {
@@ -610,11 +642,17 @@ function CourseHeroSection({
           );
           return;
         }
-        setAppliedCoupon(appliedCouponFromPreview(appliedCoupon.code, res));
+        setAppliedCoupon(
+          appliedCouponFromPreview(appliedCouponCode, res, payableAmount),
+        );
       } catch (err) {
         if (cancelled) return;
+        // The total for this amount is unknown. The coupon comes off so the
+        // button names a price that is known, and the reason is shown.
         setAppliedCoupon(null);
-        setCouponError(getApiError(err).message);
+        setCouponError(
+          `The coupon was removed because its total for this amount could not be worked out. ${getApiError(err).message}`,
+        );
       }
     }, 250);
 
@@ -622,7 +660,13 @@ function CourseHeroSection({
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [appliedCoupon?.code, checkoutItem, isFree, preview, voluntaryAmount]);
+  }, [
+    appliedCouponCode,
+    checkoutItem,
+    couponTotalIsStale,
+    payableAmount,
+    previewCheckout,
+  ]);
 
   const basePrice = pricing?.price ?? "Free";
   const displayPrice = appliedCoupon
@@ -635,12 +679,42 @@ function CourseHeroSection({
     : voluntaryAmount > 0 && voluntaryAmount > baseNumericPrice
       ? formatPriceWithCurrency(voluntaryAmount, courseCurrency)
       : basePrice;
-  const originalPrice = pricing?.originalPrice;
-  const discount = pricing?.discount;
-  const displayDiscount = appliedCoupon
-    ? appliedCoupon.discountLabel ||
-      `${formatPriceWithCurrency(appliedCoupon.discountAmount, appliedCoupon.currency)} OFF`
-    : discount;
+  // The headline is then the buyer's own, higher amount. The catalogue's
+  // "was" price and "% OFF" badge describe the regular price, and next to a
+  // chosen amount they claimed a discount that is not being given.
+  const isPayingAbovePrice =
+    !isFree &&
+    !appliedCoupon &&
+    voluntaryAmount > 0 &&
+    voluntaryAmount > baseNumericPrice;
+  const originalPrice = isPayingAbovePrice ? undefined : pricing?.originalPrice;
+  const discount = isPayingAbovePrice ? undefined : pricing?.discount;
+  // With a coupon, what the total is compared with. On the buyer's own,
+  // higher amount the catalogue price and the coupon's "% OFF" are both the
+  // wrong comparison (see `describeCouponSaving`).
+  const couponSaving =
+    !isFree && appliedCoupon
+      ? describeCouponSaving(appliedCoupon, baseNumericPrice)
+      : null;
+  const struckThroughPrice =
+    !couponSaving || !appliedCoupon
+      ? originalPrice
+      : couponSaving.against === "catalogue"
+        ? basePrice
+        : couponSaving.against === "ownAmount"
+          ? formatPriceWithCurrency(
+              couponSaving.wasAmount,
+              appliedCoupon.currency,
+            )
+          : undefined;
+  const displayDiscount = !appliedCoupon
+    ? discount
+    : couponSaving?.against === "ownAmount"
+      ? `${formatPriceWithCurrency(couponSaving.savedAmount, appliedCoupon.currency)} OFF`
+      : couponSaving?.against === "nothing"
+        ? undefined
+        : appliedCoupon.discountLabel ||
+          `${formatPriceWithCurrency(appliedCoupon.discountAmount, appliedCoupon.currency)} OFF`;
   const perksList = inclusions ?? [
     "Full lifetime access",
     "Access on mobile & desktop",
@@ -665,8 +739,10 @@ function CourseHeroSection({
         return;
       }
 
-      lastPreviewedAmount.current = voluntaryAmount;
-      setAppliedCoupon(appliedCouponFromPreview(code, res));
+      // `payableAmount` is the amount this request was made for. If the
+      // buyer changed theirs while it was in flight, the total is stale on
+      // arrival and the effect above asks again.
+      setAppliedCoupon(appliedCouponFromPreview(code, res, payableAmount));
       setCouponInputOpen(false);
       setCouponCodeInput("");
     } catch (err) {
@@ -818,11 +894,12 @@ function CourseHeroSection({
 
       rzp.open();
     } catch (error) {
-      const msg =
-        error && typeof error === "object" && "message" in error
-          ? String((error as { message: unknown }).message)
-          : "Checkout could not be started. Please retry.";
-      setPaymentError(msg);
+      setPaymentError(
+        readCheckoutStartError(
+          error,
+          "Checkout could not be started. Please retry.",
+        ),
+      );
       setIsPaymentBusy(false);
     }
   };
@@ -840,12 +917,35 @@ function CourseHeroSection({
 
   // An enrolled student has nothing left to buy; offering a coupon next to
   // "Continue Learning" suggested there was still something to pay for.
-  const showApplyCoupon = !isCreatorNormal && !isFree && !isEnrolled;
+  const showApplyCoupon =
+    !isCreatorNormal && !isFree && !isEnrolled && !isInvitationOnly;
   const isCustomUnderPrice =
     !isFree &&
     selectedPreset === "custom" &&
     voluntaryAmount > 0 &&
     voluntaryAmount < baseNumericPrice;
+  // The custom box holds something that is not a whole number ("199.50",
+  // "1e5", "abc"). It stays in the box as typed and nothing can be paid or
+  // enrolled until it is corrected: the amount is 0 meanwhile, and paying
+  // the catalogue price next to a box that says otherwise would be a
+  // different mistake.
+  const isCustomAmountUnreadable =
+    selectedPreset === "custom" &&
+    readCustomAmount(customAmountInput, MAX_VOLUNTARY_AMOUNT).kind ===
+      "unreadable";
+  // Why the amount in the custom box cannot be used. The pay button is
+  // disabled for an unreadable amount and for one under the price; without
+  // this nothing said why. Derived from the box, so it stays for as long as
+  // the box is wrong.
+  const customAmountMessage =
+    selectedPreset !== "custom"
+      ? null
+      : isCustomAmountUnreadable
+        ? "Enter a whole number, with no decimals or symbols."
+        : (customAmountError ??
+          (isCustomUnderPrice
+            ? `The least you can pay for this course is ${formatPriceWithCurrency(baseNumericPrice, courseCurrency)}.`
+            : null));
 
   if (isCreatorNormal || isEnrolled) {
     // 1. Creator viewing their course normally or already enrolled student:
@@ -983,6 +1083,33 @@ function CourseHeroSection({
         );
       };
     }
+
+    // Free or paid: no payment and no enrolment while the custom box holds
+    // text that is not an amount. The message under the box says why.
+    if (isCustomAmountUnreadable) {
+      ctaDisabled = true;
+      ctaOnClick = undefined;
+    }
+
+    // The coupon total on the card belongs to an earlier amount, and the one
+    // for the amount now chosen has been asked for. Until it arrives the
+    // button names no price and takes no payment: a click here used to send
+    // the new amount under the old total. It ends when the new total
+    // arrives, or when the coupon comes off because it could not be had.
+    if (couponTotalIsStale) {
+      ctaDisabled = true;
+      ctaOnClick = undefined;
+      if (!isPaymentBusy) {
+        ctaLabel = "Updating total…";
+        ctaIcon = (
+          <CircleNotch
+            size="1.15em"
+            className="animate-spin shrink-0"
+            aria-hidden="true"
+          />
+        );
+      }
+    }
   }
 
   const handlePreviewClick = (event: MouseEvent<HTMLButtonElement>) => {
@@ -1101,11 +1228,9 @@ function CourseHeroSection({
                         : "Free"
                       : displayPrice}
                   </span>
-                  {(isFree
-                    ? originalPrice
-                    : originalPrice || appliedCoupon) && (
+                  {struckThroughPrice && (
                     <span className="text-(--muted) text-[1.05rem] font-medium line-through whitespace-nowrap">
-                      {!isFree && appliedCoupon ? basePrice : originalPrice}
+                      {struckThroughPrice}
                     </span>
                   )}
                   {(isFree ? originalPrice : true) && displayDiscount && (
@@ -1198,10 +1323,15 @@ function CourseHeroSection({
                     type="button"
                     onClick={handleApplyCoupon}
                     disabled={couponBusy || !couponCodeInput.trim()}
+                    aria-label={couponBusy ? "Applying coupon" : undefined}
                     className="inline-flex items-center justify-center px-3.5 py-1.5 rounded-[7px] bg-(--accent) text-(--on-accent,#ffffff) text-[0.82rem] font-[750] cursor-pointer whitespace-nowrap transition-all hover:bg-(--accent-hover,color-mix(in_srgb,var(--accent)_85%,var(--text))) disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                   >
                     {couponBusy ? (
-                      <CircleNotch size={14} className="animate-spin" />
+                      <CircleNotch
+                        size={14}
+                        className="animate-spin"
+                        aria-hidden="true"
+                      />
                     ) : (
                       "Apply"
                     )}
@@ -1220,15 +1350,28 @@ function CourseHeroSection({
                   </button>
                 </div>
                 {couponError && (
-                  <p className="m-0 text-xs text-rose-500 font-semibold px-1">
+                  <p
+                    role="alert"
+                    className="m-0 text-xs text-rose-500 font-semibold px-1"
+                  >
                     {couponError}
                   </p>
                 )}
               </div>
             )}
 
+            {/* A coupon that came off by itself: the box above is closed then, so its reason would otherwise not be shown at all */}
+            {couponError && !couponInputOpen && !appliedCoupon && (
+              <p
+                role="alert"
+                className="m-0 text-xs text-rose-500 font-semibold px-1"
+              >
+                {couponError}
+              </p>
+            )}
+
             {/* Pay What You Want / Voluntary Contribution for Free and Paid Courses */}
-            {!isCreatorNormal && !isEnrolled && (
+            {!isCreatorNormal && !isEnrolled && !isInvitationOnly && (
               <div className="flex flex-col gap-2 pt-2 pb-0.5 border-t border-[color-mix(in_srgb,var(--text)_10%,transparent)]">
                 <div className="flex items-center justify-between gap-2 min-h-5">
                   <span className="text-[0.8rem] font-bold text-(--text) uppercase tracking-wider flex items-center gap-1.5">
@@ -1241,6 +1384,12 @@ function CourseHeroSection({
                     <span>Support Teacher (Optional)</span>
                   </span>
                   <span
+                    // Kept in the layout while hidden so the row does not
+                    // jump; hidden from assistive technology too, which
+                    // otherwise read out a stale "₹0 Total".
+                    aria-hidden={
+                      !(voluntaryAmount > (isFree ? 0 : baseNumericPrice))
+                    }
                     className={`text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full transition-opacity duration-150 ${
                       voluntaryAmount > (isFree ? 0 : baseNumericPrice)
                         ? "opacity-100"
@@ -1322,25 +1471,34 @@ function CourseHeroSection({
                               inputMode="numeric"
                               pattern="[0-9]*"
                               value={customAmountInput}
+                              aria-label="Custom amount"
+                              aria-invalid={Boolean(customAmountMessage)}
+                              onBlur={() => setCustomAmountError(null)}
                               onChange={(e) => {
-                                const raw = e.target.value.replace(/\D/g, "");
-                                if (!raw) {
-                                  setCustomAmountInput("");
-                                  setVoluntaryAmount(0);
-                                  return;
-                                }
-                                const parsed = parseInt(raw, 10);
-                                if (Number.isNaN(parsed) || parsed <= 0) {
-                                  setCustomAmountInput(raw);
-                                  setVoluntaryAmount(0);
-                                  return;
-                                }
-                                const clamped = Math.min(
-                                  parsed,
+                                const typed = e.target.value;
+                                const entry = readCustomAmount(
+                                  typed,
                                   MAX_VOLUNTARY_AMOUNT,
                                 );
-                                setCustomAmountInput(String(clamped));
-                                setVoluntaryAmount(clamped);
+                                if (entry.kind !== "amount") {
+                                  // Empty, or not an amount. The box shows
+                                  // what was typed and no amount is taken
+                                  // from it; `isCustomAmountUnreadable`
+                                  // holds the button and shows the reason.
+                                  setCustomAmountInput(
+                                    entry.kind === "empty" ? "" : typed,
+                                  );
+                                  setVoluntaryAmount(0);
+                                  setCustomAmountError(null);
+                                  return;
+                                }
+                                setCustomAmountInput(String(entry.amount));
+                                setVoluntaryAmount(entry.amount);
+                                setCustomAmountError(
+                                  entry.overMaximum
+                                    ? `The most you can pay here is ${formatPriceWithCurrency(MAX_VOLUNTARY_AMOUNT, courseCurrency)}.`
+                                    : null,
+                                );
                               }}
                               placeholder={
                                 isFree ? "Amount" : `>= ${baseNumericPrice}`
@@ -1354,7 +1512,9 @@ function CourseHeroSection({
                                 onClick={() => {
                                   setCustomAmountInput("");
                                   setVoluntaryAmount(0);
+                                  setCustomAmountError(null);
                                 }}
+                                aria-label="Clear custom amount"
                                 className="inline-flex items-center justify-center w-4 h-4 rounded-full text-(--muted) hover:text-(--text) cursor-pointer"
                               >
                                 <X size={11} weight="bold" />
@@ -1369,11 +1529,12 @@ function CourseHeroSection({
                           type="button"
                           onClick={() => {
                             setSelectedPreset("custom");
-                            const parsed = parseInt(customAmountInput, 10);
+                            const entry = readCustomAmount(
+                              customAmountInput,
+                              MAX_VOLUNTARY_AMOUNT,
+                            );
                             setVoluntaryAmount(
-                              !Number.isNaN(parsed) && parsed > 0
-                                ? Math.min(parsed, MAX_VOLUNTARY_AMOUNT)
-                                : 0,
+                              entry.kind === "amount" ? entry.amount : 0,
                             );
                           }}
                           className="px-3 py-1.5 rounded-[8px] text-[0.82rem] font-bold border transition-all cursor-pointer bg-[color-mix(in_srgb,var(--surface-strong)_70%,var(--canvas))] text-(--text) border-[color-mix(in_srgb,var(--text)_14%,transparent)] hover:border-[color-mix(in_srgb,var(--text)_30%,transparent)] hover:bg-(--hover)"
@@ -1392,6 +1553,7 @@ function CourseHeroSection({
                           setSelectedPreset(preset.id);
                           setVoluntaryAmount(preset.value);
                           setCustomAmountInput("");
+                          setCustomAmountError(null);
                         }}
                         className={`px-3 py-1.5 rounded-[8px] text-[0.82rem] font-bold border transition-all cursor-pointer ${
                           isSelected
@@ -1404,40 +1566,54 @@ function CourseHeroSection({
                     );
                   })}
                 </div>
+                {customAmountMessage && (
+                  <p
+                    role="alert"
+                    className="m-0 text-xs text-rose-500 font-semibold"
+                  >
+                    {customAmountMessage}
+                  </p>
+                )}
               </div>
             )}
 
             {/* Middle Row: Actions (Apply Coupon + Pay Now / Continue Learning / Enroll for Free) */}
-            <div className="flex flex-wrap items-center gap-2.5 w-full min-w-0 max-[640px]:gap-2">
-              {showApplyCoupon && !couponInputOpen && !appliedCoupon && (
+            {isInvitationOnly ? (
+              <p className="m-0 text-[0.88rem] font-medium text-(--text-secondary) leading-snug">
+                {INVITATION_ONLY_MESSAGE}
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2.5 w-full min-w-0 max-[640px]:gap-2">
+                {showApplyCoupon && !couponInputOpen && !appliedCoupon && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCouponInputOpen(true);
+                      setCouponError(null);
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 min-h-10.5 border border-dashed border-[color-mix(in_srgb,var(--text)_25%,transparent)] rounded-[9px] px-3.5 sm:px-4 py-2 text-(--text) bg-[color-mix(in_srgb,var(--surface)_60%,transparent)] text-[0.86rem] font-[750] cursor-pointer whitespace-nowrap min-w-0 transition-[border-color,color,background-color,transform] duration-160 ease-out hover:border-(--accent) hover:text-(--accent) hover:bg-(--accent-soft,color-mix(in_srgb,var(--accent)_12%,transparent)) hover:-translate-y-px shrink-0 max-[480px]:flex-1 max-[480px]:min-w-30 max-[640px]:px-3 max-[640px]:text-[0.84rem]"
+                  >
+                    <Ticket
+                      size="1.15em"
+                      weight="bold"
+                      className="shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className="font-[750] truncate">Apply coupon</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => {
-                    setCouponInputOpen(true);
-                    setCouponError(null);
-                  }}
-                  className="inline-flex items-center justify-center gap-1.5 min-h-10.5 border border-dashed border-[color-mix(in_srgb,var(--text)_25%,transparent)] rounded-[9px] px-3.5 sm:px-4 py-2 text-(--text) bg-[color-mix(in_srgb,var(--surface)_60%,transparent)] text-[0.86rem] font-[750] cursor-pointer whitespace-nowrap min-w-0 transition-[border-color,color,background-color,transform] duration-160 ease-out hover:border-(--accent) hover:text-(--accent) hover:bg-(--accent-soft,color-mix(in_srgb,var(--accent)_12%,transparent)) hover:-translate-y-px shrink-0 max-[480px]:flex-1 max-[480px]:min-w-30 max-[640px]:px-3 max-[640px]:text-[0.84rem]"
+                  className="inline-flex items-center justify-center gap-2 flex-1 min-h-10.5 min-w-35 px-4 sm:px-5 py-2.5 border-0 rounded-[9px] text-(--on-accent,#ffffff) bg-(--accent) shadow-[0_4px_14px_var(--accent-shadow,color-mix(in_srgb,var(--accent)_28%,transparent))] text-[0.94rem] font-[800] tracking-[-0.01em] cursor-pointer whitespace-nowrap min-w-0 max-[640px]:text-[0.88rem] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none disabled:shadow-none"
+                  disabled={ctaDisabled}
+                  onClick={ctaOnClick}
                 >
-                  <Ticket
-                    size="1.15em"
-                    weight="bold"
-                    className="shrink-0"
-                    aria-hidden="true"
-                  />
-                  <span className="font-[750] truncate">Apply coupon</span>
+                  {ctaIcon}
+                  <span className="font-[800] truncate">{ctaLabel}</span>
                 </button>
-              )}
-
-              <button
-                type="button"
-                className="inline-flex items-center justify-center gap-2 flex-1 min-h-10.5 min-w-35 px-4 sm:px-5 py-2.5 border-0 rounded-[9px] text-(--on-accent,#ffffff) bg-(--accent) shadow-[0_4px_14px_var(--accent-shadow,color-mix(in_srgb,var(--accent)_28%,transparent))] text-[0.94rem] font-[800] tracking-[-0.01em] cursor-pointer whitespace-nowrap min-w-0 max-[640px]:text-[0.88rem] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none disabled:shadow-none"
-                disabled={ctaDisabled}
-                onClick={ctaOnClick}
-              >
-                {ctaIcon}
-                <span className="font-[800] truncate">{ctaLabel}</span>
-              </button>
-            </div>
+              </div>
+            )}
 
             {/* Payment received, access still being confirmed */}
             {paymentNotice && (
@@ -1451,7 +1627,10 @@ function CourseHeroSection({
 
             {/* Payment Error Banner */}
             {paymentError && (
-              <div className="flex items-center justify-between gap-2 w-full rounded-lg bg-rose-500/12 border border-rose-500/30 p-2.5 text-xs text-rose-500 font-medium">
+              <div
+                role="alert"
+                className="flex items-center justify-between gap-2 w-full rounded-lg bg-rose-500/12 border border-rose-500/30 p-2.5 text-xs text-rose-500 font-medium"
+              >
                 <span>{paymentError}</span>
                 <button
                   type="button"
@@ -1788,6 +1967,11 @@ export interface AdaptedOverviewData {
   pricing: CourseOverviewPricingProps;
   instructorName: string | undefined;
   trailerMediaId: string | null;
+  /**
+   * The overview's `canSelfEnroll`. Absent for the editor's preview, which
+   * is built from the course's saved settings rather than from an overview.
+   */
+  canSelfEnroll?: boolean;
 }
 
 export function adaptCourseOverviewResponse(
@@ -1894,6 +2078,7 @@ export function adaptCourseOverviewResponse(
     pricing: pricingProps,
     instructorName: resolvedInstructorName,
     trailerMediaId: c.trailerMediaId ?? null,
+    canSelfEnroll: overview.canSelfEnroll,
   };
 }
 
@@ -2424,6 +2609,7 @@ function CourseOverviewContent({
         onNavigatePage={onNavigatePage}
         isReadOnlyPreview={isReadOnlyPreview}
         isCreator={isCreator}
+        canSelfEnroll={adaptedFromPreview?.canSelfEnroll}
       />
 
       {/* 2. About This Course */}

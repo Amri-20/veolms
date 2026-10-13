@@ -21,6 +21,8 @@ export interface PublicLessonDiscussionSqlAliases {
   lesson: string;
   section: string;
   pricing: string;
+  /** The course's access rules row (left-joined; a course may have none). */
+  accessRules: string;
 }
 
 /**
@@ -29,12 +31,17 @@ export interface PublicLessonDiscussionSqlAliases {
  * the lesson is published and not deleted, the section is not deleted, and
  * the course is free or the lesson is previewable. Reading a lesson's own
  * discussions is wider than this, see `assertCanReadLesson`.
+ *
+ * "Free" means open: free and not access-restricted. A restricted course
+ * needs a grant even when it costs nothing, so its discussions are not
+ * offered for discovery either.
  */
 export function publicLessonDiscussionPredicate({
   course,
   lesson,
   section,
   pricing,
+  accessRules,
 }: PublicLessonDiscussionSqlAliases): RawBuilder<boolean> {
   return sql<boolean>`(
     ${sql.ref(`${course}.status`)} = 'published'
@@ -44,7 +51,10 @@ export function publicLessonDiscussionPredicate({
     and ${sql.ref(`${section}.deleted_at`)} is null
     and (
       ${sql.ref(`${lesson}.is_preview`)} = true
-      or ${sql.ref(`${pricing}.pricing_type`)} = 'free'
+      or (
+        ${sql.ref(`${pricing}.pricing_type`)} = 'free'
+        and ${sql.ref(`${accessRules}.access_type`)} is distinct from 'restricted'
+      )
     )
   )`;
 }

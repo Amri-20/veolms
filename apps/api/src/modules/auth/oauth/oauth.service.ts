@@ -3,6 +3,7 @@ import type {
   OauthProvider,
   OauthRegisterRequest,
 } from "@veolms/contracts";
+import { createCorsMatcher } from "@veolms/api-core";
 
 import { config } from "../../../config.ts";
 import { AppError } from "../../../lib/errors.ts";
@@ -11,6 +12,7 @@ import type { AuthLogger, SessionUser } from "../shared/auth.types.ts";
 import { generatePkce, generateRandomToken } from "../shared/auth.utils.ts";
 import {
   fetchOauthProfile,
+  normalizeOauthProfile,
   verifyGoogleIdToken,
   verifyOauthState,
   type OauthProfile,
@@ -21,6 +23,44 @@ import type { SessionService } from "../session/session.service.ts";
 
 const ALLOW_MOCK_OAUTH =
   config.NODE_ENV === "development" && config.OAUTH_ALLOW_MOCK_CODES;
+
+const corsMatcher = createCorsMatcher(config);
+
+/**
+ * The address the provider sends the visitor back to must be a page of this
+ * platform's own web app: an http(s) URL on an origin the API already
+ * accepts requests from. The provider checks the address against its own
+ * list too; this stops the API handing out a sign-in link to anywhere else.
+ */
+function assertAllowedRedirectUri(
+  redirectUri: string,
+  logger?: AuthLogger,
+): void {
+  let url: URL | undefined;
+  try {
+    url = new URL(redirectUri);
+  } catch {
+    url = undefined;
+  }
+
+  if (
+    !url ||
+    (url.protocol !== "https:" && url.protocol !== "http:") ||
+    !corsMatcher.isAllowedOrigin(url.origin)
+  ) {
+    // An operator who serves the web app from an origin missing from
+    // WEB_URL / CORS_ORIGINS sees why social sign-in stopped there.
+    logger?.warn(
+      { origin: url?.origin ?? null },
+      "Refused an OAuth return address outside the allowed origins",
+    );
+    throw new AppError(
+      400,
+      "INVALID_REDIRECT_URI",
+      "This sign-in return address is not allowed.",
+    );
+  }
+}
 
 function assertAccountActive(user: SessionUser | undefined): void {
   if (user?.is_deleted) {
@@ -57,7 +97,10 @@ export function createOauthService({
   function createAuthorizationUrl(
     provider: OauthProvider,
     redirectUri: string,
+    logger?: AuthLogger,
   ) {
+    assertAllowedRedirectUri(redirectUri, logger);
+
     const state = generateRandomToken();
     let url: string;
     let codeVerifier: string | undefined;
@@ -155,13 +198,17 @@ export function createOauthService({
 
   async function login(
     provider: OauthProviderName,
-    profile: OauthProfile,
+    providerProfile: OauthProfile,
     request: {
       ip: string;
       userAgent: string | null;
       existingSessionToken?: string | null;
     },
   ) {
+    // Every lookup and the account created below use the stored form of the
+    // address. The providers' own functions already return it that way; a
+    // profile can also reach here from a caller's own verifier.
+    const profile = normalizeOauthProfile(providerProfile);
     let user: SessionUser | undefined =
       await authService.findUserByOauthAccountIncludingDeleted(
         provider,
@@ -222,13 +269,16 @@ export function createOauthService({
 
   async function register(
     request: OauthRegisterRequest,
-    profile: OauthProfile,
+    providerProfile: OauthProfile,
     requestMeta: {
       ip: string;
       userAgent: string | null;
       existingSessionToken?: string | null;
     },
   ) {
+    // As in `login`: the stored form of the address, for the lookups and
+    // for the account created below.
+    const profile = normalizeOauthProfile(providerProfile);
     const provider: OauthProviderName = request.provider;
 
     if (

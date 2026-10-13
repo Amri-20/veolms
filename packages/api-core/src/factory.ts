@@ -153,6 +153,34 @@ export async function createVeoLMSApi<
     );
   });
 
+  // Baseline browser protections on every response. A header a route has set
+  // for itself (the download routes do) is left as it is.
+  const isProduction = config.NODE_ENV === "production";
+  app.addHook("onSend", async (_request, reply, payload) => {
+    // The declared content type is the one to use: a response is never
+    // re-interpreted as a page or a script.
+    if (!reply.hasHeader("x-content-type-options")) {
+      reply.header("X-Content-Type-Options", "nosniff");
+    }
+    // API addresses can carry ids and short-lived tokens; they are not
+    // passed on to other sites.
+    if (!reply.hasHeader("referrer-policy")) {
+      reply.header("Referrer-Policy", "no-referrer");
+    }
+    // Nothing the API serves (its documentation page, an invoice) uses
+    // these device features.
+    if (!reply.hasHeader("permissions-policy")) {
+      reply.header(
+        "Permissions-Policy",
+        "camera=(), microphone=(), geolocation=()",
+      );
+    }
+    if (isProduction && !reply.hasHeader("strict-transport-security")) {
+      reply.header("Strict-Transport-Security", "max-age=15552000");
+    }
+    return payload;
+  });
+
   const responseDelayMs =
     config.NODE_ENV === "production" ? 0 : config.API_RESPONSE_DELAY_MS;
   if (responseDelayMs > 0) {

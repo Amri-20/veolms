@@ -12,8 +12,16 @@ import type { CreateUserInput } from "../authentication/authentication.types.ts"
 import * as academyRepository from "./setup.repository.ts";
 import type { AuthService } from "../authentication/authentication.service.ts";
 import type { SessionService } from "../session/session.service.ts";
+import { normalizePhoneIdentifier } from "../shared/auth.utils.ts";
 
 const setupSessionSchema = z.object({ exp: z.number() });
+
+/**
+ * A normalised international number: "+", country code, subscriber number,
+ * 8 to 15 digits in total. This is the form sign-in looks numbers up by, so
+ * a number stored any other way could never be matched or confirmed.
+ */
+const SETUP_PHONE_PATTERN = /^\+[1-9]\d{7,14}$/u;
 
 export interface SetupServiceOptions {
   database: Kysely<Database>;
@@ -27,6 +35,8 @@ export function createSetupService({
   sessionService,
 }: SetupServiceOptions) {
   function isValidSetupToken(submitted: string): boolean {
+    // An empty configured token would match an empty submission.
+    if (!config.SETUP_TOKEN || !submitted) return false;
     return secureCompare(submitted, config.SETUP_TOKEN);
   }
 
@@ -112,13 +122,27 @@ export function createSetupService({
       );
     }
 
+    // Stored in the same form sign-in and profile verification use, so the
+    // number the administrator later confirms is this one. It stays
+    // unconfirmed here and cannot be used to sign in until it is.
+    const phoneNo = input.phoneNo
+      ? normalizePhoneIdentifier(input.phoneNo)
+      : null;
+    if (phoneNo && !SETUP_PHONE_PATTERN.test(phoneNo)) {
+      throw new AppError(
+        400,
+        "INVALID_PHONE_NUMBER",
+        "Enter a valid mobile number including its country code.",
+      );
+    }
+
     const username = await authService.generateUniqueUsername(
       input.email.split("@")[0] || "admin",
     );
 
     const createInput: CreateUserInput = {
       email: input.email,
-      phoneNo: input.phoneNo || null,
+      phoneNo,
       username,
       displayName: input.name,
       emailVerified: true,

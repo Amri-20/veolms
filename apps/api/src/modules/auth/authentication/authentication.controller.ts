@@ -1,3 +1,4 @@
+import { DISPLAY_NAME_MAX_LENGTH } from "../shared/auth.constants.ts";
 import type { AuthContext } from "../shared/auth.context.ts";
 import {
   clearSessionCookie,
@@ -97,7 +98,9 @@ export function createAuthController(context: AuthContext) {
 
     return {
       username: user.username,
-      displayName: user.display_name,
+      // A name stored before display names were bounded can be longer than
+      // this response allows.
+      displayName: user.display_name.slice(0, DISPLAY_NAME_MAX_LENGTH),
       ...presentAvatar(user.avatar_data_url),
       bio: user.bio,
       email:

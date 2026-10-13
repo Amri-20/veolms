@@ -74,6 +74,7 @@ export function createAttachmentsController({
             isTruncated: () => multipartFile.file.truncated,
             ...readMultipartDimensions(multipartFile.fields),
           },
+          request.log,
         );
         await reply.status(200).send(attachment);
       } catch (error) {

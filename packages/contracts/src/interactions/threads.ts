@@ -151,7 +151,8 @@ export const createLearningThreadRequestSchema = z
     content: z.string().min(1).max(20000),
     timestampSeconds: z.number().int().nonnegative().nullable().optional(),
     visibility: discussionVisibilitySchema.default("public"),
-    attachmentIds: z.array(z.uuid()).optional(),
+    // Bounded: each id is looked up and attached.
+    attachmentIds: z.array(z.uuid()).max(50).optional(),
   })
   .refine(
     (data) => {

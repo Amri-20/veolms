@@ -11,6 +11,7 @@ import { AppError } from "../../../lib/errors.ts";
 import { ADMIN_ROLE } from "../../auth/index.ts";
 import type { CourseService } from "../../courses/index.ts";
 import { toMinorUnits } from "../shared/currency.ts";
+import { isUniqueViolation } from "../shared/db-errors.ts";
 import * as couponRepo from "./coupon.repository.ts";
 
 /**
@@ -313,25 +314,41 @@ export function createCouponService({
     }
 
     const now = new Date();
-    const created = await couponRepo.insertCoupon(database, {
-      id: crypto.randomUUID(),
-      code: request.code.toUpperCase(),
-      description: request.description ?? null,
-      discount_type: request.discountType,
-      discount_value: request.discountValue,
-      max_discount_amount: request.maxDiscountAmount ?? null,
-      min_order_amount: request.minOrderAmount ?? 0,
-      starts_at: new Date(request.startsAt),
-      expires_at: new Date(request.expiresAt),
-      global_usage_limit: request.globalUsageLimit ?? null,
-      per_user_limit: request.perUserLimit ?? 1,
-      is_active: request.isActive ?? true,
-      restricted_course_ids: request.restrictedCourseIds ?? null,
-      restricted_bundle_ids: request.restrictedBundleIds ?? null,
-      created_by: actor.id,
-      created_at: now,
-      updated_at: now,
-    });
+    const created = await couponRepo
+      .insertCoupon(database, {
+        id: crypto.randomUUID(),
+        code: request.code.toUpperCase(),
+        description: request.description ?? null,
+        discount_type: request.discountType,
+        discount_value: request.discountValue,
+        max_discount_amount: request.maxDiscountAmount ?? null,
+        min_order_amount: request.minOrderAmount ?? 0,
+        starts_at: new Date(request.startsAt),
+        expires_at: new Date(request.expiresAt),
+        global_usage_limit: request.globalUsageLimit ?? null,
+        per_user_limit: request.perUserLimit ?? 1,
+        is_active: request.isActive ?? true,
+        restricted_course_ids: request.restrictedCourseIds ?? null,
+        restricted_bundle_ids: request.restrictedBundleIds ?? null,
+        created_by: actor.id,
+        created_at: now,
+        updated_at: now,
+      })
+      .catch((error: unknown) => {
+        // Two requests creating the same code at once both pass the check
+        // above; the second is the same refusal, not a server error. Only
+        // the code's own unique rule: any other unique violation is not
+        // about the code, and is left for the error handler's general
+        // answer instead of being reported as a code that is taken.
+        if (isUniqueViolation(error, "coupons_code_key")) {
+          throw new AppError(
+            409,
+            "COUPON_CODE_ALREADY_EXISTS",
+            `Coupon code "${request.code}" already exists.`,
+          );
+        }
+        throw error;
+      });
 
     return mapToCoupon(created);
   }

@@ -63,6 +63,8 @@ function isUniqueViolation(error: unknown) {
   );
 }
 
+/** Size past which a rate-limit map is swept for stale entries. */
+const RATE_LIMIT_STORE_SWEEP_SIZE = 2_000;
 const startAttemptTimestamps = new Map<string, number[]>();
 const answerSaveTimestamps = new Map<string, number[]>();
 
@@ -74,6 +76,16 @@ function checkRateLimit(
   errorMessage: string,
 ) {
   const now = Date.now();
+  // Keys were only ever added: one entry per learner and quiz, for as long
+  // as the process ran. Once the map is large, entries with nothing left
+  // inside the window are dropped.
+  if (store.size > RATE_LIMIT_STORE_SWEEP_SIZE) {
+    for (const [storedKey, storedTimestamps] of store) {
+      if (storedTimestamps.every((t) => now - t >= windowMs)) {
+        store.delete(storedKey);
+      }
+    }
+  }
   const timestamps = (store.get(key) ?? []).filter((t) => now - t < windowMs);
   if (timestamps.length >= limit) {
     throw new AppError(429, "RATE_LIMIT_EXCEEDED", errorMessage);

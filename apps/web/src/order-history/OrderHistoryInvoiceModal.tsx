@@ -5,7 +5,10 @@ import { ShoppingBagIcon as ShoppingBag } from "@phosphor-icons/react/ShoppingBa
 import { XIcon as X } from "@phosphor-icons/react/X";
 import { useBackDismiss } from "../navigation/useBackDismiss";
 import { formatMoney } from "@veolms/contracts/commerce/money";
-import type { OrderHistoryItem } from "./orderHistoryData";
+import {
+  formatOrderHistoryPayment,
+  type OrderHistoryItem,
+} from "./orderHistoryData";
 
 export interface OrderHistoryInvoiceModalProps {
   order: OrderHistoryItem | null;
@@ -49,7 +52,9 @@ export function OrderHistoryInvoiceModal({
                 Order Invoice
               </h2>
               <p className="text-xs text-(--muted)">
-                Invoice {order.invoiceNumber}
+                {order.invoiceNumber
+                  ? `Invoice ${order.invoiceNumber}`
+                  : `Order ${order.orderNumber}`}
               </p>
             </div>
           </div>
@@ -94,15 +99,17 @@ export function OrderHistoryInvoiceModal({
           <div className="rounded-xl bg-(--card-surface-raised,var(--hover)) p-3">
             <span className="text-(--muted) block">Payment Method</span>
             <strong className="text-(--text) font-semibold mt-1 block">
-              {order.payment.brand} ({order.payment.label})
+              {formatOrderHistoryPayment(order.payment)}
             </strong>
           </div>
-          <div className="rounded-xl bg-(--card-surface-raised,var(--hover)) p-3 col-span-2 sm:col-span-1">
-            <span className="text-(--muted) block">Transaction ID</span>
-            <strong className="text-(--text) font-mono text-[11px] mt-1 block truncate">
-              {order.transactionId}
-            </strong>
-          </div>
+          {order.transactionId ? (
+            <div className="rounded-xl bg-(--card-surface-raised,var(--hover)) p-3 col-span-2 sm:col-span-1">
+              <span className="text-(--muted) block">Transaction ID</span>
+              <strong className="text-(--text) font-mono text-[11px] mt-1 block truncate">
+                {order.transactionId}
+              </strong>
+            </div>
+          ) : null}
           <div className="rounded-xl bg-(--card-surface-raised,var(--hover)) p-3 col-span-2 sm:col-span-1">
             <span className="text-(--muted) block">Status</span>
             <div className="flex items-center gap-1.5 mt-1">

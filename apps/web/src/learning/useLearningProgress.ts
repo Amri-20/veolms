@@ -25,6 +25,10 @@ import {
   restoreWatchedSeconds,
   takeWatchedSeconds,
 } from "./learningWatchTime";
+import {
+  adoptServerLearningProgress,
+  snapshotAnswersSyncedProgress,
+} from "./syncedLearningProgress";
 
 const MAX_BATCH_ITEMS = 100;
 
@@ -57,22 +61,38 @@ export function useLearningProgress({
   const retryDelayRef = useRef(0);
   const retryAtRef = useRef(0);
 
-  const { data: serverProgress } = useLearningProgressSnapshot(
-    courseKey ?? "",
-    { enabled: syncEnabled },
-  );
+  // When progress the server had already accepted was last taken into the
+  // local copy (what storage held on load, what this page or another tab
+  // synced), and when the latest snapshot request was sent. Together they
+  // say whether a snapshot may lower synced progress; see
+  // `syncedLearningProgress`.
+  const syncedProgressKnownAtRef = useRef(0);
+  const snapshotRequestedAtRef = useRef(0);
+
+  const {
+    data: serverProgress,
+    dataUpdatedAt: snapshotReceivedAt,
+    isFetching: isSnapshotFetching,
+  } = useLearningProgressSnapshot(courseKey ?? "", { enabled: syncEnabled });
 
   useEffect(() => {
     localStateRef.current = localState;
   }, [localState]);
 
   useEffect(() => {
+    syncedProgressKnownAtRef.current = Date.now();
     setLocalState(
       storageIdentity
         ? readLearningProgress(userId, courseKey)
         : EMPTY_LEARNING_PROGRESS_STATE,
     );
   }, [courseKey, storageIdentity, userId]);
+
+  // After the effect above on purpose: a request that starts as the stored
+  // progress is loaded was sent after it.
+  useEffect(() => {
+    if (isSnapshotFetching) snapshotRequestedAtRef.current = Date.now();
+  }, [isSnapshotFetching]);
 
   useEffect(() => {
     if (!storageIdentity) return;
@@ -84,6 +104,7 @@ export function useLearningProgress({
     const storageKey = getLearningProgressStorageKey(userId, courseKey);
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== storageKey) return;
+      syncedProgressKnownAtRef.current = Date.now();
       setLocalState((current) =>
         mergeLocalLearningProgress(
           current,
@@ -95,12 +116,25 @@ export function useLearningProgress({
     return () => window.removeEventListener("storage", handleStorage);
   }, [courseKey, storageIdentity, userId]);
 
+  // The server's progress is merged in "higher wins", except from a
+  // snapshot asked for after everything held as synced had been sent: that
+  // one also brings down a lesson whose progress the server has cleared
+  // (it had no video and was given one). `snapshotReceivedAt` is a
+  // dependency so that a refetch answering the same figures is still read
+  // as the newer answer it is.
   useEffect(() => {
     if (!serverProgress) return;
+    const answersSyncedProgress = snapshotAnswersSyncedProgress({
+      requestedAt: snapshotRequestedAtRef.current,
+      receivedAt: snapshotReceivedAt,
+      syncedProgressKnownAt: syncedProgressKnownAtRef.current,
+    });
     setLocalState((current) =>
-      mergeServerLearningProgress(current, serverProgress.lessons),
+      answersSyncedProgress
+        ? adoptServerLearningProgress(current, serverProgress.lessons)
+        : mergeServerLearningProgress(current, serverProgress.lessons),
     );
-  }, [serverProgress]);
+  }, [serverProgress, snapshotReceivedAt]);
 
   // A lesson can emit progress before the course overview finishes loading.
   // Once the UUID map is ready, attach those number-only records so they can
@@ -189,6 +223,7 @@ export function useLearningProgress({
       try {
         const response = await learningProgressService.sync(courseKey, payload);
         if (response.synced) {
+          syncedProgressKnownAtRef.current = Date.now();
           setLocalState((current) =>
             markLearningProgressSynced(current, pendingItems),
           );

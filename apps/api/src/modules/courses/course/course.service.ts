@@ -44,7 +44,14 @@ import {
   createIncludesService,
   type IncludesService,
 } from "../includes/includes.service.ts";
+import {
+  createAccessService,
+  isOpenFreeCourse,
+  isRestrictedFreeCourse,
+} from "../../access/index.ts";
 import { createMediaService, type MediaService } from "../../media/index.ts";
+import { resolveAliasedBasicsUpdate } from "./basics-aliased-field.ts";
+import { resolveBasicsCategoryUpdate } from "./basics-category.ts";
 import {
   getLessonDurationSeconds,
   presentAccessRule,
@@ -54,6 +61,24 @@ import {
   presentSettings,
   type CourseThumbnailUrls,
 } from "../shared/courses.presenters.ts";
+
+const accessService = createAccessService();
+
+/**
+ * Resource rows for a viewer who may not download them. Each keeps its place
+ * in its lesson and loses its name: a resource's title starts out as the
+ * name of the uploaded file, so the title says as much as the file name.
+ */
+function redactLockedResources<
+  Resource extends { lesson_id: string; title: string },
+>(resources: readonly Resource[]): Resource[] {
+  const countByLesson = new Map<string, number>();
+  return resources.map((resource) => {
+    const position = (countByLesson.get(resource.lesson_id) ?? 0) + 1;
+    countByLesson.set(resource.lesson_id, position);
+    return { ...resource, title: `Resource ${position}` };
+  });
+}
 
 const ALLOWED_THUMBNAIL_MIME_TYPES = new Set([
   "image/jpeg",
@@ -330,12 +355,31 @@ export function createCourseService({
       totalDurationSeconds,
       pricing,
       certificateEnabled: Boolean(row.certificate_enabled ?? false),
+      // The same rule, on the same stored values, as the course overview's
+      // `canSelfEnroll`, so a card and the page it opens agree.
+      canSelfEnroll: !isRestrictedFreeCourse({
+        pricing_type: row.pricing_type,
+        access_type: row.access_type,
+      }),
     } satisfies CourseSummary;
   }
 
   /**
    * Verifies course existence and owner permissions.
    */
+  /** Refuses a category id that names no category. */
+  async function assertCategoryExists(
+    categoryId: string | null | undefined,
+  ): Promise<void> {
+    if (!categoryId) return;
+    if (await categoryService.findCategoryById(categoryId)) return;
+    throw new AppError(
+      400,
+      "INVALID_CATEGORY",
+      "Selected category does not exist.",
+    );
+  }
+
   function getCourseAndVerifyOwner(
     courseId: string,
     creatorId: string,
@@ -577,6 +621,9 @@ export function createCourseService({
     const shortDescription = data.shortDescription ?? null;
     const description = data.description ?? null;
     const categoryId = data.categoryId ?? null;
+    // The same refusal an edit gives. Without it an unknown id reached the
+    // foreign key and came back as a generic error.
+    await assertCategoryExists(categoryId);
     const difficulty = (data.difficulty ?? data.difficultyLevel ?? null) as
       "beginner" | "intermediate" | "advanced" | null;
     const thumbnailMediaId = data.thumbnailMediaId ?? null;
@@ -793,18 +840,20 @@ export function createCourseService({
       );
     }
 
-    if (updates.categoryId) {
-      const category = await categoryService.findCategoryById(
-        updates.categoryId,
-      );
-      if (!category) {
-        throw new AppError(
-          400,
-          "INVALID_CATEGORY",
-          "Selected category does not exist.",
-        );
-      }
-    }
+    // One value is checked here, written below and reported back: `category`
+    // is an accepted alias, and checking `categoryId` alone let an unknown
+    // or a removed category through under the other name. `null` removes
+    // the category (publishing does not require one, so a published course
+    // may lose it too); `undefined` leaves it alone.
+    const categoryUpdate = resolveBasicsCategoryUpdate(updates);
+    await assertCategoryExists(categoryUpdate);
+    // The level by the same rule (`difficultyLevel` is its alias): `null`
+    // removes it, which `difficulty ?? difficultyLevel` skipped while the
+    // response said it was gone. Publishing does not require a level.
+    const difficultyUpdate = resolveAliasedBasicsUpdate(
+      updates.difficulty,
+      updates.difficultyLevel,
+    );
 
     if (updates.thumbnailMediaId) {
       const thumb = await mediaService.getMediaAsset(
@@ -851,9 +900,8 @@ export function createCourseService({
         title: updates.title,
         short_description: updates.shortDescription,
         description: updates.description,
-        category_id: updates.categoryId ?? updates.category,
-        difficulty: (updates.difficulty ?? updates.difficultyLevel) as
-          "beginner" | "intermediate" | "advanced" | null | undefined,
+        category_id: categoryUpdate,
+        difficulty: difficultyUpdate,
         thumbnail_media_id: updates.thumbnailMediaId,
         trailer_media_id: updates.trailerMediaId,
         instructor_alias: updates.instructorAlias,
@@ -895,14 +943,9 @@ export function createCourseService({
             ? updates.description
             : course.description,
         difficulty:
-          updates.difficulty !== undefined ||
-          updates.difficultyLevel !== undefined
-            ? (updates.difficulty ?? updates.difficultyLevel ?? null)
-            : course.difficulty,
+          difficultyUpdate !== undefined ? difficultyUpdate : course.difficulty,
         categoryId:
-          updates.categoryId !== undefined || updates.category !== undefined
-            ? (updates.categoryId ?? updates.category ?? null)
-            : course.category_id,
+          categoryUpdate !== undefined ? categoryUpdate : course.category_id,
         instructorAlias:
           updates.instructorAlias !== undefined
             ? updates.instructorAlias
@@ -976,6 +1019,23 @@ export function createCourseService({
   }
 
   /**
+   * Whether a signed-in viewer who does not manage the course has it: the
+   * course is free and unrestricted, or the viewer holds access.
+   */
+  async function viewerHasCourse(
+    userId: string,
+    courseId: string,
+    pricingType: string | null | undefined,
+    accessType: string | null | undefined,
+  ): Promise<boolean> {
+    const isOpen = isOpenFreeCourse({
+      pricing_type: pricingType,
+      access_type: accessType,
+    });
+    return isOpen || accessService.hasActiveAccess(database, userId, courseId);
+  }
+
+  /**
    * Assembles public course overview data for learners.
    */
   async function getCourseOverviewData(
@@ -1023,6 +1083,7 @@ export function createCourseService({
       allSections,
       allLessons,
       allResources,
+      accessRule,
       pricing,
       settings,
       includes,
@@ -1034,6 +1095,7 @@ export function createCourseService({
       curriculumService.findSectionsByCourseId(courseId),
       curriculumService.findLessonsByCourseId(courseId),
       curriculumService.listResourcesByCourseId(courseId),
+      configurationService.findAccessRuleByCourseId(courseId),
       configurationService.findPricingByCourseId(courseId),
       configurationService.findSettingsByCourseId(courseId),
       includesService.listIncludesForAuthorizedCourse(courseId),
@@ -1060,16 +1122,35 @@ export function createCourseService({
       lessonIds.has(resource.lesson_id),
     );
 
+    // What a lesson's files are called and how large they are is shown to
+    // viewers who may download them, by the same rule the download applies:
+    // whoever manages the course, a signed-in learner on a free unrestricted
+    // course, or a learner who holds access. Everyone else sees that a
+    // lesson has resources and how many, nothing about the files.
+    const viewerMayDownloadResources =
+      viewerManagesCourse ||
+      (user !== undefined &&
+        resources.length > 0 &&
+        (await viewerHasCourse(
+          user.id,
+          courseId,
+          pricing?.pricing_type,
+          accessRule?.access_type,
+        )));
+    const visibleResources = viewerMayDownloadResources
+      ? resources
+      : redactLockedResources(resources);
+
     // "Show instructor name" is the instructor's choice, so it is applied
     // here rather than left to each client to honour.
     const instructorHidden =
       settings?.show_instructor_name === false && !viewerManagesCourse;
 
-    // Learners see what each resource is before downloading it, so its file
+    // Learners who may download a resource see what it is first, so its file
     // details go out with the overview. Media is read without an owner
     // filter: the viewer is not the uploader.
     const [mediaById, creatorRows] = await Promise.all([
-      loadCurriculumMedia(lessons, resources),
+      loadCurriculumMedia(lessons, viewerMayDownloadResources ? resources : []),
       course.creator_id && !instructorHidden
         ? authService.listUserDisplayNamesByIds([course.creator_id])
         : [],
@@ -1103,7 +1184,15 @@ export function createCourseService({
       creator: creatorRow
         ? { id: creatorRow.id, displayName: creatorRow.display_name }
         : null,
-      sections: presentCurriculum({ sections, lessons, resources, mediaById }),
+      sections: presentCurriculum({
+        sections,
+        lessons,
+        resources: visibleResources,
+        mediaById,
+        // The map also holds every lesson's own media, and a resource can
+        // point at one of those.
+        omitResourceMedia: !viewerMayDownloadResources,
+      }),
       pricing: pricing
         ? {
             pricingType: pricing.pricing_type,
@@ -1125,6 +1214,12 @@ export function createCourseService({
           }
         : null,
       includes: includes.map(({ text, position }) => ({ text, position })),
+      // Asked of the rule checkout applies before it prices the course, so
+      // the page offers enrolment exactly when checkout would allow it.
+      canSelfEnroll: !isRestrictedFreeCourse({
+        pricing_type: pricing?.pricing_type,
+        access_type: accessRule?.access_type,
+      }),
       stats: {
         totalSections: sections.length,
         totalLessons: lessons.length,
@@ -1269,6 +1364,7 @@ export function createCourseService({
     },
   ) {
     await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await assertCategoryExists(payload.categoryId);
 
     const updates: Record<string, unknown> = {};
     if (payload.title !== undefined) updates.title = payload.title;

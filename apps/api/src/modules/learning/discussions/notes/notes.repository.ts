@@ -10,6 +10,7 @@ import type {
 } from "@veolms/contracts";
 import type { ExpressionBuilder, SelectQueryBuilder, Updateable } from "kysely";
 import { sql } from "kysely";
+import { containsPattern } from "../shared/discussion.utils.ts";
 import { withWriteTransaction } from "../shared/discussion.mentions.ts";
 import {
   createdAtIdDescSql,
@@ -229,7 +230,7 @@ function applyNoteFilters<O>(
   }
 
   if (options.query) {
-    const searchPattern = `%${options.query.toLowerCase()}%`;
+    const searchPattern = containsPattern(options.query);
     q = q.where((eb: ExpressionBuilder<NotesAliasedDB, "n">) =>
       eb.or([
         eb(sql`lower(n.title)`, "like", searchPattern),

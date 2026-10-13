@@ -4,6 +4,9 @@ import type {
   AccessGrantSource,
   AccessGrantStatus,
 } from "@veolms/contracts";
+import type { Database } from "@veolms/database";
+import type { Kysely } from "kysely";
+import { AppError } from "../../lib/errors.ts";
 import * as accessRepo from "./access.repository.ts";
 // access.repository.ts is the module's canonical source for this type — see
 // the comment there for the full history of it having been separately (and,
@@ -75,6 +78,20 @@ export interface AccessService {
   ): Promise<void>;
 }
 
+/**
+ * Runs `work` in a transaction: the caller's, when it is already in one,
+ * otherwise a new one. A grant and the enrolment that mirrors it are two
+ * writes; made separately, a failure between them left a learner with
+ * access and no enrolment, or an enrolment that outlived a revoked grant.
+ */
+async function inTransaction<T>(
+  database: Executor,
+  work: (transaction: Executor) => Promise<T>,
+): Promise<T> {
+  if (database.isTransaction) return work(database);
+  return (database as Kysely<Database>).transaction().execute(work);
+}
+
 export function createAccessService(): AccessService {
   async function grantAccess(
     database: Executor,
@@ -116,75 +133,112 @@ export function createAccessService(): AccessService {
   }
 
   async function grantManualAccess(
-    database: Executor,
+    outerDatabase: Executor,
     params: {
       userId: string;
       courseId: string;
       validUntil?: Date | null;
     },
   ): Promise<AccessGrant> {
-    const now = new Date();
-    const grant = await grantAccess(database, {
-      userId: params.userId,
-      courseId: params.courseId,
-      source: "admin_grant",
-      validFrom: now,
-      validUntil: params.validUntil,
-    });
+    // An unreadable date reached the database as an invalid timestamp and
+    // came back as a server error.
+    if (params.validUntil && Number.isNaN(params.validUntil.getTime())) {
+      throw new AppError(
+        400,
+        "INVALID_VALID_UNTIL",
+        "validUntil is not a valid date.",
+      );
+    }
 
-    // Also sync enrollment record with admin_grant source
-    await database
-      .insertInto("enrollments")
-      .values({
-        id: crypto.randomUUID(),
-        user_id: params.userId,
-        course_id: params.courseId,
-        order_id: null,
-        status: "active",
+    return inTransaction(outerDatabase, async (database) => {
+      const now = new Date();
+      const grant = await grantAccess(database, {
+        userId: params.userId,
+        courseId: params.courseId,
         source: "admin_grant",
-        access_starts_at: now,
-        access_expires_at: params.validUntil ?? null,
-        created_at: now,
-        updated_at: now,
-      })
-      .onConflict((oc) =>
-        oc.columns(["user_id", "course_id"]).doUpdateSet({
-          order_id: null,
-          status: "active",
-          source: "admin_grant",
-          access_starts_at: now,
-          access_expires_at: params.validUntil ?? null,
-          updated_at: now,
-        }),
-      )
-      .executeTakeFirst();
+        validFrom: now,
+        validUntil: params.validUntil,
+      });
 
-    return grant;
+      // The enrolment mirrors the grant as it now stands, not the request.
+      // The grant keeps what the learner already held (a longer or lifetime
+      // period, and the order that paid for it); writing the requested
+      // values here instead gave a lifetime buyer an enrolment that expired
+      // with a short manual grant, and detached it from its order. The
+      // course then left My Courses and could be bought a second time,
+      // while a refund of the first order revoked nothing.
+      const enrollment = {
+        order_id: grant.purchaseId ?? null,
+        status: "active" as const,
+        source:
+          grant.source === "purchase"
+            ? ("direct_purchase" as const)
+            : grant.source,
+        access_starts_at: new Date(grant.validFrom),
+        access_expires_at: grant.validUntil ? new Date(grant.validUntil) : null,
+        updated_at: now,
+      };
+      await database
+        .insertInto("enrollments")
+        .values({
+          id: crypto.randomUUID(),
+          user_id: params.userId,
+          course_id: params.courseId,
+          ...enrollment,
+          created_at: now,
+        })
+        .onConflict((oc) => {
+          // A grant that stayed with its order leaves the enrolment's own
+          // source as it was: "purchase" on the grant covers both a course
+          // bought alone and one bought in a bundle, and the enrolment is
+          // where that difference is kept.
+          const { source, ...withoutSource } = enrollment;
+          return oc
+            .columns(["user_id", "course_id"])
+            .doUpdateSet(
+              grant.source === "purchase"
+                ? withoutSource
+                : { ...withoutSource, source },
+            );
+        })
+        .executeTakeFirst();
+
+      return grant;
+    });
   }
 
   async function revokeAccessGrantById(
-    database: Executor,
+    outerDatabase: Executor,
     grantId: string,
   ): Promise<void> {
-    const grant = await database
-      .selectFrom("access_grants")
-      .selectAll()
-      .where("id", "=", grantId)
-      .executeTakeFirst();
+    await inTransaction(outerDatabase, async (database) => {
+      const grant = await database
+        .selectFrom("access_grants")
+        .selectAll()
+        .where("id", "=", grantId)
+        .executeTakeFirst();
 
-    if (!grant) return;
+      // Answered "revoked successfully" for an id that matched nothing.
+      if (!grant) {
+        throw new AppError(
+          404,
+          "ACCESS_GRANT_NOT_FOUND",
+          "Access grant not found.",
+        );
+      }
 
-    await accessRepo.updateAccessGrantStatus(database, grantId, "revoked");
+      await accessRepo.updateAccessGrantStatus(database, grantId, "revoked");
 
-    await database
-      .updateTable("enrollments")
-      .set({
-        status: "revoked",
-        updated_at: new Date(),
-      })
-      .where("user_id", "=", grant.user_id)
-      .where("course_id", "=", grant.course_id)
-      .execute();
+      await database
+        .updateTable("enrollments")
+        .set({
+          status: "revoked",
+          updated_at: new Date(),
+        })
+        .where("user_id", "=", grant.user_id)
+        .where("course_id", "=", grant.course_id)
+        .execute();
+    });
   }
 
   async function listUserGrants(

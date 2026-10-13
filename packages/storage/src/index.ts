@@ -93,6 +93,9 @@ export function assertVisibilityPrefixedKey(key: string): string {
   return normalized;
 }
 
+/** How long a failed bucket CORS call is left alone before it is retried. */
+const BUCKET_CORS_RETRY_MS = 5 * 60 * 1000;
+
 export class S3StorageService {
   private client: S3Client;
   private bucket: string;
@@ -103,6 +106,8 @@ export class S3StorageService {
   private cdnPublicFolders: readonly string[];
   private requireVisibilityPrefix: boolean;
   private bucketCorsEnsured: Promise<void> | null = null;
+  /** Earliest time the bucket CORS call may be made again after failing. */
+  private bucketCorsRetryAt = 0;
 
   constructor(options: StorageOptions) {
     if (!options.bucket) {
@@ -443,7 +448,10 @@ export class S3StorageService {
    * upload request) await the same cached result instead of re-issuing it.
    */
   async ensureBucketCors(): Promise<void> {
-    if (!this.bucketCorsEnsured) {
+    // After a failure it is not tried again straight away. A bucket that
+    // refuses the setting (no permission, say) otherwise cost every upload
+    // request a failed call of its own.
+    if (!this.bucketCorsEnsured && Date.now() >= this.bucketCorsRetryAt) {
       this.bucketCorsEnsured = this.client
         .send(
           new PutBucketCorsCommand({
@@ -476,6 +484,7 @@ export class S3StorageService {
           () => undefined,
           (error) => {
             this.bucketCorsEnsured = null;
+            this.bucketCorsRetryAt = Date.now() + BUCKET_CORS_RETRY_MS;
             console.warn(
               `[storage] Failed to set S3 bucket CORS for ${this.bucket}:`,
               error instanceof Error ? error.message : error,
@@ -492,12 +501,19 @@ export class S3StorageService {
    *
    * The URL is single-use and expires after `expiresIn` seconds (default 300).
    * Callers must set Content-Type on the PUT request to match `contentType`.
+   *
+   * By default nothing enforces that: the presigner leaves Content-Type out
+   * of the signature, so the holder of the URL can store the object under
+   * any type. `bindContentType` signs it, and storage then refuses a PUT
+   * whose Content-Type differs. Use it wherever the stored type decides how
+   * the object is served to other people (anything under a public prefix).
    */
   async getPresignedPutUrl(
     key: string,
     contentType: string,
     contentLength?: number,
     expiresIn = 300,
+    options?: { bindContentType?: boolean },
   ): Promise<string> {
     await this.ensureBucketCors().catch(() => {});
     const storageKey = this.keyForWrite(key);
@@ -510,6 +526,9 @@ export class S3StorageService {
     return getSignedUrl(this.client, command, {
       expiresIn,
       unhoistableHeaders: new Set(["content-length"]),
+      ...(options?.bindContentType
+        ? { signableHeaders: new Set(["content-type"]) }
+        : {}),
     });
   }
 

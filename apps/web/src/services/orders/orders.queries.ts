@@ -1,7 +1,9 @@
+import { useCallback } from "react";
 import {
   keepPreviousData,
   useInfiniteQuery,
   useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
 import type {
   AdminOrdersListResponse,
@@ -11,6 +13,7 @@ import type {
   OrderStatsResponse,
   Invoice,
   OrderView,
+  NeedsRefundListResponse,
 } from "@veolms/contracts";
 import type { ApiError } from "../../lib/api-error";
 import { orderKeys } from "./orders.keys";
@@ -87,6 +90,24 @@ export function useOrderStats(
   });
 }
 
+/** How many "needs a manual refund" entries the Orders screen asks for. */
+const NEEDS_REFUND_PAGE_SIZE = 20;
+
+/**
+ * Payments staff have to refund by hand (the newest few). One small
+ * request; it sits under `orderKeys.all`, so refunding an order from this
+ * screen refreshes it along with the lists.
+ */
+export function useOrdersNeedingRefund(options?: { enabled?: boolean }) {
+  return useQuery<NeedsRefundListResponse, ApiError>({
+    queryKey: orderKeys.needsRefund(),
+    queryFn: () =>
+      ordersService.listNeedsRefund({ limit: NEEDS_REFUND_PAGE_SIZE }),
+    enabled: options?.enabled ?? true,
+    staleTime: 30 * 1000,
+  });
+}
+
 export function useOrder(orderId: string | null, view?: OrderView) {
   return useQuery<OrderResponse, ApiError>({
     queryKey: orderId
@@ -96,6 +117,24 @@ export function useOrder(orderId: string | null, view?: OrderView) {
     enabled: Boolean(orderId),
     staleTime: 60 * 1000,
   });
+}
+
+/**
+ * Loads one order into the cache `useOrder` reads from and resolves with
+ * it, or rejects if it cannot be read. For opening an order on a click,
+ * where a failure has to be reported at once.
+ */
+export function useFetchOrder() {
+  const queryClient = useQueryClient();
+  return useCallback(
+    (orderId: string, view?: OrderView) =>
+      queryClient.fetchQuery<OrderResponse, ApiError>({
+        queryKey: orderKeys.detail(orderId, view),
+        queryFn: () => ordersService.getOrder(orderId, view),
+        staleTime: 60 * 1000,
+      }),
+    [queryClient],
+  );
 }
 
 export function useOrderInvoice(orderId: string | null, view?: OrderView) {

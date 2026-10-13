@@ -60,6 +60,7 @@ const accessRoutes: RoutePlugin = async (app, options) => {
           ),
           401: errorResponse("Unauthorized"),
           403: errorResponse("Forbidden - Admin required"),
+          404: errorResponse("Access grant not found"),
         },
       },
     },

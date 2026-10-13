@@ -24,6 +24,7 @@ export function createOauthController(context: AuthContext) {
     const result = oauthService.createAuthorizationUrl(
       request.body.provider,
       request.body.redirectUri,
+      request.log,
     );
     setOauthStateCookie(reply, result.cookie);
     return { url: result.url };

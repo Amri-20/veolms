@@ -3,7 +3,11 @@
 import { isValidPublicProfileUsername } from "@veolms/contracts/username-rules";
 import type { MfaGateUser } from "../auth/mfaGate";
 import { resolveMfaSetupView } from "../auth/mfaGate";
-import { normalizeNavigationPath } from "./routeDescriptors";
+import {
+  NOT_FOUND_SECTION,
+  getMatchedRouteDescriptor,
+  normalizeNavigationPath,
+} from "./routeDescriptors";
 import { CREATOR_ROLES, normalizeRoles } from "../shell/workspaceRole";
 import { isCourseEditorPath } from "../courses/courseEditorRouting";
 
@@ -176,7 +180,9 @@ const LOGIN_PROMPT_PATH_ROOTS = [
  * Signed-in pages a signed-out visitor is asked to log in for — with the page
  * kept as the place to return to — instead of being sent to the home page.
  * These are the addresses emails, notifications and bookmarks point at. An
- * address the app does not know still goes home.
+ * address under one of them that no page answers to is asked about too: the
+ * visitor may simply be signed out. Any other address the app does not know
+ * shows the not-found screen (see `guestMayView`).
  */
 export function shouldPromptLoginFor(pathname: string): boolean {
   const path = normalizeAppPath(pathname);
@@ -198,6 +204,51 @@ export function requiresAcademyAuth(pathname: string): boolean {
     return false;
   }
   return !isPublicAcademyPath(path);
+}
+
+/**
+ * Whether no page of its own answers to the address: the router fell through
+ * to its catch-all, matched a pattern the address does not really fit, or
+ * could only hand the address to the profile page although the path rules do
+ * not count it as a profile address. Takes the router's matches because only
+ * the route tree knows which addresses exist.
+ *
+ * The last case is a single word held back from the public profile addresses
+ * (see `isPublicProfilePath`): a reserved word with no page of its own
+ * ("/auth"), or one written in another case ("/Orders") or percent-encoded,
+ * which no page's own route matches. It was taken for a signed-in page, so a
+ * signed-out visitor was sent to the home page while a signed-in one saw
+ * "Page not found". Nothing signed-in is behind it: what the router gave it
+ * to is the profile page, which looks the name up and shows the not-found
+ * screen when it is no one's.
+ */
+export function isUnknownAddress(
+  matches: readonly { id: string }[],
+  pathname: string,
+): boolean {
+  const descriptor = getMatchedRouteDescriptor(matches, pathname);
+  if (descriptor.kind !== "shell") return false;
+  if (descriptor.page === "placeholder") {
+    return descriptor.section === NOT_FOUND_SECTION;
+  }
+  return descriptor.page === "public-profile" && !isPublicProfilePath(pathname);
+}
+
+/**
+ * Whether a signed-out visitor is shown the page at this address rather than
+ * being sent elsewhere. Public pages, and an address no page answers to: the
+ * not-found screen has nothing to protect, and sending the visitor to the
+ * home page instead left them on a page they did not ask for with no word
+ * that the address was wrong. An unknown address under a signed-in page
+ * keeps its login prompt.
+ */
+export function guestMayView(
+  pathname: string,
+  addressUnknown: boolean,
+): boolean {
+  const path = normalizeAppPath(pathname);
+  if (!requiresAcademyAuth(path)) return true;
+  return addressUnknown && !shouldPromptLoginFor(path);
 }
 
 export function sanitizeReturnTo(
@@ -312,6 +363,7 @@ export interface SessionAccess {
 export function shouldBlockAcademyRender(
   pathname: string,
   access: SessionAccess,
+  addressUnknown = false,
 ): boolean {
   const path = normalizeAppPath(pathname);
 
@@ -320,7 +372,7 @@ export function shouldBlockAcademyRender(
   }
 
   if (!access.isAuthenticated) {
-    return requiresAcademyAuth(path);
+    return !guestMayView(path, addressUnknown);
   }
 
   return access.needsMfaChallenge && path !== "/logout";

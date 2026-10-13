@@ -22,6 +22,7 @@ import {
   withWriteTransaction,
 } from "../shared/discussion.mentions.ts";
 import {
+  containsPattern,
   createdAtIdDescSql,
   decodeDiscussionCursor,
   encodeDiscussionCursor,
@@ -355,6 +356,17 @@ export function createThreadsService(
       const threadKind =
         input.kind === "qna" ? "question" : input.kind || "comment";
 
+      // Notes have their own endpoint and their own list. One created here
+      // was stored as a thread of kind "note", which no feed shows: the
+      // request succeeded and the note was never seen again.
+      if (threadKind === "note") {
+        throw httpError(
+          400,
+          "INVALID_THREAD_KIND",
+          "Notes are created through the notes endpoint.",
+        );
+      }
+
       await courseAccess.assertThreadKindEnabled(
         db,
         input.courseId,
@@ -363,10 +375,13 @@ export function createThreadsService(
 
       // Validate lesson hierarchy
       if (input.lessonId) {
+        // A lesson that has been removed is not one to post under: the
+        // post would be attached to something nobody can open.
         const lesson = await db
           .selectFrom("course_lessons")
           .select("course_id")
           .where("id", "=", input.lessonId)
+          .where("deleted_at", "is", null)
           .executeTakeFirst();
 
         if (!lesson || lesson.course_id !== input.courseId) {
@@ -970,7 +985,7 @@ export function createThreadsService(
         }
 
         if (query.search) {
-          const pattern = `%${query.search.toLowerCase()}%`;
+          const pattern = containsPattern(query.search);
           notesQuery = notesQuery.where((eb) =>
             eb.or([
               eb(sql`lower(n.title)`, "like", pattern),

@@ -4,6 +4,7 @@ import type {
   UserAutocompleteItem,
 } from "@veolms/contracts";
 import { sql } from "kysely";
+import { escapeLikePattern } from "../../../../lib/like-pattern.ts";
 import { isCourseParticipant } from "../shared/discussion.mentions.ts";
 
 export interface EngagementExistenceRow {
@@ -225,9 +226,12 @@ export function createEngagementsRepository(): EngagementsRepository {
 
     async searchUsersForMention(db, { query, courseId, limit }) {
       const cleanQuery = query.toLowerCase();
-      const pattern = `%${cleanQuery}%`;
-      const prefixPattern = `${cleanQuery}%`;
-      const wordPattern = `% ${cleanQuery}%`;
+      // "%", "_" and "\" are matched as typed. The two exact-match ranks
+      // below compare `cleanQuery` itself, so it stays unescaped.
+      const escapedQuery = escapeLikePattern(cleanQuery);
+      const pattern = `%${escapedQuery}%`;
+      const prefixPattern = `${escapedQuery}%`;
+      const wordPattern = `% ${escapedQuery}%`;
 
       const queryBuilder = db
         .selectFrom("users")

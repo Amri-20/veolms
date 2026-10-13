@@ -128,11 +128,15 @@ import {
   isEditingShortcutTarget,
 } from "../keyboardShortcuts";
 import {
+  getNavigationMatch,
+  resolveActiveRouteSection,
+} from "../routing/activeRouteSection";
+import { NO_VIDEO_NOTICE } from "../learning/lessonWithoutVideo";
+import {
   getDestinationPath,
   getMatchedRouteDescriptor,
   getStaticRouteDescriptor,
   normalizeNavigationPath,
-  NOT_FOUND_SECTION,
 } from "../routing/routeDescriptors";
 
 export const links: Route.LinksFunction = () => [
@@ -178,33 +182,6 @@ function readAcademyNavigationState(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-function getNavigationMatch(
-  pathname: string,
-  items: readonly NavigationItemWithMetadata[],
-) {
-  const path = normalizeNavigationPath(pathname.split(/[?#]/, 1)[0] || "/");
-  let bestMatch:
-    { label: string; path: string; exact: boolean; length: number } | undefined;
-
-  for (const [label, , metadata] of items) {
-    const itemPath = normalizeNavigationPath(metadata?.routeLink ?? "/");
-    // The Discussions menu resolves to the last tab visited in this session,
-    // so its tab URLs are still the menu's destination rather than a detail
-    // page that should inherit the previously selected section.
-    const isDiscussionTab =
-      itemPath === "/discussions" && path.startsWith("/discussions/");
-    const exact = path === itemPath || isDiscussionTab;
-    const isChild =
-      itemPath !== "/" && path.startsWith(`${itemPath.replace(/\/$/, "")}/`);
-    if (!exact && !isChild) continue;
-    if (!bestMatch || itemPath.length > bestMatch.length) {
-      bestMatch = { label, path: itemPath, exact, length: itemPath.length };
-    }
-  }
-
-  return bestMatch;
 }
 
 function getWorkspaceNavigationItems(
@@ -458,18 +435,15 @@ export default function AcademyLayout() {
     location.pathname,
     workspaceNavigationItems,
   );
-  // An address that leads nowhere belongs to no item of the menu. It keeps
-  // its own section, which is what has the page say "not found"; given the
-  // menu's first item instead, it showed that item's page as unfinished.
-  const activeRouteSection =
-    route.section === NOT_FOUND_SECTION
-      ? NOT_FOUND_SECTION
-      : hasValidNavigationOrigin
-        ? originSectionValue
-        : (currentNavigationMatch?.label ??
-          (workspaceNavigationItems.some(([label]) => label === route.section)
-            ? route.section
-            : workspaceNavigationItems[0]?.[0]));
+  // "Not found" is no sidebar entry, but it is the section the page has to
+  // be told about, and it comes before everything else that could name a
+  // section (see `resolveActiveRouteSection`).
+  const activeRouteSection = resolveActiveRouteSection({
+    routeSection: route.section,
+    originSection: hasValidNavigationOrigin ? originSectionValue : undefined,
+    navigationMatch: currentNavigationMatch,
+    navigationItems: workspaceNavigationItems,
+  });
   const showRouteBackButton = !currentNavigationMatch?.exact;
 
   useLayoutEffect(() => {
@@ -1267,15 +1241,23 @@ export default function AcademyLayout() {
                   actionLabel: "Unlock the course",
                   onAction: openPersistentPlayerCourseOverview,
                 }
-              : {
-                  kind: "retry" as const,
-                  message: "We couldn't prepare this video.",
-                  actionLabel: "Retry",
-                  onAction: () =>
-                    selectPersistentMiniPlayerLessonRef.current(lessonNumber, {
-                      retry: true,
-                    }),
-                };
+              : bootstrapError?.code === "MEDIA_NOT_FOUND"
+                ? // The lesson has no video (its quiz was removed, say).
+                  // That is not a failure and there is nothing to retry;
+                  // the lesson page says the same.
+                  NO_VIDEO_NOTICE
+                : {
+                    kind: "retry" as const,
+                    message: "We couldn't prepare this video.",
+                    actionLabel: "Retry",
+                    onAction: () =>
+                      selectPersistentMiniPlayerLessonRef.current(
+                        lessonNumber,
+                        {
+                          retry: true,
+                        },
+                      ),
+                  };
 
         const withError: PersistentLearningPlayerRegistration = {
           ...active,

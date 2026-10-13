@@ -99,6 +99,10 @@ import { SidebarResizeReadout } from "./shell/SidebarResizeReadout";
 import { SidebarToggleIcon } from "./shell/SidebarToggleIcon";
 import { useCurrentUser, useSignOut } from "./services/auth";
 import {
+  COURSE_CATALOGUE_SEARCH_SESSION_KEY,
+  forgetLegacyLearningProgress,
+} from "./store/accountBrowserState";
+import {
   authStore,
   useAuthIdentityHint,
   useSessionPresentAtBoot,
@@ -251,6 +255,8 @@ import {
   useSessionStorageState,
 } from "./learning/useSessionStorageState";
 import { LearningBackgroundSurface } from "./learning/LearningBackgroundSurface";
+import { getCatalogueCardProgressPercent } from "./learning/catalogueCardProgress";
+import { readLearningProgress } from "./learning/learningProgressStorage";
 import {
   persistReadingModePreferences,
   readReadingModePreferences,
@@ -1146,7 +1152,7 @@ export function CoursesPage({
   const [creatorEnrollmentFilter, setCreatorEnrollmentFilter] =
     useState<CourseEnrollmentFilter>("all");
   const [search, setSearch] = useSessionStorageState(
-    "veolms-course-catalogue-search",
+    COURSE_CATALOGUE_SEARCH_SESSION_KEY,
     "",
     isStoredString,
   );
@@ -1263,6 +1269,17 @@ export function CoursesPage({
   // same-page navigation after login; it is never persisted across reloads.
   const activeUser = authUserFetched && !authUserError ? authUser : storeUser;
   const isAuthenticated = Boolean(activeUser);
+  // The catalogue search belongs to whoever typed it. Its stored copy is
+  // forgotten when the session ends (`forgetAccountBrowserState`), but this
+  // page stays mounted through a session that ends without a reload, and
+  // went on filtering the next account's catalogue by it.
+  const activeUserId = activeUser?.id ?? null;
+  const searchOwnerIdRef = useRef(activeUserId);
+  useEffect(() => {
+    const previousOwnerId = searchOwnerIdRef.current;
+    searchOwnerIdRef.current = activeUserId;
+    if (previousOwnerId && previousOwnerId !== activeUserId) setSearch("");
+  }, [activeUserId, setSearch]);
   // The session has not been checked yet and nothing is remembered about the
   // account, so it is too early to offer "Login".
   const accountStatusUnknown =
@@ -1417,12 +1434,10 @@ export function CoursesPage({
         shouldQueryCreatorCourses),
   });
   const myCoursesData = myCoursesQuery.data;
+  // Asked for on every tab, not only on Bin: the tab's badge is this list's
+  // length, so asked for only once the tab was open it read 0 until clicked.
   const deletedCoursesQuery = useDeletedCourses(undefined, {
-    enabled:
-      shouldQueryCourses &&
-      isAdmin &&
-      effectiveRole === "creator" &&
-      enrollmentFilter === "bin",
+    enabled: shouldQueryCourses && isAdmin && effectiveRole === "creator",
   });
   const deletedCoursesData = deletedCoursesQuery.data;
   const isCourseCatalogueLoadError =
@@ -1556,6 +1571,18 @@ export function CoursesPage({
   const revertPalettePreviewRef = useRef<
     ((origin?: ThemeRevealOrigin) => void) | null
   >(null);
+  // The same for the two handlers the long-press effect calls. They are
+  // declared after that effect, further down, and it reached them by name
+  // before they existed in the source.
+  const activateAppearanceOptionRef = useRef<
+    | ((
+        option: AppearanceOption,
+        mobile?: boolean,
+        source?: "appearance" | "theme",
+      ) => void)
+    | null
+  >(null);
+  const acknowledgeLongPressRef = useRef<(() => void) | null>(null);
   const openLogoutConfirm = useCallback(() => {
     setProfileMenu(false);
     setLogoutConfirmOpen(true);
@@ -2475,7 +2502,7 @@ export function CoursesPage({
         );
       });
     const openAppearancePaletteFromControl = (control: HTMLButtonElement) =>
-      activateAppearanceOption(
+      activateAppearanceOptionRef.current?.(
         "theme",
         control.hasAttribute("data-mobile-palette-trigger"),
         "appearance",
@@ -2611,8 +2638,12 @@ export function CoursesPage({
           press.longPressTimer = null;
           press.longPressActivated = true;
           dockLongPressConsumedUntilRef.current = performance.now() + 1000;
-          acknowledgeLongPress();
-          activateAppearanceOption("theme", isMobile, "appearance");
+          acknowledgeLongPressRef.current?.();
+          activateAppearanceOptionRef.current?.(
+            "theme",
+            isMobile,
+            "appearance",
+          );
         }, APPEARANCE_LONG_PRESS_DURATION);
       }
       // Prevent a press on the transition snapshot from being replayed
@@ -2940,6 +2971,12 @@ export function CoursesPage({
     };
   }, [compactNavigation, effectiveRole, navigation, sidebarMode]);
 
+  // The course cards no longer read the player's old browser-wide progress
+  // maps; what earlier visits left behind is removed.
+  useEffect(() => {
+    forgetLegacyLearningProgress();
+  }, []);
+
   const allCourses = useMemo(() => {
     if (effectiveRole !== "creator") {
       const enrolledSet = new Set<string>();
@@ -2953,55 +2990,25 @@ export function CoursesPage({
         }
       }
       if (typeof window !== "undefined") {
+        const signedInUserId = authUser?.id;
         for (const ec of enrolledCoursesData?.courses || []) {
-          try {
-            const courseKey = encodeURIComponent(ec.courseSlug);
-            const serverProgress =
-              typeof ec.progress === "number" && Number.isFinite(ec.progress)
-                ? Math.max(0, Math.min(100, Math.round(ec.progress)))
-                : null;
-            const total = ec.totalLessons > 0 ? ec.totalLessons : 84;
-            let localEstimate: number | null = null;
+          // The server's figure, plus what this account has watched here
+          // and not sent yet (see `getCatalogueCardProgressPercent`).
+          //
+          // The last-opened lesson is a resume pointer, not progress. It
+          // used to stand in for it: opening lesson 45 of 50 showed 90%
+          // on a course the learner had barely started.
+          const nextProgress = getCatalogueCardProgressPercent({
+            signedIn: Boolean(signedInUserId),
+            serverPercent: ec.progress,
+            totalLessons: ec.totalLessons,
+            localItems: readLearningProgress(signedInUserId, ec.courseSlug)
+              .items,
+          });
 
-            const detailedProgStr = localStorage.getItem(
-              `veolms-learning-${courseKey}-progress`,
-            );
-            if (detailedProgStr) {
-              const progMap = JSON.parse(detailedProgStr) as Record<
-                string,
-                number
-              >;
-              const vals = Object.values(progMap).filter(
-                (value) => typeof value === "number" && Number.isFinite(value),
-              );
-              // Sparse session maps (often 1 lesson) must not replace server %.
-              // Only trust local when it covers a meaningful share of the course.
-              if (
-                vals.length > 0 &&
-                vals.length >= Math.min(10, total * 0.05)
-              ) {
-                const sum = vals.reduce((a, b) => a + b, 0);
-                localEstimate = Math.min(100, Math.round(sum / total));
-              }
-            }
-
-            // The last-opened lesson is a resume pointer, not progress. It
-            // used to stand in for it: opening lesson 45 of 50 showed 90%
-            // on a course the learner had barely started.
-
-            const nextProgress =
-              serverProgress == null
-                ? localEstimate
-                : localEstimate == null
-                  ? serverProgress
-                  : Math.max(serverProgress, localEstimate);
-
-            if (nextProgress != null) {
-              progressMap.set(ec.courseId, nextProgress);
-              if (ec.courseSlug) progressMap.set(ec.courseSlug, nextProgress);
-            }
-          } catch {
-            // Ignore storage errors
+          if (nextProgress != null) {
+            progressMap.set(ec.courseId, nextProgress);
+            if (ec.courseSlug) progressMap.set(ec.courseSlug, nextProgress);
           }
         }
       }
@@ -3016,6 +3023,7 @@ export function CoursesPage({
     }
     return (myCoursesData?.courses || []).map(adaptApiCourseToCatalogueCourse);
   }, [
+    authUser?.id,
     deletedCoursesData?.courses,
     effectiveRole,
     enrollmentFilter,
@@ -3638,6 +3646,7 @@ export function CoursesPage({
     if (mobile) setMobilePaletteMenu(false);
     else setPaletteMenu(false);
   };
+  activateAppearanceOptionRef.current = activateAppearanceOption;
 
   const openAppearanceThemeMenu = (
     event: ReactMouseEvent<HTMLButtonElement>,
@@ -3713,6 +3722,7 @@ export function CoursesPage({
     }
     playLongPressPop(context);
   };
+  acknowledgeLongPressRef.current = acknowledgeLongPress;
 
   const startDockLongPress = (
     event: ReactPointerEvent<HTMLButtonElement>,
@@ -6218,7 +6228,9 @@ export function CoursesPage({
             ref={mobileMoreRef}
             type="button"
             className={mobileMoreActive || mobileMenuOpen ? "is-active" : ""}
-            aria-label="Open navigation and appearance menu"
+            // Starts with the word on the button ("You"), so the spoken
+            // name contains the visible one.
+            aria-label="You: open navigation and appearance menu"
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-navigation-sheet"
             onClick={openMobileNavigationMenu}

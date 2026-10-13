@@ -33,7 +33,13 @@ export function createAccessController({
     const result = await service.grantManualAccess(database, {
       userId,
       courseId,
-      validUntil: validUntil ? new Date(validUntil) : null,
+      // Only an absent or null value means lifetime. An empty string used to
+      // fall through to lifetime too; it now reaches the service as an
+      // unreadable date and is refused there (INVALID_VALID_UNTIL).
+      validUntil:
+        validUntil === undefined || validUntil === null
+          ? null
+          : new Date(validUntil),
     });
     await reply.status(201).send(result);
   }

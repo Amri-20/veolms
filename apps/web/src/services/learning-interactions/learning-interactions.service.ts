@@ -36,7 +36,11 @@ import type {
   UserAutocompleteQuery,
   UserAutocompleteResponse,
 } from "@veolms/contracts";
-import { api, getApiRequestUrl } from "../../lib/api-client";
+import {
+  api,
+  endSessionIfUnauthorized,
+  getApiRequestUrl,
+} from "../../lib/api-client";
 import { mediaService } from "../media/media.service";
 import { requireServerEntityId } from "./interaction-entities";
 
@@ -271,6 +275,28 @@ export const learningInteractionsService = {
       keepalive: true,
     });
     if (!response.ok) {
+      // This request does not go through the API client, so nothing told
+      // the rest of the app when it came back "not signed in". A page that
+      // outlives it (restored from the back/forward cache) stayed signed in
+      // with every request failing. Same rule as the playback requests.
+      if (response.status === 401) {
+        let code = "UNKNOWN_ERROR";
+        try {
+          const payload: unknown = await response.json();
+          const error =
+            payload && typeof payload === "object" && "error" in payload
+              ? (payload as { error?: { code?: unknown } }).error
+              : undefined;
+          if (typeof error?.code === "string") code = error.code;
+        } catch {
+          // No readable body: it is then not an explicit session failure.
+        }
+        endSessionIfUnauthorized(
+          response.url,
+          { status: response.status, code },
+          { onlyIfSignedIn: true },
+        );
+      }
       throw new Error(`Request failed with status code ${response.status}`);
     }
   },

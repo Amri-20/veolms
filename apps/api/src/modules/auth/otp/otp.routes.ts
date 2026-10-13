@@ -54,6 +54,15 @@ const otpRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/auth/me/phone/otp/send",
     {
+      // A number that belongs to another account is refused before any code
+      // is sent, so the daily send allowance never slows a caller who is
+      // testing numbers. This does.
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: "1 minute",
+        },
+      },
       schema: {
         operationId: "sendPhoneVerificationOtp",
         tags: ["Auth"],
@@ -81,6 +90,14 @@ const otpRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/auth/me/phone/otp/verify",
     {
+      // Six-digit code space, and each wrong guess here costs the caller
+      // nothing but one of three attempts on a code they can request again.
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: "1 minute",
+        },
+      },
       schema: {
         operationId: "verifyPhoneNumber",
         tags: ["Auth"],
@@ -109,6 +126,13 @@ const otpRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/auth/me/email/otp/send",
     {
+      // The same per-address limit as the mobile route above.
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: "1 minute",
+        },
+      },
       schema: {
         operationId: "sendEmailVerificationOtp",
         tags: ["Auth"],
@@ -135,6 +159,15 @@ const otpRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/auth/me/email/otp/verify",
     {
+      // As for the mobile code: a six-digit code space, and a wrong guess
+      // costs only one of three attempts on a code that can be requested
+      // again.
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: "1 minute",
+        },
+      },
       schema: {
         operationId: "verifyEmailAddress",
         tags: ["Auth"],

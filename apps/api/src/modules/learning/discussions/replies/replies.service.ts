@@ -232,26 +232,31 @@ export function createRepliesService({
 
         // Attach any verified, still-unattached attachments owned by the caller
         if (input.attachmentIds && input.attachmentIds.length > 0) {
-          for (const attachmentId of input.attachmentIds) {
-            const result = await trx
-              .updateTable("learning_attachments")
-              .set({
-                target_type: "reply",
-                target_id: id,
-              })
-              .where("id", "=", attachmentId)
-              .where("owner_id", "=", input.userId)
-              .where("status", "=", "ready")
-              .where("target_id", "is", null)
-              .executeTakeFirst();
+          // One statement for all of them, not one per attachment. The rule
+          // is unchanged: every id named must be attached, or the reply is
+          // refused.
+          const attachmentIds = [...new Set(input.attachmentIds)];
+          const attached = await trx
+            .updateTable("learning_attachments")
+            .set({
+              target_type: "reply",
+              target_id: id,
+            })
+            .where("id", "in", attachmentIds)
+            .where("owner_id", "=", input.userId)
+            .where("status", "=", "ready")
+            .where("target_id", "is", null)
+            .returning("id")
+            .execute();
 
-            if (Number(result.numUpdatedRows ?? 0) === 0) {
-              throw httpError(
-                400,
-                "INVALID_ATTACHMENT",
-                `Attachment ${attachmentId} is unavailable or already attached elsewhere`,
-              );
-            }
+          const attachedIds = new Set(attached.map((row) => row.id));
+          const missing = attachmentIds.find((it) => !attachedIds.has(it));
+          if (missing) {
+            throw httpError(
+              400,
+              "INVALID_ATTACHMENT",
+              `Attachment ${missing} is unavailable or already attached elsewhere`,
+            );
           }
         }
 

@@ -89,6 +89,21 @@ export const rememberDiscussionTab = (tab: DiscussionTab) => {
   }
 };
 
+/**
+ * Forgets which Settings and Discussions tabs were last open. They are kept
+ * for the browser tab, which outlives a sign-out, so the next account to
+ * sign in there was taken to the previous account's last tab.
+ */
+export const forgetSessionTabs = () => {
+  try {
+    const storage = getSessionStorage();
+    storage?.removeItem(SETTINGS_TAB_SESSION_KEY);
+    storage?.removeItem(DISCUSSIONS_TAB_SESSION_KEY);
+  } catch {
+    // Session storage can be unavailable in privacy-restricted contexts.
+  }
+};
+
 export const resolveSessionTabPath = (path: string): string => {
   const suffixIndex = path.search(/[?#]/);
   const pathname = suffixIndex < 0 ? path : path.slice(0, suffixIndex);
