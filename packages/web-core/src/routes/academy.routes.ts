@@ -48,6 +48,11 @@ export function getAcademyRoutes(): RouteConfigEntry {
       id: "student-details",
       caseSensitive: true,
     }),
+    route("progress", marker, { id: "progress", caseSensitive: true }),
+    route("progress/:username", marker, {
+      id: "progress-learner",
+      caseSensitive: true,
+    }),
     route("reviews", marker, { id: "reviews", caseSensitive: true }),
     route("quizzes", marker, { id: "quizzes", caseSensitive: true }),
     route("quizzes/create", marker, {

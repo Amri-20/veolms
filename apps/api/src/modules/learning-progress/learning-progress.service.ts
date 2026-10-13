@@ -11,7 +11,10 @@ import type {
   LearningSummaryResponse,
   UpdateLearningGoalSettingsRequest,
 } from "@veolms/contracts";
-import { LEARNING_REMINDER_DAY_IDS } from "@veolms/contracts";
+import {
+  DEFAULT_DAILY_GOAL_MINUTES,
+  LEARNING_REMINDER_DAY_IDS,
+} from "@veolms/contracts";
 import type { Database } from "@veolms/database";
 import type { Kysely } from "kysely";
 
@@ -254,6 +257,11 @@ export interface LearningProgressService {
     user: UserContext,
     input: UpdateLearningGoalSettingsRequest,
   ): Promise<LearningGoalSettingsResponse>;
+  /**
+   * The zone id to store for one a client sent: the id itself when the
+   * database knows it, else its canonical form, else nothing.
+   */
+  resolveSupportedTimeZone(timeZone: string): Promise<string | null>;
   getAverageProgressAndCompletionRate(filters?: {
     courseId?: string | string[];
     asOf?: Date;
@@ -511,6 +519,8 @@ export function createLearningProgressService({
       await learningProgressRepository.upsertProgressAndAccrueActivity(
         database,
         user.id,
+        course.id,
+        DEFAULT_DAILY_GOAL_MINUTES,
         rowsToUpsert,
         watchedSeconds,
       );
@@ -695,7 +705,7 @@ export function createLearningProgressService({
       return {
         hasSavedSettings: false,
         settings: {
-          dailyGoalMinutes: null,
+          dailyGoalMinutes: DEFAULT_DAILY_GOAL_MINUTES,
           remindersEnabled: false,
           reminderDays: ["mon", "tue", "wed", "thu", "fri"],
           reminderTime: "19:00",
@@ -706,7 +716,9 @@ export function createLearningProgressService({
     return {
       hasSavedSettings: true,
       settings: {
-        dailyGoalMinutes: row.daily_goal_minutes,
+        // A row without a goal is one that was made to hold the learner's
+        // time zone, or one whose goal was cleared: both have the default.
+        dailyGoalMinutes: row.daily_goal_minutes ?? DEFAULT_DAILY_GOAL_MINUTES,
         remindersEnabled: row.reminders_enabled,
         reminderDays: row.reminder_days.filter(
           (day): day is LearningReminderDay =>
@@ -755,6 +767,14 @@ export function createLearningProgressService({
       },
     );
     usersWithSettings.add(user.id);
+    // Today is judged against the goal as it now stands; the days before
+    // keep the goal they were learned under.
+    await learningProgressRepository.stampTodayGoal(database, {
+      userId: user.id,
+      goalMinutes: row.daily_goal_minutes ?? DEFAULT_DAILY_GOAL_MINUTES,
+      timeZone: row.time_zone,
+      floorDate: row.accrual_floor_date,
+    });
     return presentGoalSettings(row);
   }
 
@@ -772,8 +792,11 @@ export function createLearningProgressService({
         floorDate: settings?.accrual_floor_date,
       });
 
-    const dailyGoalMinutes = settings?.daily_goal_minutes ?? null;
-    const goalSeconds = dailyGoalMinutes === null ? 0 : dailyGoalMinutes * 60;
+    // Every learner has a goal: their own, or the default until they
+    // choose one.
+    const chosenGoalMinutes = settings?.daily_goal_minutes ?? null;
+    const dailyGoalMinutes = chosenGoalMinutes ?? DEFAULT_DAILY_GOAL_MINUTES;
+    const goalSeconds = dailyGoalMinutes * 60;
     const todayPct =
       goalSeconds > 0
         ? Math.min(
@@ -783,9 +806,10 @@ export function createLearningProgressService({
         : 0;
 
     return {
-      configured: dailyGoalMinutes !== null,
+      configured: chosenGoalMinutes !== null,
       dailyGoalMinutes,
       todaySeconds: aggregates.todaySeconds,
+      todayCompletions: aggregates.todayCompletions,
       todayPct,
       remainingSeconds: Math.max(0, goalSeconds - aggregates.todaySeconds),
       goalCompletedToday:
@@ -804,6 +828,7 @@ export function createLearningProgressService({
     getSummary,
     getGoalSettings,
     updateGoalSettings,
+    resolveSupportedTimeZone,
     getAverageProgressAndCompletionRate,
     getAverageProgressAndCompletionRateByCourse,
     getAverageProgressByCourse,

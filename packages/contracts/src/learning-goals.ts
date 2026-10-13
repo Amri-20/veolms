@@ -3,11 +3,13 @@ import { z } from "zod";
 /**
  * Dynamic learning goals & streaks (approved PRD, 2026-10).
  *
- * Settings: one record per user. `dailyGoalMinutes` null = not configured
- * (the home widget shows an empty state). `timeZone` is an IANA id — it
- * buckets activity into the learner's local calendar days; the API
- * validates it against Intl.
+ * Settings: one record per user. Every learner has a daily goal: one who
+ * has not chosen their own has `DEFAULT_DAILY_GOAL_MINUTES`. `timeZone` is
+ * an IANA id — it buckets activity into the learner's local calendar days;
+ * the API validates it against Intl.
  */
+
+export { DEFAULT_DAILY_GOAL_MINUTES } from "./learning-goal-defaults.ts";
 
 export const LEARNING_REMINDER_DAY_IDS = [
   "mon",
@@ -43,7 +45,11 @@ const timeZoneSchema = z
   );
 
 export const learningGoalSettingsSchema = z.strictObject({
-  /** Null = the learner has not configured a goal. */
+  /**
+   * The API never answers with null: a learner who has not chosen a goal
+   * is given `DEFAULT_DAILY_GOAL_MINUTES`. Null is still accepted on a
+   * save, and means "go back to the default".
+   */
   dailyGoalMinutes: z.number().int().min(15).max(720).nullable(),
   remindersEnabled: z.boolean(),
   reminderDays: z.array(learningReminderDaySchema).max(7),
@@ -80,9 +86,13 @@ export type LearningGoalSettingsResponse = z.infer<
  * is independent of the goal, so goal changes never rewrite history.
  */
 export const learningSummaryResponseSchema = z.strictObject({
+  /** Whether the goal is one the learner chose, rather than the default. */
   configured: z.boolean(),
+  /** The learner's goal, or `DEFAULT_DAILY_GOAL_MINUTES`; never null now. */
   dailyGoalMinutes: z.number().int().nullable(),
   todaySeconds: z.number().int().nonnegative(),
+  /** Lessons and quizzes the learner finished today. */
+  todayCompletions: z.number().int().nonnegative(),
   /** 0-100, capped; 0 when no goal is configured. */
   todayPct: z.number().int().min(0).max(100),
   /** Seconds still needed to hit today's goal; 0 when done or no goal. */

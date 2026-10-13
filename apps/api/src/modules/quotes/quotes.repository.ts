@@ -1,5 +1,6 @@
+import { DAILY_QUOTE_MAX_LENGTH } from "@veolms/contracts";
 import type { Database } from "@veolms/database";
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 
 export interface QuoteRow {
   id: number;
@@ -19,6 +20,12 @@ export function isMissingQuotesTable(error: unknown): boolean {
   );
 }
 
+/**
+ * A quote too long for the home page to set in two lines is left out of
+ * the rotation, whether or not it is marked active.
+ */
+const shortEnoughToShow = sql<boolean>`char_length(text) <= ${DAILY_QUOTE_MAX_LENGTH}`;
+
 /** How many quotes are in the rotation. */
 export async function countActiveQuotes(
   database: Kysely<Database>,
@@ -27,6 +34,7 @@ export async function countActiveQuotes(
     .selectFrom("quotes")
     .select((expression) => expression.fn.countAll<string>().as("count"))
     .where("is_active", "=", true)
+    .where(shortEnoughToShow)
     .executeTakeFirstOrThrow();
 
   return Number(row.count);
@@ -41,6 +49,7 @@ export async function findActiveQuoteAt(
     .selectFrom("quotes")
     .select(["id", "text", "author"])
     .where("is_active", "=", true)
+    .where(shortEnoughToShow)
     .orderBy("id")
     .offset(position)
     .limit(1)
