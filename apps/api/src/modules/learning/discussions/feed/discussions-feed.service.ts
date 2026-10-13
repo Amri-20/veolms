@@ -9,7 +9,6 @@ import type {
 } from "@veolms/contracts";
 import { findSettingsByCourseId } from "../../../courses/configuration/configuration.repository.ts";
 import { httpError } from "../../../../lib/errors.ts";
-import { sql } from "kysely";
 import {
   decodeCursor,
   encodeCursor,
@@ -34,15 +33,14 @@ import {
   type NotesService,
 } from "../notes/notes.service.ts";
 import { createNotesRepository } from "../notes/notes.repository.ts";
-import { discussionVisibilityPredicate } from "../shared/discussion.visibility.ts";
-import { exactCursorTimestamp } from "../../../../lib/keyset.ts";
+import {
+  createDiscussionsFeedRepository,
+  FEED_SOURCE_RANK as SOURCE_RANK,
+  type FeedCandidate,
+  type FeedSourceType as SourceType,
+} from "./discussions-feed.repository.ts";
 
-const SOURCE_RANK = {
-  note: 1,
-  thread: 2,
-} as const;
-
-type SourceType = keyof typeof SOURCE_RANK;
+const feedRepo = createDiscussionsFeedRepository();
 
 interface FeedCapabilities {
   allowComments: boolean;
@@ -69,14 +67,6 @@ interface FeedCursor {
   createdAt: string;
   score: number;
   context: FeedContext;
-}
-
-interface FeedCandidate {
-  entityId: string;
-  sourceType: SourceType;
-  sourceRank: number;
-  createdAt: Date;
-  score: number;
 }
 
 function invalidCursor(): never {
@@ -195,123 +185,21 @@ async function listCandidates(
   cursor: ReturnType<typeof decodeFeedCursor>,
   limit: number,
 ): Promise<FeedCandidate[]> {
-  const sources = [];
-  const kinds = threadKinds(context);
-
-  if (kinds.length > 0) {
-    const kindPredicate = sql` t.kind in (${sql.join(
-      kinds.map((kind) => sql`${kind}`),
-      sql`, `,
-    )})`;
-    sources.push(sql`
-      select
-        t.id as "entityId",
-        'thread'::text as "sourceType",
-        ${SOURCE_RANK.thread}::int as "sourceRank",
-        t.created_at as "createdAt",
-        (coalesce(t.likes_count, 0) + coalesce(t.replies_count, 0))::int as score
-      from learning_threads as t
-      where t.academy_id = ${academyId}
-        and t.course_id = ${context.courseId}
-        and t.lesson_id = ${context.lessonId}
-        and t.status = 'active'
-        and ${kindPredicate}
-        and ${discussionVisibilityPredicate(
-          "t",
-          context.publicOnly ? null : actor?.userId,
-          context.mine,
-        )}
-    `);
-  }
-
-  if (
-    context.kind !== "comment" &&
-    context.kind !== "question" &&
-    context.capabilities.allowNotes
-  ) {
-    sources.push(sql`
-      select
-        n.id as "entityId",
-        'note'::text as "sourceType",
-        ${SOURCE_RANK.note}::int as "sourceRank",
-        n.created_at as "createdAt",
-        coalesce(n.likes_count, 0)::int as score
-      from learning_notes as n
-      where n.academy_id = ${academyId}
-        and n.course_id = ${context.courseId}
-        and n.lesson_id = ${context.lessonId}
-        and ${discussionVisibilityPredicate(
-          "n",
-          context.publicOnly ? null : actor?.userId,
-          context.mine,
-        )}
-    `);
-  }
-
-  if (sources.length === 0) return [];
-
-  // The cursor row is a thread or a note; read its exact timestamp back.
-  const cursorCreatedAt = cursor
-    ? exactCursorTimestamp(
-        ["learning_threads", "learning_notes"],
-        "created_at",
-        cursor.entityId,
-        cursor.createdAt,
-      )
-    : undefined;
-  const cursorWhere = cursor
-    ? context.sort === "top"
-      ? sql`where (
-          score < ${cursor.score}
-          or (
-            score = ${cursor.score}
-            and "createdAt" < ${cursorCreatedAt}
-          )
-          or (
-            score = ${cursor.score}
-            and "createdAt" = ${cursorCreatedAt}
-            and "sourceRank" < ${cursor.sourceRank}
-          )
-          or (
-            score = ${cursor.score}
-            and "createdAt" = ${cursorCreatedAt}
-            and "sourceRank" = ${cursor.sourceRank}
-            and "entityId" < ${cursor.entityId}::uuid
-          )
-        )`
-      : sql`where (
-          "createdAt" < ${cursorCreatedAt}
-          or (
-            "createdAt" = ${cursorCreatedAt}
-            and "sourceRank" < ${cursor.sourceRank}
-          )
-          or (
-            "createdAt" = ${cursorCreatedAt}
-            and "sourceRank" = ${cursor.sourceRank}
-            and "entityId" < ${cursor.entityId}::uuid
-          )
-        )`
-    : sql``;
-
-  const orderBy =
-    context.sort === "top"
-      ? sql`order by score desc, "createdAt" desc, "sourceRank" desc, "entityId" desc`
-      : sql`order by "createdAt" desc, "sourceRank" desc, "entityId" desc`;
-
-  const result = await sql<FeedCandidate>`
-    select *
-    from (${sql.join(sources, sql` union all `)}) as feed
-    ${cursorWhere}
-    ${orderBy}
-    limit ${limit + 1}
-  `.execute(db);
-
-  return result.rows.map((row) => ({
-    ...row,
-    createdAt: toDate(row.createdAt),
-    sourceRank: Number(row.sourceRank),
-    score: Number(row.score),
-  }));
+  return feedRepo.listCandidates(db, {
+    academyId,
+    courseId: context.courseId,
+    lessonId: context.lessonId,
+    threadKinds: threadKinds(context),
+    includeNotes:
+      context.kind !== "comment" &&
+      context.kind !== "question" &&
+      context.capabilities.allowNotes,
+    viewerUserId: context.publicOnly ? null : actor?.userId,
+    mine: context.mine,
+    sort: context.sort,
+    cursor,
+    limit,
+  });
 }
 
 export interface LearningDiscussionsFeedService {

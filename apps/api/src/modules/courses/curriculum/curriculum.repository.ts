@@ -251,6 +251,35 @@ export async function listOrderedLessonsByCourseId(
     .execute();
 }
 
+/**
+ * One live lesson's description, and whether the lesson is published. A
+ * lesson whose section has been deleted is not found, as it is in no list.
+ */
+export async function findLiveLessonDescription(
+  database: DatabaseExecutor,
+  lessonId: string,
+  courseId: string,
+) {
+  return await database
+    .selectFrom("course_lessons")
+    .innerJoin(
+      "course_sections",
+      "course_sections.id",
+      "course_lessons.section_id",
+    )
+    .select([
+      "course_lessons.id",
+      "course_lessons.description",
+      "course_lessons.is_published",
+    ])
+    .where("course_lessons.id", "=", lessonId)
+    .where("course_lessons.course_id", "=", courseId)
+    .where("course_lessons.deleted_at", "is", null)
+    .where("course_sections.course_id", "=", courseId)
+    .where("course_sections.deleted_at", "is", null)
+    .executeTakeFirst();
+}
+
 export async function findLessonsBySection(
   database: Kysely<Database>,
   sectionId: string,

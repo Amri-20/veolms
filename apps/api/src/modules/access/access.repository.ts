@@ -3,8 +3,80 @@
 // having been separately (and, in auth's case, incorrectly) redefined in 4
 // places.
 import { sql } from "kysely";
-import type { DatabaseExecutor as Executor } from "@veolms/database";
+import type {
+  DatabaseExecutor as Executor,
+  EnrollmentTable,
+} from "@veolms/database";
 export type { Executor };
+
+export async function findAccessGrantById(database: Executor, grantId: string) {
+  return await database
+    .selectFrom("access_grants")
+    .selectAll()
+    .where("id", "=", grantId)
+    .executeTakeFirst();
+}
+
+/**
+ * Writes the enrolment that mirrors a manual grant: inserted, or brought in
+ * line with `enrollment` when the learner already has one for the course.
+ * An existing enrolment keeps its own source unless `updateSource` is set.
+ */
+export async function upsertEnrollmentForGrant(
+  database: Executor,
+  input: {
+    id: string;
+    userId: string;
+    courseId: string;
+    enrollment: {
+      order_id: string | null;
+      status: "active";
+      source: EnrollmentTable["source"];
+      access_starts_at: Date;
+      access_expires_at: Date | null;
+      updated_at: Date;
+    };
+    updateSource: boolean;
+    createdAt: Date;
+  },
+) {
+  const { enrollment } = input;
+  await database
+    .insertInto("enrollments")
+    .values({
+      id: input.id,
+      user_id: input.userId,
+      course_id: input.courseId,
+      ...enrollment,
+      created_at: input.createdAt,
+    })
+    .onConflict((oc) => {
+      const { source, ...withoutSource } = enrollment;
+      return oc
+        .columns(["user_id", "course_id"])
+        .doUpdateSet(
+          input.updateSource ? { ...withoutSource, source } : withoutSource,
+        );
+    })
+    .executeTakeFirst();
+}
+
+/** Marks the learner's enrolment in the course revoked. */
+export async function revokeEnrollment(
+  database: Executor,
+  userId: string,
+  courseId: string,
+) {
+  await database
+    .updateTable("enrollments")
+    .set({
+      status: "revoked",
+      updated_at: new Date(),
+    })
+    .where("user_id", "=", userId)
+    .where("course_id", "=", courseId)
+    .execute();
+}
 
 export async function findAccessGrant(
   database: Executor,

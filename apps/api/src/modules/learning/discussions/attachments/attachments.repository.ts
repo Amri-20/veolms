@@ -139,6 +139,31 @@ export interface AttachmentsRepository {
     db: DatabaseExecutor,
     input: { attachmentId: string; olderThan: Date },
   ): Promise<boolean>;
+
+  /**
+   * Records the file sent to an upload slot and marks it ready, but only
+   * while the slot is still open (uploading and unattached). False when it
+   * was filled or attached in the meantime.
+   */
+  fillUploadSlot(
+    db: DatabaseExecutor,
+    input: {
+      attachmentId: string;
+      storageKey: string;
+      fileName: string;
+      fileUrl: string;
+      mimeType: string;
+      fileSize: number;
+      /** Serialized JSON. */
+      metadata: string;
+    },
+  ): Promise<boolean>;
+
+  /** Marks a directly uploaded attachment ready. `metadata` is serialized JSON. */
+  markUploadReady(
+    db: DatabaseExecutor,
+    input: { attachmentId: string; fileUrl: string; metadata: string },
+  ): Promise<void>;
 }
 
 export interface UnattachedAttachmentRow {
@@ -296,6 +321,40 @@ export function createAttachmentsRepository(): AttachmentsRepository {
         .executeTakeFirst();
 
       return Number(result.numUpdatedRows) > 0;
+    },
+
+    async fillUploadSlot(db, input) {
+      const result = await db
+        .updateTable("learning_attachments")
+        .set({
+          storage_key: input.storageKey,
+          file_name: input.fileName,
+          file_url: input.fileUrl,
+          mime_type: input.mimeType,
+          file_size: input.fileSize,
+          status: "ready",
+          metadata: input.metadata,
+        })
+        .where("id", "=", input.attachmentId)
+        // Only while the slot is still open: the file took a while to
+        // arrive, and the slot may have been filled since.
+        .where("status", "=", "uploading")
+        .where("target_id", "is", null)
+        .executeTakeFirst();
+
+      return Number(result.numUpdatedRows) > 0;
+    },
+
+    async markUploadReady(db, input) {
+      await db
+        .updateTable("learning_attachments")
+        .set({
+          status: "ready",
+          file_url: input.fileUrl,
+          metadata: input.metadata,
+        })
+        .where("id", "=", input.attachmentId)
+        .execute();
     },
 
     async findAttachmentById(db, attachmentId) {

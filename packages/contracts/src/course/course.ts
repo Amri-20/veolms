@@ -782,6 +782,27 @@ export const courseOverviewSchema = z.object({
 
 export type CourseOverviewResponse = z.infer<typeof courseOverviewSchema>;
 
+/**
+ * One lesson's description, for the lesson page. Shown to exactly the viewers
+ * the course overview lists the lesson for.
+ */
+export const lessonDescriptionParamsSchema = z.object({
+  courseId: z.uuid(),
+  lessonId: z.uuid(),
+});
+
+export const lessonDescriptionResponseSchema = z.object({
+  lessonId: z.uuid(),
+  description: z.string().nullable(),
+});
+
+export type LessonDescriptionParams = z.infer<
+  typeof lessonDescriptionParamsSchema
+>;
+export type LessonDescriptionResponse = z.infer<
+  typeof lessonDescriptionResponseSchema
+>;
+
 z.globalRegistry.add(courseSummarySchema, {
   id: "CourseSummary",
   description: "A course as it appears in catalogue listings.",
@@ -806,6 +827,9 @@ z.globalRegistry.add(createLessonResourceRequestSchema, {
   id: "CreateLessonResourceRequest",
 });
 z.globalRegistry.add(courseLessonSchema, { id: "CourseLesson" });
+z.globalRegistry.add(lessonDescriptionResponseSchema, {
+  id: "LessonDescriptionResponse",
+});
 z.globalRegistry.add(courseSectionSchema, { id: "CourseSection" });
 z.globalRegistry.add(courseSchema, { id: "Course" });
 z.globalRegistry.add(courseEditorDataResponseSchema, {

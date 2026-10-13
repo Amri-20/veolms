@@ -178,30 +178,18 @@ export function createAccessService(): AccessService {
         access_expires_at: grant.validUntil ? new Date(grant.validUntil) : null,
         updated_at: now,
       };
-      await database
-        .insertInto("enrollments")
-        .values({
-          id: crypto.randomUUID(),
-          user_id: params.userId,
-          course_id: params.courseId,
-          ...enrollment,
-          created_at: now,
-        })
-        .onConflict((oc) => {
-          // A grant that stayed with its order leaves the enrolment's own
-          // source as it was: "purchase" on the grant covers both a course
-          // bought alone and one bought in a bundle, and the enrolment is
-          // where that difference is kept.
-          const { source, ...withoutSource } = enrollment;
-          return oc
-            .columns(["user_id", "course_id"])
-            .doUpdateSet(
-              grant.source === "purchase"
-                ? withoutSource
-                : { ...withoutSource, source },
-            );
-        })
-        .executeTakeFirst();
+      await accessRepo.upsertEnrollmentForGrant(database, {
+        id: crypto.randomUUID(),
+        userId: params.userId,
+        courseId: params.courseId,
+        enrollment,
+        // A grant that stayed with its order leaves the enrolment's own
+        // source as it was: "purchase" on the grant covers both a course
+        // bought alone and one bought in a bundle, and the enrolment is
+        // where that difference is kept.
+        updateSource: grant.source !== "purchase",
+        createdAt: now,
+      });
 
       return grant;
     });
@@ -212,11 +200,7 @@ export function createAccessService(): AccessService {
     grantId: string,
   ): Promise<void> {
     await inTransaction(outerDatabase, async (database) => {
-      const grant = await database
-        .selectFrom("access_grants")
-        .selectAll()
-        .where("id", "=", grantId)
-        .executeTakeFirst();
+      const grant = await accessRepo.findAccessGrantById(database, grantId);
 
       // Answered "revoked successfully" for an id that matched nothing.
       if (!grant) {
@@ -229,15 +213,11 @@ export function createAccessService(): AccessService {
 
       await accessRepo.updateAccessGrantStatus(database, grantId, "revoked");
 
-      await database
-        .updateTable("enrollments")
-        .set({
-          status: "revoked",
-          updated_at: new Date(),
-        })
-        .where("user_id", "=", grant.user_id)
-        .where("course_id", "=", grant.course_id)
-        .execute();
+      await accessRepo.revokeEnrollment(
+        database,
+        grant.user_id,
+        grant.course_id,
+      );
     });
   }
 

@@ -11,6 +11,7 @@ import type {
   CourseValidationResponse,
   DeletedCoursesListResponse,
   DeletedCoursesQuery,
+  LessonDescriptionResponse,
   MyCoursesListResponse,
   PublicCourse,
 } from "@veolms/contracts";
@@ -60,6 +61,27 @@ export function useCourseOverview(
     // a price, curriculum or publish change since that build shows up —
     // the same rule the guest home page follows.
     initialDataUpdatedAt: options?.initialData ? 0 : undefined,
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+}
+
+/**
+ * One lesson's description. The lesson page shows the course overview's
+ * copy until this answers, and keeps it if this fails.
+ */
+export function useLessonDescription(
+  courseId: string | null | undefined,
+  lessonId: string | null | undefined,
+) {
+  return useQuery<LessonDescriptionResponse, ApiError>({
+    queryKey:
+      courseId && lessonId
+        ? courseKeys.lessonDescription(courseId, lessonId)
+        : ["courses", "overview", null, "lesson-description", null],
+    queryFn: () => coursesService.getLessonDescription(courseId!, lessonId!),
+    enabled: Boolean(courseId && lessonId),
+    // As long as the overview it stands in for.
     staleTime: 60 * 1000,
     retry: false,
   });

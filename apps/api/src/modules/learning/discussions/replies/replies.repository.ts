@@ -89,6 +89,25 @@ export interface RepliesRepository {
     replyId: string,
     delta: number,
   ): Promise<void>;
+
+  /**
+   * Attaches the owner's own ready, still-unattached uploads to the reply
+   * in one statement and returns the ids that were attached.
+   */
+  attachOwnedUploads(
+    db: DatabaseExecutor,
+    input: { attachmentIds: string[]; ownerId: string; replyId: string },
+  ): Promise<Array<{ id: string }>>;
+
+  /** Marks every attachment of the reply as deleted. */
+  markAttachmentsDeleted(db: DatabaseExecutor, replyId: string): Promise<void>;
+
+  /** Which of the given replies the user has liked. */
+  listReplyLikes(
+    db: DatabaseExecutor,
+    userId: string,
+    replyIds: string[],
+  ): Promise<Array<{ target_id: string }>>;
 }
 
 export function createRepliesRepository(): RepliesRepository {
@@ -289,6 +308,40 @@ export function createRepliesRepository(): RepliesRepository {
           updated_at: new Date(),
         }))
         .where("id", "=", replyId)
+        .execute();
+    },
+
+    async attachOwnedUploads(db, { attachmentIds, ownerId, replyId }) {
+      return db
+        .updateTable("learning_attachments")
+        .set({
+          target_type: "reply",
+          target_id: replyId,
+        })
+        .where("id", "in", attachmentIds)
+        .where("owner_id", "=", ownerId)
+        .where("status", "=", "ready")
+        .where("target_id", "is", null)
+        .returning("id")
+        .execute();
+    },
+
+    async markAttachmentsDeleted(db, replyId) {
+      await db
+        .updateTable("learning_attachments")
+        .set({ status: "deleted" })
+        .where("target_type", "=", "reply")
+        .where("target_id", "=", replyId)
+        .execute();
+    },
+
+    async listReplyLikes(db, userId, replyIds) {
+      return db
+        .selectFrom("learning_likes")
+        .select("target_id")
+        .where("user_id", "=", userId)
+        .where("target_type", "=", "reply")
+        .where("target_id", "in", replyIds)
         .execute();
     },
   };

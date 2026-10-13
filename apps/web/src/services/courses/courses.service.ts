@@ -16,6 +16,7 @@ import type {
   CourseSettings,
   CourseSummary,
   CourseValidationResponse,
+  LessonDescriptionResponse,
   CourseIncludeItem,
   CourseIncludesListResponse,
   CreateCategoryRequest,
@@ -93,6 +94,14 @@ export const coursesService = {
       `/courses/${encodeURIComponent(idOrSlug)}/overview`,
     );
   },
+
+  getLessonDescription: (
+    courseId: string,
+    lessonId: string,
+  ): Promise<LessonDescriptionResponse> =>
+    api.get<LessonDescriptionResponse>(
+      `/courses/${courseId}/lessons/${lessonId}/description`,
+    ),
 
   getStaticPageRefreshStatus: (
     courseId: string,

@@ -30,6 +30,7 @@ import {
   type DiscussionActor,
 } from "../shared/discussion.access.ts";
 import { getAttachmentDimensionFields } from "../shared/discussion-attachment-metadata.ts";
+import { createDiscussionRepository } from "../shared/discussion.repository.ts";
 import { withWriteTransaction } from "../shared/discussion.mentions.ts";
 import {
   exceedsUploadQuota,
@@ -226,6 +227,7 @@ export function createAttachmentsService(
   storage: S3StorageService,
 ): AttachmentsService {
   const discussionAccess = createDiscussionAccess();
+  const discussionRepo = createDiscussionRepository();
 
   // The uploader's view of a stored attachment. The delivery URL is signed
   // per response; the storage key, owner and link target are not returned.
@@ -249,21 +251,10 @@ export function createAttachmentsService(
     actor: DiscussionActor,
     context: DiscussionAttachmentUploadContext,
   ): Promise<void> {
-    const lesson = await db
-      .selectFrom("course_lessons")
-      .innerJoin("courses", "courses.id", "course_lessons.course_id")
-      .innerJoin(
-        "course_sections",
-        "course_sections.id",
-        "course_lessons.section_id",
-      )
-      .select("course_lessons.id")
-      .where("course_lessons.id", "=", context.lessonId)
-      .where("course_lessons.course_id", "=", context.courseId)
-      .where("course_lessons.deleted_at", "is", null)
-      .where("course_sections.deleted_at", "is", null)
-      .where("courses.deleted_at", "is", null)
-      .executeTakeFirst();
+    const lesson = await discussionRepo.findUploadLessonId(db, {
+      courseId: context.courseId,
+      lessonId: context.lessonId,
+    });
 
     if (!lesson) {
       throw httpError(
@@ -582,32 +573,25 @@ export function createAttachmentsService(
 
       let slotFilled: boolean;
       try {
-        const result = await db
-          .updateTable("learning_attachments")
-          .set({
-            storage_key: storedStorageKey,
-            file_name: file.filename,
-            file_url: fileUrl,
-            mime_type: file.mimetype,
-            file_size: stored.size,
-            status: "ready",
-            metadata: JSON.stringify(
-              mergeDimensions(
-                {
-                  ...(existing.metadata || {}),
-                  uploadedAt: new Date().toISOString(),
-                },
-                persistedDimensions,
-              ),
+        // Only while the slot is still open, as checked above: the file
+        // took a while to arrive, and the slot may have been filled since.
+        slotFilled = await attachmentsRepo.fillUploadSlot(db, {
+          attachmentId,
+          storageKey: storedStorageKey,
+          fileName: file.filename,
+          fileUrl,
+          mimeType: file.mimetype,
+          fileSize: stored.size,
+          metadata: JSON.stringify(
+            mergeDimensions(
+              {
+                ...(existing.metadata || {}),
+                uploadedAt: new Date().toISOString(),
+              },
+              persistedDimensions,
             ),
-          })
-          .where("id", "=", attachmentId)
-          // Only while the slot is still open, as checked above: the file
-          // took a while to arrive, and the slot may have been filled since.
-          .where("status", "=", "uploading")
-          .where("target_id", "is", null)
-          .executeTakeFirst();
-        slotFilled = Number(result.numUpdatedRows) > 0;
+          ),
+        });
       } catch (error) {
         await uploadStore.remove(sanitizedName);
         throw error;
@@ -739,19 +723,15 @@ export function createAttachmentsService(
         );
       }
 
-      await db
-        .updateTable("learning_attachments")
-        .set({
-          status: "ready",
-          file_url:
-            storage.getCdnObjectUrl(existing.storageKey) || existing.storageKey,
-          metadata: JSON.stringify({
-            ...(existing.metadata || {}),
-            completedAt: new Date().toISOString(),
-          }),
-        })
-        .where("id", "=", attachmentId)
-        .execute();
+      await attachmentsRepo.markUploadReady(db, {
+        attachmentId,
+        fileUrl:
+          storage.getCdnObjectUrl(existing.storageKey) || existing.storageKey,
+        metadata: JSON.stringify({
+          ...(existing.metadata || {}),
+          completedAt: new Date().toISOString(),
+        }),
+      });
 
       const completed = await attachmentsRepo.findAttachmentById(
         db,

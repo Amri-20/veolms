@@ -1,61 +1,22 @@
 import crypto from "node:crypto";
 import type { Database, DatabaseExecutor } from "@veolms/database";
 import type { EngagementTargetType } from "@veolms/contracts";
-import { sql, type Kysely, type Transaction } from "kysely";
+import type { Kysely, Transaction } from "kysely";
 import {
   createOutboxService,
   type OutboxService,
 } from "../../../../events/outbox.service.ts";
 import { extractPlainText } from "./discussion.utils.ts";
 import { DISCUSSION_CONSTANTS } from "./discussion.constants.ts";
+import { createDiscussionRepository } from "./discussion.repository.ts";
+
+export { isCourseParticipant } from "./discussion.repository.ts";
 
 const MENTION_PATTERN = /(^|[^A-Za-z0-9_])@([A-Za-z0-9_]{3,30})/g;
 const MAX_ACTOR_NAME = 255;
 const MAX_CONTEXT = 1000;
 
-/**
- * SQL predicate: "the `users` row is a participant of this course".
- *
- * A participant is the course creator, anyone holding live access to it
- * (grant or enrollment), anyone with a role assigned on that course, and
- * anyone who has already posted in it.
- *
- * Who can be mentioned — and who the mention picker lists — used to be an
- * id list built in memory, and for any free published course it was simply
- * "everyone on the platform". That let a user who joined one free course
- * page through every account and send each of them an email. Expressing the
- * rule in SQL also removes the per-keystroke load of every participant id.
- */
-export function isCourseParticipant(courseId: string) {
-  return sql<boolean>`(
-    users.id = (
-      select c.creator_id from courses as c
-      where c.id = ${courseId} and c.deleted_at is null
-    )
-    or exists (
-      select 1 from access_grants as g
-      where g.user_id = users.id
-        and g.course_id = ${courseId}
-        and g.status = 'active'
-        and (g.valid_until is null or g.valid_until > now())
-    )
-    or exists (
-      select 1 from enrollments as e
-      where e.user_id = users.id
-        and e.course_id = ${courseId}
-        and e.status = 'active'
-        and (e.access_expires_at is null or e.access_expires_at > now())
-    )
-    or exists (
-      select 1 from role_assignments as ra
-      where ra.user_id = users.id and ra.course_id = ${courseId}
-    )
-    or exists (
-      select 1 from learning_threads as lt
-      where lt.user_id = users.id and lt.course_id = ${courseId}
-    )
-  )`;
-}
+const discussionRepo = createDiscussionRepository();
 
 export function createDiscussionOutbox(): OutboxService {
   return createOutboxService();
@@ -78,13 +39,11 @@ export async function resolveMentionedUserIds(
 ): Promise<string[]> {
   if (usernames.length === 0) return [];
 
-  const users = await db
-    .selectFrom("users")
-    .select("id")
-    .where("is_deleted", "=", false)
-    .where(sql<string>`lower(username)`, "in", [...usernames])
-    .where(isCourseParticipant(courseId))
-    .execute();
+  const users = await discussionRepo.listCourseParticipantIdsByUsername(
+    db,
+    usernames,
+    courseId,
+  );
   return users.map((user) => user.id);
 }
 
@@ -119,11 +78,7 @@ export async function resolveDeepLink(
         lessonId: string;
       },
 ): Promise<string> {
-  const course = await db
-    .selectFrom("courses")
-    .select("slug")
-    .where("id", "=", courseId)
-    .executeTakeFirst();
+  const course = await discussionRepo.findCourseSlug(db, courseId);
   if (course?.slug) {
     if (typeof target === "string") {
       return `/learn/${encodeURIComponent(course.slug)}?thread=${target}`;
@@ -137,11 +92,7 @@ export async function resolveActorName(
   db: DatabaseExecutor,
   userId: string,
 ): Promise<string> {
-  const user = await db
-    .selectFrom("users")
-    .select(["display_name", "username"])
-    .where("id", "=", userId)
-    .executeTakeFirst();
+  const user = await discussionRepo.findUserNames(db, userId);
   const name =
     user?.display_name?.trim() || user?.username?.trim() || "Someone";
   return clamp(name, MAX_ACTOR_NAME);
@@ -193,12 +144,11 @@ export async function syncMentionsAndNotify(
 
   mentionedIds.delete(input.actorUserId);
 
-  const existing = await db
-    .selectFrom("learning_mentions")
-    .select(["id", "mentioned_user_id"])
-    .where("source_type", "=", input.sourceType)
-    .where("source_id", "=", input.sourceId)
-    .execute();
+  const existing = await discussionRepo.listMentionsBySource(
+    db,
+    input.sourceType,
+    input.sourceId,
+  );
 
   const keepIds = mentionedIds;
   const removedIds = existing
@@ -210,10 +160,7 @@ export async function syncMentionsAndNotify(
   const addedIds = [...keepIds].filter((id) => !alreadyMentioned.has(id));
 
   if (removedIds.length > 0) {
-    await db
-      .deleteFrom("learning_mentions")
-      .where("id", "in", removedIds)
-      .execute();
+    await discussionRepo.deleteMentionsByIds(db, removedIds);
   }
 
   const actorName = await resolveActorName(db, input.actorUserId);
@@ -231,21 +178,12 @@ export async function syncMentionsAndNotify(
 
   // 1. Notify newly @mentioned users
   for (const mentionedUserId of addedIds) {
-    const inserted = await db
-      .insertInto("learning_mentions")
-      .values({
-        id: crypto.randomUUID(),
-        source_type: input.sourceType,
-        source_id: input.sourceId,
-        mentioned_user_id: mentionedUserId,
-      })
-      .onConflict((conflict) =>
-        conflict
-          .columns(["source_type", "source_id", "mentioned_user_id"])
-          .doNothing(),
-      )
-      .returning("id")
-      .executeTakeFirst();
+    const inserted = await discussionRepo.insertMention(db, {
+      id: crypto.randomUUID(),
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      mentionedUserId,
+    });
 
     if (!inserted) continue;
 
@@ -266,16 +204,8 @@ export async function syncMentionsAndNotify(
   // 2. If this is a new reply, notify thread author and followers
   if (input.sourceType === "reply") {
     const [thread, followers] = await Promise.all([
-      db
-        .selectFrom("learning_threads")
-        .select(["title", "user_id"])
-        .where("id", "=", input.threadId)
-        .executeTakeFirst(),
-      db
-        .selectFrom("learning_follows")
-        .select("user_id")
-        .where("thread_id", "=", input.threadId)
-        .execute(),
+      discussionRepo.findThreadTitleAndAuthor(db, input.threadId),
+      discussionRepo.listThreadFollowerIds(db, input.threadId),
     ]);
 
     const subscriberIds = new Set<string>();

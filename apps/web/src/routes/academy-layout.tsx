@@ -399,9 +399,7 @@ export default function AcademyLayout() {
   const selectLessonTokenRef = useRef(0);
   const currentLocationPath = `${location.pathname}${location.search}${location.hash}`;
   const route = getMatchedRouteDescriptor(matches, location.pathname);
-  useCourseOverviewDocumentTitle(
-    route.kind === "shell" && route.page === "course-overview",
-  );
+  useCourseOverviewDocumentTitle(route.kind === "course-overview");
   const staticCourseRouteData = matches.find((match) => match.id === "root")
     ?.loaderData as AcademyStaticPageData | undefined;
   const {

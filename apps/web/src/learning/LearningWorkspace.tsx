@@ -101,7 +101,7 @@ import {
   QuizAttemptPanel,
   QuizStageMessage,
 } from "../quizzes/QuizAttemptPanel";
-import { useCourseOverview } from "../services/courses";
+import { useCourseOverview, useLessonDescription } from "../services/courses";
 import { useCurrentUser } from "../services/auth";
 import { useEnrolledCourses } from "../services/enrollments";
 import { useCourseQuizAssignments } from "../services/quizzes/quizzes.queries";
@@ -1021,9 +1021,42 @@ export function LearningWorkspace({
     : courseQuizAssignments.data === undefined
       ? undefined
       : false;
+  const overviewLesson = adaptedCurriculum?.lessonsByNumber.get(selectedLesson);
+  // The open lesson's description comes from its own request. The overview's
+  // copy is shown until that answers, and kept if it fails; once the
+  // overview stops carrying descriptions, this is the only source.
+  const lessonDescriptionQuery = useLessonDescription(
+    courseOverview?.course.id,
+    overviewLesson?.id,
+  );
+  const fetchedLessonDescription = lessonDescriptionQuery.data;
   // The lesson as the course lists it: what the stage is planned from, and
   // where a reading lesson's text comes from.
-  const stageLesson = adaptedCurriculum?.lessonsByNumber.get(selectedLesson);
+  const stageLesson = useMemo(() => {
+    if (
+      !overviewLesson ||
+      !fetchedLessonDescription ||
+      fetchedLessonDescription.lessonId !== overviewLesson.id ||
+      fetchedLessonDescription.description ===
+        (overviewLesson.description ?? null)
+    ) {
+      return overviewLesson;
+    }
+    return {
+      ...overviewLesson,
+      description: fetchedLessonDescription.description,
+    };
+  }, [fetchedLessonDescription, overviewLesson]);
+  // An overview with no description on any lesson may be one that no longer
+  // carries them, so the open lesson's is not known until its request ends.
+  const overviewCarriesLessonDescriptions = useMemo(() => {
+    for (const lesson of adaptedCurriculum?.lessonsByNumber.values() ?? []) {
+      if (lesson.description) return true;
+    }
+    return false;
+  }, [adaptedCurriculum]);
+  const isLessonDescriptionPending =
+    lessonDescriptionQuery.isLoading && !overviewCarriesLessonDescriptions;
   const lessonStagePlan = useMemo(() => {
     const course = courseOverview?.course;
     const holdsCourse = enrolledCoursesQuery.isFetched
@@ -1634,10 +1667,7 @@ export function LearningWorkspace({
     );
     if (video && !video.paused) video.pause();
   }, [appliedPlayerHeight]);
-  const selectedLessonRecord = useMemo(() => {
-    if (!adaptedCurriculum) return null;
-    return adaptedCurriculum.lessonsByNumber.get(selectedLesson) ?? null;
-  }, [adaptedCurriculum, selectedLesson]);
+  const selectedLessonRecord = stageLesson ?? null;
   const selectedLessonDescription = selectedLessonRecord?.description ?? null;
   const selectedLessonReading = getLessonReading(selectedLessonRecord);
   const courseId = courseOverview?.course.id;
@@ -3388,6 +3418,7 @@ export function LearningWorkspace({
                   }
                   isLessonDescriptionLoading={
                     (isApiRoute && isCourseOverviewLoading) ||
+                    isLessonDescriptionPending ||
                     isLearningBootstrapLoading
                   }
                   interactionCapabilities={interactionCapabilities}

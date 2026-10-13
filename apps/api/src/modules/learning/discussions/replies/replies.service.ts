@@ -17,6 +17,7 @@ import {
   syncMentionsAndNotify,
   withWriteTransaction,
 } from "../shared/discussion.mentions.ts";
+import { createDiscussionRepository } from "../shared/discussion.repository.ts";
 import {
   decodeDiscussionCursor,
   encodeDiscussionCursor,
@@ -103,6 +104,7 @@ export function createRepliesService({
 }): RepliesService {
   const outbox = createDiscussionOutbox();
   const courseAccess = createDiscussionAccess();
+  const discussionRepo = createDiscussionRepository();
 
   function mapReplyRow(
     row: ReplyRowWithAuthor,
@@ -236,18 +238,11 @@ export function createRepliesService({
           // is unchanged: every id named must be attached, or the reply is
           // refused.
           const attachmentIds = [...new Set(input.attachmentIds)];
-          const attached = await trx
-            .updateTable("learning_attachments")
-            .set({
-              target_type: "reply",
-              target_id: id,
-            })
-            .where("id", "in", attachmentIds)
-            .where("owner_id", "=", input.userId)
-            .where("status", "=", "ready")
-            .where("target_id", "is", null)
-            .returning("id")
-            .execute();
+          const attached = await repliesRepo.attachOwnedUploads(trx, {
+            attachmentIds,
+            ownerId: input.userId,
+            replyId: id,
+          });
 
           const attachedIds = new Set(attached.map((row) => row.id));
           const missing = attachmentIds.find((it) => !attachedIds.has(it));
@@ -325,13 +320,7 @@ export function createRepliesService({
         const replyIds = page.map((r) => r.id);
         const [likes, attachments] = await Promise.all([
           actor && canReadPrivateState
-            ? db
-                .selectFrom("learning_likes")
-                .select("target_id")
-                .where("user_id", "=", actor.userId)
-                .where("target_type", "=", "reply")
-                .where("target_id", "in", replyIds)
-                .execute()
+            ? repliesRepo.listReplyLikes(db, actor.userId, replyIds)
             : Promise.resolve([]),
           listReadyAttachments(db, "reply", replyIds),
         ]);
@@ -480,18 +469,9 @@ export function createRepliesService({
           throw httpError(404, "REPLY_NOT_FOUND", "Reply not found");
         }
 
-        await trx
-          .deleteFrom("learning_mentions")
-          .where("source_type", "=", "reply")
-          .where("source_id", "=", replyId)
-          .execute();
+        await discussionRepo.deleteMentionsBySource(trx, "reply", replyId);
 
-        await trx
-          .updateTable("learning_attachments")
-          .set({ status: "deleted" })
-          .where("target_type", "=", "reply")
-          .where("target_id", "=", replyId)
-          .execute();
+        await repliesRepo.markAttachmentsDeleted(trx, replyId);
 
         await threadsRepo.incrementRepliesCount(trx, reply.threadId, -1);
 
@@ -555,12 +535,10 @@ export function createRepliesService({
 
         // Serialize concurrent accept/unaccept requests for this thread so
         // only one reply ends up accepted.
-        const lockedThread = await trx
-          .selectFrom("learning_threads")
-          .select(["id", "accepted_answer_id as acceptedAnswerId"])
-          .where("id", "=", thread.id)
-          .forUpdate()
-          .executeTakeFirst();
+        const lockedThread = await threadsRepo.lockAcceptedAnswer(
+          trx,
+          thread.id,
+        );
         if (!lockedThread) {
           throw httpError(
             404,

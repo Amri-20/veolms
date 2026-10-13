@@ -4,6 +4,7 @@ import type {
   UpdateCourseBasicsRequest,
   CourseListQuery,
   CourseSlugParams,
+  LessonDescriptionParams,
   CourseStaticPageRefreshStatus,
 } from "@veolms/contracts";
 import { httpError } from "../../../lib/errors.ts";
@@ -128,6 +129,20 @@ export function createCourseController({
     return await service.getCourseOverviewData(idOrSlug, user);
   }
 
+  async function getLessonDescription(
+    request: FastifyRequest<{ Params: LessonDescriptionParams }>,
+  ) {
+    const { courseId, lessonId } = request.params;
+    const user = request.user
+      ? {
+          id: request.user.id,
+          roles: request.user.roles,
+          learnerView: isLearnerViewRequest(request),
+        }
+      : undefined;
+    return await service.getLessonDescription(courseId, lessonId, user);
+  }
+
   async function deleteCourse(
     request: FastifyRequest<{ Params: { id: string } }>,
   ) {
@@ -236,6 +251,7 @@ export function createCourseController({
     updateCourseDetails,
     archiveCourse,
     getCourseOverview,
+    getLessonDescription,
     deleteCourse,
     getStaticPageRefreshStatus,
     retryStaticPageRefresh,

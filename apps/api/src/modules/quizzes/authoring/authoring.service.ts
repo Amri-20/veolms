@@ -603,12 +603,7 @@ export function createAuthoringService(options: QuizServiceOptions) {
         // from the course overview (`contentMediaId: null`): it says the
         // lesson has no video, asks for no playback, and counts the lesson
         // finished when it is opened, so the course can still reach 100%.
-        await trx
-          .updateTable("course_lessons")
-          .set({ content_type: "video", updated_at: new Date() })
-          .where("id", "in", lessonIds)
-          .where("content_type", "=", "quiz")
-          .execute();
+        await repo.revertQuizLessonsToVideo(trx, lessonIds);
       }
       await repo.deleteAssignmentsByQuizId(trx, quizId);
       await repo.softDeleteQuiz(trx, quizId);

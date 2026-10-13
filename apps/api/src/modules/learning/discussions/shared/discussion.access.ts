@@ -8,6 +8,7 @@ import {
 import { ADMIN_ROLE } from "../../../auth/index.ts";
 import { httpError } from "../../../../lib/errors.ts";
 import { DiscussionErrors } from "./discussion.errors.ts";
+import { createDiscussionRepository } from "./discussion.repository.ts";
 
 // "Is this course open to a signed-in learner who holds no grant" is asked
 // of `isOpenFreeCourse`, the rule lesson playback, quizzes and the course
@@ -117,6 +118,7 @@ export interface DiscussionAccess {
 
 export function createDiscussionAccess(): DiscussionAccess {
   const access = createAccessService();
+  const discussionRepo = createDiscussionRepository();
 
   function isAdmin(actor: DiscussionActor): boolean {
     return actor.roles.includes(ADMIN_ROLE);
@@ -127,11 +129,7 @@ export function createDiscussionAccess(): DiscussionAccess {
     userId: string,
     courseId: string,
   ): Promise<boolean> {
-    const course = await db
-      .selectFrom("courses")
-      .select("creator_id")
-      .where("id", "=", courseId)
-      .executeTakeFirst();
+    const course = await discussionRepo.findCourseCreatorId(db, courseId);
     return course?.creator_id === userId;
   }
 
@@ -144,19 +142,7 @@ export function createDiscussionAccess(): DiscussionAccess {
 
     // One read answers both "is the actor the creator" and "is the course
     // open". The creator keeps access to a deleted course; nobody else does.
-    const course = await db
-      .selectFrom("courses as c")
-      .leftJoin("course_access_rules as ar", "ar.course_id", "c.id")
-      .leftJoin("course_pricing as p", "p.course_id", "c.id")
-      .select([
-        "c.creator_id",
-        "c.status",
-        "c.deleted_at",
-        "ar.access_type",
-        "p.pricing_type",
-      ])
-      .where("c.id", "=", courseId)
-      .executeTakeFirst();
+    const course = await discussionRepo.findCourseAccessState(db, courseId);
 
     if (!course) return false;
     if (course.creator_id === actor.userId) return true;
@@ -294,22 +280,11 @@ export function createDiscussionAccess(): DiscussionAccess {
     },
 
     async assertNotSuspended(db, userId, courseId, kind) {
-      const activeSuspension = await db
-        .selectFrom("learning_suspensions")
-        .select(["reason", "scope"])
-        .where("user_id", "=", userId)
-        .where("is_active", "=", true)
-        .where("scope", "in", scopesForKind(kind))
-        .where((eb) =>
-          eb.or([eb("course_id", "is", null), eb("course_id", "=", courseId)]),
-        )
-        .where((eb) =>
-          eb.or([
-            eb("expires_at", "is", null),
-            eb("expires_at", ">", new Date()),
-          ]),
-        )
-        .executeTakeFirst();
+      const activeSuspension = await discussionRepo.findActiveSuspension(db, {
+        userId,
+        courseId,
+        scopes: scopesForKind(kind),
+      });
 
       if (activeSuspension) {
         throw DiscussionErrors.suspended(
@@ -326,19 +301,8 @@ export function createDiscussionAccess(): DiscussionAccess {
       // serial ones on every notes, threads, workspace and bookmarks listing.
       const [grants, created, publishedCourses] = await Promise.all([
         access.listUserGrants(db, actor.userId),
-        db
-          .selectFrom("courses")
-          .select("id")
-          .where("creator_id", "=", actor.userId)
-          .execute(),
-        db
-          .selectFrom("courses as c")
-          .leftJoin("course_access_rules as ar", "ar.course_id", "c.id")
-          .leftJoin("course_pricing as p", "p.course_id", "c.id")
-          .select(["c.id", "ar.access_type", "p.pricing_type"])
-          .where("c.status", "=", "published")
-          .where("c.deleted_at", "is", null)
-          .execute(),
+        discussionRepo.listCreatedCourseIds(db, actor.userId),
+        discussionRepo.listPublishedCourseOpenness(db),
       ]);
 
       const now = new Date();
@@ -358,12 +322,10 @@ export function createDiscussionAccess(): DiscussionAccess {
 
     async listModeratableCourseIds(db, actor) {
       if (isAdmin(actor)) return "all";
-      const rows = await db
-        .selectFrom("courses")
-        .select("id")
-        .where("creator_id", "=", actor.userId)
-        .where("deleted_at", "is", null)
-        .execute();
+      const rows = await discussionRepo.listActiveCreatedCourseIds(
+        db,
+        actor.userId,
+      );
       return rows.map((row) => row.id);
     },
 
@@ -372,11 +334,7 @@ export function createDiscussionAccess(): DiscussionAccess {
     },
 
     async assertCanModerateCourse(db, actor, courseId) {
-      const course = await db
-        .selectFrom("courses")
-        .select("creator_id")
-        .where("id", "=", courseId)
-        .executeTakeFirst();
+      const course = await discussionRepo.findCourseCreatorId(db, courseId);
       if (!course) {
         throw httpError(404, "COURSE_NOT_FOUND", "Course not found");
       }

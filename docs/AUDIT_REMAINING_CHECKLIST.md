@@ -1,6 +1,6 @@
 # What is left after the audit: checklist
 
-Updated 14 Oct 2026, after the sixth round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 25. This file is the short list to work from. Tick a box when it is done.
+Updated 14 Oct 2026, after the seventh round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 26. This file is the short list to work from. Tick a box when it is done.
 
 ## Done in phases 1 to 3 (13 Oct)
 
@@ -76,6 +76,14 @@ Updated 14 Oct 2026, after the sixth round. The full record is `docs/AUDIT_RECON
 - [x] Razorpay test purchase done by the owner: declined, successful, refund. All worked.
 - [x] Production counts run by the owner: all zero.
 
+## Done in the seventh round (14 Oct)
+
+- [x] The lesson page reads a lesson's description from its own request (P1, steps 1 and 2). A switch is ready to shrink the course overview.
+- [x] Queries moved out of services into repositories, with identical responses on 608 requests (R4).
+- [x] The course page has share tags that follow the course (F17).
+- [x] Notifications uses the shared search shortcut; Ctrl+K and Cmd+K both work outside text fields (F11).
+- [x] Lint warnings down from 23 to 12.
+
 ## A. Right after each push
 
 Pushing `dev` deploys the API and the web together.
@@ -88,6 +96,7 @@ Pushing `dev` deploys the API and the web together.
   ```
 
 - [x] Check 5 (accounts sharing an email in different letter case): 0 found. Nothing to merge.
+- [ ] **One release after this one:** set `COURSE_OVERVIEW_LESSON_DESCRIPTIONS=false` on the API. The course overview shrinks to about a sixth for a long course. Do it only after the web from this release is live.
 - [ ] Check the server's `TRUST_PROXY` value (section 18 of the report says which value fits which setup).
 - [ ] Check that every address people sign in from is in `WEB_URL` or `CORS_ORIGINS`.
 
@@ -104,6 +113,9 @@ The first, third and ninth were seen in a local browser run in the fourth round.
 - [ ] Look at the accent text colour on a few themes, light and dark. It was changed by calculation, not by eye.
 - [ ] Play a video: play, pause, seek, open the quality menu, watch the buffering spinner. The player code was changed to satisfy the linter.
 - [ ] Take a timed quiz to the end and let the time run out.
+- [ ] Share a course overview link in WhatsApp or Slack. The preview should show the course title, description and picture.
+- [ ] Open a lesson. Its description should show as before.
+- [ ] Post a note, a question and a reply; edit and remove one of your own. The code behind these was moved, not changed.
 - [ ] Save a course to the wishlist as a guest, sign in, and see it on the account.
 - [ ] Verify a manual payment, then also complete the gateway payment for the same order. It should appear in the refund notice on the Orders page.
 - [ ] Change the amount on a course, pay the old and the new gateway order. Both should appear as one "paid twice" entry.
@@ -138,16 +150,17 @@ Four of the seven from the last round are fixed. These are left.
 
 What is left of phase 4.
 
-- [ ] **F17, the rest.** Share tags still do not follow the course.
-- [ ] **F11, the rest.** The Notifications page keeps its own copy of the shortcut. Ctrl+K on a Mac does nothing on Courses and Discussions.
-- [ ] **P1.** Course overview sends every lesson description. Needs three releases to change safely.
-- [ ] **P2.** Stylesheet loading. Needs Lighthouse on a production build.
-- [ ] **R1 to R4.** Very large files, direct imports, inline styles, queries inside services. Large refactors; not started.
+- [ ] **P2.** Stylesheet loading. Needs Lighthouse on a production build, which I do not make here.
+- [ ] **F17, last part.** The prerendered course page has no `og:url` or canonical link. Needs a build variable with the site address.
+- [ ] **R1, R2.** Very large files and direct imports. Large refactors with no behaviour to gain. I will start only when you say so.
+- [ ] **R3.** Inline styles. The web rules say not to migrate styles unrelated to a task.
 
 ## F. Code quality
 
 What is left of phase 5.
 
-- [ ] **23 lint warnings** remain. They need a behaviour change or come from a library notice. `pnpm lint` passes with 0 errors.
+- [ ] **12 lint warnings** remain: 5 library notices and 7 that need a behaviour change. `pnpm lint` passes with 0 errors.
+- [ ] **15 queries still outside repositories:** the reminder worker, the OTP locks, the health ping, commerce and courses.
+- [ ] **Four things noticed while moving queries**, listed in section 26.2 of the report. Not fixed; they need your call.
 - [ ] **Production build of the web.** It reads the root `.env`, so it was never built here. The dev server was used instead.
 - [ ] **Memory regression suite.** `apps/web/AGENTS.md` asks for one before every web commit. It does not exist.

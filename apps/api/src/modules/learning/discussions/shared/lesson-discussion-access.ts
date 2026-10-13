@@ -8,6 +8,7 @@ import {
 } from "../../../access/index.ts";
 import { DiscussionErrors } from "./discussion.errors.ts";
 import type { DiscussionActor } from "./discussion.access.ts";
+import { createDiscussionRepository } from "./discussion.repository.ts";
 
 export interface LessonDiscussionReadAccess {
   /** Whether the caller may see authenticated-only discussion state such as notes. */
@@ -74,28 +75,14 @@ export function createLessonDiscussionAccess(options?: {
   access?: AccessService;
 }): LessonDiscussionAccess {
   const access = options?.access ?? createAccessService();
+  const discussionRepo = createDiscussionRepository();
 
   return {
     async assertCanReadLesson(db, { courseId, lessonId, actor }) {
-      const lesson = await db
-        .selectFrom("course_lessons")
-        .innerJoin("courses", "courses.id", "course_lessons.course_id")
-        .innerJoin(
-          "course_sections",
-          "course_sections.id",
-          "course_lessons.section_id",
-        )
-        .select([
-          "courses.status as courseStatus",
-          "courses.creator_id as courseCreatorId",
-          "course_lessons.is_published as isPublished",
-        ])
-        .where("course_lessons.id", "=", lessonId)
-        .where("course_lessons.course_id", "=", courseId)
-        .where("course_lessons.deleted_at", "is", null)
-        .where("course_sections.deleted_at", "is", null)
-        .where("courses.deleted_at", "is", null)
-        .executeTakeFirst();
+      const lesson = await discussionRepo.findLessonReadTarget(db, {
+        courseId,
+        lessonId,
+      });
 
       if (
         !lesson ||
