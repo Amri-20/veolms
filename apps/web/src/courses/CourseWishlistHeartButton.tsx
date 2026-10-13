@@ -66,10 +66,13 @@ export function CourseWishlistHeartButton({
   return (
     <button
       type="button"
-      // On the course page's hero, which is dark by day as well: the same
-      // dark glass as the heart on a course card, placed by the hero.
-      className={`group/wishlist inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-white/18 bg-slate-950/70 text-white transition-[border-color,background-color] duration-160 ease-out hover:bg-slate-950/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-default ${
-        wishlisted ? "border-[color-mix(in_srgb,#ff6684_60%,transparent)]!" : ""
+      // On the course page's hero, which is dark by day as well: dark
+      // glass with no ring round it. A wishlisted course tints the glass
+      // pink instead of outlining it.
+      className={`group/wishlist inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 text-white transition-[background-color] duration-160 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-default ${
+        wishlisted
+          ? "bg-[color-mix(in_srgb,#ff6684_26%,rgb(2_6_23/0.82))] hover:bg-[color-mix(in_srgb,#ff6684_34%,rgb(2_6_23/0.88))]"
+          : "bg-slate-950/70 hover:bg-slate-950/85"
       }`}
       aria-label={ariaLabel}
       aria-pressed={wishlisted}

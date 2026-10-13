@@ -1,20 +1,24 @@
-import { ArrowsInLineVertical } from "@phosphor-icons/react/ArrowsInLineVertical";
-import { ArrowsOutLineVertical } from "@phosphor-icons/react/ArrowsOutLineVertical";
 import { CaretDown } from "@phosphor-icons/react/CaretDown";
 import { CheckCircle } from "@phosphor-icons/react/CheckCircle";
-import { Circle } from "@phosphor-icons/react/Circle";
 import { FileText } from "@phosphor-icons/react/FileText";
+import { PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { PlayCircle } from "@phosphor-icons/react/PlayCircle";
 import { Question } from "@phosphor-icons/react/Question";
+import { useDeferredValue, useState } from "react";
 import type { CourseSection } from "../../learning/courseContent";
 import { formatDuration } from "../courseAdapter";
-import { VirtualizedLessonList } from "../curriculum/VirtualizedLessonList";
+import { useContinuousLessonNumbering } from "../../learning/useContinuousLessonNumbering";
+import {
+  bandHeaderClasses,
+  bandLinkClasses,
+  bandSubtitleClasses,
+  bandTitleClasses,
+  overviewCardClasses,
+  overviewCardPaddingClasses,
+} from "./overviewStyles";
 
-const NO_PINNED_LESSONS: ReadonlySet<string> = new Set();
-const getOverviewLessonKey = (lesson: CourseSection["lessons"][number]) =>
-  String(lesson[0]);
-
-const hairline = "border-[color-mix(in_srgb,var(--text)_8%,transparent)]";
+/** A lesson row's height: one line of title in a row 42px tall. */
+const LESSON_ROW_HEIGHT = 42;
 
 function parseDurationLabel(label: string): number {
   const hours = Number(label.match(/(\d+)h/)?.[1] ?? 0);
@@ -26,26 +30,31 @@ interface CurriculumSectionRowProps {
   section: CourseSection;
   index: number;
   isOpen: boolean;
+  /**
+   * False when every section was opened or shut at once: two dozen panels
+   * growing together lay the whole page out again on every frame, so they
+   * change in one step instead.
+   */
+  animate: boolean;
   onToggle: () => void;
   onSelectLesson?: (lessonNumber: number) => void;
-  shouldVirtualizeLessons?: boolean;
   isReadOnlyPreview?: boolean;
   isPaidCourse?: boolean;
 }
 
 /**
- * One section: a row across the card that opens its lessons underneath.
- * `data-fixed-radius` keeps the rows square; the radius preference rounds
- * every list item and button on this page otherwise, and these run edge to
- * edge inside the card.
+ * One section of the outline: its numbered title and facts on a row that
+ * opens its lessons underneath. The row has no box of its own; under the
+ * pointer it lights up as a rounded strip. The lessons start at the same
+ * left edge as the title. Sections are parted by hairlines.
  */
 function CurriculumSectionRow({
   section,
   index,
   isOpen,
+  animate,
   onToggle,
   onSelectLesson,
-  shouldVirtualizeLessons = false,
   isReadOnlyPreview = false,
   isPaidCourse = false,
 }: CurriculumSectionRowProps) {
@@ -58,40 +67,79 @@ function CurriculumSectionRow({
   );
   const durationLabel =
     durationSeconds > 0 ? formatDuration(durationSeconds) : "";
+  const doneCount = section.lessons.filter(
+    (lesson) => lesson[3] === "done",
+  ).length;
+  const sectionDone = lessonCount > 0 && doneCount === lessonCount;
+  // The section opens at once, at its full height, and its lessons are
+  // drawn straight after as lower-priority work: the click is answered in
+  // the next frame however many sections open with it ("Expand all" opens
+  // them all).
+  //
+  // Every lesson of an open section is in the page: no virtual list, and
+  // nothing held back until the section is near the screen. Both left gaps
+  // while scrolling, when the page moved faster than the rows could be put
+  // back. A course's lessons are single-line rows (hundreds, not tens of
+  // thousands), which a browser scrolls without help. What keeps a fully
+  // expanded course cheap is `content-visibility` on each section's list
+  // (see below): the browser itself skips the layout and painting of the
+  // lists that are off screen, and does them, within the same frame, when
+  // they come into view.
+  const lessonsShown = useDeferredValue(isOpen) && isOpen;
+  // The learning page's numbering: every section starts again at 1, or the
+  // lessons are numbered straight through the course when the learner has
+  // chosen that. A lesson's own number is its place in the course.
+  const continuousLessonNumbering = useContinuousLessonNumbering();
+  const lessonNumberBase = continuousLessonNumbering
+    ? 0
+    : (section.lessons[0]?.[0] ?? 1) - 1;
 
   return (
     <div role="listitem" data-fixed-radius>
       <button
         id={buttonId}
         type="button"
-        data-fixed-radius
-        className="flex min-h-15 w-full cursor-pointer items-center gap-3.5 border-0 bg-transparent px-4 py-3 text-left text-(--text) transition-colors duration-140 hover:bg-(--hover) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--accent) @2xl/curriculum:px-6"
+        className="group/section -mx-3 flex w-[calc(100%+1.5rem)] cursor-pointer items-center gap-3 rounded-xl border-0 bg-transparent px-3 py-3.5 text-left text-(--text) transition-colors duration-140 hover:bg-(--hover) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--accent)"
         aria-expanded={isOpen}
         aria-controls={panelId}
         onClick={onToggle}
       >
-        <span
-          className="inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-(--accent) text-[0.84rem] font-bold text-(--on-accent,#ffffff)"
-          aria-hidden="true"
-        >
-          {index + 1}
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5 @xl/curriculum:flex-row @xl/curriculum:items-center @xl/curriculum:gap-4">
-          <span className="min-w-0 flex-1 text-[0.95rem] font-semibold">
-            {section.title}
+        <span className="flex min-w-0 flex-1 flex-col gap-1 @xl/curriculum:flex-row @xl/curriculum:items-baseline @xl/curriculum:gap-4">
+          <span className="min-w-0 flex-1 text-[0.98rem] leading-snug font-semibold">
+            {index + 1}. {section.title}
           </span>
-          <span className="shrink-0 text-[0.82rem] font-normal text-(--muted)">
-            {lessonCount} Lesson{lessonCount === 1 ? "" : "s"}
-            {durationLabel ? ` • ${durationLabel}` : ""}
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-[0.82rem] font-normal text-(--muted) tabular-nums">
+            {sectionDone ? (
+              <CheckCircle
+                size={15}
+                weight="fill"
+                className="text-emerald-500"
+                aria-label="All lessons done"
+              />
+            ) : doneCount > 0 ? (
+              <span>
+                {doneCount}/{lessonCount} done
+              </span>
+            ) : (
+              <span>
+                {lessonCount} Lesson{lessonCount === 1 ? "" : "s"}
+              </span>
+            )}
+            {durationLabel ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{durationLabel}</span>
+              </>
+            ) : null}
           </span>
         </span>
         <span
-          className={`inline-flex shrink-0 items-center justify-center text-(--muted) transition-transform duration-200 ease-out motion-reduce:transition-none ${
+          className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full text-(--muted) transition-[transform,background-color,color] duration-200 ease-out group-hover/section:text-(--text) motion-reduce:transition-none ${
             isOpen ? "rotate-180" : ""
           }`}
           aria-hidden="true"
         >
-          <CaretDown size={17} weight="bold" />
+          <CaretDown size={16} weight="bold" />
         </span>
       </button>
 
@@ -101,26 +149,33 @@ function CurriculumSectionRow({
         aria-labelledby={buttonId}
         aria-hidden={!isOpen}
         className={`grid motion-reduce:transition-none ${
+          animate
+            ? "transition-[grid-template-rows,opacity,visibility]"
+            : "transition-none"
+        } ${
           isOpen
-            ? "visible grid-rows-[1fr] opacity-100 transition-[grid-template-rows,opacity,visibility] duration-220 ease-[cubic-bezier(0.22,1,0.36,1)]"
-            : "invisible grid-rows-[0fr] opacity-0 transition-[grid-template-rows,opacity,visibility] duration-250 ease-[cubic-bezier(0,1,0,1)]"
+            ? "visible grid-rows-[1fr] opacity-100 duration-220 ease-[cubic-bezier(0.22,1,0.36,1)]"
+            : "invisible grid-rows-[0fr] opacity-0 duration-250 ease-[cubic-bezier(0,1,0,1)]"
         }`}
       >
         <div className="min-h-0 overflow-hidden">
+          {/* Each lesson is a rounded row with room on both sides, kept
+              inside the column: this box clips anything that bleeds out. */}
           <div
-            className={`border-t ${hairline} bg-[color-mix(in_srgb,var(--surface)_95%,var(--text))] py-1`}
+            className="mb-2 [content-visibility:auto]"
+            // The lessons' room is held before they are drawn, while the
+            // section shuts after they are gone, and while the browser
+            // skips the list off screen (`contain-intrinsic-size` is the
+            // height it assumes for a list it has not laid out).
+            style={{
+              minHeight: lessonCount * LESSON_ROW_HEIGHT,
+              containIntrinsicSize: `auto ${lessonCount * LESSON_ROW_HEIGHT}px`,
+            }}
           >
             {section.lessons.length > 0 ? (
-              isOpen ? (
-                <VirtualizedLessonList
-                  items={section.lessons}
-                  forceVirtualized={shouldVirtualizeLessons}
-                  estimatedItemSize={46}
-                  itemGap={0}
-                  overscan={14}
-                  getItemKey={getOverviewLessonKey}
-                  pinnedItemIds={NO_PINNED_LESSONS}
-                  renderItem={([
+              lessonsShown ? (
+                section.lessons.map(
+                  ([
                     number,
                     title,
                     duration,
@@ -130,14 +185,17 @@ function CurriculumSectionRow({
                   ]) => {
                     const isDoc = contentType === "document";
                     const isQuiz = contentType === "quiz";
+                    const isDone = status === "done";
                     return (
                       <button
                         type="button"
                         data-fixed-radius
-                        className={`group/lesson flex min-h-11.5 w-full items-center gap-3 border-0 bg-transparent py-1.5 pr-4 pl-5 text-left text-[0.85rem] text-(--text-secondary) transition-colors duration-140 @2xl/curriculum:pr-6 @2xl/curriculum:pl-16.5 ${
+                        className={`group/lesson flex min-h-10.5 w-full items-center gap-3 rounded-xl border-0 bg-transparent px-3 py-1.5 text-left text-[0.88rem] transition-colors duration-140 ${
+                          isDone ? "text-(--muted)" : "text-(--text-secondary)"
+                        } ${
                           isReadOnlyPreview
-                            ? "cursor-default opacity-85 hover:bg-transparent hover:text-(--text-secondary)"
-                            : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)] hover:text-(--text) focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:outline-none focus-visible:ring-inset"
+                            ? "cursor-default"
+                            : "cursor-pointer hover:bg-(--hover) hover:text-(--text) focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:outline-none focus-visible:ring-inset"
                         }`}
                         key={number}
                         disabled={isReadOnlyPreview}
@@ -146,77 +204,59 @@ function CurriculumSectionRow({
                           onSelectLesson?.(number);
                         }}
                       >
-                        {/* The row is named by what it shows, with the lesson
-                            number added for screen readers. A separate
-                            aria-label used to replace the visible text with
-                            wording of its own ("Lesson 1: Title, 12:30"),
-                            which voice control cannot match to what is on
-                            screen and which left the "Free" badge out. */}
-                        <span className="sr-only">{`Lesson ${number}: `}</span>
                         <span
-                          className={`inline-flex w-5 shrink-0 items-center justify-center text-(--muted) transition-colors duration-140 ${
-                            isReadOnlyPreview
-                              ? ""
-                              : "group-hover/lesson:text-(--accent)"
+                          className={`inline-flex w-5 shrink-0 items-center justify-start transition-colors duration-140 ${
+                            isDone
+                              ? "text-emerald-500"
+                              : isReadOnlyPreview
+                                ? "text-(--muted)"
+                                : "text-(--muted) group-hover/lesson:text-(--accent)"
                           }`}
                           aria-hidden="true"
                         >
-                          {isDoc ? (
-                            <FileText size={16} weight="regular" />
+                          {isDone ? (
+                            <CheckCircle size={17} weight="fill" />
+                          ) : isDoc ? (
+                            <FileText size={17} weight="regular" />
                           ) : isQuiz ? (
-                            <Question size={16} weight="regular" />
+                            <Question size={17} weight="regular" />
                           ) : (
-                            <PlayCircle size={16} weight="regular" />
+                            <PlayCircle size={17} weight="regular" />
                           )}
                         </span>
 
-                        <span className="min-w-0 flex-1 overflow-hidden text-[0.85rem] text-ellipsis whitespace-nowrap text-(--text-secondary)">
-                          {title}
+                        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+                          {/* Numbered as on the learning page. */}
+                          {number - lessonNumberBase}. {title}
                         </span>
 
-                        {duration ? (
-                          <span className="w-11.25 shrink-0 text-right text-[0.78rem] text-(--muted)">
-                            {duration}
-                          </span>
-                        ) : null}
-
-                        {/* Free preview badge: only on a paid course, for a
-                            lesson marked as a free preview. */}
+                        {/* Free preview: only on a paid course, for a lesson
+                            marked as one. */}
                         {isPaidCourse && isPreview ? (
                           <span
-                            className="inline-flex shrink-0 items-center rounded-[5px] border border-[color-mix(in_srgb,var(--accent)_30%,transparent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-1.5 py-0.5 text-[0.7rem] leading-none font-bold text-(--accent)"
+                            className="inline-flex shrink-0 items-center rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-2 py-0.5 text-[0.7rem] leading-none font-bold text-(--accent-ink,var(--accent))"
                             aria-label="Free preview"
                           >
                             Free
                           </span>
                         ) : null}
 
-                        {status === "done" ? (
-                          <span
-                            className="inline-flex shrink-0 items-center justify-center"
-                            aria-hidden="true"
-                          >
-                            <CheckCircle
-                              size={16}
-                              weight="fill"
-                              className="text-[#10b981]"
-                            />
-                          </span>
-                        ) : status === "todo" ? (
-                          <span
-                            className="inline-flex shrink-0 items-center justify-center"
-                            aria-hidden="true"
-                          >
-                            <Circle size={16} className="text-(--muted)" />
+                        {isDone ? (
+                          <span className="sr-only">, done</span>
+                        ) : null}
+
+                        {duration ? (
+                          <span className="w-11.25 shrink-0 text-right text-[0.78rem] text-(--muted) tabular-nums">
+                            {duration}
                           </span>
                         ) : null}
                       </button>
                     );
-                  }}
-                />
+                  },
+                )
               ) : null
             ) : (
-              <div className="px-4 py-3 text-[0.82rem] text-(--muted) italic @2xl/curriculum:pl-16.5">
+              <div className="px-3 py-2 text-[0.84rem] text-(--muted) italic">
                 No lessons added yet
               </div>
             )}
@@ -230,6 +270,7 @@ function CurriculumSectionRow({
 interface CourseOverviewCurriculumProps {
   sectionCount: number;
   lessonCount: number;
+  duration?: string;
   courseSections: CourseSection[];
   openSections: Set<number>;
   onToggleSection: (index: number) => void;
@@ -238,11 +279,14 @@ interface CourseOverviewCurriculumProps {
   onSelectLesson?: (lessonNumber: number) => void;
   isReadOnlyPreview?: boolean;
   isPaidCourse?: boolean;
+  /** For someone who manages the course: opens the curriculum editor. */
+  onEdit?: () => void;
 }
 
 export function CourseOverviewCurriculum({
   sectionCount,
   lessonCount,
+  duration,
   courseSections,
   openSections,
   onToggleSection,
@@ -251,52 +295,60 @@ export function CourseOverviewCurriculum({
   onSelectLesson,
   isReadOnlyPreview = false,
   isPaidCourse = false,
+  onEdit,
 }: CourseOverviewCurriculumProps) {
   const allSectionsExpanded =
     courseSections.length > 0 && openSections.size === courseSections.length;
-  const ToggleAllIcon = allSectionsExpanded
-    ? ArrowsInLineVertical
-    : ArrowsOutLineVertical;
+  // Whether the last change was to every section at once (see `animate`).
+  const [changedTogether, setChangedTogether] = useState(false);
 
   return (
     <section
-      className="@container/curriculum overflow-hidden rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-(--surface) shadow-(--card-shadow)"
+      className={`@container/curriculum ${overviewCardClasses} ${overviewCardPaddingClasses}`}
       aria-labelledby="cov-curriculum-heading"
+      data-fixed-radius
     >
-      <div className="flex items-center justify-between gap-4 px-4 py-4.5 @2xl/curriculum:px-6">
+      <div className={bandHeaderClasses}>
         <div className="min-w-0">
-          <h2
-            id="cov-curriculum-heading"
-            className="m-0 text-[1.24rem] font-bold tracking-[-0.015em] text-(--text)"
-          >
-            Course curriculum
+          <h2 id="cov-curriculum-heading" className={bandTitleClasses}>
+            Curriculum
           </h2>
-          <p className="m-0 mt-1.5 text-[0.86rem] text-(--muted)">
-            {sectionCount} Section{sectionCount === 1 ? "" : "s"} &bull;{" "}
-            {lessonCount} Lesson{lessonCount === 1 ? "" : "s"}
+          <p className={bandSubtitleClasses}>
+            {sectionCount} section{sectionCount === 1 ? "" : "s"} &middot;{" "}
+            {lessonCount} lesson{lessonCount === 1 ? "" : "s"}
+            {duration ? <> &middot; {duration}</> : null}
           </p>
         </div>
-        {courseSections.length > 0 ? (
-          <button
-            type="button"
-            className="inline-flex h-9.5 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-transparent px-3 text-[0.88rem] font-semibold text-(--accent-ink,var(--accent)) transition-colors duration-140 hover:bg-(--hover) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
-            onClick={allSectionsExpanded ? onCollapseAll : onExpandAll}
-          >
-            <span>{allSectionsExpanded ? "Collapse all" : "Expand all"}</span>
-            <ToggleAllIcon size={17} weight="bold" aria-hidden="true" />
-          </button>
-        ) : null}
+        <div className="flex items-center gap-5">
+          {onEdit ? (
+            <button type="button" className={bandLinkClasses} onClick={onEdit}>
+              <PencilSimple size={15} weight="bold" aria-hidden="true" />
+              <span>Edit curriculum</span>
+            </button>
+          ) : null}
+          {courseSections.length > 0 ? (
+            <button
+              type="button"
+              className={bandLinkClasses}
+              onClick={() => {
+                setChangedTogether(true);
+                if (allSectionsExpanded) onCollapseAll();
+                else onExpandAll();
+              }}
+            >
+              {allSectionsExpanded ? "Collapse all" : "Expand all"}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {courseSections.length === 0 ? (
-        <div
-          className={`border-t ${hairline} p-8 text-center text-[0.88rem] text-(--muted) italic`}
-        >
+        <div className="mt-2 py-10 text-center text-[0.9rem] text-(--muted)">
           No sections added yet
         </div>
       ) : (
         <div
-          className={`flex flex-col divide-y border-t ${hairline} divide-[color-mix(in_srgb,var(--text)_8%,transparent)]`}
+          className="mt-2 flex flex-col divide-y divide-[color-mix(in_srgb,var(--text)_9%,transparent)]"
           role="list"
         >
           {courseSections.map((section, index) => (
@@ -305,9 +357,12 @@ export function CourseOverviewCurriculum({
               section={section}
               index={index}
               isOpen={openSections.has(index)}
-              onToggle={() => onToggleSection(index)}
+              animate={!changedTogether}
+              onToggle={() => {
+                setChangedTogether(false);
+                onToggleSection(index);
+              }}
               onSelectLesson={onSelectLesson}
-              shouldVirtualizeLessons={lessonCount >= 80}
               isReadOnlyPreview={isReadOnlyPreview}
               isPaidCourse={isPaidCourse}
             />

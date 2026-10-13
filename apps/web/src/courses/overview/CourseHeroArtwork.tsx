@@ -9,6 +9,11 @@ interface CourseHeroArtworkProps {
   /** Opens the course's preview. Without it there is no play button. */
   onPreview?: () => void;
   previewDisabled?: boolean;
+  /**
+   * The hero keeps 1rem at its foot for the box that overlaps it there: the
+   * picture, beside the text, stops above that strip so none of it is hidden.
+   */
+  footRoom?: boolean;
 }
 
 /**
@@ -27,12 +32,16 @@ const heroPictureSizes =
  *    lies under the picture and spreads out from it, so on a hero much wider
  *    than the picture the colours fade away from the picture instead of the
  *    thumbnail's middle showing up as a patch in the hero's middle;
- * 2. a dot grid;
+ * 2. a grid of dots, set wide apart (24px), lit from the top;
  * 3. the thumbnail itself, with no edge of its own: it dissolves into the
  *    wash, downwards while it sits above the text and leftwards once it sits
  *    beside it. Beside the text it is as tall as the hero and whole; in a
  *    hero too narrow for that it loses its left side, which is the faded one;
- * 4. a shade under the text so it reads on any thumbnail.
+ * 4. a shade under the text so it reads on any thumbnail;
+ * 5. beside the picture, the dot grid again over the whole text side, a
+ *    good deal fainter, thinning out where the picture begins. It is a
+ *    layer of its own, over the shade, which is solid there and hides the
+ *    first grid; the first one is what shows faintly on the picture.
  *
  * The parent is the `@container/hero` these layers size themselves against.
  */
@@ -42,6 +51,7 @@ export function CourseHeroArtwork({
   thumbnailSrcSet,
   onPreview,
   previewDisabled = false,
+  footRoom = false,
 }: CourseHeroArtworkProps) {
   // A thumbnail from before sizes were kept has an empty list.
   const smallestVariant = thumbnailSrcSet?.length
@@ -72,11 +82,17 @@ export function CourseHeroArtwork({
 
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,rgb(255_255_255/0.2)_1px,transparent_1.5px)] bg-size-[16px_16px] [mask-image:radial-gradient(110%_95%_at_58%_0%,black,transparent_74%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,color-mix(in_srgb,var(--hero-ink)_20%,transparent)_1px,transparent_1.5px)] bg-size-[24px_24px] [mask-image:radial-gradient(110%_95%_at_58%_0%,black,transparent_74%)]"
       />
 
       {thumbnail ? (
-        <div className="relative aspect-video w-full @3xl/hero:absolute @3xl/hero:inset-y-0 @3xl/hero:right-0 @3xl/hero:h-full @3xl/hero:w-auto @3xl/hero:max-w-[62%]">
+        <div
+          className={`relative aspect-video w-full @3xl/hero:absolute @3xl/hero:inset-y-0 @3xl/hero:right-0 @3xl/hero:h-full @3xl/hero:w-auto @3xl/hero:max-w-[62%] ${
+            footRoom
+              ? "@3xl/hero:bottom-4! @3xl/hero:h-[calc(100%_-_1rem)]!"
+              : ""
+          }`}
+        >
           <img
             src={thumbnail}
             srcSet={getCourseThumbnailSrcSet({ thumbnailSrcSet })}
@@ -111,6 +127,10 @@ export function CourseHeroArtwork({
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 hidden bg-linear-to-r from-(--hero-base) from-28% via-(--hero-base)/75 via-48% to-transparent to-68% @3xl/hero:block"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 hidden bg-[radial-gradient(circle,color-mix(in_srgb,var(--hero-ink)_11%,transparent)_1px,transparent_1.5px)] bg-size-[24px_24px] [mask-image:linear-gradient(to_right,black_36%,transparent_60%)] @3xl/hero:block"
       />
     </>
   );

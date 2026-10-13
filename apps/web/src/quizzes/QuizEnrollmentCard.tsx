@@ -10,6 +10,7 @@ import { LoadingSpinnerIcon } from "../components/LoadingSpinner";
 import { productName } from "../routing/routeDescriptors";
 import { useCurrentUser } from "../services/auth";
 import { readCheckoutStartError } from "../services/payments/checkoutError";
+import "../services/payments/razorpay-checkout.css";
 import {
   useAwaitPaidOrder,
   useCreateCheckoutOrder,

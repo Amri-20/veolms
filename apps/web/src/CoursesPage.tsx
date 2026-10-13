@@ -1017,6 +1017,13 @@ function LoginProfileButton({
 
 const subscribeToNothing = () => () => {};
 
+/** The course page's deeper ground; see where it is used. */
+const COURSE_PAGE_GROUND_CLASSES = [
+  "in-data-[content-layout=framed]:bg-(--cov-ground)!",
+  "in-data-[content-layout=framed]:[--cov-ground:color-mix(in_srgb,var(--main-surface)_42%,var(--canvas))]",
+  "[:root[data-theme=light]_&]:supports-[color:oklch(from_white_l_c_h)]:in-data-[content-layout=framed]:[--cov-ground:oklch(from_var(--main-surface)_calc(l_-_0.018)_c_h)]",
+].join(" ");
+
 export function CoursesPage({
   initialPublishedCoursePage,
   initialPublishedCoursePageNeedsRefresh = false,
@@ -6065,6 +6072,11 @@ export function CoursesPage({
         <main
           id="courses-main-scrollport"
           ref={mainScrollportRef}
+          // Tells the course page's boxes which ground they lie on (see
+          // `overviewCardClasses`).
+          data-deep-ground={
+            !renderMain && page === "course-overview" ? "" : undefined
+          }
           className={[
             "courses-main",
             // While the page is being scrolled nothing in it answers the
@@ -6080,7 +6092,21 @@ export function CoursesPage({
             // scroller lies over the shell's own surfaces.
             renderMain
               ? ""
-              : "in-data-[content-layout=framed]:bg-(--main-surface)!",
+              : page === "course-overview"
+                ? // A course's page lies on a deeper ground than the other
+                  // pages, so that its boxes stand out from it the way the
+                  // pinned course stands out from the home page's picture.
+                  // The ground is kept in `--cov-ground`, which the boxes
+                  // read to set themselves one fixed step lighter (see
+                  // `overviewCardClasses`), and is solid, as the note above
+                  // requires. By night it is the frame's colour taken part
+                  // of the way to the shell's. By day the frame is already
+                  // close to white, with no room above it for a lighter
+                  // box, so the ground is the frame's colour made a fixed
+                  // step darker instead; the plain mix is what a browser
+                  // without relative colours falls back to.
+                  COURSE_PAGE_GROUND_CLASSES
+                : "in-data-[content-layout=framed]:bg-(--main-surface)!",
             renderMain
               ? "courses-main--learning overflow-x-clip!"
               : page !== "courses"
