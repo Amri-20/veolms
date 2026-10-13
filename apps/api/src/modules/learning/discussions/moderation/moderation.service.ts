@@ -30,6 +30,7 @@ import {
   createDiscussionOutbox,
   withWriteTransaction,
 } from "../shared/discussion.mentions.ts";
+import { createDiscussionRepository } from "../shared/discussion.repository.ts";
 import {
   decodeDiscussionCursor,
   encodeDiscussionCursor,
@@ -233,6 +234,7 @@ export function createModerationService({
   const courseAccess = createDiscussionAccess();
   const access = createAccessService();
   const outbox = createDiscussionOutbox();
+  const discussionRepo = createDiscussionRepository();
 
   /**
    * A course moderator suspends that course's participants, nobody else.
@@ -434,11 +436,7 @@ export function createModerationService({
     async updateReportStatus(db, reportId, actor, input, courseId, ipAddress) {
       await assertModerationScope(db, actor, courseId);
       return withWriteTransaction(db, async (trx) => {
-        const report = await trx
-          .selectFrom("learning_reports")
-          .select(["course_id", "target_type", "target_id", "reporter_id"])
-          .where("id", "=", reportId)
-          .executeTakeFirst();
+        const report = await moderationRepo.findReportTarget(trx, reportId);
         if (!report) {
           throw httpError(404, "REPORT_NOT_FOUND", "Report not found");
         }
@@ -528,13 +526,11 @@ export function createModerationService({
         }
 
         // Fetch pending reports before updating so we know who to notify
-        const pendingReports = await trx
-          .selectFrom("learning_reports")
-          .select(["id", "reporter_id"])
-          .where("target_type", "=", "thread")
-          .where("target_id", "=", threadId)
-          .where("status", "=", "pending")
-          .execute();
+        const pendingReports = await moderationRepo.listPendingReportsForTarget(
+          trx,
+          "thread",
+          threadId,
+        );
 
         // Transition pending reports on this thread to actioned or reviewed
         const targetReportStatus =
@@ -543,18 +539,13 @@ export function createModerationService({
           input.action === "delete"
             ? "actioned"
             : "reviewed";
-        await trx
-          .updateTable("learning_reports")
-          .set({
-            status: targetReportStatus,
-            reviewed_by_user_id: actor.userId,
-            action_taken: input.action,
-            updated_at: new Date(),
-          })
-          .where("target_type", "=", "thread")
-          .where("target_id", "=", threadId)
-          .where("status", "=", "pending")
-          .execute();
+        await moderationRepo.resolvePendingReportsForTarget(trx, {
+          targetType: "thread",
+          targetId: threadId,
+          status: targetReportStatus,
+          reviewedByUserId: actor.userId,
+          actionTaken: input.action,
+        });
 
         const academyId = await resolveAcademyId(trx);
         await moderationRepo.createAuditLog(trx, {
@@ -629,31 +620,20 @@ export function createModerationService({
 
         await notesRepo.holdPrivate(trx, noteId);
         // Nobody else can open it now, so nobody stays mentioned in it.
-        await trx
-          .deleteFrom("learning_mentions")
-          .where("source_type", "=", "note")
-          .where("source_id", "=", noteId)
-          .execute();
+        await discussionRepo.deleteMentionsBySource(trx, "note", noteId);
 
-        const pendingReports = await trx
-          .selectFrom("learning_reports")
-          .select(["id", "reporter_id"])
-          .where("target_type", "=", "note")
-          .where("target_id", "=", noteId)
-          .where("status", "=", "pending")
-          .execute();
-        await trx
-          .updateTable("learning_reports")
-          .set({
-            status: "actioned",
-            reviewed_by_user_id: actor.userId,
-            action_taken: input.action,
-            updated_at: new Date(),
-          })
-          .where("target_type", "=", "note")
-          .where("target_id", "=", noteId)
-          .where("status", "=", "pending")
-          .execute();
+        const pendingReports = await moderationRepo.listPendingReportsForTarget(
+          trx,
+          "note",
+          noteId,
+        );
+        await moderationRepo.resolvePendingReportsForTarget(trx, {
+          targetType: "note",
+          targetId: noteId,
+          status: "actioned",
+          reviewedByUserId: actor.userId,
+          actionTaken: input.action,
+        });
 
         const academyId = await resolveAcademyId(trx);
         await moderationRepo.createAuditLog(trx, {
@@ -739,17 +719,8 @@ export function createModerationService({
             // reply that is gone. Left behind, the mention came back in the
             // mentioned person's Mentions if the reply was ever made active
             // again.
-            await trx
-              .deleteFrom("learning_mentions")
-              .where("source_type", "=", "reply")
-              .where("source_id", "=", replyId)
-              .execute();
-            await trx
-              .updateTable("learning_attachments")
-              .set({ status: "deleted" })
-              .where("target_type", "=", "reply")
-              .where("target_id", "=", replyId)
-              .execute();
+            await discussionRepo.deleteMentionsBySource(trx, "reply", replyId);
+            await repliesRepo.markAttachmentsDeleted(trx, replyId);
             await threadsRepo.incrementRepliesCount(trx, reply.threadId, -1);
             if (reply.isAccepted || thread?.acceptedAnswerId === replyId) {
               await repliesRepo.setAcceptedStatus(trx, replyId, false);
@@ -759,31 +730,24 @@ export function createModerationService({
         }
 
         // Fetch pending reports before updating
-        const pendingReports = await trx
-          .selectFrom("learning_reports")
-          .select(["id", "reporter_id"])
-          .where("target_type", "=", "reply")
-          .where("target_id", "=", replyId)
-          .where("status", "=", "pending")
-          .execute();
+        const pendingReports = await moderationRepo.listPendingReportsForTarget(
+          trx,
+          "reply",
+          replyId,
+        );
 
         // Transition pending reports on this reply to actioned or reviewed
         const targetReportStatus =
           input.action === "hide" || input.action === "delete"
             ? "actioned"
             : "reviewed";
-        await trx
-          .updateTable("learning_reports")
-          .set({
-            status: targetReportStatus,
-            reviewed_by_user_id: actor.userId,
-            action_taken: input.action,
-            updated_at: new Date(),
-          })
-          .where("target_type", "=", "reply")
-          .where("target_id", "=", replyId)
-          .where("status", "=", "pending")
-          .execute();
+        await moderationRepo.resolvePendingReportsForTarget(trx, {
+          targetType: "reply",
+          targetId: replyId,
+          status: targetReportStatus,
+          reviewedByUserId: actor.userId,
+          actionTaken: input.action,
+        });
 
         const academyId = await resolveAcademyId(trx);
         await moderationRepo.createAuditLog(trx, {

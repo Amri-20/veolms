@@ -172,6 +172,18 @@ export async function updateMediaAssetStatus(
     .execute();
 }
 
+export async function updateMediaAssetDuration(
+  database: Kysely<Database>,
+  mediaId: string,
+  durationSeconds: number,
+) {
+  await database
+    .updateTable("media_assets")
+    .set({ duration_seconds: durationSeconds, updated_at: new Date() })
+    .where("id", "=", mediaId)
+    .execute();
+}
+
 export async function updateMediaAssetProbedDetails(
   database: Kysely<Database>,
   mediaId: string,
@@ -248,6 +260,27 @@ export async function updateVideoJobStatus(
       updated_at: new Date(),
     })
     .where("id", "=", jobId)
+    .execute();
+}
+
+/**
+ * Records transcoding progress, unless the job has already reached a
+ * terminal status.
+ */
+export async function markVideoJobProcessing(
+  database: Kysely<Database>,
+  jobId: string,
+  progressPercent: number,
+) {
+  await database
+    .updateTable("video_jobs")
+    .set({
+      status: "processing",
+      progress_percent: progressPercent,
+      updated_at: new Date(),
+    })
+    .where("id", "=", jobId)
+    .where("status", "not in", ["completed", "failed", "cancelled"])
     .execute();
 }
 
@@ -346,6 +379,32 @@ export async function findVideoJobProgress(
   return await query
     .orderBy("video_jobs.created_at", "desc")
     .limit(1)
+    .executeTakeFirst();
+}
+
+/** The course a playback request names by id, unless it has been deleted. */
+export async function findPlaybackCourseById(
+  database: Kysely<Database>,
+  courseId: string,
+) {
+  return database
+    .selectFrom("courses")
+    .select(["id", "creator_id", "status"])
+    .where("id", "=", courseId)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+}
+
+/** The course a playback request names by slug, unless it has been deleted. */
+export async function findPlaybackCourseBySlug(
+  database: Kysely<Database>,
+  slug: string,
+) {
+  return database
+    .selectFrom("courses")
+    .select(["id", "creator_id", "status"])
+    .where("slug", "=", slug)
+    .where("deleted_at", "is", null)
     .executeTakeFirst();
 }
 

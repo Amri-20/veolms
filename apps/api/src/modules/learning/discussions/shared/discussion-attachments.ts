@@ -6,6 +6,9 @@ import type {
 import type { S3StorageService } from "@veolms/storage";
 import { getCdnDeliveryUrl } from "../../../../services/cdn-delivery.ts";
 import { getAttachmentDimensionFields } from "./discussion-attachment-metadata.ts";
+import { createDiscussionRepository } from "./discussion.repository.ts";
+
+const discussionRepo = createDiscussionRepository();
 
 /** The attachment columns a thread or reply response is built from. */
 export interface DiscussionAttachmentRow {
@@ -32,25 +35,11 @@ export async function listReadyAttachments(
   const byTargetId = new Map<string, DiscussionAttachmentRow[]>();
   if (targetIds.length === 0) return byTargetId;
 
-  const rows = await db
-    .selectFrom("learning_attachments")
-    .select([
-      "id",
-      "target_id",
-      "kind",
-      "file_name",
-      "storage_key",
-      "file_url",
-      "mime_type",
-      "file_size",
-      "metadata",
-    ])
-    .where("target_type", "=", targetType)
-    .where("target_id", "in", [...targetIds])
-    .where("status", "=", "ready")
-    .orderBy("created_at", "asc")
-    .orderBy("id", "asc")
-    .execute();
+  const rows = await discussionRepo.listReadyAttachmentRows(
+    db,
+    targetType,
+    targetIds,
+  );
 
   for (const { target_id: targetId, ...attachment } of rows) {
     if (!targetId) continue;

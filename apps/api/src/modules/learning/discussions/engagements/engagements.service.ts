@@ -13,6 +13,7 @@ import {
   createDiscussionAccess,
   type DiscussionActor,
 } from "../shared/discussion.access.ts";
+import { createDiscussionRepository } from "../shared/discussion.repository.ts";
 import {
   createNotesRepository,
   type NotesRepository,
@@ -77,6 +78,7 @@ export function createEngagementsService({
   engagementsRepo: EngagementsRepository;
 }): EngagementsService {
   const courseAccess = createDiscussionAccess();
+  const discussionRepo = createDiscussionRepository();
 
   return {
     async toggleLike(db, actor, targetType, targetId) {
@@ -380,11 +382,7 @@ export function createEngagementsService({
         );
       }
 
-      const course = await db
-        .selectFrom("courses")
-        .select("id")
-        .where("id", "=", input.courseId)
-        .executeTakeFirst();
+      const course = await discussionRepo.findCourseId(db, input.courseId);
       if (!course) {
         throw httpError(404, "COURSE_NOT_FOUND", "Course not found");
       }

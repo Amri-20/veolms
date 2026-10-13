@@ -14,7 +14,7 @@ import {
   PUBLIC_PROFILE_USERNAME_MIN_LENGTH,
 } from "@veolms/contracts";
 import type { S3StorageService } from "@veolms/storage";
-import { sql, type Kysely } from "kysely";
+import type { Kysely } from "kysely";
 
 import { AppError } from "../../../lib/errors.ts";
 import {
@@ -300,9 +300,7 @@ export function createAuthService({
     fn: (executor: DatabaseExecutor) => Promise<T>,
   ): Promise<T> {
     const result = await database.transaction().execute(async (trx) => {
-      await sql`select pg_advisory_xact_lock(hashtext(${`veolms:user-avatar:${userId}`}))`.execute(
-        trx,
-      );
+      await userRepository.lockUserAvatar(trx, userId);
       return fn(trx);
     });
     // Every avatar change is saved through here. See forgetCachedAccount.
@@ -1192,9 +1190,7 @@ export function createAuthService({
 
     try {
       await database.transaction().execute(async (trx) => {
-        await sql`select pg_advisory_xact_lock(hashtext('veolms:user-bootstrap'))`.execute(
-          trx,
-        );
+        await userRepository.lockUserBootstrap(trx);
 
         const isFirstUser = (await userRepository.countUsers(trx)) === 0;
         if (isFirstUser && !input.allowBootstrapAdmin) {

@@ -499,6 +499,98 @@ export interface ThreadsRepository {
     threadId: string,
     status: InteractionStatus,
   ): Promise<void>;
+
+  /** Which of the given threads the user has liked. */
+  listThreadLikes(
+    db: DatabaseExecutor,
+    userId: string,
+    threadIds: readonly string[],
+  ): Promise<Array<{ target_id: string }>>;
+
+  listThreadBookmarks(
+    db: DatabaseExecutor,
+    userId: string,
+    threadIds: readonly string[],
+  ): Promise<Array<{ thread_id: string | null }>>;
+
+  listThreadFollows(
+    db: DatabaseExecutor,
+    userId: string,
+    threadIds: readonly string[],
+  ): Promise<Array<{ thread_id: string }>>;
+
+  listNoteBookmarks(
+    db: DatabaseExecutor,
+    userId: string,
+    noteIds: readonly string[],
+  ): Promise<Array<{ note_id: string | null }>>;
+
+  /**
+   * Attaches the owner's own ready, still-unattached uploads to the thread
+   * in one statement. An id that does not qualify is left as it is.
+   */
+  attachOwnedUploads(
+    db: DatabaseExecutor,
+    input: { attachmentIds: string[]; ownerId: string; threadId: string },
+  ): Promise<void>;
+
+  /** One page (plus one row) of the workspace's Notes tab. */
+  listWorkspaceNotes(
+    db: DatabaseExecutor,
+    options: WorkspaceNoteFilterOptions,
+  ): Promise<WorkspaceNoteRow[]>;
+
+  /** Active direct replies under each of the given replies. */
+  countActiveRepliesByParent(
+    db: DatabaseExecutor,
+    replyIds: string[],
+  ): Promise<Array<{ parent_reply_id: string | null; count: number }>>;
+
+  /**
+   * Row-locks the thread for the rest of the transaction and returns its
+   * current accepted answer.
+   */
+  lockAcceptedAnswer(
+    db: DatabaseExecutor,
+    threadId: string,
+  ): Promise<{ id: string; acceptedAnswerId: string | null } | undefined>;
+}
+
+export interface WorkspaceNoteRow {
+  id: string;
+  userId: string;
+  authorName: string | null;
+  authorUsername: string | null;
+  authorAvatarUrl: string | null;
+  courseId: string;
+  courseTitle: string;
+  lessonId: string;
+  lessonTitle: string;
+  timestampSeconds: number | null;
+  title: string | null;
+  content: string;
+  plainText: string;
+  visibility: DiscussionVisibility;
+  likesCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface WorkspaceNoteFilterOptions {
+  academyId: string;
+  /** The viewer: whose own notes are listed alongside public ones. */
+  userId: string;
+  courseId?: string;
+  /** Applied only when no `courseId` is given. */
+  accessibleCourseIds: readonly string[] | "all";
+  lessonId?: string;
+  /** `true` restricts the list to the viewer's own notes. */
+  mine?: boolean;
+  visibility?: DiscussionVisibility;
+  search?: string;
+  pageCursor?: DiscussionListCursor;
+  sort: "latest" | "activity";
+  limit: number;
 }
 
 function applyThreadFilters<O>(
@@ -1184,6 +1276,184 @@ export function createThreadsRepository(): ThreadsRepository {
         })
         .where("id", "=", threadId)
         .execute();
+    },
+
+    async listThreadLikes(db, userId, threadIds) {
+      return db
+        .selectFrom("learning_likes")
+        .select("target_id")
+        .where("user_id", "=", userId)
+        .where("target_type", "=", "thread")
+        .where("target_id", "in", [...threadIds])
+        .execute();
+    },
+
+    async listThreadBookmarks(db, userId, threadIds) {
+      return db
+        .selectFrom("learning_bookmarks")
+        .select("thread_id")
+        .where("user_id", "=", userId)
+        .where("thread_id", "in", [...threadIds])
+        .execute();
+    },
+
+    async listThreadFollows(db, userId, threadIds) {
+      return db
+        .selectFrom("learning_follows")
+        .select("thread_id")
+        .where("user_id", "=", userId)
+        .where("thread_id", "in", [...threadIds])
+        .execute();
+    },
+
+    async listNoteBookmarks(db, userId, noteIds) {
+      return db
+        .selectFrom("learning_bookmarks")
+        .select("note_id")
+        .where("user_id", "=", userId)
+        .where("note_id", "in", [...noteIds])
+        .execute();
+    },
+
+    async attachOwnedUploads(db, { attachmentIds, ownerId, threadId }) {
+      await db
+        .updateTable("learning_attachments")
+        .set({
+          target_type: "thread",
+          target_id: threadId,
+        })
+        .where("id", "in", attachmentIds)
+        .where("owner_id", "=", ownerId)
+        .where("status", "=", "ready")
+        .where("target_id", "is", null)
+        .execute();
+    },
+
+    async listWorkspaceNotes(db, options) {
+      let notesQuery = db
+        .selectFrom("learning_notes as n")
+        // Active accounts only: a note by a deactivated account stays
+        // listed and is presented without an author.
+        .leftJoin("users as u", (join) =>
+          join.onRef("u.id", "=", "n.user_id").on("u.is_deleted", "=", false),
+        )
+        .innerJoin("courses as c", "c.id", "n.course_id")
+        .innerJoin("course_lessons as l", "l.id", "n.lesson_id")
+        .select([
+          "n.id",
+          "n.user_id as userId",
+          "u.display_name as authorName",
+          "u.username as authorUsername",
+          "u.avatar_data_url as authorAvatarUrl",
+          "n.course_id as courseId",
+          "c.title as courseTitle",
+          "n.lesson_id as lessonId",
+          "l.title as lessonTitle",
+          "n.timestamp_seconds as timestampSeconds",
+          "n.title",
+          "n.content",
+          "n.plain_text as plainText",
+          "n.visibility",
+          "n.likes_count as likesCount",
+          "n.created_at as createdAt",
+          "n.updated_at as updatedAt",
+        ])
+        .where("n.academy_id", "=", options.academyId)
+        .where("c.deleted_at", "is", null)
+        .whereRef("l.course_id", "=", "n.course_id");
+
+      if (options.courseId) {
+        notesQuery = notesQuery.where("n.course_id", "=", options.courseId);
+      } else if (options.accessibleCourseIds !== "all") {
+        notesQuery = notesQuery.where("n.course_id", "in", [
+          ...options.accessibleCourseIds,
+        ]);
+      }
+
+      if (options.lessonId) {
+        notesQuery = notesQuery.where("n.lesson_id", "=", options.lessonId);
+      }
+
+      if (options.mine === true) {
+        // `mine=true` is an ownership constraint for every role.
+        notesQuery = notesQuery.where("n.user_id", "=", options.userId);
+        if (options.visibility) {
+          notesQuery = notesQuery.where(
+            "n.visibility",
+            "=",
+            options.visibility,
+          );
+        }
+      } else if (
+        options.visibility === "private" ||
+        options.visibility === "unlisted"
+      ) {
+        // Canonical Note discovery does not list another user's private or
+        // unlisted Notes. Preserve that rule for the workspace feed.
+        notesQuery = notesQuery
+          .where("n.user_id", "=", options.userId)
+          .where("n.visibility", "=", options.visibility);
+      } else if (options.visibility === "public") {
+        notesQuery = notesQuery.where("n.visibility", "=", "public");
+      } else {
+        notesQuery = notesQuery.where((eb) =>
+          eb.or([
+            eb("n.user_id", "=", options.userId),
+            eb("n.visibility", "=", "public"),
+          ]),
+        );
+      }
+
+      if (options.search) {
+        const pattern = containsPattern(options.search);
+        notesQuery = notesQuery.where((eb) =>
+          eb.or([
+            eb(sql`lower(n.title)`, "like", pattern),
+            eb(sql`lower(n.plain_text)`, "like", pattern),
+          ]),
+        );
+      }
+
+      if (options.pageCursor) {
+        notesQuery = notesQuery.where(
+          options.sort === "activity"
+            ? updatedAtIdDescSql("n", options.pageCursor, "learning_notes")
+            : createdAtIdDescSql("n", options.pageCursor, "learning_notes"),
+        );
+      }
+
+      notesQuery =
+        options.sort === "activity"
+          ? notesQuery
+              .orderBy("n.updated_at", "desc")
+              .orderBy("n.id", "desc")
+              .limit(options.limit + 1)
+          : notesQuery
+              .orderBy("n.created_at", "desc")
+              .orderBy("n.id", "desc")
+              .limit(options.limit + 1);
+
+      return notesQuery.execute();
+    },
+
+    async countActiveRepliesByParent(db, replyIds) {
+      return db
+        .selectFrom("learning_replies")
+        .select("parent_reply_id")
+        .select(sql<number>`count(*)::int`.as("count"))
+        .where("parent_reply_id", "in", replyIds)
+        .where("status", "=", "active")
+        .groupBy("parent_reply_id")
+        .execute();
+    },
+
+    async lockAcceptedAnswer(db, threadId) {
+      return db
+        .selectFrom("learning_threads")
+        .select(["id", "accepted_answer_id as acceptedAnswerId"])
+        .where("id", "=", threadId)
+        .forUpdate()
+        .executeTakeFirst();
     },
   };
 }

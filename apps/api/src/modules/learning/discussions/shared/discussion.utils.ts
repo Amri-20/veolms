@@ -2,6 +2,9 @@ import type { DatabaseExecutor } from "@veolms/database";
 import { sql } from "kysely";
 import { httpError } from "../../../../lib/errors.ts";
 import { exactCursorTimestamp } from "../../../../lib/keyset.ts";
+import { createDiscussionRepository } from "./discussion.repository.ts";
+
+const discussionRepo = createDiscussionRepository();
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -211,10 +214,7 @@ let cachedAcademyId: string | null = null;
 
 export async function resolveAcademyId(db: DatabaseExecutor): Promise<string> {
   if (cachedAcademyId) return cachedAcademyId;
-  const academy = await db
-    .selectFrom("academy")
-    .select("id")
-    .executeTakeFirst();
+  const academy = await discussionRepo.findAcademyId(db);
   if (!academy?.id) {
     throw httpError(
       500,
