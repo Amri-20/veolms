@@ -28,6 +28,18 @@ export const refundResultSchema = z.strictObject({
 });
 export type RefundResult = z.infer<typeof refundResultSchema>;
 
+/**
+ * Marks a refund as one staff already made outside the platform, for an
+ * order paid by manual bank or UPI transfer. No money is moved: the refund
+ * is only recorded. `reference` is what staff put on the transfer back (a
+ * UTR, say); one reference can be recorded once, whatever its spacing or
+ * letter case.
+ */
+export const outsideRefundSchema = z.strictObject({
+  reference: z.string().trim().min(1).max(100),
+});
+export type OutsideRefund = z.infer<typeof outsideRefundSchema>;
+
 export const createRefundRequestSchema = z.strictObject({
   orderId: z.uuid(),
   orderItemId: z.uuid().optional(),
@@ -35,6 +47,8 @@ export const createRefundRequestSchema = z.strictObject({
   reason: z.string().max(500).optional(),
   preserveAccess: z.boolean().default(false),
   idempotencyKey: z.string().min(1).max(255).optional(),
+  /** Only for an order paid by manual transfer; refused for any other. */
+  outsideRefund: outsideRefundSchema.optional(),
 });
 export type CreateRefundRequest = z.infer<typeof createRefundRequestSchema>;
 

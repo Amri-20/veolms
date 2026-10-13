@@ -1,5 +1,14 @@
-import type { NeedsRefundEntry } from "@veolms/contracts";
+import type {
+  ManualTransferForClosedOrderNeedsRefund,
+  ManualTransferForPaidOrderNeedsRefund,
+  NeedsRefundEntry,
+} from "@veolms/contracts";
 import { formatCurrency, formatOrderDate } from "./orderHelpers";
+
+/** A transfer a learner reported that staff can no longer verify. */
+export type ReportedTransferEntry =
+  | ManualTransferForPaidOrderNeedsRefund
+  | ManualTransferForClosedOrderNeedsRefund;
 
 /**
  * The words the Orders screen shows for one payment that staff have to
@@ -9,10 +18,15 @@ import { formatCurrency, formatOrderDate } from "./orderHelpers";
 export interface NeedsRefundLines {
   buyerName: string;
   buyerEmail: string | null;
+  /** The course, or "Bundle: ..." when a whole bundle was paid for twice. */
   courseTitle: string;
   /** What has to go back, formatted: "₹600". */
   amount: string;
-  /** What that amount is: "Amount", or "Order total" for a transfer. */
+  /**
+   * What that amount is: "Amount"; "Order total" for a transfer; "Bundle
+   * price" when it is the price of a bundle the course is inside, of which
+   * staff decide how much to return.
+   */
   amountLabel: string;
   /** "₹100 already refunded", when part of it has gone back. */
   refundedNote: string | null;
@@ -51,33 +65,72 @@ function transferName(paymentMethod: string): string {
   return "a transfer";
 }
 
+/** Whether an entry is a reported transfer: the kinds staff close by rejecting. */
+export function isReportedTransfer(
+  entry: NeedsRefundEntry,
+): entry is ReportedTransferEntry {
+  return (
+    entry.kind === "manual_transfer_for_paid_order" ||
+    entry.kind === "manual_transfer_for_closed_order"
+  );
+}
+
+/**
+ * The note kept with a request rejected from the Orders screen, so the
+ * review queue says why it was closed.
+ */
+export function transferRejectionNote(entry: ReportedTransferEntry): string {
+  if (entry.kind === "manual_transfer_for_closed_order") {
+    return entry.orderStatus === "cancelled"
+      ? "Rejected from the Orders screen: the order was cancelled."
+      : "Rejected from the Orders screen: the order failed.";
+  }
+  return "Rejected from the Orders screen: the order was paid another way.";
+}
+
 export function describeNeedsRefundEntry(
   entry: NeedsRefundEntry,
 ): NeedsRefundLines {
   const buyerAndCourse = {
     buyerName: entry.buyer.name,
     buyerEmail: entry.buyer.email,
-    courseTitle: entry.courseTitle || "Course order",
+    courseTitle:
+      entry.kind === "duplicate_bundle_purchase"
+        ? `Bundle: ${entry.bundleTitle}`
+        : entry.courseTitle || "Course order",
     amount: formatCurrency(entry.amount, entry.currency),
   };
 
   // Money the platform never recorded: there is no payment to refund and
   // nothing has gone back that it could know of. What staff have is the
   // reference the buyer gave, and the request to close when they are done.
-  if (entry.kind === "manual_transfer_for_paid_order") {
+  if (isReportedTransfer(entry)) {
     const orderNumber = withHash(entry.order.orderNumber);
-    return {
+    const transfer = {
       ...buyerAndCourse,
       amountLabel: "Order total",
       refundedNote: null,
-      reason: `The learner reported ${transferName(entry.paymentMethod)} for order ${orderNumber}, and the order was then paid another way. Nothing was granted for the transfer.`,
-      action:
-        "Check your bank account for this transfer. If it arrived, return it to the learner outside the platform. Then reject this request.",
       orderNumber,
       orderLabel: "Order",
       reference: entry.transactionReference,
       referenceLabel: "Reference",
       when: onDate("Reported", entry.submittedAt),
+    };
+    // The order was never paid: the learner got nothing for it, and the
+    // request cannot be verified any more, so it would wait for good.
+    if (entry.kind === "manual_transfer_for_closed_order") {
+      return {
+        ...transfer,
+        reason: `The learner reported ${transferName(entry.paymentMethod)} for order ${orderNumber}, and the order ${entry.orderStatus === "cancelled" ? "was then cancelled" : "then failed"}. It was never paid, so the learner got no access from it and this request can no longer be verified.`,
+        action:
+          "Check your bank account for this transfer. If it arrived, return it to the learner outside the platform, or ask the learner to buy again. Then reject this request.",
+      };
+    }
+    return {
+      ...transfer,
+      reason: `The learner reported ${transferName(entry.paymentMethod)} for order ${orderNumber}, and the order was then paid another way. Nothing was granted for the transfer.`,
+      action:
+        "Check your bank account for this transfer. If it arrived, return it to the learner outside the platform. Then reject this request.",
     };
   }
 
@@ -107,15 +160,58 @@ export function describeNeedsRefundEntry(
 
   const later = withHash(entry.order.orderNumber);
   const earlier = withHash(entry.earlierOrder.orderNumber);
-  const reason = `Paid for twice: order ${earlier} first, then order ${later}. The learner keeps access either way.`;
+  const keepsAccess = "The learner keeps access either way.";
+
+  // The course is inside a bundle on the later order. A bundle's courses
+  // are not priced one by one, so there is no amount to name: the bundle's
+  // price is shown as what it is, and staff decide how much of it to return.
+  if (entry.kind === "duplicate_purchase" && entry.bundleTitle !== null) {
+    const first = entry.earlierOrder.bundleTitle
+      ? `inside the bundle "${entry.earlierOrder.bundleTitle}" on order ${earlier}`
+      : `on order ${earlier}`;
+    const inBundle = {
+      ...shared,
+      amountLabel: "Bundle price",
+      reason: `Paid for twice: ${first} first, then inside the bundle "${entry.bundleTitle}" on order ${later}. ${keepsAccess}`,
+      orderNumber: later,
+    };
+    if (entry.gatewayProvider === "manual") {
+      return {
+        ...inBundle,
+        action:
+          "The later order was paid by manual transfer and cannot be refunded from here. One course of a bundle has no price of its own: decide how much to return, and return it outside the platform.",
+        orderLabel: "Later order",
+      };
+    }
+    return {
+      ...inBundle,
+      action:
+        "One course of a bundle has no price of its own: decide how much to return for this course and make a partial refund of that amount on the later order. Do not refund all of it unless the whole bundle is to go back.",
+      orderLabel: "Order to refund",
+    };
+  }
+
+  const what =
+    entry.kind === "duplicate_bundle_purchase" ? "Bundle paid" : "Paid";
+  // Set when the earlier order holds the course inside a bundle.
+  const earlierBundle =
+    entry.kind === "duplicate_purchase" ? entry.earlierOrder.bundleTitle : null;
+  const firstOrder = earlierBundle
+    ? `inside the bundle "${earlierBundle}" on order ${earlier}`
+    : `order ${earlier}`;
+  const reason = `${what} for twice: ${firstOrder} first, then order ${later}. ${keepsAccess}`;
 
   // A manual transfer cannot be sent back from this screen, so the usual
-  // advice would lead to a refusal.
+  // advice would lead to a refusal. Refunding the earlier order instead is
+  // only the same thing when that order holds the same item, not a bundle
+  // with other courses in it.
   if (entry.gatewayProvider === "manual") {
     return {
       ...shared,
       reason,
-      action: `The later order was paid by manual transfer and cannot be refunded from here. Refund order ${earlier} instead, or return the money outside the platform.`,
+      action: earlierBundle
+        ? `The later order was paid by manual transfer and cannot be refunded from here. Return ${shared.amount} to the learner outside the platform.`
+        : `The later order was paid by manual transfer and cannot be refunded from here. Refund order ${earlier} instead, or return the money outside the platform.`,
       orderNumber: later,
       orderLabel: "Later order",
     };

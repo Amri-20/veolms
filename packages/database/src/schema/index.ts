@@ -72,6 +72,7 @@ import type {
   CouponRedemptionTable,
   OrderTable,
   OrderItemTable,
+  OrderItemCourseTable,
   PaymentTable,
   PaymentAttemptTable,
   RefundTable,
@@ -176,6 +177,7 @@ export interface Database {
   coupon_redemptions: CouponRedemptionTable;
   orders: OrderTable;
   order_items: OrderItemTable;
+  order_item_courses: OrderItemCourseTable;
   payments: PaymentTable;
   payment_attempts: PaymentAttemptTable;
   refunds: RefundTable;

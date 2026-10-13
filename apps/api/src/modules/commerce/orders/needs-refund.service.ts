@@ -8,20 +8,24 @@ import { AppError } from "../../../lib/errors.ts";
 import type { Executor } from "../shared/repository.types.ts";
 import {
   compareNewestFirst,
+  isCourseDuplicateStillOwed,
   isDuplicateStillOwed,
   toCursorTime,
+  toDuplicateBundlePurchaseEntry,
   toDuplicatePurchaseEntry,
-  toManualTransferForPaidOrderEntry,
+  toStuckManualTransferEntry,
   toSurplusPaymentEntry,
+  withoutCoursesOfDuplicateBundles,
 } from "./needs-refund.mapper.ts";
 import * as needsRefundRepo from "./needs-refund.repository.ts";
 
 export interface NeedsRefundService {
   /**
    * Money staff have to return by hand, newest first: surplus payments
-   * still to be returned, duplicate purchases, and transfers reported for
-   * an order that was then paid another way. Read-only; nothing is
-   * refunded and no access changes because something is on this list.
+   * still to be returned, courses and bundles paid for twice, and
+   * transfers reported for an order that was then paid another way,
+   * cancelled or failed. Read-only; nothing is refunded and no access
+   * changes because something is on this list.
    */
   listNeedsRefund(
     query: NeedsRefundListQuery,
@@ -59,13 +63,13 @@ export function createNeedsRefundService({
     // One more than a page of each kind. Whatever the mix, the newest
     // `limit` of them all together are then in hand, and anything beyond
     // them means there is another page.
-    const [surplusRows, allDuplicateRows, transferRows] = await Promise.all([
+    const [surplusRows, duplicates, transferRows] = await Promise.all([
       needsRefundRepo.listSurplusPaymentsToReturn(database, {
         cursor: decoded,
         limit: limit + 1,
       }),
       needsRefundRepo.listDuplicatePurchases(database),
-      needsRefundRepo.listManualTransfersForPaidOrders(database, {
+      needsRefundRepo.listStuckManualTransfers(database, {
         cursor: decoded,
         limit: limit + 1,
       }),
@@ -74,14 +78,27 @@ export function createNeedsRefundService({
       paid_at_cursor: decoded.paidAt,
       id: decoded.id,
     };
-    const duplicateRows = allDuplicateRows
-      .filter(isDuplicateStillOwed)
-      .filter((row) => !after || compareNewestFirst(row, after) > 0)
-      .slice(0, limit + 1);
+    const onThisPage = <Row extends { paid_at_cursor: string; id: string }>(
+      rows: Row[],
+    ) =>
+      rows
+        .filter((row) => !after || compareNewestFirst(row, after) > 0)
+        .slice(0, limit + 1);
+    // The same bundle in both orders is one entry, not one per course.
+    const duplicateRows = onThisPage(
+      withoutCoursesOfDuplicateBundles(
+        duplicates.courses,
+        duplicates.bundles,
+      ).filter(isCourseDuplicateStillOwed),
+    );
+    const duplicateBundleRows = onThisPage(
+      duplicates.bundles.filter(isDuplicateStillOwed),
+    );
 
     const merged = [
       ...surplusRows.map((row) => ({ kind: "surplus" as const, row })),
       ...duplicateRows.map((row) => ({ kind: "duplicate" as const, row })),
+      ...duplicateBundleRows.map((row) => ({ kind: "bundle" as const, row })),
       ...transferRows.map((row) => ({ kind: "transfer" as const, row })),
     ].sort((a, b) => compareNewestFirst(a.row, b.row));
     const pageRows = merged.slice(0, limit);
@@ -102,7 +119,10 @@ export function createNeedsRefundService({
       if (entry.kind === "duplicate") {
         return toDuplicatePurchaseEntry(entry.row, buyer);
       }
-      return toManualTransferForPaidOrderEntry(entry.row, buyer);
+      if (entry.kind === "bundle") {
+        return toDuplicateBundlePurchaseEntry(entry.row, buyer);
+      }
+      return toStuckManualTransferEntry(entry.row, buyer);
     });
 
     const last = pageRows[pageRows.length - 1]!.row;
