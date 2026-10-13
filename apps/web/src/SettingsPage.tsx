@@ -71,6 +71,8 @@ export interface SettingsPageProps {
   onSidebarPreferencesChange: (preferences: SidebarPreferences) => void;
   sidebarMode: SidebarMode;
   onSidebarModeChange: (mode: SidebarMode) => void;
+  sidebarWidthIsDefault: boolean;
+  onSidebarWidthReset: () => void;
   userRoles?: readonly string[] | null;
 }
 
@@ -111,6 +113,8 @@ const SettingsTabContent = memo(function SettingsTabContent({
           academyTheme={pageProps.academyTheme}
           sidebarMode={pageProps.sidebarMode}
           onSidebarModeChange={pageProps.onSidebarModeChange}
+          sidebarWidthIsDefault={pageProps.sidebarWidthIsDefault}
+          onSidebarWidthReset={pageProps.onSidebarWidthReset}
         />
       );
     case "learning":
@@ -153,6 +157,8 @@ export function SettingsPage({
   onSidebarPreferencesChange,
   sidebarMode,
   onSidebarModeChange,
+  sidebarWidthIsDefault,
+  onSidebarWidthReset,
 }: SettingsPageProps) {
   const activeTab = normalizeSettingsTab(tab);
   const storeIsAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -185,6 +191,8 @@ export function SettingsPage({
       onSidebarPreferencesChange,
       sidebarMode,
       onSidebarModeChange,
+      sidebarWidthIsDefault,
+      onSidebarWidthReset,
     }),
     [
       academyTheme,
@@ -197,12 +205,14 @@ export function SettingsPage({
       onProfileSaved,
       onSidebarModeChange,
       onSidebarPreferencesChange,
+      onSidebarWidthReset,
       onThemeChange,
       onToggleFullscreen,
       pageTabColors,
       role,
       sidebarMode,
       sidebarPreferences,
+      sidebarWidthIsDefault,
       theme,
     ],
   );

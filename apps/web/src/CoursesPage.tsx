@@ -176,6 +176,7 @@ import { learningProgressKeys } from "./services/learning-progress";
 import { mediaKeys } from "./services/media";
 
 import {
+  SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MIN_WIDTH,
   applySidebarShellToDocument,
   clampSidebarMaxWidth,
@@ -4000,6 +4001,13 @@ export function CoursesPage({
     localStorage.setItem("veolms-sidebar-width", String(Math.round(nextWidth)));
   };
 
+  // Removing the saved width, rather than saving the default, lets a later
+  // change of the default reach this browser.
+  const resetSidebarWidth = () => {
+    setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
+    localStorage.removeItem("veolms-sidebar-width");
+  };
+
   const createSidebarGesture = ({
     active,
     clientX,
@@ -5023,6 +5031,8 @@ export function CoursesPage({
             onSidebarPreferencesChange={setSidebarPreferences}
             sidebarMode={renderedSidebarMode}
             onSidebarModeChange={setSidebarMode}
+            sidebarWidthIsDefault={sidebarWidth === SIDEBAR_DEFAULT_WIDTH}
+            onSidebarWidthReset={resetSidebarWidth}
           />
         </Suspense>
       );

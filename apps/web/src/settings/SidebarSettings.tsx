@@ -1,5 +1,4 @@
 import { CheckIcon as Check } from "@phosphor-icons/react/Check";
-import { ArrowCounterClockwiseIcon as ArrowCounterClockwise } from "@phosphor-icons/react/ArrowCounterClockwise";
 import { CircleHalfIcon as CircleHalf } from "@phosphor-icons/react/CircleHalf";
 import { DeviceMobileIcon as DeviceMobile } from "@phosphor-icons/react/DeviceMobile";
 import { InfoIcon as Info } from "@phosphor-icons/react/Info";
@@ -20,6 +19,7 @@ import {
   RadioGroup,
   RecommendedBadge,
   SettingRow,
+  SettingsResetButton,
   SettingsToggle,
 } from "./SettingsControls";
 import { MiniSurface, SidebarIconPreview } from "./SettingsPreviews";
@@ -41,6 +41,7 @@ import {
   SIDEBAR_GLOW_SHAPE_SIZE_DEFAULT,
   SIDEBAR_GLOW_SHAPE_SIZE_MAX,
   SIDEBAR_GLOW_SHAPE_SIZE_MIN,
+  SIDEBAR_MAX_WIDTH_DEFAULT,
   SIDEBAR_MAX_WIDTH_LIMIT,
   SIDEBAR_MAX_WIDTH_MIN,
 } from "./settingsPreferences";
@@ -132,6 +133,10 @@ export interface SidebarSettingsProps {
   academyTheme: AcademyTheme["id"];
   sidebarMode: SidebarMode;
   onSidebarModeChange?: (mode: SidebarMode) => void;
+  // The width the sidebar was dragged to is shell state, kept outside the
+  // preferences, so its reset is handed down separately.
+  sidebarWidthIsDefault?: boolean;
+  onSidebarWidthReset?: () => void;
 }
 
 export function SidebarSettings({
@@ -140,6 +145,8 @@ export function SidebarSettings({
   academyTheme,
   sidebarMode,
   onSidebarModeChange,
+  sidebarWidthIsDefault = true,
+  onSidebarWidthReset,
 }: SidebarSettingsProps) {
   const preferences = sidebarPreferences || {};
   const iconStyle = preferences.iconStyle || "multicolor";
@@ -179,6 +186,10 @@ export function SidebarSettings({
     glowShapeSize === SIDEBAR_GLOW_SHAPE_SIZE_DEFAULT &&
     glowBlur === SIDEBAR_GLOW_BLUR_DEFAULT &&
     glowIntensity === SIDEBAR_GLOW_INTENSITY_DEFAULT;
+  const widthSettingsAreDefault =
+    sidebarMaxWidth === SIDEBAR_MAX_WIDTH_DEFAULT &&
+    !showResizeDimensions &&
+    sidebarWidthIsDefault;
   const shortcutPlatform = useShortcutPlatform();
   const sidebarHidden = sidebarMode === "hidden";
   const [colorDraft, setColorDraft] = useState(displayColor);
@@ -212,6 +223,14 @@ export function SidebarSettings({
     const normalizedWidth = normalizeSidebarMaxWidth(sidebarWidthDraft);
     setSidebarWidthDraft(String(normalizedWidth));
     update({ sidebarMaxWidth: normalizedWidth });
+  };
+
+  const resetWidthSettings = () => {
+    update({
+      sidebarMaxWidth: SIDEBAR_MAX_WIDTH_DEFAULT,
+      showResizeDimensions: false,
+    });
+    onSidebarWidthReset?.();
   };
 
   return (
@@ -416,11 +435,9 @@ export function SidebarSettings({
                 Follow the active theme or choose a separate color atmosphere.
               </p>
             </div>
-            <button
-              type="button"
-              className="settings-sidebar-glow-reset"
+            <SettingsResetButton
               disabled={glowIsDefault}
-              onClick={() =>
+              onReset={() =>
                 update({
                   glowPalette: SIDEBAR_GLOW_DEFAULT,
                   glowShape: SIDEBAR_GLOW_SHAPE_DEFAULT,
@@ -429,11 +446,8 @@ export function SidebarSettings({
                   glowIntensity: SIDEBAR_GLOW_INTENSITY_DEFAULT,
                 })
               }
-              aria-label="Reset sidebar glow to defaults"
-            >
-              <ArrowCounterClockwise size={16} weight="bold" />
-              Reset
-            </button>
+              label="Reset sidebar glow to defaults"
+            />
           </div>
           <RadioGroup
             label="Sidebar glow colors"
@@ -669,12 +683,11 @@ export function SidebarSettings({
               <h2>Sidebar max width</h2>
               <p>Set the widest size available when the sidebar is expanded.</p>
             </div>
-            <output
-              className="settings-sidebar-width__value"
-              htmlFor="sidebar-max-width-range"
-            >
-              {sidebarMaxWidth}px
-            </output>
+            <SettingsResetButton
+              disabled={widthSettingsAreDefault}
+              onReset={resetWidthSettings}
+              label="Reset sidebar width settings to defaults"
+            />
           </div>
           <div className="settings-sidebar-width__controls">
             <label

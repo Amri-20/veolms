@@ -3,7 +3,7 @@ import {
   type BuiltInPlayerThemeId,
 } from "@veolms/video-player/theme-ids";
 
-export const SIDEBAR_MAX_WIDTH_MIN = 220;
+export const SIDEBAR_MAX_WIDTH_MIN = 200;
 export const SIDEBAR_MAX_WIDTH_DEFAULT = 300;
 export const SIDEBAR_MAX_WIDTH_LIMIT = 520;
 
