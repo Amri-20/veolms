@@ -1,6 +1,6 @@
 # What is left after the audit: checklist
 
-Updated 14 Oct 2026, after the seventh round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 26. This file is the short list to work from. Tick a box when it is done.
+Updated 14 Oct 2026, after the double-payment round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 27. This file is the short list to work from. Tick a box when it is done.
 
 ## Done in phases 1 to 3 (13 Oct)
 
@@ -84,6 +84,15 @@ Updated 14 Oct 2026, after the seventh round. The full record is `docs/AUDIT_REC
 - [x] Notifications uses the shared search shortcut; Ctrl+K and Cmd+K both work outside text fields (F11).
 - [x] Lint warnings down from 23 to 12.
 
+## Done in the double-payment round (14 Oct)
+
+- [x] The amount or coupon cannot be changed while a checkout for that purchase may still be open.
+- [x] Two overlapping purchases (a course and a bundle that holds it) cannot both be open.
+- [x] A bundle is refused if the buyer owns any of its courses.
+- [x] A reported bank transfer closes Pay for that purchase until staff answer; an open checkout closes transfer reporting.
+- [x] Two requests at the same instant give one open order.
+- [x] The payment window closes itself after 10 minutes.
+
 ## A. Right after each push
 
 Pushing `dev` deploys the API and the web together.
@@ -113,6 +122,9 @@ The first, third and ninth were seen in a local browser run in the fourth round.
 - [ ] Look at the accent text colour on a few themes, light and dark. It was changed by calculation, not by eye.
 - [ ] Play a video: play, pause, seek, open the quality menu, watch the buffering spinner. The player code was changed to satisfy the linter.
 - [ ] Take a timed quiz to the end and let the time run out.
+- [ ] Press Pay, close the payment window, change the amount and press Pay again. It should say a payment was already started and when to try again.
+- [ ] Leave the Razorpay window open for 10 minutes. It should close itself.
+- [ ] Own a course, then try to buy a bundle that holds it. It should be refused and name the course.
 - [ ] Share a course overview link in WhatsApp or Slack. The preview should show the course title, description and picture.
 - [ ] Open a lesson. Its description should show as before.
 - [ ] Post a note, a question and a reply; edit and remove one of your own. The code behind these was moved, not changed.
@@ -141,7 +153,7 @@ The first, third and ninth were seen in a local browser run in the fourth round.
 
 Four of the seven from the last round are fixed. These are left.
 
-- [ ] **A buyer can still pay twice.** Cannot be fixed in code: the gateway cannot withdraw an order it already gave the buyer. It is flagged for staff.
+- [ ] **A buyer can still pay twice in three rare cases** (section 27): a UPI request approved after 12 minutes or an old tab, a double capture by the provider, and two different accounts. Every door the app controls is now closed. These are flagged for staff. Only automatic refunds would cover them.
 - [ ] **Bundle orders paid before 13 Oct** are not compared course by course. Cannot be fixed: what they contained when sold was never recorded.
 - [x] **Accounts that share an email in different letter case.** Closed on 14 Oct: the production count is 0.
 - [ ] **Refund requests have no staff screen in the web.** Approving one works through the API only. See section C.

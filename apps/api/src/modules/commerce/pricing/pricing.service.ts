@@ -326,6 +326,18 @@ export function createPricingService({
           throw CommerceErrors.BUNDLE_ALL_COURSES_OWNED(bundle.title);
         }
 
+        // A bundle is one price for all its courses, so buying it with one
+        // of them already owned paid for that course a second time.
+        const ownedCourses = bundleCourses.filter((c) =>
+          enrolledCourseIds.has(c.course_id),
+        );
+        if (ownedCourses.length > 0) {
+          throw CommerceErrors.BUNDLE_CONTAINS_OWNED_COURSE(
+            bundle.title,
+            ownedCourses.map((c) => c.course_title),
+          );
+        }
+
         const unitPrice = bundle.price;
         const itemCurrency = bundle.currency ?? "INR";
         if (!currencyInitialized) {

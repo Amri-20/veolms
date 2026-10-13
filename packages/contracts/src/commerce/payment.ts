@@ -6,6 +6,14 @@ import type {
   GatewayRefundDetails,
 } from "./refund.ts";
 
+/**
+ * How long a payment window stays open before it closes itself, in seconds.
+ * The web app passes it to the gateway's checkout; the API uses it to tell
+ * whether a gateway order it handed out may still be paid, and refuses to
+ * start a second payment for the same thing until it cannot.
+ */
+export const CHECKOUT_WINDOW_SECONDS = 600;
+
 export const paymentStatusSchema = z.enum([
   "initiated",
   "processing",

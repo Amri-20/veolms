@@ -43,6 +43,37 @@ export const CommerceErrors = {
       "BUNDLE_ALL_COURSES_OWNED",
       `You already own all courses in bundle "${title}".`,
     ),
+  BUNDLE_CONTAINS_OWNED_COURSE: (title: string, ownedTitles: string[]) =>
+    new AppError(
+      409,
+      "BUNDLE_CONTAINS_OWNED_COURSE",
+      `Bundle "${title}" includes ${ownedTitles.map((owned) => `"${owned}"`).join(", ")}, which you are already enrolled in. Buy the other courses on their own so you do not pay for it again.`,
+    ),
+  /**
+   * `secondsLeft` is how long until the earlier payment window is certainly
+   * closed. An error carries no field for it, so the buyer is told in
+   * minutes, rounded up.
+   */
+  CHECKOUT_IN_PROGRESS: (title: string, secondsLeft: number) => {
+    const minutes = Math.max(1, Math.ceil(secondsLeft / 60));
+    return new AppError(
+      409,
+      "CHECKOUT_IN_PROGRESS",
+      `A payment for "${title}" was already started. Finish that payment, or try again in ${minutes} ${minutes === 1 ? "minute" : "minutes"}. This keeps you from paying twice.`,
+    );
+  },
+  MANUAL_PAYMENT_PENDING: (title: string) =>
+    new AppError(
+      409,
+      "MANUAL_PAYMENT_PENDING",
+      `You reported a bank transfer for "${title}". It is being checked, so another payment cannot be started for it now.`,
+    ),
+  CART_ITEMS_OVERLAP: () =>
+    new AppError(
+      409,
+      "CART_ITEMS_OVERLAP",
+      "Your cart already has this course, on its own or inside a bundle. Remove that item first so you do not pay for it twice.",
+    ),
   QUIZ_NOT_FOUND: (id: string) =>
     new AppError(404, "QUIZ_NOT_FOUND", `Quiz offering "${id}" was not found.`),
   QUIZ_NOT_PURCHASABLE: (title: string) =>

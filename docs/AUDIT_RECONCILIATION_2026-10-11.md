@@ -1,6 +1,6 @@
 # Audit reconciliation — 11 Oct 2026
 
-> **Read sections 19 to 26 first, then `docs/AUDIT_REMAINING_CHECKLIST.md`.** Section 19 is the current status of the audit findings and sections 20 to 26 the bug-fix rounds that followed. Section 19 was written on 13 Oct 2026 after every "FIXED" below was re-checked against the code. Sections 2 to 9 are the picture on the morning of 11 Oct, before any fix, and are kept as the record of what was found. Sections 10 to 17 record the first round of fixes; twenty of their "FIXED" entries were wrong and are corrected in section 19.
+> **Read sections 19 to 27 first, then `docs/AUDIT_REMAINING_CHECKLIST.md`.** Section 19 is the current status of the audit findings and sections 20 to 27 the bug-fix rounds that followed. Section 19 was written on 13 Oct 2026 after every "FIXED" below was re-checked against the code. Sections 2 to 9 are the picture on the morning of 11 Oct, before any fix, and are kept as the record of what was found. Sections 10 to 17 record the first round of fixes; twenty of their "FIXED" entries were wrong and are corrected in section 19.
 
 Reconciles the application audit of 9 Oct 2026 (findings S1–S16, C1–C13, A1–A7, F1–F18, B1–B9, P1–P5, X1–X6, R1–R6) against the code on `dev` at `8252933c`. Investigation only: no application code, migration, dependency or data was changed.
 
@@ -988,3 +988,42 @@ These are observations for the owner, each with a file to look at.
 - Each lesson opened makes one extra small request.
 - The description of a prerendered course page changes from "Course overview for … on ProCodrr." to the course's short description.
 - New optional setting: `COURSE_OVERVIEW_LESSON_DESCRIPTIONS` (see `.env.example`).
+
+## 27. One account cannot pay twice: 14 Oct 2026
+
+On `fix/no-double-payment`.
+
+**The owner's decision.**
+
+14. A buyer must not be able to buy the same course twice through one account, or pay twice. Prevention before money moves; still no automatic refunds.
+
+**What already held.** An owned course was refused. One open order per buyer and identical set of items. One gateway order per order while nothing changed.
+
+**How it was verified.** One script of 22 scenarios, run on the code before and after, with the real services and a stand-in gateway, on the owner's demo database (not Docker, not production). Whole tree: `tsc --noEmit`, `eslint .` with 0 errors, 133 of 133 API tests (24 new).
+
+| Gap                                                                        | Before                                                                                   | After                                                                                                                                                        |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The amount or coupon is changed while the first checkout may still be open | A second gateway order was handed out. Paying both: **2 captured payments**.             | Refused with `CHECKOUT_IN_PROGRESS` until the first checkout window has closed. 1 captured payment.                                                          |
+| A course, then a bundle that holds it (or the other way round, or a cart)  | Two open orders. Paying both: **2 captured payments**.                                   | Refused while the first is in checkout. Afterwards the older order is closed before the new one is made.                                                     |
+| A bundle holding a course the buyer already owns                           | Sold unless the buyer owned all of its courses: **2 captured payments** for that course. | Refused with `BUNDLE_CONTAINS_OWNED_COURSE`, also when an open bundle order is resumed. A cart refuses an item that overlaps one already in it.              |
+| A bank transfer reported, then Pay                                         | A gateway order was handed out beside the pending transfer: 2 ways to pay one order.     | Every gateway path for that purchase is refused with `MANUAL_PAYMENT_PENDING` until staff verify or reject the transfer. After a rejection, Pay works again. |
+| Checkout open, then a transfer reported                                    | Accepted.                                                                                | Refused with `CHECKOUT_IN_PROGRESS` until the window has closed.                                                                                             |
+| Two requests at the same instant from two devices                          | 2 open orders, 2 gateway orders.                                                         | 1 open order, 1 gateway order. The check and the creation run under one lock per buyer.                                                                      |
+
+**How the window works.** The web tells the gateway to close its checkout after 10 minutes (`CHECKOUT_WINDOW_SECONDS`). The API counts an order as in checkout for 12 minutes after the gateway order was last handed to the buyer. Opening checkout again for the same amount returns the same order and restarts the 12 minutes. No migration.
+
+**What a buyer will notice.**
+
+- After pressing Pay, they cannot change the amount or coupon for that purchase, or buy something that overlaps it, for up to 12 minutes. This holds even if they closed the payment window themselves, because the server cannot know it was closed. Paying the same amount works at once.
+- A bundle cannot be bought by someone who owns one of its courses.
+- While a reported transfer waits for staff, the buyer cannot pay for that purchase another way. A transfer left unanswered keeps that buyer blocked.
+
+**What still cannot be stopped.** The app cannot refuse money at the bank. These stay on the staff refund list:
+
+1. A payment completed on an old gateway order after the 12 minutes: a UPI request approved very late, or a tab still running a web build from before this release.
+2. Two captures by the provider for one gateway order.
+3. The same person buying through two different accounts.
+
+Only an automatic refund of the extra payment would make these cost the buyer nothing. The owner has declined that so far.
+
+**Not verified.** That Razorpay honours the checkout timeout (its checkout cannot be driven from here). The messages on the price card in a browser. The two older refund scripts could not be rerun as written: their set-up creates two overlapping open orders for one buyer, which is now refused; the refund code itself was not changed.

@@ -13,6 +13,7 @@ import { AppError } from "../../../lib/errors.ts";
 import { CommerceErrors } from "../shared/commerce.errors.ts";
 import { toMinorUnits } from "../shared/currency.ts";
 import { isUniqueViolation } from "../shared/db-errors.ts";
+import { checkoutSecondsLeft } from "../shared/open-orders.ts";
 import { recordCouponRedemptionForPaidOrder } from "../coupons/coupon-redemption.service.ts";
 import * as orderRepo from "../orders/order.repository.ts";
 import * as paymentRepo from "./payment.repository.ts";
@@ -100,6 +101,30 @@ export function createManualPaymentService({
     }
 
     const now = new Date();
+
+    // A payment window for this order may still be open. A transfer reported
+    // now, and a payment completed in that window, would both be taken for
+    // the one order.
+    const secondsLeft = checkoutSecondsLeft(
+      {
+        handedOutAt: await paymentRepo.findLastCheckoutHandOutAt(
+          database,
+          orderId,
+        ),
+        createdAt: order.created_at,
+        totalAmount: order.total_amount,
+        isOpen: new Date(order.expires_at) > now,
+      },
+      now,
+    );
+    if (secondsLeft > 0) {
+      const items = await orderRepo.listOrderItems(database, orderId);
+      throw CommerceErrors.CHECKOUT_IN_PROGRESS(
+        items.map((item) => item.title_snapshot).join(", "),
+        secondsLeft,
+      );
+    }
+
     const row = await manualPaymentRepo.insertManualPaymentRequest(database, {
       id: crypto.randomUUID(),
       order_id: orderId,

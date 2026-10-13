@@ -15,6 +15,7 @@ import { Heart } from "@phosphor-icons/react/Heart";
 import { Play } from "@phosphor-icons/react/Play";
 import { ShoppingBag } from "@phosphor-icons/react/ShoppingBag";
 import {
+  CHECKOUT_WINDOW_SECONDS,
   MAX_VOLUNTARY_AMOUNT,
   type Category,
   type CheckoutPreviewResponse,
@@ -592,6 +593,9 @@ function CoursePurchaseSection({
             ? `Support Creator - ${course.title}`
             : course.title,
         order_id: order.gateway.gatewayOrderId,
+        // The window closes itself, so a payment cannot be completed in it
+        // long after the server has let the buyer start another one.
+        timeout: CHECKOUT_WINDOW_SECONDS,
         prefill: {
           name: user.displayName || user.username,
           email: user.email,

@@ -5,6 +5,7 @@ import { CircleNotch } from "@phosphor-icons/react/CircleNotch";
 import { CurrencyInr } from "@phosphor-icons/react/CurrencyInr";
 import { Lock } from "@phosphor-icons/react/Lock";
 import { Tag } from "@phosphor-icons/react/Tag";
+import { CHECKOUT_WINDOW_SECONDS } from "@veolms/contracts";
 import { Button } from "../components/Button";
 import { LoadingSpinnerIcon } from "../components/LoadingSpinner";
 import { productName } from "../routing/routeDescriptors";
@@ -248,6 +249,9 @@ export function QuizEnrollmentCard({
         name: productName,
         description: `Quiz Access - ${quizTitle || "Assessment"}`,
         order_id: order.gateway.gatewayOrderId,
+        // The window closes itself, so a payment cannot be completed in it
+        // long after the server has let the buyer start another one.
+        timeout: CHECKOUT_WINDOW_SECONDS,
         prefill: {
           name: user?.displayName || user?.username || "",
           email: user?.email || "",
