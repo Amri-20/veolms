@@ -365,6 +365,7 @@ export function createPaymentWorker({
               item_type: targetItem.item_type,
               course_id: targetItem.course_id,
               bundle_id: targetItem.bundle_id,
+              quiz_pricing_id: targetItem.quiz_pricing_id,
             },
           );
         }

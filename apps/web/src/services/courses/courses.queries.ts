@@ -83,7 +83,10 @@ export function useLessonDescription(
     enabled: Boolean(courseId && lessonId),
     // As long as the overview it stands in for.
     staleTime: 60 * 1000,
-    retry: false,
+    // A lesson that is only text has nothing else to show, so a dropped
+    // request is asked again. "Not found" and "forbidden" are final.
+    retry: (failureCount, error) =>
+      failureCount < 2 && !(error.status >= 400 && error.status < 500),
   });
 }
 

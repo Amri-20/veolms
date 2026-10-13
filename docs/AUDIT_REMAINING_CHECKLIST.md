@@ -1,6 +1,6 @@
 # What is left after the audit: checklist
 
-Updated 14 Oct 2026, after the double-payment round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 27. This file is the short list to work from. Tick a box when it is done.
+Updated 14 Oct 2026, after the independent review. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 28. This file is the short list to work from. Tick a box when it is done.
 
 ## Done in phases 1 to 3 (13 Oct)
 
@@ -93,6 +93,14 @@ Updated 14 Oct 2026, after the double-payment round. The full record is `docs/AU
 - [x] Two requests at the same instant give one open order.
 - [x] The payment window closes itself after 10 minutes.
 
+## Done after the independent review (14 Oct)
+
+- [x] Three reviewers read everything from rounds 4 to 8. No high-severity bug. Twelve findings fixed (section 28).
+- [x] A late "payment failed" notice no longer blocks the buyer for another 12 minutes.
+- [x] Two requests at the same instant can no longer leave two payable gateway orders.
+- [x] Refunding only the quiz item of an order removes the quiz pass.
+- [x] Quick wishlist clicks no longer undo each other.
+
 ## A. Right after each push
 
 Pushing `dev` deploys the API and the web together.
@@ -105,7 +113,7 @@ Pushing `dev` deploys the API and the web together.
   ```
 
 - [x] Check 5 (accounts sharing an email in different letter case): 0 found. Nothing to merge.
-- [ ] **One release after this one:** set `COURSE_OVERVIEW_LESSON_DESCRIPTIONS=false` on the API. The course overview shrinks to about a sixth for a long course. Do it only after the web from this release is live.
+- [ ] **Not yet, and not before I fix reading lessons (section 28.1, point 6):** set `COURSE_OVERVIEW_LESSON_DESCRIPTIONS=false` on the API. The course overview shrinks to about a sixth for a long course. Do it only after the web from this release is live.
 - [ ] Check the server's `TRUST_PROXY` value (section 18 of the report says which value fits which setup).
 - [ ] Check that every address people sign in from is in `WEB_URL` or `CORS_ORIGINS`.
 
@@ -140,6 +148,7 @@ The first, third and ninth were seen in a local browser run in the fourth round.
 
 ## C. Decisions only you can make
 
+- [ ] **Five payment rules that may be too strict** (section 28.1): no bank transfer in the first 12 minutes of an order; no free enrolment for 12 minutes after a dismissed support payment; a pending transfer blocks the buyer until staff answer; a bundle is refused for a course held free or by grant; one transfer reference per refund across all orders. Keep, or relax which?
 - [ ] **A screen for refund requests.** Skipped for now by your decision. The API is ready.
 - [ ] **Downloads (S3).** Should the "allow downloads" setting on a course be enforced? It is stored today and does nothing.
 - [ ] **Archived courses (B1).** Should people who bought a course keep access after it is archived?

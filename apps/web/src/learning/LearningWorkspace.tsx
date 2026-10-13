@@ -1140,7 +1140,9 @@ export function LearningWorkspace({
     if (refused) {
       setPlaybackBootstrap(null);
       setPlaybackBootstrapError(refused);
-      return;
+      return () => {
+        playbackRequestKeyRef.current = null;
+      };
     }
 
     setPlaybackBootstrap(null);

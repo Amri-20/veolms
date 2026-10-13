@@ -1,4 +1,18 @@
 import type { DatabaseExecutor } from "@veolms/database";
+import { sql } from "kysely";
+
+/**
+ * Makes one learner's wishlist changes take turns until the transaction
+ * ends, so two requests cannot both count the list and both add to it.
+ */
+export async function lockWishlist(
+  transaction: DatabaseExecutor,
+  userId: string,
+) {
+  await sql`select pg_advisory_xact_lock(hashtext(${`veolms:wishlist:${userId}`}))`.execute(
+    transaction,
+  );
+}
 
 export async function listItems(database: DatabaseExecutor, userId: string) {
   return await database
