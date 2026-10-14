@@ -17,7 +17,11 @@ import {
 import type { MfaGateUser } from "../auth/mfaGate";
 import { AppLoadingScreen } from "../bootstrap/AppLoadingScreen";
 import { useCapabilities } from "../services/authorization";
-import { cancelPendingLogin, useCurrentUser } from "../services/auth";
+import {
+  cancelPendingLogin,
+  useCurrentUser,
+  wasSignedOutHere,
+} from "../services/auth";
 import { useAuthStore } from "../store/auth.store";
 import { isPendingMfaLoginAbandoned } from "../store/pendingMfaLogin";
 import {
@@ -141,9 +145,12 @@ export function AcademyRouteGuard({ children }: { children: ReactNode }) {
     if (!access.isAuthenticated) {
       if (authenticationRequired && !isGuestLandingPath(path)) {
         const returnPath = `${location.pathname}${location.search}`;
-        const destination = shouldPromptLoginFor(path)
-          ? buildLoginDialogPath(returnPath)
-          : APP_HOME_PATH;
+        // Someone who has just signed out here is not asked to sign in
+        // again; their page needed the session, so they go home.
+        const destination =
+          shouldPromptLoginFor(path) && !wasSignedOutHere()
+            ? buildLoginDialogPath(returnPath)
+            : APP_HOME_PATH;
         navigate(destination, { replace: true });
       }
       return;

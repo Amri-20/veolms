@@ -6,6 +6,7 @@ import {
   stripLoginDialogParams,
 } from "../routing/routeAccess";
 import { loginDialogBody } from "../routing/prerenderedBodies";
+import { removeLoginDialogSnapshot } from "./loginDialogSnapshot";
 import { useSessionAccess } from "../routing/RouteGuards";
 
 // The login card and its styles load only when someone asks to log in. Once
@@ -55,6 +56,12 @@ export function LoginDialogHost() {
   useEffect(() => {
     if (requested && isSessionReady) finish();
   }, [finish, isSessionReady, requested]);
+
+  // A copy of the pop-up put up early (after a full-tab sign-in) is taken
+  // down by the pop-up itself; when there will be no pop-up, here.
+  useEffect(() => {
+    if (!requested || isSessionReady) removeLoginDialogSnapshot();
+  }, [isSessionReady, requested]);
 
   if (!pageIsHydrated || !requested || isSessionReady) return null;
 

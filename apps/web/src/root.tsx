@@ -8,6 +8,7 @@ import {
   PrefetchPageLinks,
   Scripts,
   useLocation,
+  useMatches,
   useRouteError,
 } from "react-router";
 import type { Route } from "./+types/root";
@@ -55,7 +56,15 @@ import {
   defaultAcademyPaletteStyles,
   getAcademyPaletteStylesheetBootstrapScript,
 } from "./shell/academyPaletteStyles";
+import { AuthPageFrame } from "./auth/AuthPageFrame";
 import { GlobalGoogleOneTap } from "./auth/GoogleOneTap";
+import {
+  OAUTH_REDIRECT_RESULT_STORAGE_KEY,
+  getOauthDialogReturnScript,
+} from "./auth/oauthFlow";
+import { getLoginDialogSnapshotScript } from "./auth/loginDialogSnapshot";
+import { getOauthPopupHandoffScript } from "./auth/oauthPopup";
+import { AppLoadingScreen } from "./bootstrap/AppLoadingScreen";
 import {
   ACADEMY_THEME_VERSION,
   DEFAULT_ACADEMY_THEME,
@@ -250,7 +259,7 @@ export function Layout({ children }: LayoutProps) {
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `${getSessionPresenceBootstrapScript()}${getLearnerStartedBootstrapScript()}${getHomeHintBootstrapScript()}${getSidebarShellBootstrapScript()}${getSidebarCollapsedMarkupBootstrapScript()}${getSidebarPresentationBootstrapScript()}${getLearningShellBootstrapScript()}${getLearningPlayerBootstrapScript()}`,
+            __html: `${getOauthDialogReturnScript()}${getOauthPopupHandoffScript()}${getLoginDialogSnapshotScript(OAUTH_REDIRECT_RESULT_STORAGE_KEY)}${getSessionPresenceBootstrapScript()}${getLearnerStartedBootstrapScript()}${getHomeHintBootstrapScript()}${getSidebarShellBootstrapScript()}${getSidebarCollapsedMarkupBootstrapScript()}${getSidebarPresentationBootstrapScript()}${getLearningShellBootstrapScript()}${getLearningPlayerBootstrapScript()}`,
           }}
         />
         <Meta />
@@ -347,6 +356,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export function HydrateFallback() {
+  const matches = useMatches();
+  // The auth pages (login, register, two-factor setup, OAuth callback) show
+  // their frame with the loading card while the session check is out, so
+  // they do not paint an empty canvas. The auth layout cannot export this
+  // itself: React Router allows HydrateFallback only on the root route
+  // while the dev server runs without prerendering.
+  if (matches.some(({ id }) => id === "auth-layout")) {
+    return (
+      <AuthPageFrame>
+        <AppLoadingScreen variant="embedded" />
+      </AuthPageFrame>
+    );
+  }
   // Wait for the academy route to mount before rendering its page-level
   // loading state. A root-level skeleton would cover the real sidebar/layout.
   return <div aria-hidden="true" className="min-h-dvh bg-(--canvas)" />;

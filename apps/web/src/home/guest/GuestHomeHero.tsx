@@ -1,4 +1,5 @@
 import { guestHomeGutter } from "./guestHomeSpacing";
+import { homeHeroHeightClasses } from "./homeHeroHeight";
 import { ArrowRightIcon as ArrowRight } from "@phosphor-icons/react/ArrowRight";
 import type { HomePageHero } from "@veolms/contracts/home-page-defaults";
 import type { NavigateTo } from "../../routing/navigation";
@@ -95,7 +96,9 @@ export function GuestHomeHero({
   return (
     <HeroDesk
       labelledBy="guest-home-hero-title"
-      className="min-h-104 justify-start sm:min-h-[clamp(20rem,27vw,25rem)] sm:justify-center"
+      // Beside the picture it is as tall as the signed-in learner's hero,
+      // so the page keeps its height when someone signs in on it.
+      className={`min-h-104 justify-start sm:min-h-[clamp(20rem,27vw,25rem)] sm:justify-center ${homeHeroHeightClasses}`}
       // Wider screens: the copy sits on the picture's empty left side, which
       // is deepened so the text stays readable at every crop.
       fadeClassName="hidden sm:block sm:bg-[linear-gradient(to_right,rgb(5_9_21/0.95)_0,rgb(5_9_21/0.86)_36%,rgb(5_9_21/0.45)_62%,transparent_84%)] sm:[:root[data-theme=light]_&]:bg-[linear-gradient(to_right,rgb(250_245_236/0.9)_0,rgb(250_245_236/0.74)_34%,rgb(250_245_236/0.28)_56%,transparent_74%)]"

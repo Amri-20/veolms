@@ -750,6 +750,21 @@ export function useLearningMiniPlayerGestures(
           } catch {
             // Resize handles are narrow, but document delivery remains a fallback.
           }
+        } else if (
+          event.pointerType === "mouse" &&
+          event.target instanceof Element
+        ) {
+          // A finger stays with what it pressed; a mouse does not, so a
+          // quick move off a button (a drag may start on any of them) went
+          // to the page and never reached this window. Holding the mouse to
+          // the pressed element keeps its moves coming here, and a press
+          // let go in place still clicks that element. A drag takes the
+          // hold over for the window (see handlePointerMove).
+          try {
+            event.target.setPointerCapture(event.pointerId);
+          } catch {
+            // Without it, a drag still starts while the mouse is over the window.
+          }
         }
         startSingleGesture(
           sample,
