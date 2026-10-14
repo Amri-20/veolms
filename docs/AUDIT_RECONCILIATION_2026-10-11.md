@@ -1,6 +1,6 @@
 # Audit reconciliation — 11 Oct 2026
 
-> **Read sections 19 to 29 first, then `docs/AUDIT_REMAINING_CHECKLIST.md`.** Section 19 is the current status of the audit findings and sections 20 to 29 the bug-fix rounds that followed. Section 19 was written on 13 Oct 2026 after every "FIXED" below was re-checked against the code. Sections 2 to 9 are the picture on the morning of 11 Oct, before any fix, and are kept as the record of what was found. Sections 10 to 17 record the first round of fixes; twenty of their "FIXED" entries were wrong and are corrected in section 19.
+> **Read sections 19 to 30 first, then `docs/AUDIT_REMAINING_CHECKLIST.md`.** Section 19 is the current status of the audit findings and sections 20 to 30 the bug-fix rounds that followed. Section 19 was written on 13 Oct 2026 after every "FIXED" below was re-checked against the code. Sections 2 to 9 are the picture on the morning of 11 Oct, before any fix, and are kept as the record of what was found. Sections 10 to 17 record the first round of fixes; twenty of their "FIXED" entries were wrong and are corrected in section 19.
 
 Reconciles the application audit of 9 Oct 2026 (findings S1–S16, C1–C13, A1–A7, F1–F18, B1–B9, P1–P5, X1–X6, R1–R6) against the code on `dev` at `8252933c`. Investigation only: no application code, migration, dependency or data was changed.
 
@@ -1108,3 +1108,28 @@ On `fix/owner-decisions-2`, built on `dev` after pulling seven commits from othe
 
 - `VITE_SITE_URL` in the environment of the build that deploys the web. The two web workflows in `.github/workflows` are manual-dispatch only, so the automatic deploy on push builds somewhere else; the variable must be set there.
 - `COURSE_OVERVIEW_LESSON_DESCRIPTIONS=false` may now be set on the API, one release after this one is live.
+
+## 30. P2, stylesheet loading: 14 Oct 2026
+
+On `perf/critical-css`. The owner allowed a production build of the web, on condition that nothing is deleted without permission beyond the build's own output folder.
+
+**What was wrong.** Every prerendered page linked two render-blocking stylesheets: `styles-*.css` (588 KB, 71 KB gzip) and `shell-theme-*.css` (130 KB, 22 KB gzip). 92% of the first is Tailwind utilities for the whole app. Nothing was inlined: the critical-CSS step described in `docs/performance-report.md` was removed on 17 Aug (commit `a85e78e20`), so that report is out of date on this point.
+
+**What changed.** After the build, `apps/web/scripts/inline-critical-css.mjs` writes into each prerendered page the CSS rules that page can match, in the same cascade position, and makes the two large stylesheets non-blocking. The client waits for them before it hydrates (10 s budget), so nothing the app renders appears unstyled, then drops the inline copies. The dev server, the SPA fallback and course pages refreshed later by `refresh-course-static-pages.mjs` are unchanged.
+
+**How it was verified.** A local production build against a local API on the demo database, then measured with Chromium on a mobile profile (4x CPU slowdown, 150 ms latency, 1.6 Mbit/s), median of 5 runs:
+
+| Page            | First paint before | First paint after | CSS fetched before first paint |
+| --------------- | ------------------ | ----------------- | ------------------------------ |
+| `/`             | 1372 ms            | 904 ms            | 83 KB to 2 KB                  |
+| `/courses`      | 1184 ms            | 756 ms            | 83 KB to 2 KB                  |
+| Course overview | 1252 ms            | 756 ms            | 83 KB to 2 KB                  |
+| `/login`        | 1132 ms            | 644 ms            | 69 KB to 7 KB                  |
+
+Page load and hydration times are unchanged.
+
+**Design unchanged.** Every prerendered page was compared pixel by pixel with the previous build, at 412x915 and 1366x900, light and dark. Each was compared with JavaScript off and full CSS, with JavaScript off and only the inline CSS (the first paint), and with the app hydrated. All were identical on the real build, for 17 of the 18 pages; the settings index was checked on a processed copy of the build. The one difference was lazy-loaded wallpaper images far below the fold on one settings page, with JavaScript off and the full page captured. Those images load at different moments in both builds, and the same page is identical at first paint.
+
+**Trade-off.** Each page's HTML grows by 9 to 33 KB gzip, paid on every full page load, also by visitors who already have the stylesheets cached.
+
+**Not verified.** Lighthouse itself, and the deployed site. The deploy builds through the same script (`pnpm build:web`), so the change ships with the normal build.
