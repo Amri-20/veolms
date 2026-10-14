@@ -8,7 +8,7 @@ import { FileText } from "@phosphor-icons/react/FileText";
 import { PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { PlayCircle } from "@phosphor-icons/react/PlayCircle";
 import { Question } from "@phosphor-icons/react/Question";
-import { useDeferredValue, useState } from "react";
+import { useDeferredValue, useState, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
 import type { CourseSection } from "../../learning/courseContent";
 import { formatDuration } from "../courseAdapter";
@@ -35,10 +35,10 @@ const SECTIONS_SHOWN_FIRST = 3;
 const SECTIONS_SHOWN_IN_FULL = 4;
 
 /**
- * The room a lesson takes: a card of one line of title and the line under
- * it (70px), and the gap to the next.
+ * The room a lesson takes, with the gap to the next: a card of one line of
+ * title and the line under it (70px), or on a wide screen one 48px line.
+ * Used as `--lesson-rows` × these, in the list's classes below.
  */
-const LESSON_ROW_HEIGHT = 76;
 
 function parseDurationLabel(label: string): number {
   const hours = Number(label.match(/(\d+)h/)?.[1] ?? 0);
@@ -217,15 +217,12 @@ function CurriculumSectionRow({
         <div className="min-h-0 overflow-hidden">
           <div className="border-t border-[color-mix(in_srgb,var(--text)_8%,transparent)] p-2 max-[640px]:px-1.5 @xl/curriculum:px-3">
             <div
-              className="flex flex-col gap-1.5 [content-visibility:auto]"
+              className="flex min-h-[calc(var(--lesson-rows)*76px)] flex-col gap-1.5 [contain-intrinsic-size:auto_calc(var(--lesson-rows)*76px)] [content-visibility:auto] lg:min-h-[calc(var(--lesson-rows)*54px)] lg:[contain-intrinsic-size:auto_calc(var(--lesson-rows)*54px)]"
               // The lessons' room is held before they are drawn, while the
               // section shuts after they are gone, and while the browser
               // skips the list off screen (`contain-intrinsic-size` is the
               // height it assumes for a list it has not laid out).
-              style={{
-                minHeight: lessonCount * LESSON_ROW_HEIGHT,
-                containIntrinsicSize: `auto ${lessonCount * LESSON_ROW_HEIGHT}px`,
-              }}
+              style={{ "--lesson-rows": lessonCount } as CSSProperties}
             >
               {section.lessons.length > 0 ? (
                 lessonsShown ? (
@@ -261,14 +258,19 @@ function CurriculumSectionRow({
                         // learning page: its title (two lines at most),
                         // and under it what kind of lesson it is, how long
                         // it takes and, on a paid course, whether it is a
-                        // free preview.
+                        // free preview. On a wide screen, where such cards
+                        // would be long bars, it is one plain line instead
+                        // (filled only under the pointer): the kind, the
+                        // title, the free tag and the length, in that order;
+                        // the line under the title takes itself apart
+                        // (`contents`) so its pieces line up in the row.
                         <button
                           type="button"
                           data-fixed-radius
-                          className={`group/lesson flex w-full flex-col gap-2 rounded-xl border-0 bg-[color-mix(in_srgb,var(--text)_4%,transparent)] px-3.5 py-3 text-left transition-colors duration-140 ${
+                          className={`group/lesson flex w-full flex-col gap-2 rounded-xl border-0 bg-[color-mix(in_srgb,var(--text)_4%,transparent)] px-3.5 py-3 text-left transition-colors duration-140 lg:min-h-12 lg:flex-row lg:items-center lg:gap-3 lg:bg-transparent lg:py-2 ${
                             isReadOnlyPreview
                               ? "cursor-default"
-                              : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)] focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:outline-none focus-visible:ring-inset"
+                              : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)] lg:hover:bg-[color-mix(in_srgb,var(--text)_6%,transparent)] focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:outline-none focus-visible:ring-inset"
                           }`}
                           key={number}
                           disabled={isReadOnlyPreview}
@@ -278,7 +280,7 @@ function CurriculumSectionRow({
                           }}
                         >
                           <span
-                            className={`line-clamp-2 text-[0.92rem] leading-[1.4] font-semibold ${
+                            className={`line-clamp-2 text-[0.92rem] leading-[1.4] font-semibold lg:min-w-0 lg:flex-1 lg:line-clamp-1 ${
                               isDone ? "text-(--muted)" : "text-(--text)"
                             }`}
                           >
@@ -286,30 +288,45 @@ function CurriculumSectionRow({
                             {number - lessonNumberBase}. {title}
                           </span>
 
-                          <span className="flex min-h-6 w-full items-center gap-2 text-[0.8rem] font-medium text-(--muted) tabular-nums">
-                            {/* Filled and coloured by kind, in the hero's
-                                colours: a sky-blue video, a violet document,
-                                an amber quiz; green once done. */}
+                          <span className="flex min-h-6 w-full items-center gap-2 text-[0.8rem] font-medium text-(--muted) tabular-nums lg:contents">
+                            {/* Filled and coloured by kind: a video in the
+                                theme's own colour, a violet document, a
+                                sky-blue quiz; green once done. */}
                             <TypeIcon
                               size={17}
                               weight="fill"
                               aria-hidden="true"
-                              className={`shrink-0 ${
+                              className={`shrink-0 lg:order-first ${
                                 isDone
                                   ? "text-emerald-500"
                                   : isDoc
                                     ? "text-violet-400 [:root[data-theme=light]_&]:text-violet-600"
                                     : isQuiz
-                                      ? "text-amber-400 [:root[data-theme=light]_&]:text-amber-600"
-                                      : "text-sky-400 [:root[data-theme=light]_&]:text-sky-600"
+                                      ? "text-sky-400 [:root[data-theme=light]_&]:text-sky-600"
+                                      : "text-(--accent-ink,var(--accent))"
                               }`}
                             />
                             <span className="sr-only">{typeLabel}, </span>
                             {/* A document with no length says what it is
                                 instead. */}
-                            <span>{duration || typeLabel}</span>
+                            {/* On a wide screen the length is a column of
+                                its own, as wide for every lesson, so the free
+                                tags beside it line up; a document with no
+                                length says "Doc" there. */}
+                            <span className="lg:order-2 lg:w-12 lg:shrink-0 lg:text-right">
+                              {duration || (
+                                <>
+                                  <span className="lg:hidden">{typeLabel}</span>
+                                  <span className="hidden lg:inline">
+                                    {isDoc ? "Doc" : typeLabel}
+                                  </span>
+                                </>
+                              )}
+                            </span>
                             {isDone ? (
-                              <span className="text-emerald-500">· Done</span>
+                              <span className="text-emerald-500 lg:order-2">
+                                · Done
+                              </span>
                             ) : null}
 
                             {/* Free preview: only on a paid course, for a
@@ -317,7 +334,7 @@ function CurriculumSectionRow({
                                 beside the price is. */}
                             {isPaidCourse && isPreview ? (
                               <span
-                                className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--success,#10b981)_14%,transparent)] px-2.5 py-1 text-[0.72rem] leading-none font-bold text-[color-mix(in_srgb,var(--success,#10b981)_72%,var(--text))]"
+                                className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--success,#10b981)_14%,transparent)] lg:order-1 px-2.5 py-1 text-[0.72rem] leading-none font-bold text-[color-mix(in_srgb,var(--success,#10b981)_72%,var(--text))]"
                                 aria-label="Free preview"
                               >
                                 <Eye
