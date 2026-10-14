@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { inlineCriticalCss } from "./inline-critical-css.mjs";
 
 export const FIRST_SECTION_FLAG = "--first-section";
 export const NO_LESSONS_FLAG = "--no-lessons";
@@ -12,6 +13,7 @@ const reactRouterCli = path.resolve(
   "../node_modules/@react-router/dev/bin.cjs",
 );
 const workspaceRoot = path.resolve(scriptDirectory, "../..");
+const clientBuildDirectory = path.resolve(scriptDirectory, "../build/client");
 
 for (const environmentFile of [".env.production", ".env"]) {
   try {
@@ -73,7 +75,20 @@ export const runPerformanceBuild = async (
         reject(new Error(`React Router build stopped with ${signal}.`));
         return;
       }
-      resolve(code ?? 1);
+      if (code !== 0) {
+        resolve(code ?? 1);
+        return;
+      }
+      // Prerendered pages paint from inline critical CSS instead of waiting
+      // for the app's large stylesheets. A page that cannot be processed
+      // fails the build rather than shipping half-rewritten.
+      inlineCriticalCss(clientBuildDirectory).then(
+        () => resolve(0),
+        (error) => {
+          console.error(error instanceof Error ? error.message : error);
+          resolve(1);
+        },
+      );
     });
   });
 };
