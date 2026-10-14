@@ -798,8 +798,9 @@ const toAbsoluteUrl = (value: string, origin?: string): string | undefined => {
 /**
  * The description and share tags of a course's overview page. The page's
  * address (`og:url` and the canonical link) is included only when `origin`
- * is given: a page built ahead of time does not know the site it will be
- * served from. A picture is included only when its address is complete.
+ * is given: a page built ahead of time knows the site it will be served
+ * from only when the build was told (`configuredSiteOrigin`). A picture is
+ * included only when its address is complete.
  */
 export const getCourseHeadTags = (
   course: CourseHeadDetails,
@@ -833,12 +834,14 @@ export const getCourseHeadTags = (
 /**
  * The share tags a route's `meta` adds to what `getRouteMeta` gives: those
  * of the course, on the overview of a course this document was built with.
+ * `origin` is the site's public address when the build knows it.
  */
 export const getRouteShareTags = (
   routeId: string | undefined,
   params: RouteParams = {},
   pathname: string,
   matches?: readonly (RouteMetaMatch | undefined)[],
+  origin?: string,
 ): HeadTagDescriptor[] => {
   if (
     routeId === undefined ||
@@ -848,7 +851,7 @@ export const getRouteShareTags = (
   }
   const course = getRouteCourse(params.courseSlug, matches);
   return course
-    ? getCourseHeadTags(course).filter((tag) => !("name" in tag))
+    ? getCourseHeadTags(course, origin).filter((tag) => !("name" in tag))
     : [];
 };
 

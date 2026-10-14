@@ -136,7 +136,9 @@ import { useLearningProgress } from "./useLearningProgress";
 import {
   getLessonReading,
   noVideoNoticeFor,
+  noVideoStageFor,
   planLessonStage,
+  resolveLessonDescriptionState,
   viewerMayRecordProgress,
 } from "./lessonWithoutVideo";
 import {
@@ -1057,6 +1059,22 @@ export function LearningWorkspace({
   }, [adaptedCurriculum]);
   const isLessonDescriptionPending =
     lessonDescriptionQuery.isLoading && !overviewCarriesLessonDescriptions;
+  // Whether the open lesson's description is known. A lesson with no video
+  // is its description, so its stage and its completion wait for this.
+  const lessonDescriptionState = resolveLessonDescriptionState({
+    overviewCarriesDescriptions: overviewCarriesLessonDescriptions,
+    request: !(courseOverview?.course.id && overviewLesson?.id)
+      ? "idle"
+      : fetchedLessonDescription !== undefined
+        ? "answered"
+        : lessonDescriptionQuery.isError && !lessonDescriptionQuery.isFetching
+          ? "failed"
+          : "loading",
+  });
+  const refetchLessonDescription = lessonDescriptionQuery.refetch;
+  const retryLessonDescription = useCallback(() => {
+    void refetchLessonDescription();
+  }, [refetchLessonDescription]);
   const lessonStagePlan = useMemo(() => {
     const course = courseOverview?.course;
     const holdsCourse = enrolledCoursesQuery.isFetched
@@ -1070,6 +1088,7 @@ export function LearningWorkspace({
       lesson: adaptedCurriculum?.lessonsByNumber.get(selectedLesson),
       showingQuiz,
       hasQuiz: selectedLessonQuizAttached,
+      descriptionState: lessonDescriptionState,
       viewerMayRecordProgress:
         Boolean(course) &&
         !isAuthResolutionPending &&
@@ -1094,6 +1113,7 @@ export function LearningWorkspace({
     enrolledCoursesQuery.isFetched,
     isAuthResolutionPending,
     isAuthenticated,
+    lessonDescriptionState,
     resolvedAuthUser,
     selectedLesson,
     selectedLessonQuizAttached,
@@ -1218,9 +1238,15 @@ export function LearningWorkspace({
         : null;
 
     // A lesson the course lists with no video says so, whatever a request
-    // made before the course had loaded came back with.
+    // made before the course had loaded came back with. Not before its
+    // description is known, though: the description may be all its content.
     if (!courseNotFound && !requestsLessonPlayback) {
-      return noVideoNoticeFor(stageLesson);
+      const stage = noVideoStageFor(stageLesson, lessonDescriptionState);
+      // The loader stands in meanwhile; see `lessonTextPending`.
+      if (stage.kind === "pending") return null;
+      return stage.kind === "retry"
+        ? { ...stage, onAction: retryLessonDescription }
+        : stage;
     }
 
     if (!playbackBootstrapError) return courseNotFound;
@@ -1280,14 +1306,23 @@ export function LearningWorkspace({
     };
   }, [
     courseUnavailable,
+    lessonDescriptionState,
     onOpenCourseOverview,
     onOpenLogin,
     playbackBootstrapError,
     requestsLessonPlayback,
     retryCourseOverview,
+    retryLessonDescription,
     retryPlaybackBootstrap,
     stageLesson,
   ]);
+  // A lesson with no video whose description is still on its way shows the
+  // player's loader. Kept apart from `playbackBootstrapPending`, whose time
+  // limit is for a video request.
+  const lessonTextPending =
+    !courseUnavailable &&
+    !requestsLessonPlayback &&
+    lessonDescriptionState === "loading";
   const playbackBootstrapPending = Boolean(
     protectedPlayback &&
     requestsLessonPlayback &&
@@ -3007,7 +3042,7 @@ export function LearningWorkspace({
       description: selectedLessonDescription,
       playbackBootstrap,
       playbackAccessError,
-      playbackBootstrapPending,
+      playbackBootstrapPending: playbackBootstrapPending || lessonTextPending,
       playbackUnavailableMessage: playbackBootstrapError?.message ?? null,
       onRetryPlayback: retryPlaybackBootstrap,
       refreshPlaybackToken,
@@ -3084,6 +3119,7 @@ export function LearningWorkspace({
       handleMobileLandscapeFullscreenChange,
       lessonDrawer,
       lessonSequence.length,
+      lessonTextPending,
       nextLessonId,
       nextLessonInfo,
       onMiniPlayerRestoreReady,

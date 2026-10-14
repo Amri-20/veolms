@@ -1225,8 +1225,8 @@ export function adaptCourseOverviewResponse(
     students: 0,
     thumbnail: resolvedThumbnail,
     thumbnailSrcSet: c.thumbnailSrcSet,
-    lifecycleStatus: (c.status === "published"
-      ? "published"
+    lifecycleStatus: (c.status === "published" || c.status === "archived"
+      ? c.status
       : "draft") as CourseLifecycleStatus,
     creatorId: c.creatorId ?? overview.creator?.id ?? null,
   };
@@ -1332,8 +1332,8 @@ export function adaptPreviewDataToOverview(
     students: 0,
     thumbnail: c.thumbnailUrl || "",
     thumbnailSrcSet: c.thumbnailSrcSet,
-    lifecycleStatus: (c.status === "published"
-      ? "published"
+    lifecycleStatus: (c.status === "published" || c.status === "archived"
+      ? c.status
       : "draft") as CourseLifecycleStatus,
     creatorId: c.creatorId ?? null,
   };

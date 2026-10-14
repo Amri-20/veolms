@@ -7,6 +7,8 @@ import tailwindcss from "@tailwindcss/vite";
 import { loadWebConfig } from "@veolms/config";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 
+import { parseSiteOrigin } from "./src/routing/siteOrigin.ts";
+
 const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
 const webSourceRoot = fileURLToPath(new URL("./src", import.meta.url));
 
@@ -403,6 +405,14 @@ export default defineConfig(({ command, mode }) => {
     ...loadEnv(mode, workspaceRoot, ""),
   };
   const config = loadWebConfig(environment);
+  // Optional: the site's public address, for the share tags of pages built
+  // ahead of time. Unset leaves those tags out, as before.
+  const siteOrigin = parseSiteOrigin(environment.VITE_SITE_URL);
+  if (environment.VITE_SITE_URL?.trim() && !siteOrigin) {
+    throw new Error(
+      "VITE_SITE_URL must be the site's public origin, such as https://academy.example.com (http or https, no path or query).",
+    );
+  }
 
   return {
     envDir: workspaceRoot,
@@ -459,6 +469,7 @@ export default defineConfig(({ command, mode }) => {
         config.STATIC_BUILD_API_URL,
       ),
       "import.meta.env.VITE_CDN_URL": JSON.stringify(config.VITE_CDN_URL),
+      "import.meta.env.VITE_SITE_URL": JSON.stringify(siteOrigin ?? ""),
       // The API's own setting, handed to the login form so its countdown
       // ends when the API starts accepting another send.
       "import.meta.env.OTP_RESEND_COOLDOWN_SECONDS": JSON.stringify(
