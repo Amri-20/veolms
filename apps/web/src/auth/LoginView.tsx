@@ -1,5 +1,12 @@
 import { useEffect, useReducer, useRef, useState } from "react";
-import { rememberCodeSignIn } from "./lastGoogleAccount";
+import { rememberCodeSignIn, useLastGoogleAccount } from "./lastGoogleAccount";
+import { LoginDivider, LoginHeading } from "./LoginCardParts";
+import {
+  codeSentAt,
+  forgetCodeSent,
+  hasUsableSentCode,
+  rememberCodeSent,
+} from "./sentCode";
 import { useNavigate, useSearchParams } from "react-router";
 import { AccountForm } from "./AccountForm";
 import { MfaEnrollmentSetup } from "./MfaEnrollmentSetup";
@@ -33,46 +40,17 @@ function resolvePayload(identifier: AuthIdentifier) {
     : { phoneNo: identifier.phoneNo };
 }
 
-// Where this tab last had a code sent, and when. Closing the login pop-up
-// unmounts the view and loses the code step, but the code already in the
-// inbox is still good, so this is kept outside the component.
-let lastCodeSent: { destination: string; at: number } | null = null;
-
 const ALREADY_SENT_NOTICE = "We sent you a code a moment ago — enter it below.";
-
-function resolveDestination(identifier: AuthIdentifier) {
-  return identifier.method === "email" ? identifier.email : identifier.phoneNo;
-}
-
-function rememberCodeSent(identifier: AuthIdentifier) {
-  lastCodeSent = {
-    destination: resolveDestination(identifier),
-    at: Date.now(),
-  };
-}
-
-// When this tab last had a code sent to that destination, if it did.
-function codeSentAt(identifier: AuthIdentifier): number | null {
-  return lastCodeSent !== null &&
-    lastCodeSent.destination === resolveDestination(identifier)
-    ? lastCodeSent.at
-    : null;
-}
-
-// Once a code has been used it is no longer one the visitor can still enter.
-function forgetCodeSent() {
-  lastCodeSent = null;
-}
 
 // True when the server refuses a send because it is too soon after one this
 // tab made to the same destination. The server answers its other request
 // limits with the same code, so the earlier send has to be known here.
 function isRefusedAsAlreadySent(identifier: AuthIdentifier, error: unknown) {
+  const sentAt = codeSentAt(identifier);
   return (
     (error as { code?: string } | null)?.code === "RATE_LIMIT_EXCEEDED" &&
-    lastCodeSent !== null &&
-    lastCodeSent.destination === resolveDestination(identifier) &&
-    Date.now() - lastCodeSent.at < RESEND_COOLDOWN_SECONDS * 1000
+    sentAt !== null &&
+    Date.now() - sentAt < RESEND_COOLDOWN_SECONDS * 1000
   );
 }
 
@@ -140,6 +118,10 @@ export function LoginView({
   const returnPath = returnTo?.split(/[?#]/, 1)[0] ?? "";
   const isReturningToDiscussions =
     returnPath === "/discussions" || returnPath.startsWith("/discussions/");
+  // A browser that has signed in with Google before is greeted back, and
+  // its account leads the card (see SocialLoginActions).
+  const { account: rememberedGoogleAccount } = useLastGoogleAccount();
+  const isReturningVisitor = rememberedGoogleAccount !== null;
 
   // Keep the last OTP screen so it stays visible (as "verifying") during the
   // authenticated redirect. Written in an effect, not during render.
@@ -174,12 +156,21 @@ export function LoginView({
   const handleSendCode = async (identifier: AuthIdentifier) => {
     if (sendOtpMutation.isPending) return;
     setIdentifierError(null);
-    setOtpNotice(null);
     dispatch({ type: "SUBMIT_IDENTIFIER", identifier });
 
+    if (hasUsableSentCode(identifier)) {
+      setOtpNotice(ALREADY_SENT_NOTICE);
+      dispatch({ type: "OTP_SENT" });
+      return;
+    }
+
+    setOtpNotice(null);
+
     try {
-      await sendOtpMutation.mutateAsync(resolvePayload(identifier));
-      rememberCodeSent(identifier);
+      const sent = await sendOtpMutation.mutateAsync(
+        resolvePayload(identifier),
+      );
+      rememberCodeSent(identifier, sent.codeExpiresInSeconds);
       dispatch({ type: "OTP_SENT" });
     } catch (err: unknown) {
       // The visitor asked for a code, closed the pop-up and came back within
@@ -207,8 +198,10 @@ export function LoginView({
     dispatch({ type: "RESEND_OTP" });
 
     try {
-      await sendOtpMutation.mutateAsync(resolvePayload(identifier));
-      rememberCodeSent(identifier);
+      const sent = await sendOtpMutation.mutateAsync(
+        resolvePayload(identifier),
+      );
+      rememberCodeSent(identifier, sent.codeExpiresInSeconds);
       setOtpNotice(null);
       dispatch({ type: "OTP_SENT" });
     } catch (err: unknown) {
@@ -504,55 +497,35 @@ export function LoginView({
       );
     }
 
+    const brand = (
+      // A whole-pixel height: the logo's height sets every edge below
+      // it, and a fraction there drew the field and the button a screen
+      // pixel apart in height on scaled displays.
+      <AuthBrandMark className="block h-9 text-(--text) [&_svg]:block [&_svg]:h-full [&_svg]:w-auto" />
+    );
+
     if (pendingSecondaryMethod) {
       return (
-        <>
-          <AuthBrandMark />
-          <h1 className="auth-card__heading" id={AUTH_CARD_HEADING_ID}>
-            {pendingSecondaryMethod === "email"
-              ? "Link your email"
-              : "Link your mobile"}
-          </h1>
-          <p className="auth-card__subheading">
-            {pendingSecondaryMethod === "email"
-              ? "Please verify your email address to complete registration."
-              : "Please verify your mobile number to complete registration."}
-          </p>
-
-          <div className="auth-card__form-slot">
-            <IdentifierForm
-              errorMessage={identifierError ?? undefined}
-              onEdit={() => setIdentifierError(null)}
-              forcedMethod={pendingSecondaryMethod}
-              onSubmit={(identifier) => handleSendCode(identifier)}
-              status={
-                flow.status === "sendingOtp" || sendOtpMutation.isPending
-                  ? "sending"
-                  : "idle"
+        <div className="flex w-full flex-col gap-6">
+          <div className="flex flex-col items-start gap-4.5">
+            {brand}
+            <LoginHeading
+              title={
+                pendingSecondaryMethod === "email"
+                  ? "Link your email"
+                  : "Link your mobile"
+              }
+              subtitle={
+                pendingSecondaryMethod === "email"
+                  ? "Verify your email to finish creating your account."
+                  : "Verify your mobile number to finish creating your account."
               }
             />
           </div>
-        </>
-      );
-    }
-
-    return (
-      <>
-        <AuthBrandMark />
-        <h1 className="auth-card__heading" id={AUTH_CARD_HEADING_ID}>
-          Welcome to {productName}
-        </h1>
-        <p className="auth-card__subheading">
-          {isReturningToDiscussions
-            ? "Log in to continue to Discussions."
-            : "Log in or create an account to continue."}
-        </p>
-
-        <div className="auth-card__form-slot">
           <IdentifierForm
-            disabled={oneTapPending}
             errorMessage={identifierError ?? undefined}
             onEdit={() => setIdentifierError(null)}
+            forcedMethod={pendingSecondaryMethod}
             onSubmit={(identifier) => handleSendCode(identifier)}
             status={
               flow.status === "sendingOtp" || sendOtpMutation.isPending
@@ -560,13 +533,48 @@ export function LoginView({
                 : "idle"
             }
           />
-          <SocialLoginActions
-            onError={setIdentifierError}
-            oneTapPending={oneTapPending}
-            returnTo={requestedReturnTo}
+        </div>
+      );
+    }
+
+    const welcomeSubtitle = isReturningToDiscussions
+      ? isReturningVisitor
+        ? "Log in to join the discussion"
+        : "Log in or sign up to join the discussion"
+      : isReturningVisitor
+        ? "Log in to continue"
+        : "Log in or sign up to continue";
+
+    return (
+      <div className="flex w-full flex-col gap-6">
+        <div className="flex flex-col items-start gap-4.5">
+          {brand}
+          <LoginHeading
+            title={
+              isReturningVisitor ? "Welcome back" : `Welcome to ${productName}`
+            }
+            subtitle={welcomeSubtitle}
           />
         </div>
-      </>
+        <SocialLoginActions
+          onError={setIdentifierError}
+          oneTapPending={oneTapPending}
+          returnTo={requestedReturnTo}
+        />
+        <LoginDivider />
+        <IdentifierForm
+          disabled={oneTapPending}
+          errorMessage={identifierError ?? undefined}
+          onEdit={() => setIdentifierError(null)}
+          onSubmit={(identifier) => handleSendCode(identifier)}
+          status={
+            flow.status === "sendingOtp" || sendOtpMutation.isPending
+              ? "sending"
+              : "idle"
+          }
+          submitTone={isReturningVisitor ? "secondary" : "primary"}
+        />
+      </div>
     );
   }
 

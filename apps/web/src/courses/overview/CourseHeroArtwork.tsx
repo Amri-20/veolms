@@ -34,13 +34,16 @@ const heroPictureSizes =
  *    lies under the picture and spreads out from it, so on a hero much wider
  *    than the picture the colours fade away from the picture instead of the
  *    thumbnail's middle showing up as a patch in the hero's middle;
- * 2. a grid of dots, set wide apart (24px), lit from the top;
+ * 2. a grid of dots, set wide apart (24px), lit from the top (beside the
+ *    picture only; stacked, see 5.);
  * 3. the thumbnail itself, with no edge of its own: it dissolves into the
  *    wash, downwards while it sits above the text and leftwards once it sits
  *    beside it. Beside the text it is as tall as the hero and whole; in a
  *    hero too narrow for that it loses its left side, which is the faded one;
  * 4. a shade under the text so it reads on any thumbnail;
- * 5. beside the picture, the dot grid again over the whole text side, a
+ * 5. stacked, the dot grid again over that shade, behind the text under the
+ *    picture, as faint as the next one;
+ * 6. beside the picture, the dot grid again over the whole text side, a
  *    good deal fainter, thinning out where the picture begins. It is a
  *    layer of its own, over the shade, which is solid there and hides the
  *    first grid; the first one is what shows faintly on the picture.
@@ -85,7 +88,9 @@ export function CourseHeroArtwork({
 
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,color-mix(in_srgb,var(--hero-ink)_20%,transparent)_1px,transparent_1.5px)] bg-size-[24px_24px] [mask-image:radial-gradient(110%_95%_at_58%_0%,black,transparent_74%)]"
+        // Stacked (a phone) the picture's own area is left plain: the dots
+        // are behind the words under it instead (below).
+        className="pointer-events-none absolute inset-0 hidden bg-[radial-gradient(circle,color-mix(in_srgb,var(--hero-ink)_20%,transparent)_1px,transparent_1.5px)] bg-size-[24px_24px] [mask-image:radial-gradient(110%_95%_at_58%_0%,black,transparent_74%)] @3xl/hero:block"
       />
 
       {thumbnail ? (
@@ -111,7 +116,7 @@ export function CourseHeroArtwork({
           {onPreview ? (
             <button
               type="button"
-              className={`absolute top-[44%] left-1/2 z-20 inline-flex size-15 -translate-1/2 cursor-pointer items-center justify-center rounded-full border border-white/25 bg-slate-950/75 text-white shadow-[0_8px_30px_rgb(0_0_0/0.45)] transition-[background-color,scale] duration-160 ease-out hover:scale-105 hover:bg-slate-950/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-default disabled:hover:scale-100 motion-reduce:transition-none @3xl/hero:hidden ${previewClassName}`}
+              className={`absolute top-[44%] left-1/2 z-20 inline-flex size-15 -translate-1/2 cursor-pointer items-center justify-center rounded-full border-0 bg-black/40 text-white shadow-[0_8px_30px_rgb(0_0_0/0.3)] backdrop-blur-md transition-colors duration-160 ease-out hover:bg-black/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-default disabled:hover:bg-black/40 motion-reduce:transition-none @3xl/hero:hidden ${previewClassName}`}
               onClick={onPreview}
               disabled={previewDisabled}
               aria-label="Preview course"
@@ -126,6 +131,14 @@ export function CourseHeroArtwork({
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 bg-linear-to-b from-transparent from-30% to-(--hero-base)/80 to-75% @3xl/hero:hidden"
+      />
+      {/* Stacked (a phone), the text under the picture gets the fainter
+          grid the text side has beside the picture (5. and 6. above): over the
+          shade, coming in over the picture's last stretch only, and above the
+          hero's foot fade (z-5), so it runs on down to the box under the hero. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-6 bg-[radial-gradient(circle,color-mix(in_srgb,var(--hero-ink)_11%,transparent)_1px,transparent_1.5px)] bg-size-[24px_24px] [mask-image:linear-gradient(to_bottom,transparent_36%,black_50%)] @3xl/hero:hidden"
       />
       <div
         aria-hidden="true"

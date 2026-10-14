@@ -10,15 +10,12 @@ const DAY_MS = 24 * HOUR_MS;
 
 // --- One-time passcodes -----------------------------------------------------
 
-/** Quoted in the OTP email and SMS templates. */
-export const OTP_TTL_MINUTES = 5;
-export const OTP_TTL_MS = OTP_TTL_MINUTES * MINUTE_MS;
-
 /** Wrong guesses before the outstanding code is burned. */
 export const OTP_MAX_ATTEMPTS = 3;
 
-// The minimum gap between sends for one identifier and purpose is not a
-// constant: it is OTP_RESEND_COOLDOWN_SECONDS in the environment.
+// How long a code stays valid and the minimum gap between sends for one
+// identifier and purpose are not constants: they are OTP_TTL_MINUTES and
+// OTP_RESEND_COOLDOWN_SECONDS in the environment.
 
 /**
  * Daily sends one requester may trigger for one identifier and purpose, so

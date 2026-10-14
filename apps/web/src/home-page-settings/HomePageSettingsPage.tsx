@@ -14,6 +14,7 @@ import {
   useHomePageSettingsOptions,
   useUpdateHomePageSettings,
 } from "../services/home";
+import { AcademyBrandSection } from "./AcademyBrandSection";
 import { CourseSectionEditor } from "./CourseSectionEditor";
 import { DiscussionsEditor } from "./DiscussionsEditor";
 import {
@@ -360,6 +361,8 @@ function HomePageSettingsEditor({
         title="Home Page"
         description="Choose what signed-out visitors see on the home page. To check the result, open the site in a private window."
       />
+
+      <AcademyBrandSection setNotice={setNotice} />
 
       {settingsQuery.isLoading ? (
         <CenteredLoadingSpinner

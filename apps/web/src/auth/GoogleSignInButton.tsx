@@ -19,8 +19,9 @@ import { GoogleBrandIcon } from "./SocialBrandIcons";
  *   two backgrounds the "G" may stand on, here the card's own surface a
  *   shade deeper, with a 1px edge. The guidelines give Google's own fills
  *   as defaults and set no rule for the corner or the height (the button
- *   may be scaled, the logo kept unstretched), so the card's corner and the
- *   Continue button's height are used.
+ *   may be scaled, the logo kept unstretched), so the login card's own are
+ *   used: 46px tall with 10px corners, like its email field and button
+ *   (see LoginCardParts).
  */
 
 // Google Sans comes from Google Fonts, asked for when the login card's code
@@ -50,7 +51,7 @@ loadGoogleSans();
  * stylesheet sets `font: inherit` on buttons, which outranks utilities.
  */
 const googleSurfaceClasses = [
-  "relative w-full min-h-(--auth-h-submit) rounded-(--auth-radius) border",
+  "relative w-full min-h-11.5 rounded-[10px] border",
   "border-[color-mix(in_srgb,var(--text)_24%,transparent)] bg-[color-mix(in_srgb,var(--canvas)_30%,var(--surface))] text-(--text)",
   "[font-family:'Google_Sans',var(--app-font-family,sans-serif)]! text-[0.9375rem]! leading-5! font-medium! tracking-[0.1px]!",
 ].join(" ");
@@ -101,19 +102,19 @@ function AccountPicture({ account }: { account: LastGoogleAccount }) {
   return account.avatarUrl && !failed ? (
     <img
       alt=""
-      className="size-8 shrink-0 rounded-full object-cover"
+      className="size-9 shrink-0 rounded-full object-cover"
       decoding="async"
       draggable={false}
-      height={32}
+      height={36}
       onError={() => setFailed(true)}
       referrerPolicy="no-referrer"
       src={account.avatarUrl}
-      width={32}
+      width={36}
     />
   ) : (
     <span
       aria-hidden="true"
-      className="grid size-8 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--accent)_24%,var(--surface))] text-sm font-semibold text-(--accent-ink,var(--accent))"
+      className="grid size-9 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--accent)_24%,var(--surface))] text-sm font-semibold text-(--accent-ink,var(--accent))"
     >
       {initial}
     </span>
@@ -157,16 +158,16 @@ export function GoogleAccountButton({
     <div
       className={cn(
         googleSurfaceClasses,
-        "flex items-stretch",
-        lastUsed && "mt-1.5",
+        // Two lines, so taller than the one-line buttons: room for the
+        // "Last used" tag to sit centred on the top edge, clear of the name.
+        "flex min-h-14.5 items-stretch",
       )}
     >
       {lastUsed ? (
-        // Centred on the button's top edge and lifted mostly above it, so it
-        // ends before the first line of text starts; the ring in the card's
-        // colour cuts the edge around it. A deeper shade of the accent, so
-        // white reads clearly on it in every theme.
-        <span className="pointer-events-none absolute -top-3.5 left-1/2 z-10 -translate-x-1/2 rounded-full bg-[color-mix(in_srgb,var(--accent)_78%,black)] px-2.5 py-0.5 [font-family:var(--app-font-family,sans-serif)] text-[0.6875rem] leading-3 font-bold tracking-[0.06em] whitespace-nowrap text-white uppercase shadow-[0_1px_6px_color-mix(in_srgb,var(--accent)_45%,transparent)] ring-2 ring-(--surface)">
+        // Centred on the button's top edge, half above it and half below;
+        // the ring in the card's colour cuts the edge around it. A deeper
+        // shade of the accent, so white reads clearly on it in every theme.
+        <span className="pointer-events-none absolute top-0 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[color-mix(in_srgb,var(--accent)_78%,black)] px-2.5 py-0.5 [font-family:var(--app-font-family,sans-serif)] text-[0.6875rem] leading-3 font-bold tracking-[0.06em] whitespace-nowrap text-white uppercase shadow-[0_1px_6px_color-mix(in_srgb,var(--accent)_45%,transparent)] ring-2 ring-(--surface)">
           Last used
         </span>
       ) : null}
@@ -175,7 +176,7 @@ export function GoogleAccountButton({
         aria-label={`Continue as ${account.name} (${account.email}) with Google`}
         className={cn(
           pressableClasses,
-          "flex min-w-0 flex-1 items-center gap-3 rounded-l-[calc(var(--auth-radius)_-_1px)] py-1 pr-3 pl-2 text-left",
+          "flex min-w-0 flex-1 items-center gap-3 rounded-l-[9px] py-2.5 pr-3 pl-3 text-left",
         )}
         disabled={disabled}
         onClick={onContinue}
@@ -199,7 +200,7 @@ export function GoogleAccountButton({
         title="Use another Google account"
         className={cn(
           pressableClasses,
-          "grid w-11 shrink-0 place-items-center rounded-r-[calc(var(--auth-radius)_-_1px)] text-(--muted) hover:text-(--text)",
+          "grid w-11 shrink-0 place-items-center rounded-r-[9px] text-(--muted) hover:text-(--text)",
         )}
         disabled={disabled}
         onClick={onChooseAccount}

@@ -88,6 +88,9 @@ const checkoutRoutes: RoutePlugin = async (app, options) => {
           ),
           400: errorResponse("Invalid checkout request"),
           401: errorResponse("Unauthorized"),
+          403: errorResponse(
+            "A verified mobile number is needed first (PHONE_VERIFICATION_REQUIRED)",
+          ),
           404: errorResponse("Item not found"),
           409: errorResponse("Item already owned or payment in progress"),
         },

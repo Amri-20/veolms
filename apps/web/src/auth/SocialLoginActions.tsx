@@ -318,11 +318,9 @@ export function SocialLoginActions({
         : null;
 
   return (
-    <div className="auth-social">
-      <p className="auth-social__divider">
-        <span>OR</span>
-      </p>
-
+    // The way in the pop-up leads with; the email form follows it under an
+    // "or" (see LoginView).
+    <div className="flex w-full flex-col">
       {/* Said to screen readers only: the Google button itself shows that
           it is verifying, and a line of its own here made the pop-up grow
           and jump as the sign-in started. Always in the page, so a change
@@ -331,7 +329,7 @@ export function SocialLoginActions({
         {pendingMessage ?? ""}
       </p>
 
-      <div className="auth-social__actions">
+      <div className="flex w-full flex-col gap-3">
         {lastGoogleAccount ? (
           <GoogleAccountButton
             account={lastGoogleAccount}

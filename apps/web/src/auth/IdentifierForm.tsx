@@ -1,10 +1,18 @@
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Icon } from "../icons/Icon";
-import { AuthBusySubmit } from "./AuthProgress";
+import { cn } from "../lib/utils";
+import {
+  LoginFieldLabel,
+  LoginFootnote,
+  LoginSubmitButton,
+  loginFieldBoxClasses,
+  loginInputClasses,
+} from "./LoginCardParts";
 import { CountryCodeSelect, getDefaultCountry } from "./CountryCodeSelect";
 import { IdentifierMethodSwitch } from "./IdentifierMethodSwitch";
+import { readIdentifierDraft, saveIdentifierDraft } from "./identifierDraft";
 import {
+  findCountry,
   normalizeEmail,
   toInternationalPhoneNumber,
   validateEmail,
@@ -32,21 +40,20 @@ export interface IdentifierFormProps {
    * cleared there, as this form clears its own.
    */
   onEdit?: () => void;
+  /**
+   * The submit button's weight: the accent's fill, or the quieter one when
+   * another way in leads (the remembered Google account above it).
+   */
+  submitTone?: "primary" | "secondary";
+  /** The submit button's words, when not the login's "Continue with …". */
+  submitLabel?: string;
+  /** The line under the button, when not the login's. */
+  footnote?: string;
 }
 
 const EMAIL_FIELD_ID = "auth-identifier-email";
 const MOBILE_FIELD_ID = "auth-identifier-mobile";
 const ERROR_ID = "auth-identifier-error";
-
-const invalidMark = (
-  <Icon
-    aria-hidden
-    className="auth-form__invalid-mark"
-    emphasis="fill"
-    name="validationError"
-    size={18}
-  />
-);
 
 const DEFAULT_COUNTRY = getDefaultCountry();
 
@@ -57,6 +64,9 @@ export function IdentifierForm({
   forcedMethod,
   onSubmit,
   onEdit,
+  submitTone = "primary",
+  submitLabel,
+  footnote,
 }: IdentifierFormProps) {
   const sending = status === "sending";
   const locked = sending || disabled;
@@ -68,6 +78,18 @@ export function IdentifierForm({
   const [mobile, setMobile] = useState("");
   const [country, setCountry] = useState<CountryOption>(DEFAULT_COUNTRY);
   const [invalidReason, setInvalidReason] = useState<string | null>(null);
+
+  // What was typed before the pop-up last closed is put back (see
+  // identifierDraft.ts). After mounting, not in the first state: the login
+  // page is built ahead of time with empty fields and must hydrate as such.
+  // A layout effect, so a pop-up opening in the browser shows it at once.
+  useLayoutEffect(() => {
+    const draft = readIdentifierDraft();
+    if (draft.email) setEmail(draft.email);
+    if (draft.mobile) setMobile(draft.mobile);
+    const draftCountry = draft.countryId && findCountry(draft.countryId);
+    if (draftCountry) setCountry(draftCountry);
+  }, []);
 
   const error = invalidReason ?? errorMessage ?? null;
 
@@ -109,6 +131,7 @@ export function IdentifierForm({
 
   const selectCountry = (next: CountryOption) => {
     edit(() => setCountry(next));
+    saveIdentifierDraft({ countryId: next.id });
   };
 
   const showEmailOnly = forcedMethod
@@ -119,52 +142,29 @@ export function IdentifierForm({
     : isMobileLoginEnabled() && !isEmailLoginEnabled();
   const showSwitch = !forcedMethod && isMethodSwitchVisible();
 
+  const usingEmail = showEmailOnly || (showSwitch && method === "email");
+  const usingMobile = showMobileOnly || (showSwitch && method === "mobile");
+
   return (
-    <form className="auth-form" noValidate onSubmit={submit}>
+    <form className="flex flex-col gap-3.5" noValidate onSubmit={submit}>
       {showSwitch && (
-        <div className="auth-form__method">
-          <p className="auth-form__section-label">Continue with</p>
-          <IdentifierMethodSwitch
-            method={method}
-            onMethodChange={changeMethod}
+        <IdentifierMethodSwitch method={method} onMethodChange={changeMethod} />
+      )}
+
+      {usingEmail && (
+        <div className="flex flex-col gap-2">
+          <LoginFieldLabel
+            error={error}
+            errorId={ERROR_ID}
+            htmlFor={EMAIL_FIELD_ID}
+            label="Email"
           />
-          <p className="auth-form__helper">
-            We&apos;ll send you a one-time code
-          </p>
-        </div>
-      )}
-
-      {showEmailOnly && (
-        <div className="auth-form__method">
-          <p className="auth-form__section-label">Continue with email</p>
-          <p className="auth-form__helper">
-            We&apos;ll send you a one-time code
-          </p>
-        </div>
-      )}
-
-      {showMobileOnly && (
-        <div className="auth-form__method">
-          <p className="auth-form__section-label">Continue with mobile</p>
-          <p className="auth-form__helper">
-            We&apos;ll send you a one-time code
-          </p>
-        </div>
-      )}
-
-      {(showEmailOnly || (showSwitch && method === "email")) && (
-        <div className="auth-form__field">
-          <label className="auth-form__label" htmlFor={EMAIL_FIELD_ID}>
-            Email address
-          </label>
-
-          <div className="auth-form__input-shell">
-            <Icon aria-hidden name="email" size={18} />
+          <div className={loginFieldBoxClasses}>
             <input
               aria-describedby={error ? ERROR_ID : undefined}
               aria-invalid={error !== null}
               autoComplete="email"
-              className="auth-form__input"
+              className={loginInputClasses}
               disabled={locked}
               id={EMAIL_FIELD_ID}
               inputMode="email"
@@ -172,43 +172,37 @@ export function IdentifierForm({
               onChange={(event) => {
                 const value = event.target.value;
                 edit(() => setEmail(value));
+                saveIdentifierDraft({ email: value });
               }}
-              placeholder="Enter your email address"
+              placeholder="you@example.com"
               type="email"
               value={email}
             />
-            {error ? invalidMark : null}
           </div>
-
-          {error ? (
-            <p className="auth-form__error" id={ERROR_ID} role="alert">
-              {error}
-            </p>
-          ) : null}
         </div>
       )}
 
-      {(showMobileOnly || (showSwitch && method === "mobile")) && (
-        <div className="auth-form__field">
-          <label className="auth-form__label" htmlFor={MOBILE_FIELD_ID}>
-            Mobile number
-          </label>
-
-          <div className="auth-form__mobile-row">
+      {usingMobile && (
+        <div className="flex flex-col gap-2">
+          <LoginFieldLabel
+            error={error}
+            errorId={ERROR_ID}
+            htmlFor={MOBILE_FIELD_ID}
+            label="Mobile number"
+          />
+          <div className="flex min-w-0 items-stretch gap-2.5">
             <CountryCodeSelect
               contentClassName="auth-form__country-menu"
               onCountryChange={selectCountry}
-              triggerClassName="auth-form__country"
+              triggerClassName="auth-form__country h-11.5! min-h-11.5! rounded-[10px]! border-[color-mix(in_srgb,var(--text)_12%,transparent)]! bg-[color-mix(in_srgb,var(--canvas)_45%,var(--surface))]!"
               value={country.id}
             />
-
-            <div className="auth-form__input-shell">
-              <Icon aria-hidden name="mobile" size={18} />
+            <div className={cn(loginFieldBoxClasses, "flex-1")}>
               <input
                 aria-describedby={error ? ERROR_ID : undefined}
                 aria-invalid={error !== null}
                 autoComplete="tel-national"
-                className="auth-form__input"
+                className={loginInputClasses}
                 disabled={locked}
                 id={MOBILE_FIELD_ID}
                 inputMode="numeric"
@@ -216,30 +210,34 @@ export function IdentifierForm({
                 onChange={(event) => {
                   const value = event.target.value;
                   edit(() => setMobile(value));
+                  saveIdentifierDraft({ mobile: value });
                 }}
-                placeholder="Enter your mobile number"
+                placeholder="Mobile number"
                 type="tel"
                 value={mobile}
               />
-              {error ? invalidMark : null}
             </div>
           </div>
-
-          {error ? (
-            <p className="auth-form__error" id={ERROR_ID} role="alert">
-              {error}
-            </p>
-          ) : null}
         </div>
       )}
 
-      <AuthBusySubmit
+      <LoginSubmitButton
         busy={sending}
         busyLabel="Sending code…"
         disabled={disabled}
-        label="Continue"
+        label={
+          submitLabel ??
+          (usingMobile ? "Continue with mobile" : "Continue with email")
+        }
         pendingMessage="Sending your sign-in code. Please wait."
+        tone={submitTone}
       />
+      <LoginFootnote>
+        {footnote ??
+          (usingMobile
+            ? "We'll text you a one-time code. No password needed."
+            : "We'll email you a one-time code. No password needed.")}
+      </LoginFootnote>
     </form>
   );
 }

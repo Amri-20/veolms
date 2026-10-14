@@ -5,6 +5,7 @@ import { Clock } from "@phosphor-icons/react/Clock";
 import { Play } from "@phosphor-icons/react/Play";
 import { Stack } from "@phosphor-icons/react/Stack";
 import type { Course } from "../catalogue";
+import { PageBackButton } from "../../components/PageBackButton";
 import { CourseWishlistHeartButton } from "../CourseWishlistHeartButton";
 import { CourseHeroArtwork } from "./CourseHeroArtwork";
 import { presumedGuestOnlyClasses } from "./courseViewerState";
@@ -129,7 +130,9 @@ export const heroPlacementClasses: Record<
     // much taller here (`pb-10` and the `min-h`, which is `heroTextClasses`'
     // own plus 1rem, written out because Tailwind reads whole class names),
     // and the picture stops above the strip (`footRoom`).
-    text: `${heroTextClasses} pb-10! @3xl/hero:min-h-[calc(clamp(15rem,28cqi,max(17rem,min(15cqi,21rem)))_+_1rem)]! px-[calc(var(--application-page-inline-gutter)_+_1rem)] @3xl/hero:pl-[max(var(--application-page-inline-gutter),(100cqi_-_68.75rem)/2)]`,
+    // On a phone the words keep 1rem from the screen's edges, as the text
+    // in the boxes below does (they run to the edges there).
+    text: `${heroTextClasses} pb-10! @3xl/hero:min-h-[calc(clamp(15rem,28cqi,max(17rem,min(15cqi,21rem)))_+_1rem)]! px-[calc(var(--application-page-inline-gutter)_+_1rem)] max-[640px]:px-4 @3xl/hero:pl-[max(var(--application-page-inline-gutter),(100cqi_-_68.75rem)/2)]`,
     pill: "right-(--application-page-inline-gutter) @3xl/hero:bottom-10!",
   },
 };
@@ -244,21 +247,32 @@ export function CourseOverviewHero({
         className={`pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 ${placed.controls}`}
       >
         {onBack ? (
-          // A link that says where it leads. Over the picture (stacked)
-          // it keeps the dark glass the other controls have, so its words
-          // read on any thumbnail; beside the picture it is plain words.
-          // The words are in the theme's accent, lightened: the hero is
-          // dark in every theme, and a dark accent would not show on it.
-          // It rests slightly dull and comes up to its full colour under
-          // the pointer; nothing moves and nothing is underlined.
-          <button
-            type="button"
-            className={`${heroControlClasses} inline-flex h-9 gap-2 rounded-full px-3.5 text-[0.9rem] font-medium text-[color-mix(in_srgb,var(--accent)_72%,white)]! [:root[data-theme=light]_&]:@3xl/hero:text-(--accent-ink,var(--accent))! opacity-85 transition-[opacity,background-color]! hover:opacity-100 focus-visible:opacity-100 @3xl/hero:border-transparent @3xl/hero:bg-transparent @3xl/hero:px-0 @3xl/hero:hover:bg-transparent`}
-            onClick={onBack}
-          >
-            <ArrowLeft size={17} weight="bold" aria-hidden="true" />
-            <span>{backLabel}</span>
-          </button>
+          <>
+            {/* Over the picture while stacked (a phone or a tablet): the
+                app's back button in the Settings page's shape, in the top
+                left corner, dark over the picture (a little see-through, a light edge and a
+                white arrow); it says where it leads to screen readers. */}
+            <PageBackButton
+              label={backLabel}
+              title={backLabel}
+              onClick={onBack}
+              className="pointer-events-auto self-start! border-white/25! bg-black/45! text-white! shadow-none! backdrop-blur-[2px] hover:bg-black/60! hover:text-white! @3xl/hero:hidden"
+            />
+            {/* Beside the picture: a link that says where it leads, in the
+                theme's accent, lightened (the hero is dark in every theme).
+                It sits in a slim pill of the same colour, faint and
+                see-through, its left edge in line with the title. It rests
+                slightly dull and comes up to its full colour under the
+                pointer, the pill a little stronger; nothing moves and nothing is underlined. */}
+            <button
+              type="button"
+              className="pointer-events-auto hidden h-8 cursor-pointer items-center gap-2 rounded-full border-0 bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-3 text-[0.9rem] font-medium text-[color-mix(in_srgb,var(--accent)_72%,white)] opacity-85 transition-[opacity,background-color] duration-160 ease-out hover:bg-[color-mix(in_srgb,var(--accent)_20%,transparent)] hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white @3xl/hero:inline-flex [:root[data-theme=light]_&]:text-(--accent-ink,var(--accent))"
+              onClick={onBack}
+            >
+              <ArrowLeft size={17} weight="bold" aria-hidden="true" />
+              <span>{backLabel}</span>
+            </button>
+          </>
         ) : (
           <span />
         )}

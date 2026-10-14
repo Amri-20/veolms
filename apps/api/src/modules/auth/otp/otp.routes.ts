@@ -5,6 +5,7 @@ import {
   phoneVerificationSendRequestSchema,
   phoneVerificationVerifyRequestSchema,
   otpSendRequestSchema,
+  otpSendResponseSchema,
 } from "@veolms/contracts";
 
 import { errorResponse } from "../../../lib/errors.ts";
@@ -40,7 +41,7 @@ const otpRoutes: RoutePlugin = async (app, options) => {
         response: {
           200: jsonResponse(
             "OTP dispatched successfully.",
-            authMessageResponseSchema,
+            otpSendResponseSchema,
           ),
           400: errorResponse("Validation error or missing parameters."),
           429: errorResponse("Rate limit exceeded."),

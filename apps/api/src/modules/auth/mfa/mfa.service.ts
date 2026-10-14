@@ -163,7 +163,7 @@ export function createMfaService({
 
   function setupTotp(user: AuthenticatedMfaUser) {
     const label = user.email || user.username || user.phoneNo || "user";
-    return generateTotpSecret(label, config.RP_NAME);
+    return generateTotpSecret(label, config.ACADEMY_NAME);
   }
 
   async function disableTotp(
@@ -429,7 +429,7 @@ export function createMfaService({
     const rpId = resolveRpIdForOrigin(requestOrigin);
     const existing = await mfaRepository.listUserPasskeys(database, user.id);
     const options = await generateRegistrationOptions({
-      rpName: config.RP_NAME,
+      rpName: config.ACADEMY_NAME,
       rpID: rpId,
       userID: Uint8Array.from(Buffer.from(user.id)),
       userName: user.email || user.username || user.phoneNo || "user",

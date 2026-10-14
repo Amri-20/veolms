@@ -723,6 +723,12 @@ const APPEARANCE_LONG_PRESS_DURATION = 500;
 const APPEARANCE_LONG_PRESS_MOVE_TOLERANCE = 10;
 const MOBILE_NAV_HIDE_SCROLL_THRESHOLD = 56;
 const MOBILE_NAV_SHOW_SCROLL_THRESHOLD = 18;
+// How long a scroll still counts as the visitor's after the finger leaves
+// the screen or a scrolling key is pressed (a fling glides on), and how much
+// longer each further scroll step or wheel turn keeps it so.
+const MOBILE_NAV_USER_SCROLL_GLIDE_MS = 1200;
+const MOBILE_NAV_USER_SCROLL_STEP_MS = 250;
+const MOBILE_NAV_PLAYER_SELECTOR = "[data-learning-persistent-player]";
 const MOBILE_NAV_TOP_GUARD = 12;
 const MOBILE_DRAWER_INITIAL_SNAP_POINT = 0.82;
 
@@ -2359,6 +2365,41 @@ export function CoursesPage({
     let direction: -1 | 0 | 1 = 0;
     let directionalTravel = 0;
     let frame: number | null = null;
+    // Only scrolling the visitor does hides or shows the menu: a finger on
+    // the screen (and the glide after it), the wheel, the keys, the
+    // scrollbar. A page that is switched, or has its place put back, also
+    // changes the scroll position, and the menu would drop away and come
+    // back for it (a lesson minimized onto a page that was scrolled).
+    let fingerDown = false;
+    let userScrollUntil = 0;
+    const holdUserScroll = (ms: number) => {
+      userScrollUntil = Math.max(userScrollUntil, performance.now() + ms);
+    };
+    // A finger on the lesson's player is moving the player (minimizing it,
+    // or dragging the mini window), not scrolling the page.
+    const startUserScroll = (event: Event) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(MOBILE_NAV_PLAYER_SELECTOR)
+      ) {
+        return;
+      }
+      fingerDown = true;
+    };
+    const endUserScroll = () => {
+      if (!fingerDown) return;
+      fingerDown = false;
+      holdUserScroll(MOBILE_NAV_USER_SCROLL_GLIDE_MS);
+    };
+    const markWheelScroll = () =>
+      holdUserScroll(MOBILE_NAV_USER_SCROLL_STEP_MS);
+    const isUserScroll = () => {
+      if (fingerDown) return true;
+      if (performance.now() >= userScrollUntil) return false;
+      // A glide keeps going for as long as it keeps scrolling.
+      holdUserScroll(MOBILE_NAV_USER_SCROLL_STEP_MS);
+      return true;
+    };
 
     const revealNavigation = () => {
       direction = 0;
@@ -2382,7 +2423,7 @@ export function CoursesPage({
         return;
       }
 
-      if (Math.abs(delta) < 1) return;
+      if (Math.abs(delta) < 1 || !isUserScroll()) return;
       const nextDirection = delta > 0 ? 1 : -1;
       if (nextDirection !== direction) {
         direction = nextDirection;
@@ -2420,8 +2461,44 @@ export function CoursesPage({
       ) {
         revealNavigation();
       }
+      if (
+        event.key === " " ||
+        event.key === "PageDown" ||
+        event.key === "PageUp" ||
+        event.key === "ArrowDown" ||
+        event.key === "ArrowUp" ||
+        event.key === "End" ||
+        event.key === "Home"
+      ) {
+        holdUserScroll(MOBILE_NAV_USER_SCROLL_GLIDE_MS);
+      }
     };
 
+    document.addEventListener("touchstart", startUserScroll, {
+      capture: true,
+      passive: true,
+    });
+    document.addEventListener("touchend", endUserScroll, {
+      capture: true,
+      passive: true,
+    });
+    document.addEventListener("touchcancel", endUserScroll, {
+      capture: true,
+      passive: true,
+    });
+    // A mouse or pen on a scrollbar.
+    document.addEventListener("pointerdown", startUserScroll, {
+      capture: true,
+      passive: true,
+    });
+    document.addEventListener("pointerup", endUserScroll, {
+      capture: true,
+      passive: true,
+    });
+    document.addEventListener("wheel", markWheelScroll, {
+      capture: true,
+      passive: true,
+    });
     document.addEventListener("scroll", handleScroll, {
       capture: true,
       passive: true,
@@ -2431,6 +2508,12 @@ export function CoursesPage({
     return () => {
       if (frame !== null) window.cancelAnimationFrame(frame);
       document.removeEventListener("scroll", handleScroll, true);
+      document.removeEventListener("touchstart", startUserScroll, true);
+      document.removeEventListener("touchend", endUserScroll, true);
+      document.removeEventListener("touchcancel", endUserScroll, true);
+      document.removeEventListener("pointerdown", startUserScroll, true);
+      document.removeEventListener("pointerup", endUserScroll, true);
+      document.removeEventListener("wheel", markWheelScroll, true);
       window.removeEventListener("scroll", handleScroll);
       window.removeEventListener("keydown", handleKeyboardNavigation);
     };

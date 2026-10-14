@@ -67,12 +67,13 @@ export function CourseWishlistHeartButton({
     <button
       type="button"
       // On the course page's hero, which is dark by day as well: dark
-      // glass with no ring round it. A wishlisted course tints the glass
-      // pink instead of outlining it.
-      className={`group/wishlist inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 text-white transition-[background-color] duration-160 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-default ${
+      // glass with no ring round it, as the hero's back and play buttons
+      // have. A wishlisted course tints the glass pink instead of outlining
+      // it.
+      className={`group/wishlist inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 text-white shadow-[0_4px_16px_rgb(0_0_0/0.25)] backdrop-blur-md transition-[background-color] duration-160 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-default ${
         wishlisted
-          ? "bg-[color-mix(in_srgb,#ff6684_26%,rgb(2_6_23/0.82))] hover:bg-[color-mix(in_srgb,#ff6684_34%,rgb(2_6_23/0.88))]"
-          : "bg-slate-950/70 hover:bg-slate-950/85"
+          ? "bg-[color-mix(in_srgb,#ff6684_26%,rgb(0_0_0/0.4))] hover:bg-[color-mix(in_srgb,#ff6684_34%,rgb(0_0_0/0.6))]"
+          : "bg-black/40 hover:bg-black/60"
       }`}
       aria-label={ariaLabel}
       aria-pressed={wishlisted}

@@ -207,7 +207,18 @@ const serverConfigSchema = z.object({
 
   // WebAuthn Passkeys Config
   RP_ID: z.string().optional(),
-  RP_NAME: z.string().default("VeoLMS"),
+  /**
+   * The academy's name, as passkey prompts, authenticator apps, text
+   * messages and notices show it, and as emails show it until the academy
+   * has its own name (set during setup, changed in the admin settings).
+   */
+  ACADEMY_NAME: z.string().trim().optional(),
+  /**
+   * The former name of ACADEMY_NAME ("relying party name", the passkey
+   * standard's term). Still read when ACADEMY_NAME is not set.
+   * @deprecated Set ACADEMY_NAME.
+   */
+  RP_NAME: z.string().trim().optional(),
   WEBAUTHN_ORIGINS: z.string().optional(),
   CORS_ORIGINS: z.string().optional(),
 
@@ -218,6 +229,20 @@ const serverConfigSchema = z.object({
 
   // One-time passcodes
   OTP_RESEND_COOLDOWN_SECONDS: otpResendCooldownSecondsSchema,
+  /**
+   * How long a sign-in or verification code can be used, in minutes. Quoted
+   * in the code's email and text, and told to the web with each send so the
+   * sign-in screen knows when the code in the inbox stops working.
+   */
+  OTP_TTL_MINUTES: z.coerce.number().int().min(1).max(60).default(10),
+  /**
+   * Whether a learner must have verified a mobile number before buying or
+   * enrolling in a course. Sign-up asks only for an email, so the number is
+   * asked for at the first enrolment. Needs a working SMS provider; off by
+   * default for an academy without one.
+   */
+  REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT:
+    booleanEnvironmentValueSchema.default(false),
   /**
    * Codes one network address may request in any ten minutes, across every
    * destination. Counted in the database, so it holds across API instances.
@@ -583,8 +608,9 @@ function resolveCorsOrigins(parsed: ParsedServerConfig): string[] {
 
 export type ServerConfig = Omit<
   ParsedServerConfig,
-  "RP_ID" | "WEBAUTHN_ORIGINS" | "CORS_ORIGINS"
+  "RP_ID" | "WEBAUTHN_ORIGINS" | "CORS_ORIGINS" | "ACADEMY_NAME" | "RP_NAME"
 > & {
+  ACADEMY_NAME: string;
   EMAIL_TRANSPORT: "smtp" | "console";
   RP_ID: string;
   WEBAUTHN_ORIGINS: string[];
@@ -634,8 +660,10 @@ export function loadServerConfig(
   const rpIds = resolveWebAuthnRpIds(resolvedRpId, origins);
   const corsOrigins = resolveCorsOrigins(parsed);
 
+  const { RP_NAME: legacyAcademyName, ...current } = parsed;
   return {
-    ...parsed,
+    ...current,
+    ACADEMY_NAME: parsed.ACADEMY_NAME || legacyAcademyName || "VeoLMS",
     EMAIL_TRANSPORT: resolveEmailTransport(parsed),
     RP_ID: resolvedRpId,
     WEBAUTHN_ORIGINS: origins,

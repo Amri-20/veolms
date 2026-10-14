@@ -26,7 +26,11 @@ export const overviewCardClasses = elevatedCardClasses;
  * be 0.
  */
 export const overviewColumnUnderHeroClasses =
-  "[&>:first-child]:relative [&>:first-child]:z-10 [&>:first-child]:-mt-4";
+  "[&>:first-child]:relative [&>:first-child]:z-10 [&>:first-child]:-mt-4 " +
+  // On a phone the boxes run to the screen's edges, as the hero does: the
+  // column is pulled out over the page's side padding. The boxes keep their
+  // rounded corners.
+  "max-[640px]:-mx-(--application-page-inline-gutter) max-[640px]:w-[calc(100%_+_2_*_var(--application-page-inline-gutter))] max-[640px]:max-w-none";
 
 /** A box's inner room, a little less on a phone. */
 export const overviewCardPaddingClasses = elevatedCardPaddingClasses;
@@ -36,7 +40,7 @@ export const bandHeaderClasses =
   "flex min-w-0 flex-wrap items-end justify-between gap-x-6 gap-y-2";
 
 export const bandTitleClasses =
-  "m-0 text-[1.2rem] leading-tight font-bold tracking-[-0.02em] text-(--text)";
+  "m-0 text-[1.35rem] leading-tight font-bold tracking-[-0.02em] text-(--text)";
 
 export const bandSubtitleClasses = "m-0 mt-1 text-[0.86rem] text-(--muted)";
 
