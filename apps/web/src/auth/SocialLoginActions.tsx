@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useNavigate } from "react-router";
 import { cancelGoogleOneTap } from "./GoogleOneTap";
-import { GitHubBrandIcon, GoogleBrandIcon } from "./SocialBrandIcons";
+import { GitHubBrandIcon } from "./SocialBrandIcons";
+import { GoogleAccountButton, GoogleSignInButton } from "./GoogleSignInButton";
+import {
+  rememberGoogleSignIn,
+  useLastGoogleAccount,
+} from "./lastGoogleAccount";
 import {
   OAUTH_PROVIDER_STORAGE_KEY,
   OAUTH_RETURN_TO_STORAGE_KEY,
@@ -34,26 +39,21 @@ const SILENT_CHECK_WAIT_MS = 1500;
 const SHOW_GITHUB_SIGN_IN = false;
 
 /**
- * The Google button, drawn to Google's sign-in branding guidelines: the
- * standard four-colour "G" at 20px, Roboto Medium at 14/20px, 12px at the
- * sides and 10px between the logo and the words, 40px tall, a 4px corner.
- * Their dark theme (#131314, a #8E918F edge, #E3E3E3 words) on the app's
- * dark themes and their light one (white, #747775, #1F1F1F) on its light
- * theme. Hovered and pressed it takes their state layer: the words' colour
- * at 8% and 12%. As wide as the login card.
+ * Adds Google's own options to the address the API gives for its sign-in:
+ * the account to sign in with, or that Google is to show its chooser.
  */
-const googleButtonClasses = [
-  "inline-flex h-10 w-full shrink-0 cursor-pointer items-center justify-center gap-2.5 rounded-sm border px-3",
-  // Important: the login card's stylesheet sets `font: inherit` on buttons,
-  // which outranks utility classes.
-  "font-['Roboto',Arial,sans-serif]! text-sm! leading-5! font-medium! tracking-[0.25px]! whitespace-nowrap",
-  "border-[#8E918F] bg-[#131314] text-[#E3E3E3]",
-  "[:root[data-theme=light]_&]:border-[#747775] [:root[data-theme=light]_&]:bg-white [:root[data-theme=light]_&]:text-[#1F1F1F]",
-  "transition-colors hover:bg-[color-mix(in_srgb,#E3E3E3_8%,#131314)] active:bg-[color-mix(in_srgb,#E3E3E3_12%,#131314)]",
-  "[:root[data-theme=light]_&]:hover:bg-[color-mix(in_srgb,#1F1F1F_8%,white)] [:root[data-theme=light]_&]:active:bg-[color-mix(in_srgb,#1F1F1F_12%,white)]",
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)",
-  "disabled:cursor-progress",
-].join(" ");
+function withGoogleOptions(
+  url: string,
+  options: { loginHint?: string; chooseAccount?: boolean },
+): string {
+  const address = new URL(url);
+  if (options.loginHint) {
+    address.searchParams.set("login_hint", options.loginHint);
+  }
+  if (options.chooseAccount)
+    address.searchParams.set("prompt", "select_account");
+  return address.toString();
+}
 
 interface SocialLoginActionsProps {
   onError?: (message: string) => void;
@@ -85,7 +85,14 @@ export function SocialLoginActions({
   const stopListeningRef = useRef<(() => void) | null>(null);
   // Whether Google would sign the visitor in without asking anything; asked
   // as the pop-up opens.
-  const googleSilentCheckRef = useGoogleSilentSignInCheck(!redirectReturn);
+  // The Google account this browser last used, offered by name; the check
+  // asks Google about that account.
+  const { account: lastGoogleAccount, lastUsed: googleLastUsed } =
+    useLastGoogleAccount();
+  const googleSilentCheckRef = useGoogleSilentSignInCheck(
+    !redirectReturn,
+    lastGoogleAccount?.email,
+  );
 
   useEffect(() => () => stopListeningRef.current?.(), []);
 
@@ -132,6 +139,7 @@ export function SocialLoginActions({
         redirectUri,
       });
       clearOauthHandoff();
+      if (provider === "google") rememberGoogleSignIn(response.user);
       authStore.setUser(response.user);
       navigate(resolvePostAuthPath(response, returnTo), { replace: true });
     } catch (err: unknown) {
@@ -190,7 +198,11 @@ export function SocialLoginActions({
     });
   };
 
-  const handleOauth = async (provider: "google" | "github") => {
+  const handleOauth = async (
+    provider: "google" | "github",
+    /** The arrow on the account's button: Google's chooser, no hint. */
+    { chooseAccount = false }: { chooseAccount?: boolean } = {},
+  ) => {
     if (actionsLocked) return;
     cancelGoogleOneTap();
     stopListeningRef.current?.();
@@ -207,13 +219,21 @@ export function SocialLoginActions({
     }
     const redirectUri = `${window.location.origin}/auth/callback`;
     const providerName = provider === "google" ? "Google" : "GitHub";
+    const googleOptions =
+      provider === "google"
+        ? chooseAccount
+          ? { chooseAccount: true }
+          : { loginHint: lastGoogleAccount?.email }
+        : {};
 
     // When Google would sign the visitor in without asking anything (one
     // account that has agreed before), a window opened here only flashed
     // open and shut. Then the sign-in runs in a hidden frame instead, and a
     // window opens only if Google asks for the visitor after all.
     const silentCheck =
-      provider === "google" ? googleSilentCheckRef.current : null;
+      provider === "google" && !chooseAccount
+        ? googleSilentCheckRef.current
+        : null;
     if (silentCheck && silentCheck.settled !== false) {
       try {
         const silent =
@@ -233,7 +253,8 @@ export function SocialLoginActions({
           if (!response.url) {
             throw new Error("The OAuth provider did not return a login URL.");
           }
-          const answer = await askOauthProviderSilently(response.url);
+          const url = withGoogleOptions(response.url, googleOptions);
+          const answer = await askOauthProviderSilently(url);
           if (answer?.has("code")) {
             await finishFromPopup(provider, answer, redirectUri);
             return;
@@ -244,7 +265,7 @@ export function SocialLoginActions({
           silentCheck.markNeedsVisitor();
           const popup = openOauthPopup(providerName);
           setPopupStage(popup ? "popup" : null);
-          continueInWindow(provider, popup, response.url, redirectUri);
+          continueInWindow(provider, popup, url, redirectUri);
           return;
         }
       } catch (err: unknown) {
@@ -268,7 +289,14 @@ export function SocialLoginActions({
         throw new Error("The OAuth provider did not return a login URL.");
       }
 
-      continueInWindow(provider, popup, response.url, redirectUri);
+      continueInWindow(
+        provider,
+        popup,
+        provider === "google"
+          ? withGoogleOptions(response.url, googleOptions)
+          : response.url,
+        redirectUri,
+      );
     } catch (err: unknown) {
       popup?.close();
       fail(err, "Unable to initialize social login. Please try again.");
@@ -276,6 +304,11 @@ export function SocialLoginActions({
   };
 
   const providerLabel = loadingProvider === "github" ? "GitHub" : "Google";
+  const googleBusyLabel = googleBusy
+    ? popupStage === "popup"
+      ? "Waiting for Google…"
+      : "Verifying…"
+    : null;
   const pendingMessage = oneTapPending
     ? "Verifying your Google account…"
     : popupStage === "popup"
@@ -290,31 +323,33 @@ export function SocialLoginActions({
         <span>OR</span>
       </p>
 
-      {pendingMessage ? (
-        <p className="auth-form__pending" role="status">
-          {pendingMessage}
-        </p>
-      ) : null}
+      {/* Said to screen readers only: the Google button itself shows that
+          it is verifying, and a line of its own here made the pop-up grow
+          and jump as the sign-in started. Always in the page, so a change
+          of its words is announced. */}
+      <p className="sr-only" role="status">
+        {pendingMessage ?? ""}
+      </p>
 
       <div className="auth-social__actions">
-        <button
-          aria-busy={googleBusy}
-          aria-label={googleBusy ? "Verifying Google sign-in" : undefined}
-          className={googleButtonClasses}
-          disabled={actionsLocked}
-          onClick={() => handleOauth("google")}
-          type="button"
-        >
-          <GoogleBrandIcon size={20} />
-          {googleBusy ? (
-            <>
-              <LoadingSpinnerIcon size={18} className="text-current!" />
-              {popupStage === "popup" ? "Waiting for Google…" : "Verifying…"}
-            </>
-          ) : (
-            "Continue with Google"
-          )}
-        </button>
+        {lastGoogleAccount ? (
+          <GoogleAccountButton
+            account={lastGoogleAccount}
+            busyLabel={googleBusyLabel}
+            disabled={actionsLocked}
+            lastUsed={googleLastUsed}
+            onChooseAccount={() =>
+              handleOauth("google", { chooseAccount: true })
+            }
+            onContinue={() => handleOauth("google")}
+          />
+        ) : (
+          <GoogleSignInButton
+            busyLabel={googleBusyLabel}
+            disabled={actionsLocked}
+            onClick={() => handleOauth("google")}
+          />
+        )}
 
         {/* Off for now (see SHOW_GITHUB_SIGN_IN); the sign-in itself still
             works and the API keeps its GitHub routes. */}

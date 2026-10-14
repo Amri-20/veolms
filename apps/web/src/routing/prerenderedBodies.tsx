@@ -1,5 +1,7 @@
 import { lazy, useState, type ComponentType } from "react";
+import { authStore } from "../store/auth.store";
 import { readHomeHint } from "../store/homeHint";
+import { isSignedInSettingsTab, normalizeSettingsTab } from "./tabSessionState";
 import {
   CATALOGUE_CHUNK_URL_PLACEHOLDER,
   COURSE_OVERVIEW_CHUNK_URL_PLACEHOLDER,
@@ -73,7 +75,22 @@ export const courseOverviewBody = definePrerenderedBody(
 // Fetched ahead of a visit by the shell (see its warm-up effect), so that
 // opening them shows the page and not a placeholder for it.
 export const settingsPageBody = definePrerenderedBody(
-  () => import("../SettingsPage"),
+  // With the signed-in sections when the browser looks signed in (see
+  // SettingsPage.tsx). Their request starts alongside the page's. The page
+  // waits for them only when the address opens on one of them; on the other
+  // tabs nothing of theirs is drawn, so it does not hold the page up.
+  () => {
+    const page = import("../SettingsPage");
+    if (!authStore.hasSessionHint()) return page;
+    void import("../settings/SignedInSettingsTab").catch(() => undefined);
+    const sections = page
+      .then((module) => module.preloadSignedInSettings())
+      .catch(() => undefined);
+    const tab = /^\/settings\/([^/]+)/.exec(window.location.pathname)?.[1];
+    return isSignedInSettingsTab(normalizeSettingsTab(tab))
+      ? sections.then(() => page)
+      : page;
+  },
   (module) => module.SettingsPage,
 );
 

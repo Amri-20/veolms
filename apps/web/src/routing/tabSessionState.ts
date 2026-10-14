@@ -10,7 +10,7 @@ export type SettingsTab =
 export type DiscussionTab =
   "all" | "q-and-a" | "comments" | "notes" | "mentions" | "following" | "saved";
 
-export const SETTINGS_DEFAULT_TAB: SettingsTab = "profile";
+export const SETTINGS_DEFAULT_TAB: SettingsTab = "appearance";
 export const DISCUSSIONS_DEFAULT_TAB: DiscussionTab = "q-and-a";
 export const SETTINGS_TAB_SESSION_KEY = "veolms-session-settings-tab";
 export const DISCUSSIONS_TAB_SESSION_KEY = "veolms-session-discussions-tab";
@@ -24,6 +24,18 @@ const settingsTabs = new Set<SettingsTab>([
   "security",
   "account",
 ]);
+
+// Profile, notifications, privacy and the account only mean something to a
+// signed-in account; a guest's Settings leaves them out.
+const signedInSettingsTabs = new Set<SettingsTab>([
+  "notifications",
+  "security",
+  "profile",
+  "account",
+]);
+
+export const isSignedInSettingsTab = (tab: SettingsTab) =>
+  signedInSettingsTabs.has(tab);
 
 const discussionTabs = new Set<DiscussionTab>([
   "all",

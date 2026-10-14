@@ -2,7 +2,10 @@ import {
   guestHomeGutter,
   guestHomeGutterBleed,
 } from "../guest/guestHomeSpacing";
-import { homeHeroHeightClasses } from "../guest/homeHeroHeight";
+import {
+  homeHeroHeightClasses,
+  homeHeroPictureSizeClasses,
+} from "../guest/homeHeroHeight";
 
 /**
  * The band the picture gets on a page too narrow to show it beside the copy:
@@ -53,8 +56,9 @@ export const heroSizeClasses = [
   // The height itself, shared with the visitor's hero (92% of the sizes
   // described above).
   homeHeroHeightClasses,
-  "@[50rem]/home:[--picture-h:max(var(--hero-h),33.35cqw)]",
-  "@[50rem]/home:[--picture-shift:min(calc(var(--picture-h)_*_0.216),max(0px,calc(var(--picture-h)_*_2.9985_-_100cqw)))]",
+  // The picture's size and shift beside the copy, shared with the visitor's
+  // hero so the desk stands in the same place in both.
+  homeHeroPictureSizeClasses,
   "@max-[50rem]/home:sm:[--picture-shift:calc(clamp(20rem,46cqw,23rem)_*_0.216)]",
 ].join(" ");
 

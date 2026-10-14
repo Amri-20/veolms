@@ -12,6 +12,7 @@ import {
   isOauthProvider,
   isReturningToOauthDialog,
 } from "../auth/oauthFlow";
+import { rememberGoogleSignIn } from "../auth/lastGoogleAccount";
 import { useOauthLogin } from "../services/auth";
 import { authStore } from "../store/auth.store";
 
@@ -101,6 +102,7 @@ export default function AuthCallbackRoute() {
         })
         .then((response) => {
           clearOauthHandoff();
+          if (storedProvider === "google") rememberGoogleSignIn(response.user);
           authStore.setUser(response.user);
           navigate(resolvePostAuthPath(response, returnTo), { replace: true });
         })

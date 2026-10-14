@@ -20,6 +20,8 @@ const GOOGLE_SIGN_IN_SCOPE = "openid profile email";
 export async function canSignInWithGoogleSilently(
   clientId: string,
   signal?: AbortSignal,
+  /** The account to ask about (see lastGoogleAccount); any, without one. */
+  loginHint?: string,
 ): Promise<boolean> {
   const url = `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams(
     {
@@ -28,6 +30,7 @@ export async function canSignInWithGoogleSilently(
       response_type: "code",
       scope: GOOGLE_SIGN_IN_SCOPE,
       state: "silent-check",
+      ...(loginHint ? { login_hint: loginHint } : {}),
     },
   ).toString()}`;
   const answer = await askOauthProviderSilently(url, signal);
@@ -44,11 +47,13 @@ export interface GoogleSilentSignInCheck {
 
 /**
  * Puts the question above to Google once the login pop-up is open (when
- * `enabled`), and keeps the answer for the Google button. Null until the
+ * `enabled`), about `loginHint`'s account when there is one, and keeps the
+ * answer for the Google button. Null until the
  * question has been asked; called off when the pop-up closes.
  */
 export function useGoogleSilentSignInCheck(
   enabled: boolean,
+  loginHint?: string,
 ): RefObject<GoogleSilentSignInCheck | null> {
   const { data: authConfig } = useAuthConfig();
   const clientId = authConfig?.googleClientId;
@@ -67,6 +72,7 @@ export function useGoogleSilentSignInCheck(
     check.answer = canSignInWithGoogleSilently(
       clientId,
       controller.signal,
+      loginHint,
     ).then((silent) => {
       check.settled = silent;
       return silent;
@@ -76,7 +82,7 @@ export function useGoogleSilentSignInCheck(
       controller.abort();
       if (checkRef.current === check) checkRef.current = null;
     };
-  }, [clientId, enabled]);
+  }, [clientId, enabled, loginHint]);
 
   return checkRef;
 }

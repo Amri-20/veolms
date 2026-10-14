@@ -31,6 +31,7 @@ import type {
   GuestHomePageResponse,
 } from "@veolms/contracts";
 import {
+  SETTINGS_DEFAULT_TAB,
   normalizeSettingsTab,
   rememberSettingsTab,
   type SettingsTab,
@@ -1038,7 +1039,7 @@ export function CoursesPage({
   routeCatalogueEnrollmentFilter = "all",
   page = "courses",
   section: requestedSection = null,
-  settingsTab = "profile",
+  settingsTab = SETTINGS_DEFAULT_TAB,
   discussionTab = "q-and-a",
   courseSlug,
   quizId,
@@ -1314,6 +1315,15 @@ export function CoursesPage({
   } = useAcademyRouteGuardState();
   const isEditingOrCreatingCourse = page === "course-create";
   const isAuthReady = Boolean(storeUser) || authUserFetched;
+  // Whether this page has shown someone signed out. Signing in after that
+  // keeps the guest home up until the learner's own home is ready, just as
+  // for a browser that opened the page signed out: signing out and back in
+  // without a reload used to show the placeholders of a learner with
+  // courses in between, whatever the account had.
+  const [shownSignedOut, setShownSignedOut] = useState(false);
+  if (isAuthReady && !isAuthenticated && !shownSignedOut) {
+    setShownSignedOut(true);
+  }
   // The Discussions page needs a session, and the route guard holds every
   // such page back until the session check has answered. A browser that was
   // signed in last time is shown the page meanwhile: its heading, tabs and
@@ -4919,7 +4929,9 @@ export function CoursesPage({
       // the code's loading state used to be the learner's placeholders, and
       // the page went guest home, placeholders, guest home, their home.
       const justSignedInHome =
-        initialGuestHomePage && showGuestHomeWhilePending ? (
+        initialGuestHomePage &&
+        (showGuestHomeWhilePending ||
+          (shownSignedOut && hydratedWorkspaceRoleHint !== "creator")) ? (
           <GuestHome
             onNavigatePage={onNavigatePage}
             courseCardActions={guestHomeCourseCardActions}
@@ -5046,6 +5058,7 @@ export function CoursesPage({
             role={role}
             userRoles={userRoles}
             isAuthenticated={isAuthenticated}
+            isAuthReady={isAuthReady}
             onNavigatePage={onNavigatePage}
             onExitSettings={onExitSettings}
             showBackButton={showPageBackButton}
@@ -6093,6 +6106,7 @@ export function CoursesPage({
                         : null
                     }
                     onNavigate={navigateSettingsQuickMenu}
+                    showSignedInTabs={isAuthenticated}
                   />
                 </Suspense>
               )}
@@ -6397,6 +6411,7 @@ export function CoursesPage({
                             : null
                         }
                         onNavigate={navigateSettingsQuickMenu}
+                        showSignedInTabs={isAuthenticated}
                       />
                     </Suspense>
                   )}
