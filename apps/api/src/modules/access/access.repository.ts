@@ -78,6 +78,48 @@ export async function revokeEnrollment(
     .execute();
 }
 
+/** The learner's enrolment in the course, whatever its status. */
+export async function findEnrollmentForCourse(
+  database: Executor,
+  userId: string,
+  courseId: string,
+) {
+  return await database
+    .selectFrom("enrollments")
+    .select(["id", "status"])
+    .where("user_id", "=", userId)
+    .where("course_id", "=", courseId)
+    .executeTakeFirst();
+}
+
+/**
+ * Makes a revoked grant and its enrolment active again, exactly as they
+ * were: order, source and access period are not touched, so a later refund
+ * of the order that paid for them still finds them. Rows in any other
+ * status are left alone.
+ */
+export async function restoreRevokedCourseAccess(
+  database: Executor,
+  userId: string,
+  courseId: string,
+) {
+  const now = new Date();
+  await database
+    .updateTable("access_grants")
+    .set({ status: "active", updated_at: now })
+    .where("user_id", "=", userId)
+    .where("course_id", "=", courseId)
+    .where("status", "=", "revoked")
+    .execute();
+  await database
+    .updateTable("enrollments")
+    .set({ status: "active", updated_at: now })
+    .where("user_id", "=", userId)
+    .where("course_id", "=", courseId)
+    .where("status", "=", "revoked")
+    .execute();
+}
+
 export async function findAccessGrant(
   database: Executor,
   userId: string,

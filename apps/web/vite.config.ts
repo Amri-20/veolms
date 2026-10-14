@@ -179,6 +179,14 @@ const ROUTE_CHUNK_PRELOADS = [
     manifestSrcSuffix: "src/GuestHome.tsx",
     devUrl: "/src/GuestHome.tsx",
   },
+  {
+    placeholder: "__VEO_COURSE_OVERVIEW_CHUNK_URL__",
+    cssPlaceholder: "__VEO_COURSE_OVERVIEW_CSS_URLS__",
+    jsPlaceholder: "__VEO_COURSE_OVERVIEW_JS_URLS__",
+    facadeSuffix: "/src/courses/CourseOverviewPage.tsx",
+    manifestSrcSuffix: "courses/CourseOverviewPage.tsx",
+    devUrl: "/src/courses/CourseOverviewPage.tsx",
+  },
 ];
 
 function routeChunkPreloadPlugin(): Plugin {

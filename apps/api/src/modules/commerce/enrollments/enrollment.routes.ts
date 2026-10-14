@@ -80,10 +80,11 @@ const enrollmentRoutes: RoutePlugin = async (app, options) => {
       schema: {
         operationId: "unenrollFromCourse",
         tags: ["Commerce - Enrollments"],
-        summary: "Unenroll from a free course",
+        summary: "Unenroll from a course",
         description:
           "Removes the authenticated student from a free course they enrolled in at no cost. " +
-          "Learning progress is kept. Purchased, bundled, and staff-granted enrollments cannot be removed this way.",
+          "Learning progress is kept. Purchased, bundled, and staff-granted enrollments cannot be removed this way. " +
+          "An admin may leave any course they are enrolled in: the order is not changed, no money is returned, and their progress in the course is cleared.",
         params: unenrollCourseParamsSchema,
         response: {
           200: jsonResponse(

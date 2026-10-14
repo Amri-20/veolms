@@ -747,7 +747,10 @@ export function createThreadsService(
         ["admin", "instructor", "creator", "staff"].includes(r.toLowerCase()),
       );
       const isAuthorRestrictedTab =
-        tab === "q-and-a" || tab === "comments" || tab === "notes";
+        tab === "all" ||
+        tab === "q-and-a" ||
+        tab === "comments" ||
+        tab === "notes";
 
       // Validate courseId if supplied
       if (query.courseId) {

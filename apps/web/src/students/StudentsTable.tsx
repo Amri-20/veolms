@@ -18,6 +18,7 @@ import { EnvelopeSimpleIcon as EnvelopeSimple } from "@phosphor-icons/react/Enve
 import type { StudentListItem } from "@veolms/contracts";
 import type { NavigateTo } from "../routing/navigation";
 import { getApplicationScrollElement } from "../shell/applicationScroll";
+import { ElevatedCard } from "../components/ElevatedCard";
 
 const STUDENT_ROW_ESTIMATE = 78;
 const STUDENT_ROW_OVERSCAN = 8;
@@ -563,10 +564,7 @@ export function StudentsTable({
 
   return (
     <div className="w-full">
-      <div
-        className="overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface-raised,var(--surface))"
-        style={{ boxShadow: "var(--card-shadow)" }}
-      >
+      <ElevatedCard as="div" className="overflow-hidden">
         <div className="@container/students overflow-x-auto">
           <div
             role="table"
@@ -608,7 +606,7 @@ export function StudentsTable({
             )}
           </div>
         </div>
-      </div>
+      </ElevatedCard>
 
       {isFetchingNextPage && (
         <div

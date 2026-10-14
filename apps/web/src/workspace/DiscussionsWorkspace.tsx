@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import "../styles/features/discussions.css";
+import { elevatedCardTokenScopeClasses } from "../components/ElevatedCard";
 import type { PublicPopularDiscussion } from "@veolms/contracts";
 import type {
   CSSProperties,
@@ -24,6 +25,7 @@ import { AtIcon as At } from "@phosphor-icons/react/At";
 import { BookmarkSimpleIcon as BookmarkSimple } from "@phosphor-icons/react/BookmarkSimple";
 import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { ChatCircleDotsIcon as ChatCircleDots } from "@phosphor-icons/react/ChatCircleDots";
+import { ChatsCircleIcon as ChatsCircle } from "@phosphor-icons/react/ChatsCircle";
 import { ChatTeardropTextIcon as ChatTeardropText } from "@phosphor-icons/react/ChatTeardropText";
 import { CheckCircleIcon as CheckCircle } from "@phosphor-icons/react/CheckCircle";
 import { ClockIcon as Clock } from "@phosphor-icons/react/Clock";
@@ -248,6 +250,7 @@ const tabs: readonly {
   Icon: typeof Question;
   tone: PageTabTone;
 }[] = [
+  { id: "all", label: "All", Icon: ChatsCircle, tone: "green" },
   { id: "q-and-a", label: "Q&A", Icon: Question, tone: "violet" },
   {
     id: "comments",
@@ -1842,6 +1845,9 @@ export function DiscussionsWorkspace({
     setMobileActionTarget(null);
   }, [activeTab]);
 
+  // Every question and comment in one list. (Notes are kept apart by the
+  // server and are not in it.)
+  const isAllTab = activeTab === "all";
   const isQnaTab = activeTab === "q-and-a";
   const isCommentsTab = activeTab === "comments";
   const isNotesTab = activeTab === "notes";
@@ -1893,12 +1899,12 @@ export function DiscussionsWorkspace({
 
     return {
       ...sharedQuery,
-      ...(isQnaTab || isCommentsTab
+      ...(isQnaTab || isCommentsTab || isAllTab
         ? effectiveOwnership === "mine"
           ? { mine: true }
           : {}
         : {}),
-      ...(isCommentsTab
+      ...(isCommentsTab || isAllTab
         ? {}
         : {
             status: workspaceStatus as
@@ -2123,7 +2129,7 @@ export function DiscussionsWorkspace({
     if (isQnaTab) {
       setQnaStatus("all");
       setQnaSort("activity");
-    } else if (isCommentsTab) {
+    } else if (isCommentsTab || isAllTab) {
       setSort("activity");
     } else if (isNotesTab) {
       setNotesSort("activity");
@@ -2402,6 +2408,25 @@ export function DiscussionsWorkspace({
         );
       }
 
+      // All: each row is drawn as what it is.
+      if (isAllTab) {
+        const isQuestion = thread.kind === "question" || thread.kind === "qna";
+        const RowCard = isQuestion
+          ? DiscussionWorkspaceQuestionCard
+          : DiscussionWorkspaceCommentCard;
+        return (
+          <RowCard
+            thread={thread}
+            onNavigatePage={onNavigatePage}
+            showActions={!showDiscussionSwipePreviews}
+            onRequestMobileActions={
+              showDiscussionSwipePreviews ? openMobileActions : undefined
+            }
+            setNotice={setNotice}
+          />
+        );
+      }
+
       const discussionStatus = thread.status ?? "open";
       const StatusIcon = statusIcons[discussionStatus];
       return isQnaTab ? (
@@ -2484,6 +2509,7 @@ export function DiscussionsWorkspace({
       );
     },
     [
+      isAllTab,
       isBookmarksTab,
       isCommentsTab,
       isFollowingTab,
@@ -2527,6 +2553,7 @@ export function DiscussionsWorkspace({
               contentClassName={selectContentClassName}
               menuMaxWidth={inSheet ? Number.POSITIVE_INFINITY : undefined}
               matchMenuToContainer={
+                isAllTab ||
                 isQnaTab ||
                 isCommentsTab ||
                 isNotesTab ||
@@ -2539,7 +2566,8 @@ export function DiscussionsWorkspace({
             />
           </div>,
         )}
-        {!isCommentsTab &&
+        {!isAllTab &&
+          !isCommentsTab &&
           !isNotesTab &&
           !isMentionsTab &&
           !isFollowingTab &&
@@ -2629,7 +2657,7 @@ export function DiscussionsWorkspace({
                     menuMaxWidth={
                       inSheet ? Number.POSITIVE_INFINITY : undefined
                     }
-                    matchMenuToContainer={isQnaTab || isCommentsTab}
+                    matchMenuToContainer={isQnaTab || isCommentsTab || isAllTab}
                     options={
                       isQnaTab
                         ? ([
@@ -2658,13 +2686,13 @@ export function DiscussionsWorkspace({
             ? "discussion-hub__filters--bookmarks"
             : isMentionsTab
               ? "discussion-hub__filters--mentions"
-              : isCommentsTab || isNotesTab
+              : isCommentsTab || isNotesTab || isAllTab
                 ? "discussion-hub__filters--comments"
                 : ""
       }`}
       aria-label="Filter discussions"
     >
-      <div className="discussion-hub__filter-toolbar">
+      <div className="discussion-hub__filter-toolbar" data-filter-bar="">
         <label className="discussion-hub__search">
           <MagnifyingGlass size={19} aria-hidden="true" />
           <span className="sr-only">Search discussions</span>
@@ -2714,7 +2742,10 @@ export function DiscussionsWorkspace({
   );
 
   return (
-    <div className="discussion-hub" aria-labelledby="discussions-title">
+    <div
+      className={`discussion-hub ${elevatedCardTokenScopeClasses}`}
+      aria-labelledby="discussions-title"
+    >
       <header className="discussion-hub__header">
         <div>
           <h1 id="discussions-title">Discussions</h1>

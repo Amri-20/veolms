@@ -7,6 +7,7 @@ import { Stack } from "@phosphor-icons/react/Stack";
 import type { Course } from "../catalogue";
 import { CourseWishlistHeartButton } from "../CourseWishlistHeartButton";
 import { CourseHeroArtwork } from "./CourseHeroArtwork";
+import { presumedGuestOnlyClasses } from "./courseViewerState";
 
 export interface CourseOverviewHeroProps {
   title: string;
@@ -28,6 +29,22 @@ export interface CourseOverviewHeroProps {
   };
   /** Left out when the course has nothing a visitor can watch yet. */
   preview?: { onOpen: () => void; disabled: boolean };
+  /**
+   * Which of the corner's two controls depend on who is looking, while that
+   * is not known yet (see `courseViewerState`).
+   *
+   * - `for: "everyone"`: the viewer is being waited for. The controls named
+   *   here are not passed in at all; a placeholder holds the place of each.
+   * - `for: "expected-session"`: the visitor is presumed a guest and the
+   *   guest's controls are passed in and shown. On a browser that remembers
+   *   a session they are hidden from the first paint and the placeholders
+   *   shown in their place.
+   */
+  viewerPlaceholders?: {
+    for: "everyone" | "expected-session";
+    preview: boolean;
+    wishlist: boolean;
+  };
   placement?: HeroPlacement;
 }
 
@@ -56,12 +73,12 @@ const heroSurfaceClasses =
  * The hero's lower edge on the course page: over its last stretch it fades
  * slowly into the ground the boxes below lie on, so the hero does not end
  * in a hard line behind the box that overlaps it. The ground is the shell's
- * `--cov-ground` (see `CoursesPage`), or the canvas in the unframed layout,
+ * `--card-ground` (see `CoursesPage`), or the canvas in the unframed layout,
  * where the page is not deepened. It lies over the picture and under the
  * text and the buttons.
  */
 const heroFootFadeClasses =
-  "pointer-events-none absolute inset-x-0 bottom-0 z-5 h-28 bg-linear-to-t from-(--hero-foot) from-12% via-(--hero-foot)/50 via-45% to-transparent [--hero-foot:var(--cov-ground,var(--canvas))]";
+  "pointer-events-none absolute inset-x-0 bottom-0 z-5 h-28 bg-linear-to-t from-(--hero-foot) from-12% via-(--hero-foot)/50 via-45% to-transparent [--hero-foot:var(--card-ground,var(--canvas))]";
 
 /**
  * The text column: under the picture when stacked, beside it when wide. Wide,
@@ -122,6 +139,13 @@ const heroControlClasses =
 
 const previewPillClasses = `${heroControlClasses} h-12 gap-2.5 rounded-full px-5 text-[0.92rem] font-semibold`;
 
+/**
+ * Holds the place of a control in the hero's corner: the same dark glass,
+ * pulsing as the app's other placeholders do.
+ */
+const controlPlaceholderClasses =
+  "shrink-0 animate-pulse rounded-full border border-white/10 bg-slate-950/55 motion-reduce:animate-none";
+
 const previewPillContent = (
   <>
     <Play size={17} weight="bold" aria-hidden="true" />
@@ -152,9 +176,18 @@ export function CourseOverviewHero({
   backLabel = "Back",
   wishlist,
   preview,
+  viewerPlaceholders,
   placement = "card",
 }: CourseOverviewHeroProps) {
   const placed = heroPlacementClasses[placement];
+  // The guest's own controls step aside for their placeholders on a browser
+  // that remembers a session.
+  const guestOnly =
+    viewerPlaceholders?.for === "expected-session"
+      ? presumedGuestOnlyClasses
+      : "";
+  const previewGuestOnly = viewerPlaceholders?.preview ? guestOnly : "";
+  const forEveryone = viewerPlaceholders?.for === "everyone";
   // The short description is one paragraph here, whatever line breaks it
   // was written with, cut to two or three lines.
   const summary = shortDescription?.replace(/\s+/g, " ").trim();
@@ -200,6 +233,7 @@ export function CourseOverviewHero({
         thumbnailSrcSet={thumbnailSrcSet}
         onPreview={preview?.onOpen}
         previewDisabled={preview?.disabled}
+        previewClassName={previewGuestOnly}
       />
 
       {placement === "edge" ? (
@@ -243,13 +277,17 @@ export function CourseOverviewHero({
           {title}
         </h1>
         {summary ? (
-          // The course's two-line pitch, set exactly as the home page's quote
-          // is (`heroQuoteClasses`): the serif face in italic, in balanced
-          // lines. Two lines where the hero is wide; a third where its text
-          // column is narrow, so that the line is never cut short.
-          // Stacked, it has a few pixels more room above and below than the
-          // column's own gap; beside the picture the rows are spread anyway.
-          <p className="mx-0 my-1.5 line-clamp-3 max-w-[34em] font-serif text-[1.06rem] leading-[1.3] text-balance italic text-(--hero-ink)/80 @3xl/hero:my-0">
+          // The course's two-line pitch, in the page's own face, upright,
+          // in balanced lines. It was set as the home page's quote is (the
+          // system serif in italic) until 2026-10-14: that reads as someone
+          // being quoted, which this is not; the serif is whichever one the
+          // device has, so the line looked different on each; and its
+          // figures ("75+ hours") are old-style ones that sit unevenly.
+          // Two lines where the hero is wide; a third where its text column
+          // is narrow, so that the line is never cut short. Stacked, it has
+          // a few pixels more room above and below than the column's own
+          // gap; beside the picture the rows are spread anyway.
+          <p className="mx-0 my-1.5 line-clamp-3 max-w-[34em] text-[1.02rem] leading-[1.45] font-medium text-balance text-(--hero-ink)/80 @3xl/hero:my-0">
             {summary}
           </p>
         ) : null}
@@ -294,7 +332,7 @@ export function CourseOverviewHero({
         {preview && !thumbnail ? (
           <button
             type="button"
-            className={`${previewPillClasses} mt-1 inline-flex self-start`}
+            className={`${previewPillClasses} mt-1 inline-flex self-start ${previewGuestOnly}`}
             onClick={preview.onOpen}
             disabled={preview.disabled}
           >
@@ -313,15 +351,38 @@ export function CourseOverviewHero({
         {preview && thumbnail ? (
           <button
             type="button"
-            className={`${previewPillClasses} hidden @3xl/hero:inline-flex`}
+            className={`${previewPillClasses} hidden @3xl/hero:inline-flex ${previewGuestOnly}`}
             onClick={preview.onOpen}
             disabled={preview.disabled}
           >
             {previewPillContent}
           </button>
         ) : null}
+        {/* The places of the two controls while the viewer is not known:
+            the preview button's beside the text only, as the button's own
+            is, and the heart's. */}
+        {viewerPlaceholders?.preview && thumbnail ? (
+          <span
+            aria-hidden="true"
+            className={`${controlPlaceholderClasses} h-12 w-44 ${
+              forEveryone
+                ? "hidden @3xl/hero:block"
+                : "hidden [:root[data-session-hint=signed-in]_&]:@3xl/hero:block"
+            }`}
+          />
+        ) : null}
+        {viewerPlaceholders?.wishlist ? (
+          <span
+            aria-hidden="true"
+            className={`${controlPlaceholderClasses} size-11 ${
+              forEveryone
+                ? "block"
+                : "hidden [:root[data-session-hint=signed-in]_&]:block"
+            }`}
+          />
+        ) : null}
         {wishlist ? (
-          <div>
+          <div className={viewerPlaceholders?.wishlist ? guestOnly : ""}>
             <CourseWishlistHeartButton
               variant="overview-hero"
               wishlisted={wishlist.wishlisted}

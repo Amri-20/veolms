@@ -405,6 +405,7 @@ export function LearningWorkspace({
     data: courseOverview,
     isLoading: isCourseOverviewLoading,
     isError: isCourseOverviewError,
+    error: courseOverviewError,
     isFetching: isCourseOverviewFetching,
     refetch: refetchCourseOverview,
   } = useCourseOverview(courseSlug, {
@@ -458,8 +459,10 @@ export function LearningWorkspace({
     if (courseOverview?.course.title) {
       return courseOverview.course.title;
     }
+    // A course that did not load has no name to show. The address's slug
+    // used to stand in, and for a discussion link that is the course's id.
     if (isCourseOverviewError) {
-      return courseSlug || "";
+      return "";
     }
     return isApiRoute ? courseSlug || "" : getCourseTitle(courseSlug);
   }, [
@@ -995,13 +998,20 @@ export function LearningWorkspace({
   // or a course that has been unpublished), or it has no lessons. The page
   // used to carry on as if a lesson were there, with an empty title, a video
   // that could only be retried in vain and discussions that never finished
-  // checking access. A discussion link reports a course that fails to load
-  // in its own way.
-  const courseUnavailable: "not-found" | "no-lessons" | null =
-    !isApiRoute || isDiscussionDeepLink
+  // checking access. A lesson opened from a discussion link is no
+  // different: it used to keep the whole page up around a course it did
+  // not have, with the course's id for a title.
+  //
+  // "not-found" is the server saying there is no such course; "failed" is
+  // everything else (the server could not be reached, or it failed), where
+  // the course may well be there and trying again is the thing to do.
+  const courseUnavailable: "not-found" | "failed" | "no-lessons" | null =
+    !isApiRoute
       ? null
       : isCourseOverviewError && !isCourseOverviewFetching && !courseOverview
-        ? "not-found"
+        ? courseOverviewError?.status === 404
+          ? "not-found"
+          : "failed"
         : courseOverview && firstCurriculumLessonId === undefined
           ? "no-lessons"
           : null;
@@ -1208,6 +1218,7 @@ export function LearningWorkspace({
       courseUnavailable === "not-found"
         ? {
             kind: "retry",
+            illustration: "not-found",
             title: "Course not found",
             message:
               "It may have been unpublished, or the address may be wrong.",
@@ -1215,7 +1226,17 @@ export function LearningWorkspace({
             onAction: retryCourseOverview,
             link: { label: "Browse courses", href: "/courses" },
           }
-        : null;
+        : courseUnavailable === "failed"
+          ? {
+              kind: "retry",
+              illustration: "went-wrong",
+              title: "Something went wrong",
+              message:
+                "We couldn't load this course. Check your connection and try again.",
+              actionLabel: "Try again",
+              onAction: retryCourseOverview,
+            }
+          : null;
 
     // A lesson the course lists with no video says so, whatever a request
     // made before the course had loaded came back with.
@@ -1274,8 +1295,9 @@ export function LearningWorkspace({
 
     return {
       kind: "retry",
+      illustration: "went-wrong",
       message: "We couldn't prepare this video.",
-      actionLabel: "Retry",
+      actionLabel: "Try again",
       onAction: retryPlaybackBootstrap,
     };
   }, [
@@ -3554,6 +3576,7 @@ export function LearningWorkspace({
                 onOpenLessonQuiz={handleOpenLessonQuiz}
                 isLoading={isApiRoute && isCourseOverviewLoading}
                 unavailable={courseUnavailable !== null}
+                loadFailed={courseUnavailable === "failed"}
               />
             </div>
             {/* The lesson player portals its chapters panel here so it
@@ -3723,6 +3746,7 @@ export function LearningWorkspace({
               onOpenLessonQuiz={handleOpenLessonQuiz}
               isLoading={isApiRoute && isCourseOverviewLoading}
               unavailable={courseUnavailable !== null}
+              loadFailed={courseUnavailable === "failed"}
               onClose={closeLessonDrawer}
               onLessonSearchOpen={
                 phoneLessonDrawer

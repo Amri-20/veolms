@@ -1,12 +1,12 @@
 import type { LearningHistoryDay } from "@veolms/contracts";
 import { goalStanding, type GoalStanding } from "../services/learning-goals";
 
+import { elevatedCardClasses } from "../components/ElevatedCard";
 /**
  * The panels of the Progress page: the surface the app's other pages give
  * their sections (the analytics pages' `surfaceClass` is the same).
  */
-export const progressPanelClasses =
-  "rounded-[14px] sm:rounded-[22px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface,var(--surface)) text-(--text) shadow-(--card-shadow,var(--surface-depth-shadow))";
+export const progressPanelClasses = `${elevatedCardClasses} text-(--text)`;
 
 /** "45 min", "1h 20m", "2h": rounded down, never an unearned minute. */
 export function formatDuration(seconds: number) {

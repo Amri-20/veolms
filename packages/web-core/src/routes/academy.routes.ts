@@ -68,6 +68,10 @@ export function getAcademyRoutes(): RouteConfigEntry {
       caseSensitive: true,
     }),
     route("discussions", marker, { id: "discussions", caseSensitive: true }),
+    route("discussions/all", marker, {
+      id: "discussions-all",
+      caseSensitive: true,
+    }),
     route("discussions/q-and-a", marker, {
       id: "discussions-q-and-a",
       caseSensitive: true,

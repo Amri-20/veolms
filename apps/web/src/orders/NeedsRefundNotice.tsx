@@ -10,6 +10,7 @@ import {
   transferRejectionNote,
 } from "./needsRefundHelpers";
 import { RejectTransferRequestAction } from "./RejectTransferRequestAction";
+import { ElevatedCard } from "../components/ElevatedCard";
 
 export interface NeedsRefundNoticeProps {
   /** The payments to refund by hand; nothing is rendered for an empty list. */
@@ -53,10 +54,9 @@ export const NeedsRefundNotice = memo(function NeedsRefundNotice({
   };
 
   return (
-    <section
+    <ElevatedCard
       aria-labelledby="orders-needs-refund-title"
-      className="overflow-hidden rounded-[18px] border border-amber-500/30 bg-(--card-surface-raised,var(--surface))"
-      style={{ boxShadow: "var(--card-shadow)" }}
+      className="overflow-hidden"
     >
       <div className="flex items-start gap-3 border-b border-[color-mix(in_srgb,var(--text)_8%,transparent)] p-3.5 sm:px-5 sm:py-4">
         <span
@@ -188,6 +188,6 @@ export const NeedsRefundNotice = memo(function NeedsRefundNotice({
           );
         })}
       </ul>
-    </section>
+    </ElevatedCard>
   );
 });

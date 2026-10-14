@@ -229,13 +229,98 @@ function refreshDevelopmentGuestHomePage() {
 export async function loadDevelopmentHomePageData(request: Request) {
   const pathname = new URL(request.url).pathname.replace(/[/]$/u, "") || "/";
   const refresh = refreshDevelopmentGuestHomePage();
-  if (!developmentGuestHomePage) await refresh;
-  if (!developmentGuestHomePage) return null;
+  const courseSlug = readCourseOverviewSlug(pathname);
+  const [courseOverview] = await Promise.all([
+    courseSlug ? loadDevelopmentCourseOverview(courseSlug) : undefined,
+    developmentGuestHomePage ? undefined : refresh,
+  ]);
+  if (!developmentGuestHomePage) {
+    return courseOverview
+      ? ({ courseOverview } satisfies AcademyStaticPageData)
+      : null;
+  }
   return (
     pathname === "/" || pathname === "/home"
       ? { guestHomePage: developmentGuestHomePage }
-      : { guestHomeCopy: toGuestHomeCopy(developmentGuestHomePage) }
+      : {
+          guestHomeCopy: toGuestHomeCopy(developmentGuestHomePage),
+          ...(courseOverview ? { courseOverview } : {}),
+        }
   ) satisfies AcademyStaticPageData;
+}
+
+/** The course a course page's address is for; nothing for any other address. */
+function readCourseOverviewSlug(pathname: string) {
+  const match = /^\/courses\/([^/]+)\/overview$/u.exec(pathname);
+  if (!match?.[1]) return undefined;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return undefined;
+  }
+}
+
+function parseCourseOverview(courseSlug: string) {
+  return (value: unknown) => {
+    const result = courseOverviewSchema.safeParse(value);
+    if (!result.success) {
+      throw new Error(
+        `The build API returned invalid overview data for ${courseSlug}.`,
+      );
+    }
+    return result.data as CourseOverviewResponse;
+  };
+}
+
+/** The last overview read for each course the dev server has been asked for. */
+const developmentCourseOverviews = new Map<string, CourseOverviewResponse>();
+const developmentCourseOverviewRefreshes = new Map<string, Promise<void>>();
+/** A handful of pages are open in development; this only stops it growing. */
+const DEVELOPMENT_COURSE_OVERVIEW_LIMIT = 50;
+
+/**
+ * A course page on the dev server, as the production build has it: the
+ * course is handed to the document, so the first render already holds the
+ * title, the curriculum and the About text, and only the parts that depend
+ * on the viewer wait (see `courseViewerState`). Without this the dev
+ * server's course page was one whole placeholder until its own request
+ * answered, which is not what a visitor of the built site sees.
+ *
+ * It is the guest's overview, as the build's is: no session goes with it.
+ * As with the home page, the last one read is served at once and refreshed
+ * behind it, so only the first load of a course waits for the API, and the
+ * page checks it against the API once it is in the browser.
+ */
+async function loadDevelopmentCourseOverview(courseSlug: string) {
+  let refresh = developmentCourseOverviewRefreshes.get(courseSlug);
+  if (!refresh) {
+    refresh = fetchStaticApiData(
+      `/courses/${encodeURIComponent(courseSlug)}/overview`,
+      parseCourseOverview(courseSlug),
+      0,
+    )
+      .then((overview) => {
+        developmentCourseOverviews.delete(courseSlug);
+        developmentCourseOverviews.set(courseSlug, overview);
+        if (
+          developmentCourseOverviews.size > DEVELOPMENT_COURSE_OVERVIEW_LIMIT
+        ) {
+          const oldest = developmentCourseOverviews.keys().next().value;
+          if (oldest !== undefined) developmentCourseOverviews.delete(oldest);
+        }
+      })
+      // A course that is not there, or an API that is not up: the page asks
+      // for it in the browser as before, and says what it finds.
+      .catch(() => {
+        developmentCourseOverviews.delete(courseSlug);
+      })
+      .finally(() => {
+        developmentCourseOverviewRefreshes.delete(courseSlug);
+      });
+    developmentCourseOverviewRefreshes.set(courseSlug, refresh);
+  }
+  if (!developmentCourseOverviews.has(courseSlug)) await refresh;
+  return developmentCourseOverviews.get(courseSlug);
 }
 
 export async function loadAcademyStaticPageData(
@@ -279,15 +364,7 @@ async function loadStaticPageData(
     return {
       courseOverview: await fetchStaticApiData(
         `/courses/${encodeURIComponent(courseSlug)}/overview`,
-        (value) => {
-          const result = courseOverviewSchema.safeParse(value);
-          if (!result.success) {
-            throw new Error(
-              `The build API returned invalid overview data for ${courseSlug}.`,
-            );
-          }
-          return result.data as CourseOverviewResponse;
-        },
+        parseCourseOverview(courseSlug),
       ),
     } satisfies AcademyStaticPageData;
   }

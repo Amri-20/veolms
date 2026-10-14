@@ -26,6 +26,7 @@ import {
 } from "./learnerHeroLayout";
 import { useEnterKeyAction } from "./useEnterKeyAction";
 import { useIsCutOff } from "./useIsCutOff";
+import { usePinnedCelebration } from "./usePinnedCelebration";
 
 /** Where in the course the learner goes next, once it is known. */
 export interface LearnerResume {
@@ -89,6 +90,7 @@ export function LearnerResumeRow({
   onUnpin,
   onNavigatePage,
   pinDrop,
+  pinPulse = 0,
 }: {
   course: EnrolledCourse;
   intent: LearnerHeroIntent;
@@ -103,7 +105,15 @@ export function LearnerResumeRow({
   onNavigatePage: NavigateTo;
   /** Laid over the row, and a little past it, while a course is dragged. */
   pinDrop?: ReactNode;
+  /**
+   * How many times a course has been pinned on this page. Each new count
+   * plays the row's "pinned" motion (see `usePinnedCelebration`).
+   */
+  pinPulse?: number;
 }) {
+  const paneRef = useRef<HTMLDivElement>(null);
+  const pinRef = useRef<HTMLButtonElement>(null);
+  usePinnedCelebration(paneRef, pinRef, pinned ? pinPulse : 0);
   const progress = course.progress ?? 0;
   // A course not started yet has no progress to speak of.
   const showProgress = intent === "continue" || intent === "review";
@@ -120,7 +130,7 @@ export function LearnerResumeRow({
 
   return (
     <div className={resumeRowBoxClasses}>
-      <div className={resumePaneClasses}>
+      <div ref={paneRef} className={resumePaneClasses}>
         <span aria-hidden="true" className={paneLampLightClasses} />
         {/* The whole row opens the course, so the pointer is a hand all over
             it. This lies under the words, which let the pointer through to
@@ -152,6 +162,7 @@ export function LearnerResumeRow({
                   among the cards below, whose menus do the pinning. */}
               {pinned ? (
                 <button
+                  ref={pinRef}
                   type="button"
                   onClick={onUnpin}
                   title="Unpin from Home"

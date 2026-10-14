@@ -39,6 +39,7 @@ import {
   useMyQuizzes,
 } from "../services/quizzes";
 import { SelectCourseForQuizModal } from "./SelectCourseForQuizModal";
+import { ElevatedCard, elevatedCardClasses } from "../components/ElevatedCard";
 
 interface Props {
   role: "student" | "creator";
@@ -48,10 +49,8 @@ interface Props {
 type InstructorView = "overview" | "library" | "analytics";
 type LearnerFilter = "all" | "todo" | "in_progress" | "completed";
 
-const surfaceClass =
-  "rounded-[14px] sm:rounded-[22px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface,var(--surface)) text-(--text) shadow-(--card-shadow,var(--surface-depth-shadow))";
-const insetClass =
-  "rounded-[12px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface-raised,color-mix(in_srgb,var(--surface-strong,var(--surface))_85%,var(--surface))) shadow-(--card-shadow,var(--surface-depth-shadow))";
+const surfaceClass = `${elevatedCardClasses} text-(--text)`;
+const insetClass = elevatedCardClasses;
 const inputClass =
   "h-9 sm:h-10 rounded-[10px] border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-[color-mix(in_srgb,var(--canvas)_75%,var(--surface))] px-2.5 sm:px-3.5 text-xs sm:text-sm text-(--text) outline-none transition-all placeholder:text-(--muted) focus:border-(--accent) focus:ring-2 focus:ring-(--accent)/20";
 
@@ -1468,9 +1467,9 @@ function LearnerQuizCard({
           ? "Try again"
           : "Start quiz";
   return (
-    <article
-      className="flex min-h-56 flex-col rounded-[14px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface-raised,var(--surface)) p-3 sm:p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--accent)_35%,transparent)] hover:shadow-(--card-hover-shadow)"
-      style={{ boxShadow: "var(--card-shadow)" }}
+    <ElevatedCard
+      as="article"
+      className="flex min-h-56 flex-col p-3 sm:p-5 transition-all duration-200 hover:-translate-y-0.5"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex size-10 items-center justify-center rounded-xl bg-(--accent)/12 text-(--accent)">
@@ -1534,7 +1533,7 @@ function LearnerQuizCard({
         {action}
         <ArrowRight size={17} weight="bold" />
       </Button>
-    </article>
+    </ElevatedCard>
   );
 }
 

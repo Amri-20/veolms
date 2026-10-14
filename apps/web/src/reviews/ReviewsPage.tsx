@@ -18,6 +18,7 @@ import { TopReviewersWidget } from "./TopReviewersWidget";
 import { useReviewsFilter } from "./useReviewsFilter";
 import { WriteReviewModal } from "./WriteReviewModal";
 import { useBackDismiss } from "../navigation/useBackDismiss";
+import { ElevatedCard } from "../components/ElevatedCard";
 
 export interface ReviewsPageProps {
   onNavigatePage?: NavigateTo;
@@ -131,10 +132,9 @@ export function ReviewsPage({ onNavigatePage, setNotice }: ReviewsPageProps) {
       </header>
 
       {/* Course Header Banner */}
-      <section
+      <ElevatedCard
         aria-label="Course details and actions"
-        className="mb-5 rounded-[18px] border border-(--border) bg-(--card-surface) p-5 md:p-6 transition-all"
-        style={{ boxShadow: "var(--card-shadow)" }}
+        className="mb-5 p-5 md:p-6 transition-all"
       >
         <CourseReviewHeader
           courseMeta={courseMeta}
@@ -143,7 +143,7 @@ export function ReviewsPage({ onNavigatePage, setNotice }: ReviewsPageProps) {
           onOpenWriteModal={() => setIsWriteModalOpen(true)}
           setNotice={setNotice}
         />
-      </section>
+      </ElevatedCard>
 
       {/* Tab Navigation Bar with delicate thin bottom line and transparent background */}
       <nav
@@ -228,9 +228,9 @@ export function ReviewsPage({ onNavigatePage, setNotice }: ReviewsPageProps) {
               />
             ))
           ) : (
-            <div
-              className="flex flex-col items-center justify-center rounded-[18px] border border-(--border) bg-(--card-surface) p-12 text-center"
-              style={{ boxShadow: "var(--card-shadow)" }}
+            <ElevatedCard
+              as="div"
+              className="flex flex-col items-center justify-center p-12 text-center"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-(--hover) text-(--muted) mb-3">
                 <Star size={24} />
@@ -250,7 +250,7 @@ export function ReviewsPage({ onNavigatePage, setNotice }: ReviewsPageProps) {
               >
                 Reset filters
               </button>
-            </div>
+            </ElevatedCard>
           )}
 
           {/* Pagination note */}

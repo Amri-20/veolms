@@ -31,6 +31,10 @@ import {
 import { LessonAmbientProjection } from "./LessonAmbientProjection";
 import { LessonTroubleIllustration } from "./LessonTroubleIllustration";
 import {
+  OctopusIllustration,
+  type OctopusKind,
+} from "../../components/OctopusIllustration";
+import {
   LessonEndScreenOverlay,
   type NextLessonInfo,
 } from "./LessonEndScreenOverlay";
@@ -190,6 +194,12 @@ export interface LessonVideoPlayerProps {
     title?: string;
     /** A way out to another page, shown under the action. */
     link?: { label: string; href: string };
+    /**
+     * The octopus to draw over a `retry` message in the full player: a
+     * failure gets the same picture a failed video does, a missing course
+     * the one for things not found. Without it the message stands alone.
+     */
+    illustration?: OctopusKind;
     /**
      * A reading lesson's text (Markdown). The full player shows it where the
      * video would be, in place of the title and message.
@@ -1056,6 +1066,10 @@ export function LessonVideoPlayer({
       playbackAccessError?.kind === "notice";
     const reading =
       presentation === "full" ? playbackAccessError?.article : undefined;
+    const gateIllustration =
+      presentation === "full" && playbackAccessError?.kind === "retry"
+        ? playbackAccessError.illustration
+        : undefined;
     const gateTitle = !playbackAccessError
       ? ""
       : playbackAccessError.kind === "login"
@@ -1105,6 +1119,9 @@ export function LessonVideoPlayer({
         {playbackAccessError && !isPlainGate && media.thumbnailSrc ? (
           <LessonPictureBackdrop src={media.thumbnailSrc} />
         ) : null}
+        {/* A failure with a drawing stands on the lit stage a failed video
+            does, not on bare black. */}
+        {gateIllustration ? <LessonPictureBackdrop /> : null}
         {reading ? <LessonReadingStage article={reading} /> : null}
         {/* A reading has nothing that would go on playing in the small
             player, so it offers no button to send it there. */}
@@ -1163,11 +1180,24 @@ export function LessonVideoPlayer({
             }
           />
         ) : reading ? null : (
-          <div className="pointer-events-none absolute inset-0 grid place-items-center p-6 text-center text-white">
+          <div className="[container-type:size] pointer-events-none absolute inset-0 grid place-items-center p-6 text-center text-white">
             {isPending ? (
               <VideoLoadingSpinner />
             ) : (
               <div className="relative z-20 max-w-md space-y-4">
+                {/* Drawn only where the player is tall enough to keep the
+                    message and its action whole under it. */}
+                {gateIllustration ? (
+                  // The drawing sets its own display, so the box around it
+                  // is what comes and goes.
+                  <div className="hidden [@container_(min-height:17rem)]:block">
+                    <OctopusIllustration
+                      kind={gateIllustration}
+                      surface="dark"
+                      className="mx-auto h-[clamp(4.5rem,calc(100cqh_-_13rem),9rem)] w-auto"
+                    />
+                  </div>
+                ) : null}
                 <div className="space-y-1">
                   <h2 className="text-base font-semibold">{gateTitle}</h2>
                   <p className="text-sm text-white/70">

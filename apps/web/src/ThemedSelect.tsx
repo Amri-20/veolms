@@ -67,6 +67,22 @@ const joinClasses = (
   ...classes: Array<string | false | null | undefined>
 ): string => classes.filter(Boolean).join(" ");
 
+/**
+ * What the menu lines up with. A trigger drawn bare inside a frame that
+ * carries the control's surface (a filter bar's selects) is not the
+ * control's edge; the frame is. A parent counts as that frame when the
+ * trigger is the only thing in it and it paints a fill or a shadow.
+ */
+function findControlFrame(trigger: HTMLElement): HTMLElement {
+  const parent = trigger.parentElement;
+  if (!parent || parent.childElementCount !== 1) return trigger;
+  const style = window.getComputedStyle(parent);
+  const paintsFill =
+    style.backgroundColor !== "rgba(0, 0, 0, 0)" &&
+    style.backgroundColor !== "transparent";
+  return paintsFill || style.boxShadow !== "none" ? parent : trigger;
+}
+
 interface MenuPosition {
   left: number;
   top?: number;
@@ -200,7 +216,9 @@ export function ThemedSelect<Value extends string>({
   const calculatePosition = useCallback((): MenuPosition | null => {
     const trigger = triggerRef.current;
     if (!trigger) return null;
-    const anchor = matchMenuToContainer ? trigger.parentElement : trigger;
+    const anchor = matchMenuToContainer
+      ? trigger.parentElement
+      : findControlFrame(trigger);
     const rect = (anchor ?? trigger).getBoundingClientRect();
     const viewportPadding = 12;
     const gap = 6;
@@ -232,10 +250,10 @@ export function ThemedSelect<Value extends string>({
       menuMaxWidth,
       window.innerWidth - viewportPadding * 2,
     );
-    let left = rect.left;
-    if (left + width > window.innerWidth - viewportPadding) {
-      left = Math.max(viewportPadding, rect.right - width);
-    }
+    // The menu ends where the control ends: a list wider than its control
+    // grows towards the start, and one near the start edge of the window
+    // is kept on screen.
+    const left = Math.max(viewportPadding, rect.right - width);
     return {
       left,
       top: useAbove ? undefined : rect.bottom + gap,

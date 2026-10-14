@@ -11,6 +11,7 @@ import { OrderHistoryTable } from "./OrderHistoryTable";
 import { useOrderHistoryFilter } from "./useOrderHistoryFilter";
 import { ordersService } from "../services/orders";
 import type { OrderHistoryItem } from "./orderHistoryData";
+import { ElevatedCard } from "../components/ElevatedCard";
 
 export interface OrderHistoryPageProps {
   onNavigatePage?: NavigateTo;
@@ -109,20 +110,17 @@ export function OrderHistoryPage({
       {/* Purchase History Content Section */}
       <section aria-label="Purchase history" className="min-w-0">
         {isLoading ? (
-          <div
-            className="grid min-h-72 place-items-center rounded-2xl border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface) shadow-(--card-shadow)"
-            style={{ boxShadow: "var(--card-shadow)" }}
-          >
+          <ElevatedCard as="div" className="grid min-h-72 place-items-center">
             <CircleNotch
               size={32}
               className="animate-spin text-(--accent)"
               aria-label="Loading"
             />
-          </div>
+          </ElevatedCard>
         ) : isError ? (
-          <div
-            className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface) p-6 text-center shadow-(--card-shadow)"
-            style={{ boxShadow: "var(--card-shadow)" }}
+          <ElevatedCard
+            as="div"
+            className="flex min-h-72 flex-col items-center justify-center p-6 text-center"
           >
             <WarningCircle size={30} className="mb-3 text-rose-400" />
             <h2 className="font-semibold text-(--text)">
@@ -135,7 +133,7 @@ export function OrderHistoryPage({
             >
               Try again
             </button>
-          </div>
+          </ElevatedCard>
         ) : paginatedOrders.length > 0 ? (
           <>
             <OrderHistoryTable

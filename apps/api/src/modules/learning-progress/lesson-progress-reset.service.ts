@@ -56,6 +56,23 @@ export function createLessonProgressResetService({
         passedLearnerIds,
       );
     },
+
+    /**
+     * Clears one learner's progress through a whole course, for an
+     * unenrollment that is meant to start them from nothing if they come
+     * back. Quizzes passed are not looked at: the learner asked for this.
+     */
+    async clearCourseProgressForLearner(
+      executor: DatabaseExecutor,
+      userId: string,
+      courseId: string,
+    ): Promise<number> {
+      return await learningProgressRepository.deleteCourseProgressForUser(
+        executor,
+        userId,
+        courseId,
+      );
+    },
   };
 }
 

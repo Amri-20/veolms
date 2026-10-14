@@ -3,10 +3,7 @@ import {
   overviewColumnClasses,
   type HeroPlacement,
 } from "./CourseOverviewHero";
-import {
-  priceBarPaddingClasses,
-  priceBarSurfaceClasses,
-} from "./CoursePriceBar";
+import { CourseViewerBandPlaceholder } from "./CourseViewerBandPlaceholder";
 import {
   overviewCardClasses,
   overviewCardPaddingClasses,
@@ -76,21 +73,9 @@ export function CourseOverviewSkeleton({
       >
         {heroPlacement === "card" ? hero : null}
 
-        {/* The first band: price or progress, and the button. */}
-        <div className={priceBarSurfaceClasses}>
-          <div
-            className={`${priceBarPaddingClasses} flex flex-col gap-4 @2xl/price:flex-row @2xl/price:items-center @2xl/price:justify-between`}
-          >
-            <div className="flex w-full flex-col gap-3 @2xl/price:w-80">
-              <div className="flex items-center gap-3">
-                <div className={`${block} h-7 w-40`} />
-                <div className={`${block} h-4 w-32`} />
-              </div>
-              <div className="h-2.5 rounded-full bg-[color-mix(in_srgb,var(--text)_10%,transparent)]" />
-            </div>
-            <div className="h-14 w-full rounded-lg bg-[color-mix(in_srgb,var(--accent)_30%,transparent)] @2xl/price:w-60" />
-          </div>
-        </div>
+        {/* The first band: price or progress, and the button. The whole
+            page pulses here, so the band does not pulse again. */}
+        <CourseViewerBandPlaceholder pulse={false} />
 
         {/* Curriculum */}
         <div

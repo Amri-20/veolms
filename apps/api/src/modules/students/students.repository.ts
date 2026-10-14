@@ -653,10 +653,17 @@ export async function getStudentEnrolledCourses(
   let query = database
     .selectFrom("enrollments as e")
     .innerJoin("courses as c", "c.id", "e.course_id")
+    // The order behind the enrollment, so staff can refund it from here.
+    .leftJoin("orders as o", "o.id", "e.order_id")
     .select([
       "e.course_id",
       "e.source as enrollment_source",
       "e.created_at as enrolled_at",
+      "e.status as enrollment_status",
+      "e.access_expires_at",
+      "e.order_id",
+      "o.status as order_status",
+      "o.total_amount as order_total_amount",
       "c.slug as course_slug",
       "c.title as course_title",
       "c.short_description as course_description",

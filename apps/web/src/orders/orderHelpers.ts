@@ -1,11 +1,10 @@
 import type { OrderStatus } from "@veolms/contracts";
 import { formatMoney } from "@veolms/contracts/commerce/money";
 
-export const surfaceClass =
-  "rounded-[14px] sm:rounded-[22px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface,var(--surface)) text-(--text) shadow-(--card-shadow,var(--surface-depth-shadow))";
+import { elevatedCardClasses } from "../components/ElevatedCard";
+export const surfaceClass = `${elevatedCardClasses} text-(--text)`;
 
-export const insetClass =
-  "rounded-[12px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface-raised,color-mix(in_srgb,var(--surface-strong,var(--surface))_85%,var(--surface))) shadow-(--card-shadow,var(--surface-depth-shadow))";
+export const insetClass = elevatedCardClasses;
 
 export const inputClass =
   "h-9 sm:h-10 rounded-[10px] border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-[color-mix(in_srgb,var(--canvas)_75%,var(--surface))] px-2.5 sm:px-3.5 text-xs sm:text-sm text-(--text) outline-none transition-all placeholder:text-(--muted) focus:border-(--accent) focus:ring-2 focus:ring-(--accent)/20";

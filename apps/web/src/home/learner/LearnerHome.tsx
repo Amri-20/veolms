@@ -1,8 +1,10 @@
 import type { EnrolledCourse } from "@veolms/contracts";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { NavigateTo } from "../../routing/navigation";
 import { getCoursePlayerPath } from "../../learning/coursePlayerNavigation";
+import { useCurrentUser } from "../../services/auth";
 import { useCourses } from "../../services/courses";
+import { hasAdminRole } from "../../shell/workspaceRole";
 import { useLearningSummary } from "../../services/learning-goals";
 import { useLearningProgressResumeContext } from "../../services/learning-progress";
 import {
@@ -38,6 +40,13 @@ import {
   selectCoursesToExplore,
 } from "./learnerHomePlan";
 import "../guest/guest-home-shell.css";
+
+// Asked for only once an admin picks "Unenroll" from a course's menu.
+const UnenrollCourseModal = lazy(() =>
+  import("../../courses/UnenrollCourseModal").then((module) => ({
+    default: module.UnenrollCourseModal,
+  })),
+);
 
 /**
  * A learner with this many courses or more has enough of their own on the
@@ -84,7 +93,16 @@ export function LearnerHome({
   onNavigatePage: NavigateTo;
 }) {
   const enrolledCourses = knownCourses ?? NO_COURSES;
+  // An admin in Student view can leave any course they enrolled in; doing
+  // so clears their progress in it.
+  const isAdmin = hasAdminRole(useCurrentUser().data?.roles);
+  const [pendingUnenroll, setPendingUnenroll] = useState<EnrolledCourse | null>(
+    null,
+  );
   const pinnedCourseId = usePinnedHomeCourseId();
+  // Counts the pins made on this page; each one plays the hero row's
+  // "pinned" motion. A pin already there when the page opens is not one.
+  const [pinPulse, setPinPulse] = useState(0);
   const draggedCourseId = useDraggedPinCourseId();
   const plan = useMemo(
     () => planLearnerHome(enrolledCourses, pinnedCourseId),
@@ -173,10 +191,27 @@ export function LearnerHome({
       ? getCoursePlayerPath(resumeContext.courseSlug, heroLesson.lessonNumber)
       : null;
   const nothingStarted = !anythingStarted;
+  // A pin is said twice: the hero's row marks it with a motion of its own,
+  // and the page's message names the course. Taking a pin off moves nothing
+  // near the card it was taken off from, so that is said too.
+  const pinAndSay = (courseId: string) => {
+    pinHomeCourse(courseId);
+    setPinPulse((count) => count + 1);
+    const title = enrolledCourses.find(
+      (course) => course.courseId === courseId,
+    )?.courseTitle;
+    courseCardActions.setNotice(
+      title ? `${title} is pinned to Home.` : "Course pinned to Home.",
+    );
+  };
+  const unpinAndSay = () => {
+    pinHomeCourse(null);
+    courseCardActions.setNotice("Unpinned from Home.");
+  };
   // The pinned course takes the hero's place at the top of the page, so the
   // learner is taken there to see it happen.
   const pinCourse = (course: EnrolledCourse) => {
-    pinHomeCourse(course.courseId);
+    pinAndSay(course.courseId);
     document.getElementById("learner-home-hero-title")?.scrollIntoView({
       block: "center",
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -200,7 +235,8 @@ export function LearnerHome({
               isLoading: resumeQuery.isLoading,
             }}
             pinned={plan.heroPinned}
-            onUnpin={() => pinHomeCourse(null)}
+            pinPulse={pinPulse}
+            onUnpin={unpinAndSay}
             onNavigatePage={onNavigatePage}
             href={heroLessonPath ?? getCoursePlayerHref(heroCourse)}
             onOpen={() =>
@@ -211,9 +247,7 @@ export function LearnerHome({
             // A course card dragged from the list below is pinned by
             // dropping it on the hero's own course card.
             pinDrop={
-              draggedCourseId ? (
-                <LearnerHeroPinDrop onPin={pinHomeCourse} />
-              ) : null
+              draggedCourseId ? <LearnerHeroPinDrop onPin={pinAndSay} /> : null
             }
           />
         }
@@ -230,7 +264,8 @@ export function LearnerHome({
           onOpenCourse={openCourse}
           pinnedCourseId={plan.heroPinned ? heroCourse.courseId : null}
           onPinCourse={pinCourse}
-          onUnpinCourse={() => pinHomeCourse(null)}
+          onUnpinCourse={unpinAndSay}
+          onUnenrollCourse={isAdmin ? setPendingUnenroll : undefined}
           onNavigatePage={onNavigatePage}
         />
 
@@ -255,6 +290,20 @@ export function LearnerHome({
           />
         ) : null}
       </div>
+
+      {pendingUnenroll ? (
+        <Suspense fallback={null}>
+          <UnenrollCourseModal
+            course={{
+              id: pendingUnenroll.courseId,
+              title: pendingUnenroll.courseTitle,
+            }}
+            resetsProgress
+            onClose={() => setPendingUnenroll(null)}
+            setNotice={courseCardActions.setNotice}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

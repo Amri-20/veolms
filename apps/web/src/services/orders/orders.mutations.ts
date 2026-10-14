@@ -6,6 +6,7 @@ import type {
   ReviewRefundRequest,
 } from "@veolms/contracts";
 import type { ApiError } from "../../lib/api-error";
+import { studentKeys } from "../students/students.keys";
 import { orderKeys } from "./orders.keys";
 import { ordersService } from "./orders.service";
 
@@ -25,6 +26,9 @@ export function useRefundOrder() {
       void queryClient.invalidateQueries({
         queryKey: orderKeys.detail(variables.orderId),
       });
+      // A refund can be issued from a student's page, whose course cards
+      // show whether the order is still refundable and access still held.
+      void queryClient.invalidateQueries({ queryKey: studentKeys.details() });
     },
   });
 }

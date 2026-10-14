@@ -2,6 +2,7 @@ import { lazy, useState, type ComponentType } from "react";
 import { readHomeHint } from "../store/homeHint";
 import {
   CATALOGUE_CHUNK_URL_PLACEHOLDER,
+  COURSE_OVERVIEW_CHUNK_URL_PLACEHOLDER,
   GUEST_HOME_CHUNK_URL_PLACEHOLDER,
 } from "./routeChunkPreloads";
 
@@ -58,6 +59,15 @@ export const guestHomeBody = definePrerenderedBody(
 export const courseCatalogueBody = definePrerenderedBody(
   () => import("../courses/CourseCatalogue"),
   (module) => module.CourseCatalogue,
+);
+
+// A course's own page. It is built into the document whole (the title, the
+// curriculum, the About text), and nothing stood in for it while its code
+// loaded: React removed the built page as soon as anything re-rendered and
+// drew it again when the code arrived, so the page blinked empty in between.
+export const courseOverviewBody = definePrerenderedBody(
+  () => import("../courses/CourseOverviewPage"),
+  (module) => module.CourseOverviewPage,
 );
 
 // Fetched ahead of a visit by the shell (see its warm-up effect), so that
@@ -122,6 +132,18 @@ export function preloadPrerenderedBodies(): Promise<unknown> | null {
   }
   if (documentPreloads(CATALOGUE_CHUNK_URL_PLACEHOLDER)) {
     pending.push(courseCatalogueBody.preload());
+  }
+  // The dev server's document is handed the course (see
+  // loadDevelopmentHomePageData), so there too the page can be drawn on the
+  // first pass once its module is in.
+  const isDevelopmentCoursePage =
+    import.meta.env.DEV &&
+    /^\/courses\/[^/]+\/overview\/?$/u.test(window.location.pathname);
+  if (
+    isDevelopmentCoursePage ||
+    documentPreloads(COURSE_OVERVIEW_CHUNK_URL_PLACEHOLDER)
+  ) {
+    pending.push(courseOverviewBody.preload());
   }
   return pending.length ? Promise.all(pending) : null;
 }

@@ -9,6 +9,8 @@ interface CourseHeroArtworkProps {
   /** Opens the course's preview. Without it there is no play button. */
   onPreview?: () => void;
   previewDisabled?: boolean;
+  /** More classes for the play button (the hero hides it for some viewers). */
+  previewClassName?: string;
   /**
    * The hero keeps 1rem at its foot for the box that overlaps it there: the
    * picture, beside the text, stops above that strip so none of it is hidden.
@@ -51,6 +53,7 @@ export function CourseHeroArtwork({
   thumbnailSrcSet,
   onPreview,
   previewDisabled = false,
+  previewClassName = "",
   footRoom = false,
 }: CourseHeroArtworkProps) {
   // A thumbnail from before sizes were kept has an empty list.
@@ -108,7 +111,7 @@ export function CourseHeroArtwork({
           {onPreview ? (
             <button
               type="button"
-              className="absolute top-[44%] left-1/2 z-20 inline-flex size-15 -translate-1/2 cursor-pointer items-center justify-center rounded-full border border-white/25 bg-slate-950/75 text-white shadow-[0_8px_30px_rgb(0_0_0/0.45)] transition-[background-color,scale] duration-160 ease-out hover:scale-105 hover:bg-slate-950/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-default disabled:hover:scale-100 motion-reduce:transition-none @3xl/hero:hidden"
+              className={`absolute top-[44%] left-1/2 z-20 inline-flex size-15 -translate-1/2 cursor-pointer items-center justify-center rounded-full border border-white/25 bg-slate-950/75 text-white shadow-[0_8px_30px_rgb(0_0_0/0.45)] transition-[background-color,scale] duration-160 ease-out hover:scale-105 hover:bg-slate-950/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-default disabled:hover:scale-100 motion-reduce:transition-none @3xl/hero:hidden ${previewClassName}`}
               onClick={onPreview}
               disabled={previewDisabled}
               aria-label="Preview course"

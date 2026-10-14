@@ -4,39 +4,19 @@
  * and the About text.
  */
 
+import {
+  elevatedCardClasses,
+  elevatedCardPaddingClasses,
+} from "../../components/ElevatedCard";
+
 /**
- * A box, made the way the home page's pinned course is: a lighter pane on a
- * deeper ground, with a faint light along its top edge and a soft shadow
- * falling away under it. It has no border.
- *
- * On the course page the ground is deepened by the shell (`CoursesPage`
- * marks its scroller `data-deep-ground` in the framed layout and keeps the
- * ground's colour in `--cov-ground`). The box is that same colour made one
- * fixed step lighter, so it is as clearly apart from the ground in every
- * palette: the palettes space their own surface colours very differently
- * (the darkest ones by about half as much as the others), and a mix of
- * those gave boxes that all but vanished in some of them. The step is
- * small on purpose; the box must not glare. A browser without relative
- * colours gets a mix of the palette's surfaces instead.
- *
- * Anywhere else (the course editor's preview, the unframed layout) the
- * ground is not deepened, and the box is the raised `--surface` so that it
- * still differs from what is behind it.
- *
- * The fill is also `--cov-card`, for anything that has to fade into it (the
- * About text's "See more"). The corners are a course card's (16px, whatever
- * the roundness preference): each box carries `data-fixed-radius`, since
- * that preference would otherwise set every section on this page to its
- * own, smaller radius.
+ * A box: the application's shared card (see `components/ElevatedCard`),
+ * which was first made for this page. The fill is `--elevated-card`, for
+ * anything that has to fade into it (the About text's "See more"). Each box
+ * carries `data-fixed-radius`, since the roundness preference would
+ * otherwise set every section on this page to its own, smaller radius.
  */
-export const overviewCardClasses = [
-  "rounded-2xl border-0 bg-(--cov-card) [--cov-card:var(--surface)]",
-  "in-data-[content-layout=framed]:in-data-deep-ground:[--cov-card:color-mix(in_srgb,var(--main-surface)_60%,var(--surface))]",
-  "supports-[color:oklch(from_white_l_c_h)]:in-data-[content-layout=framed]:in-data-deep-ground:[--cov-card:oklch(from_var(--cov-ground)_calc(l_+_0.042)_c_h)]",
-  "[:root[data-theme=light]_&]:supports-[color:oklch(from_white_l_c_h)]:in-data-[content-layout=framed]:in-data-deep-ground:[--cov-card:oklch(from_var(--cov-ground)_calc(l_+_0.03)_c_h)]",
-  "shadow-[inset_0_1px_0_rgb(255_255_255/0.07),0_10px_22px_-12px_rgb(0_0_0/0.4),0_22px_44px_-24px_rgb(0_0_0/0.45)]",
-  "[:root[data-theme=light]_&]:shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_10px_22px_-12px_rgb(15_23_42/0.16),0_22px_44px_-24px_rgb(15_23_42/0.2)]",
-].join(" ");
+export const overviewCardClasses = elevatedCardClasses;
 
 /**
  * For the column under a hero that runs edge to edge: the first box sits
@@ -49,7 +29,7 @@ export const overviewColumnUnderHeroClasses =
   "[&>:first-child]:relative [&>:first-child]:z-10 [&>:first-child]:-mt-4";
 
 /** A box's inner room, a little less on a phone. */
-export const overviewCardPaddingClasses = "px-6 py-5 max-[640px]:px-4";
+export const overviewCardPaddingClasses = elevatedCardPaddingClasses;
 
 /** A band's heading: the title, one supporting line and an action on the right. */
 export const bandHeaderClasses =

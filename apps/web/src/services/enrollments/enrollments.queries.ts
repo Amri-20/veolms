@@ -47,6 +47,9 @@ export function useUnenrollFromCourse() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: courseKeys.all });
       void queryClient.invalidateQueries({ queryKey: ["orders"] });
+      // An admin's unenrollment clears their progress in the course.
+      void queryClient.invalidateQueries({ queryKey: ["learning-progress"] });
+      void queryClient.invalidateQueries({ queryKey: ["learning-goals"] });
       // The mutation settles once the enrolled list is fresh, so the course
       // card has already changed when the confirmation closes.
       return queryClient.invalidateQueries({ queryKey: enrollmentKeys.all });

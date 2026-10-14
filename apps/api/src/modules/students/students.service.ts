@@ -419,6 +419,7 @@ export function createStudentsService({ database }: StudentsServiceOptions) {
     let inProgressCoursesCount = 0;
     let totalProgressSum = 0;
 
+    const now = new Date();
     const courses: StudentCourseDetail[] = enrolledCourses.map((c) => {
       const totalLessonsCount = lessonCounts.get(c.course_id) ?? 0;
       const summary = progressByCourse.get(c.course_id);
@@ -444,6 +445,20 @@ export function createStudentsService({ database }: StudentsServiceOptions) {
         difficulty: c.difficulty,
         enrolledAt: c.enrolled_at.toISOString(),
         enrollmentSource: c.enrollment_source,
+        accessStatus:
+          c.enrollment_status === "active" &&
+          c.access_expires_at &&
+          c.access_expires_at <= now
+            ? "expired"
+            : c.enrollment_status,
+        // Refunds are an admin's job; an instructor is not told which order
+        // paid for a place in their course.
+        orderId: creatorId ? null : c.order_id,
+        refundable:
+          !creatorId &&
+          (c.order_status === "paid" ||
+            c.order_status === "partially_refunded") &&
+          (c.order_total_amount ?? 0) > 0,
         progressPercent,
         completedLessonsCount: summary?.completed_lessons ?? 0,
         totalLessonsCount,
@@ -466,6 +481,7 @@ export function createStudentsService({ database }: StudentsServiceOptions) {
 
     return {
       student: {
+        id: user.id,
         username: user.username,
         displayName: user.display_name,
         email: user.email,
