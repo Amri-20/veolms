@@ -1,6 +1,6 @@
 # What is left after the audit: checklist
 
-Updated 14 Oct 2026, after the stylesheet round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 30. This file is the short list to work from. Tick a box when it is done.
+Updated 14 Oct 2026, after the stylesheet round, and tidied so that every open box below is really open. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 30. This file is the short list to work from. Tick a box when it is done.
 
 ## Done in phases 1 to 3 (13 Oct)
 
@@ -115,87 +115,48 @@ Updated 14 Oct 2026, after the stylesheet round. The full record is `docs/AUDIT_
 
 ## A. Right after each push
 
-Pushing `dev` deploys the API and the web together.
+Pushing `dev` deploys the API and the web together. These are yours: they need the deployed servers or their settings.
 
-- [ ] Confirm the deploy finished and migration `20261015100000-manual-payment-withdrawn` ran, as well as these four: `20261013100000-shorten-legacy-user-names`, `20261013110000-lowercase-user-emails`, `20261013120000-create-order-item-courses` and `20261014100000-create-wishlist-items`.
-- [x] Run the count file on the production database. Done by the owner on 14 Oct: every count is 0. It only counts, and writes nothing:
-
-  ```bash
-  psql "$PRODUCTION_DATABASE_URL" -x -f docs/audit-pre-push-checks.sql
-  ```
-
+- [ ] Confirm the deploy finished and these migrations ran: `20261013100000-shorten-legacy-user-names`, `20261013110000-lowercase-user-emails`, `20261013120000-create-order-item-courses`, `20261014100000-create-wishlist-items`, `20261015100000-manual-payment-withdrawn`.
+- [x] Run the count file on the production database. Done by the owner on 14 Oct: every count is 0.
 - [x] Check 5 (accounts sharing an email in different letter case): 0 found. Nothing to merge.
-- [ ] **One release after this one:** set `COURSE_OVERVIEW_LESSON_DESCRIPTIONS=false` on the API. Text lessons are now safe with it.
-- [ ] Set `VITE_SITE_URL` (for example `https://dev.veolms.org`) in the environment of the build that deploys the web. The course overview shrinks to about a sixth for a long course. Do it only after the web from this release is live.
+- [ ] Set `VITE_SITE_URL` (for example `https://dev.veolms.org`) in the environment of the build that deploys the web. Share previews then carry the page address.
+- [ ] **One release after this one:** set `COURSE_OVERVIEW_LESSON_DESCRIPTIONS=false` on the API. The course overview shrinks to about a sixth for a long course. Text lessons are safe with it.
+- [ ] Run PageSpeed on dev.veolms.org, mobile and desktop, and compare with the baseline in `docs/performance-report.md`. Only a local production build was measured (section 30).
 - [ ] Check the server's `TRUST_PROXY` value (section 18 of the report says which value fits which setup).
 - [ ] Check that every address people sign in from is in `WEB_URL` or `CORS_ORIGINS`.
 
 ## B. Try these on staging or a real device
 
-The first, third and ninth were seen in a local browser run in the fourth round. They are worth one more look on staging. The rest could not be tried from here.
-
-- [ ] Course price card in the real app: type `199.50`, `50`, `-100`, `1e5`, `abc`. Then apply a coupon and change the amount.
-- [ ] Sign in with a code that arrives by SMS, on an iPhone and on an Android phone.
-- [ ] Open `/orders/abc`, `/courses/a/b/c`, `/settings/privacy` and `/abcde`, signed in and signed out. Each should say "not found".
-- [ ] End a session from another device, then sign in as a different account on the same tab.
-- [x] One test-mode purchase with Razorpay in a normal browser: a declined attempt, then a successful one, then a refund. Done by the owner on 14 Oct.
-- [ ] Open `/login` in a private window after the deploy. It should show the page frame with a loading card, not a blank page.
-- [ ] Look at the accent text colour on a few themes, light and dark. It was changed by calculation, not by eye.
-- [ ] Play a video: play, pause, seek, open the quality menu, watch the buffering spinner. The player code was changed to satisfy the linter.
-- [ ] Take a timed quiz to the end and let the time run out.
-- [ ] Press Pay, close the payment window, change the amount and press Pay again. It should say a payment was already started and when to try again.
-- [ ] Leave the Razorpay window open for 10 minutes. It should close itself.
-- [ ] Own a course, then try to buy a bundle that holds it. It should be refused and name the course.
-- [ ] Share a course overview link in WhatsApp or Slack. The preview should show the course title, description and picture.
-- [ ] Open a lesson. Its description should show as before.
-- [ ] Post a note, a question and a reply; edit and remove one of your own. The code behind these was moved, not changed.
-- [ ] Save a course to the wishlist as a guest, sign in, and see it on the account.
-- [ ] Verify a manual payment, then also complete the gateway payment for the same order. It should appear in the refund notice on the Orders page.
-- [ ] Change the amount on a course, pay the old and the new gateway order. Both should appear as one "paid twice" entry.
-- [ ] Open a lesson whose quiz was deleted. It should say it has no video, and get its tick.
-- [ ] Open a restricted free course as a learner. No enrol button.
-- [ ] Refund an order that was paid by bank transfer: the dialog should ask for the transfer reference, and the order should become Refunded.
-- [ ] Buy a course, then a bundle that contains it. It should appear in the refund notice.
-- [ ] Sign in with Google and with GitHub using one email address written in different letter case. It should be one account.
-- [ ] Run the upload clean-up once against real storage before turning it on.
+- [x] All the staging and device checks listed here until 14 Oct: confirmed working by the owner, including the Razorpay test purchase (declined, paid, refunded).
+- [ ] After this deploy: report a bank transfer for an order, withdraw it, then pay by card or UPI. Pay should work again at once.
+- [ ] After this deploy: pay an old payment window after changing the amount. The extra payment should come back by itself and not appear in the staff refund notice.
+- [ ] After this deploy: archive a course you are enrolled in. You keep it in "My courses" and can watch it; a new account cannot buy it.
+- [ ] Before turning it on: run the upload clean-up once against real storage.
 
 ## C. Decisions only you can make
 
-- [ ] **Five payment rules that may be too strict** (section 28.1): no bank transfer in the first 12 minutes of an order; no free enrolment for 12 minutes after a dismissed support payment; a pending transfer blocks the buyer until staff answer; a bundle is refused for a course held free or by grant; one transfer reference per refund across all orders. Keep, or relax which?
-- [ ] **A screen for refund requests.** Skipped for now by your decision. The API is ready.
-- [ ] **Downloads (S3).** Should the "allow downloads" setting on a course be enforced? It is stored today and does nothing.
-- [ ] **Archived courses (B1).** Should people who bought a course keep access after it is archived?
-- [ ] **Sale price 0 (B7).** Should a sale price of 0 make a paid course free without asking?
-- [ ] **Per-creator payment gateways (C4).** Build it, or remove the endpoints?
-- [ ] **Dashboard numbers (F5).** Which definition of progress and of net revenue is the official one?
-- [ ] **Upload clean-up (S16).** Turn it on? Set `DISCUSSION_UPLOAD_PURGE_INTERVAL_HOURS=24`. It is off by default.
-- [ ] **API tests.** `apps/api` has a `test` script again (103 tests). Keep it?
+- [x] All decisions of 14 Oct are taken (section 29 of the report): automatic refund of extra payments, instant free enrolment, bank transfer at once with withdraw and a 7-day limit, bundle refused for any course already held, one refund reference per order, archived courses kept by students and not sold, sale price 0 free, low-risk observations of section 26.2 fixed, API tests kept.
+- [ ] **Deferred by you, for a later version:** enforce the "allow downloads" setting; per-creator payment gateways (endpoints kept, not supported); official definitions of progress and net revenue (current calculation stays); upload clean-up (stays off); a screen for refund requests (the refund button is enough).
 
 ## D. Bugs still open
 
-Four of the seven from the last round are fixed. These are left.
+None that code can fix. Accepted as they are:
 
-- [ ] **A buyer can still pay twice in three rare cases** (section 27): a UPI request approved after 12 minutes or an old tab, a double capture by the provider, and two different accounts. Every door the app controls is now closed. These are flagged for staff. Only automatic refunds would cover them.
-- [ ] **Bundle orders paid before 13 Oct** are not compared course by course. Cannot be fixed: what they contained when sold was never recorded.
-- [x] **Accounts that share an email in different letter case.** Closed on 14 Oct: the production count is 0.
-- [ ] **Refund requests have no staff screen in the web.** Approving one works through the API only. See section C.
+- [ ] **Three rare double-payment cases** cannot be stopped before the money moves: a UPI request approved very late, a double capture by Razorpay on one order, and one person using two accounts. The first is now refunded automatically; the second is not caught; the third is out of reach.
+- [ ] **Bundle orders paid before 13 Oct** are not compared course by course: what they contained when sold was never recorded.
 
 ## E. Put off because it needs a browser or new API work
 
-What is left of phase 4.
-
 - [x] **P2.** Stylesheet loading. Prerendered pages paint from inline critical CSS; first paint on a phone profile is about 35 to 45 percent faster (section 30).
-- [ ] Run PageSpeed on dev.veolms.org after the deploy, mobile and desktop, and compare with the baseline in `docs/performance-report.md`.
-- [ ] **F17, last part.** The prerendered course page has no `og:url` or canonical link. Needs a build variable with the site address.
-- [ ] **R1, R2.** Very large files and direct imports. Large refactors with no behaviour to gain. I will start only when you say so.
-- [ ] **R3.** Inline styles. The web rules say not to migrate styles unrelated to a task.
+- [x] **F17.** Share tags, including the page address once `VITE_SITE_URL` is set (section 29).
+- [ ] **R1, R2.** Very large files and direct imports. Paused by you until the colleagues' course page work is finished; no change to logic or design when it is done.
+- [ ] **R3.** Inline styles. Skipped by your decision.
 
 ## F. Code quality
 
-What is left of phase 5.
-
-- [ ] **12 lint warnings** remain: 5 library notices and 7 that need a behaviour change. `pnpm lint` passes with 0 errors.
-- [ ] **15 queries still outside repositories:** the reminder worker, the OTP locks, the health ping, commerce and courses.
-- [ ] **Four things noticed while moving queries**, listed in section 26.2 of the report. Not fixed; they need your call.
-- [ ] **Production build of the web.** It reads the root `.env`, so it was never built here. The dev server was used instead.
-- [ ] **Memory regression suite.** `apps/web/AGENTS.md` asks for one before every web commit. It does not exist.
+- [x] **Production build of the web.** Built and measured locally with your permission (section 30).
+- [x] **Section 26.2 observations.** Fixed (section 29).
+- [ ] **12 lint warnings** remain: 5 library notices and 7 that need a behaviour change. Left by your decision. `pnpm lint` passes with 0 errors.
+- [ ] **15 queries still outside repositories:** the reminder worker, the OTP locks, the health ping, commerce and courses. Left by your decision.
+- [ ] **Memory regression suite.** `apps/web/AGENTS.md` asks for one before every web commit. It does not exist in the repository.
