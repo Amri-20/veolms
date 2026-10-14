@@ -1,6 +1,6 @@
 # What is left after the audit: checklist
 
-Updated 14 Oct 2026, after the owner's decisions round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 29. This file is the short list to work from. Tick a box when it is done.
+Updated 14 Oct 2026, after the stylesheet round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 30. This file is the short list to work from. Tick a box when it is done.
 
 ## Done in phases 1 to 3 (13 Oct)
 
@@ -184,7 +184,8 @@ Four of the seven from the last round are fixed. These are left.
 
 What is left of phase 4.
 
-- [ ] **P2.** Stylesheet loading. Needs Lighthouse on a production build, which I do not make here.
+- [x] **P2.** Stylesheet loading. Prerendered pages paint from inline critical CSS; first paint on a phone profile is about 35 to 45 percent faster (section 30).
+- [ ] Run PageSpeed on dev.veolms.org after the deploy, mobile and desktop, and compare with the baseline in `docs/performance-report.md`.
 - [ ] **F17, last part.** The prerendered course page has no `og:url` or canonical link. Needs a build variable with the site address.
 - [ ] **R1, R2.** Very large files and direct imports. Large refactors with no behaviour to gain. I will start only when you say so.
 - [ ] **R3.** Inline styles. The web rules say not to migrate styles unrelated to a task.
