@@ -156,10 +156,15 @@ export type SaveCreatorPaymentConfigRequest = z.infer<
   typeof saveCreatorPaymentConfigRequestSchema
 >;
 
+/**
+ * `withdrawn`: the buyer took the report back before staff answered it.
+ * It no longer waits for review and no longer stops another payment.
+ */
 export const manualPaymentStatusSchema = z.enum([
   "pending",
   "verified",
   "rejected",
+  "withdrawn",
 ]);
 export type ManualPaymentStatus = z.infer<typeof manualPaymentStatusSchema>;
 

@@ -8,6 +8,7 @@ import type { Database } from "@veolms/database";
 import type { Kysely } from "kysely";
 import { AppError } from "../../lib/errors.ts";
 import * as accessRepo from "./access.repository.ts";
+import { learnerCourseGate } from "./course-openness.ts";
 // access.repository.ts is the module's canonical source for this type — see
 // the comment there for the full history of it having been separately (and,
 // in auth's case, incorrectly) redefined in 4 places.
@@ -63,6 +64,18 @@ export interface AccessService {
     database: Executor,
     userId: string,
     courseId: string,
+  ): Promise<boolean>;
+
+  /**
+   * Whether someone who does not manage a course may be shown it, given its
+   * status: anyone for a published course, only a learner who holds access
+   * for an archived one, nobody for a draft. The grant is read only when
+   * the answer depends on it. See `learnerCourseGate`.
+   */
+  isCourseOpenToLearner(
+    database: Executor,
+    userId: string | null | undefined,
+    course: { id: string; status: string },
   ): Promise<boolean>;
 
   listActiveUserIdsForCourse(
@@ -330,6 +343,17 @@ export function createAccessService(): AccessService {
     return true;
   }
 
+  async function isCourseOpenToLearner(
+    database: Executor,
+    userId: string | null | undefined,
+    course: { id: string; status: string },
+  ): Promise<boolean> {
+    const gate = learnerCourseGate(course.status);
+    if (gate === "open") return true;
+    if (gate === "closed" || !userId) return false;
+    return hasActiveAccess(database, userId, course.id);
+  }
+
   async function listActiveUserIdsForCourse(
     database: Executor,
     courseId: string,
@@ -390,6 +414,7 @@ export function createAccessService(): AccessService {
     restoreCourseAccess,
     listUserGrants,
     hasActiveAccess,
+    isCourseOpenToLearner,
     listActiveUserIdsForCourse,
     revokeAccessForOrder,
     revokeAccessForOrderCourse,

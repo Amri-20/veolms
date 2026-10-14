@@ -1,4 +1,5 @@
 import type { Route } from "./+types/academy-marker";
+import { configuredSiteOrigin } from "../routing/configuredSiteOrigin";
 import { getRouteMeta, getRouteShareTags } from "../routing/routeDescriptors";
 
 export function meta({ location, matches, params }: Route.MetaArgs) {
@@ -9,7 +10,13 @@ export function meta({ location, matches, params }: Route.MetaArgs) {
     ).map(([name, content]) =>
       name === "title" ? { title: content } : { name, content },
     ),
-    ...getRouteShareTags(routeId, params, location.pathname, matches),
+    ...getRouteShareTags(
+      routeId,
+      params,
+      location.pathname,
+      matches,
+      configuredSiteOrigin,
+    ),
   ];
 }
 

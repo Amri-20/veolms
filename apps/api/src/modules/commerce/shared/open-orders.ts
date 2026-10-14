@@ -24,6 +24,24 @@ export const GATEWAY_ORDER_PENDING_SECONDS = 60;
  */
 export const CHECKOUT_HAND_OUT_ATTEMPT_STATUS = "initiated";
 
+/**
+ * The moment before which a reported bank transfer no longer keeps the
+ * gateway closed for its purchase. A transfer staff have not answered for
+ * `blockDays` days stays in their queue, but the buyer may pay another way.
+ */
+export function manualPaymentBlockingSince(now: Date, blockDays: number): Date {
+  return new Date(now.getTime() - blockDays * 24 * 60 * 60 * 1000);
+}
+
+/** Whether a transfer reported at `reportedAt` still closes the gateway. */
+export function manualPaymentStillBlocks(
+  reportedAt: Date | string,
+  now: Date,
+  blockDays: number,
+): boolean {
+  return new Date(reportedAt) > manualPaymentBlockingSince(now, blockDays);
+}
+
 /** Unpaid and not past its deadline: it can still be paid or continued. */
 export function isOrderOpen(
   order: { status: string; expires_at: Date | string },
@@ -120,6 +138,28 @@ export function coverageOverlaps(a: Coverage, b: Coverage): boolean {
   );
 }
 
+function isSubset(part: ReadonlySet<string>, whole: ReadonlySet<string>) {
+  for (const value of part) if (!whole.has(value)) return false;
+  return true;
+}
+
+/**
+ * True when `whole` gives the buyer everything `part` would: every course
+ * (bought directly or inside a bundle) and every quiz pass. Then nothing is
+ * left that `part` alone would sell. Items that hold nothing (a bundle with
+ * no courses left) only count when `part` holds nothing else: such an order
+ * is covered by the same items and by nothing else.
+ */
+export function coverageCovers(whole: Coverage, part: Coverage): boolean {
+  if (part.courseIds.size + part.quizPricingIds.size === 0) {
+    return sameItems(whole, part);
+  }
+  return (
+    isSubset(part.courseIds, whole.courseIds) &&
+    isSubset(part.quizPricingIds, whole.quizPricingIds)
+  );
+}
+
 /** One of the buyer's other unpaid orders, as it bears on a new checkout. */
 export interface OpenOrderFacts {
   id: string;
@@ -129,9 +169,17 @@ export interface OpenOrderFacts {
   sameItems: boolean;
   /** Shares a course or quiz pass with the new request. */
   overlaps: boolean;
+  /**
+   * The new request gives the buyer everything this order sells
+   * (coverageCovers), so nothing would be left to buy with it.
+   */
+  coveredByRequest: boolean;
   /** Same amount, currency and coupon as the new request. */
   sameTerms: boolean;
-  /** A bank transfer was reported for it and staff have not answered. */
+  /**
+   * A bank transfer was reported for it, staff have not answered, and it is
+   * recent enough to keep the gateway closed (manualPaymentStillBlocks).
+   */
   manualPaymentPending: boolean;
   /** From checkoutSecondsLeft. */
   checkoutSecondsLeft: number;
@@ -140,7 +188,17 @@ export interface OpenOrderFacts {
 export type OpenOrderDecision =
   | { kind: "manual_payment_pending"; orderId: string }
   | { kind: "checkout_in_progress"; orderId: string; secondsLeft: number }
-  | { kind: "proceed"; resumeOrderId?: string; supersedeOrderIds: string[] };
+  | {
+      kind: "proceed";
+      resumeOrderId?: string;
+      supersedeOrderIds: string[];
+      /**
+       * Only for an order with nothing to pay: orders it covers entirely
+       * that have a transfer waiting for staff. They are cancelled so the
+       * transfer shows on the staff list of money to return.
+       */
+      cancelOrderIds?: string[];
+    };
 
 /**
  * What a new checkout does about the buyer's other unpaid orders, given
@@ -152,15 +210,48 @@ export type OpenOrderDecision =
  *    unless a payment for it may still arrive: a transfer waiting for staff,
  *    or a payment window that may still be open. Then the request is
  *    refused, because closing the order would not stop that payment.
+ *
+ * An order with nothing to pay (`freeOrder`) is never refused: it takes no
+ * money, so it cannot be a second payment, and the buyer is enrolled at
+ * once. It closes another order only when it covers everything that order
+ * sells (`coveredByRequest`): nothing is left to pay for. A payment that
+ * still arrives for a closed one is then an extra payment and is sent back
+ * (payments/extra-payment.ts).
+ *
+ * An order that also sells something else is left exactly as it is, with
+ * its payment window or its transfer waiting for staff: closing it would
+ * take away the buyer's way to get the rest, and staff could no longer
+ * verify a transfer that paid for it. If it is paid later, the rule for
+ * something the buyer already has applies: a gateway payment is sent back,
+ * and a transfer is refused at verification with the reason, for staff to
+ * return.
  */
 export function decideOpenOrders(
   orders: ReadonlyArray<OpenOrderFacts>,
+  { freeOrder = false }: { freeOrder?: boolean } = {},
 ): OpenOrderDecision {
   const related = orders.filter((order) => order.sameItems || order.overlaps);
   const resume = related.find(
     (order) => order.isOpen && order.sameItems && order.sameTerms,
   );
   const others = related.filter((order) => order !== resume);
+
+  if (freeOrder) {
+    const covered = others.filter(
+      (order) => order.sameItems || order.coveredByRequest,
+    );
+    const awaitingStaff = covered.filter((order) => order.manualPaymentPending);
+    return {
+      kind: "proceed",
+      ...(resume ? { resumeOrderId: resume.id } : {}),
+      supersedeOrderIds: covered
+        .filter((order) => order.isOpen && !order.manualPaymentPending)
+        .map((order) => order.id),
+      ...(awaitingStaff.length > 0
+        ? { cancelOrderIds: awaitingStaff.map((order) => order.id) }
+        : {}),
+    };
+  }
 
   // The order that would be continued counts too: continuing it hands out
   // its gateway order again.

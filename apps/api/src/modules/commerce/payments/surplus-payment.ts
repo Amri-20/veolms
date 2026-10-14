@@ -43,8 +43,16 @@ export function describeSurplusCapture(orderNumber: string): string {
   );
 }
 
-/** One line per refund, in a form `refundedSoFar` can read back. */
-const REFUND_NOTE = /Refund (\S+) of (\d+) /gu;
+/**
+ * One note per refund, exactly as applySurplusRefund writes it, so that
+ * `refundedSoFar` reads back those notes and nothing else. The description
+ * also holds free text (the titles of what the buyer already had, see
+ * extra-payment.ts), and a looser pattern counted a title such as "Refund
+ * Policy of 49900 Rupees Explained" as a refund of 49900. Titles are
+ * written there without round brackets, so none can contain a whole note.
+ */
+const REFUND_NOTE =
+  /Refund (\S+) of (\d+) [A-Za-z]{3} \(minor units\) reported by the gateway\./gu;
 
 /**
  * How much of a surplus payment the gateway has reported as refunded, in
@@ -70,7 +78,9 @@ export function applySurplusRefund(
   errorDescription: string;
 } {
   const current = payment.error_description ?? "";
-  const alreadyNoted = current.includes(`Refund ${refund.gatewayRefundId} of `);
+  const alreadyNoted = [...current.matchAll(REFUND_NOTE)].some(
+    (note) => note[1] === refund.gatewayRefundId,
+  );
   const errorDescription = alreadyNoted
     ? current
     : `${current} Refund ${refund.gatewayRefundId} of ${refund.amount} ${refund.currency} (minor units) reported by the gateway.`.trim();

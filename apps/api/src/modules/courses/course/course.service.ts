@@ -51,6 +51,7 @@ import {
   isOpenFreeCourse,
   isRestrictedFreeCourse,
 } from "../../access/index.ts";
+import { resolveCoursePricing } from "../../commerce/index.ts";
 import { createMediaService, type MediaService } from "../../media/index.ts";
 import { resolveAliasedBasicsUpdate } from "./basics-aliased-field.ts";
 import { resolveBasicsCategoryUpdate } from "./basics-category.ts";
@@ -367,9 +368,19 @@ export function createCourseService({
       pricing,
       certificateEnabled: Boolean(row.certificate_enabled ?? false),
       // The same rule, on the same stored values, as the course overview's
-      // `canSelfEnroll`, so a card and the page it opens agree.
+      // `canSelfEnroll`, so a card and the page it opens agree. Whether the
+      // course is free is read as checkout reads it: a priced course that
+      // sells for nothing is a free one.
       canSelfEnroll: !isRestrictedFreeCourse({
-        pricing_type: row.pricing_type,
+        pricing_type: resolveCoursePricing(
+          row.pricing_type
+            ? {
+                pricing_type: row.pricing_type,
+                price: pricing.price,
+                sale_price: pricing.salePrice,
+              }
+            : null,
+        ).pricingType,
         access_type: row.access_type,
       }),
     } satisfies CourseSummary;
@@ -1072,7 +1083,12 @@ export function createCourseService({
     }
 
     const visibility = resolveOverviewVisibility(course, user);
-    if (!visibility.mayOpen) {
+    // An archived course is still shown to a learner who holds access to
+    // it, as a learner sees any course; to everyone else it stays unfound.
+    if (
+      !visibility.mayOpen &&
+      !(await accessService.isCourseOpenToLearner(database, user?.id, course))
+    ) {
       throw new AppError(404, "COURSE_NOT_FOUND", "Course not published.");
     }
 
@@ -1218,8 +1234,11 @@ export function createCourseService({
       includes: includes.map(({ text, position }) => ({ text, position })),
       // Asked of the rule checkout applies before it prices the course, so
       // the page offers enrolment exactly when checkout would allow it.
+      // Whether the course is free is read as checkout reads it too: a
+      // priced course that sells for nothing is a free one, and a
+      // restricted free course is entered by a grant from staff only.
       canSelfEnroll: !isRestrictedFreeCourse({
-        pricing_type: pricing?.pricing_type,
+        pricing_type: resolveCoursePricing(pricing).pricingType,
         access_type: accessRule?.access_type,
       }),
       stats: {
@@ -1244,7 +1263,17 @@ export function createCourseService({
     const visibility = course
       ? resolveOverviewVisibility(course, user)
       : undefined;
-    if (!course || !visibility?.mayOpen) {
+    if (
+      !course ||
+      !visibility ||
+      // The overview's rule, archived courses included.
+      (!visibility.mayOpen &&
+        !(await accessService.isCourseOpenToLearner(
+          database,
+          user?.id,
+          course,
+        )))
+    ) {
       throw new AppError(404, "COURSE_NOT_FOUND", "Course not found.");
     }
 
@@ -1282,6 +1311,11 @@ export function createCourseService({
    * their own actor authorization (for example platform-admin analytics). */
   async function findCourseById(courseId: string) {
     return courseRepo.findCourseById(database, courseId);
+  }
+
+  /** The same lookup by slug, for the same trusted callers. */
+  async function findCourseBySlug(slug: string) {
+    return courseRepo.findCourseBySlug(database, slug);
   }
 
   /**
@@ -1507,6 +1541,7 @@ export function createCourseService({
     deleteCourse,
     findLessonById,
     findCourseById,
+    findCourseBySlug,
     listCourseCardsByIds,
     listPublishedCourseRefs,
     findCourseAccessByIdOrSlug,

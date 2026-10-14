@@ -34,9 +34,47 @@ export function lessonHasNoVideo(
   );
 }
 
+/**
+ * Whether the open lesson's description is known. A lesson with no video is
+ * its description: until that is known the page can neither say "there is
+ * nothing here" nor count the lesson as read.
+ */
+export type LessonDescriptionState = "known" | "loading" | "failed";
+
+/**
+ * The description comes with the course overview, or from the lesson's own
+ * request once the overview stops carrying descriptions. An overview with a
+ * description on any lesson is one that carries them, and its word on this
+ * lesson is final. One with none on any lesson may no longer carry them, so
+ * the lesson's own request decides.
+ */
+export function resolveLessonDescriptionState(input: {
+  /** Some lesson of the course has a description in the overview. */
+  overviewCarriesDescriptions: boolean;
+  /**
+   * The lesson's own request: `idle` when none is made (no lesson yet),
+   * `answered` once it has come back, with or without a text.
+   */
+  request: "idle" | "loading" | "answered" | "failed";
+}): LessonDescriptionState {
+  if (input.overviewCarriesDescriptions) return "known";
+  if (input.request === "loading") return "loading";
+  if (input.request === "failed") return "failed";
+  return "known";
+}
+
 export interface LessonStagePlan {
-  /** What stands where the lesson's video goes. */
-  stage: "quiz" | "video" | "no-video-notice";
+  /**
+   * What stands where the lesson's video goes. A lesson with no video waits
+   * for its description (`description-loading`), or says that it could not
+   * be loaded (`description-failed`), before it says it has no video.
+   */
+  stage:
+    | "quiz"
+    | "video"
+    | "no-video-notice"
+    | "description-loading"
+    | "description-failed";
   /** Whether the page asks the server for the lesson's video. */
   requestsPlayback: boolean;
   /** Whether opening the lesson is all there is to finishing it. */
@@ -55,6 +93,8 @@ export interface LessonStageInput {
   hasQuiz: boolean | undefined;
   /** See `viewerMayRecordProgress`. */
   viewerMayRecordProgress: boolean;
+  /** See `resolveLessonDescriptionState`. A lesson with a video ignores it. */
+  descriptionState: LessonDescriptionState;
 }
 
 export function planLessonStage({
@@ -62,18 +102,29 @@ export function planLessonStage({
   showingQuiz,
   hasQuiz,
   viewerMayRecordProgress,
+  descriptionState,
 }: LessonStageInput): LessonStagePlan {
   const noVideo = lessonHasNoVideo(lesson);
   return {
-    stage: showingQuiz ? "quiz" : noVideo ? "no-video-notice" : "video",
+    stage: showingQuiz
+      ? "quiz"
+      : !noVideo
+        ? "video"
+        : descriptionState === "loading"
+          ? "description-loading"
+          : descriptionState === "failed"
+            ? "description-failed"
+            : "no-video-notice",
     // A lesson with no media has nothing to play whichever view is open, a
     // quiz lesson included: the request could only come back "not found".
     requestsPlayback: !noVideo,
     // A quiz is finished by passing it, and the server checks that. A
     // lesson that still has a quiz attached is not finished by looking at
     // it either, so nothing is recorded until it is known to have none.
+    // Nor is a lesson finished whose text has not reached the learner yet.
     completesWhenOpened:
       noVideo &&
+      descriptionState === "known" &&
       lesson?.contentType !== "quiz" &&
       !showingQuiz &&
       hasQuiz === false &&
@@ -118,6 +169,17 @@ export const NO_VIDEO_NOTICE = {
 } as const;
 
 /**
+ * Shown where the video would be when a lesson with no video could not get
+ * its description. The page adds the action that asks again.
+ */
+export const LESSON_TEXT_FAILED_NOTICE = {
+  kind: "retry",
+  title: "Couldn't load this lesson",
+  message: "Check your connection and try again.",
+  actionLabel: "Try again",
+} as const;
+
+/**
  * The text of a reading lesson: a document lesson with no file attached
  * keeps what there is to read in its description, the only text field a
  * lesson has. `null` for any other lesson, and for a reading left empty.
@@ -148,4 +210,19 @@ export function noVideoNoticeFor(
         article,
       } as const)
     : NO_VIDEO_NOTICE;
+}
+
+/**
+ * What stands where the video would be for a lesson with none, by what is
+ * known of its description: a loader while it is on its way, the failure
+ * with a retry when it did not arrive, and `noVideoNoticeFor` once it is
+ * known.
+ */
+export function noVideoStageFor(
+  lesson: LessonReadingContent | null | undefined,
+  descriptionState: LessonDescriptionState,
+) {
+  if (descriptionState === "loading") return { kind: "pending" } as const;
+  if (descriptionState === "failed") return LESSON_TEXT_FAILED_NOTICE;
+  return noVideoNoticeFor(lesson);
 }

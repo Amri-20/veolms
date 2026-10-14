@@ -166,8 +166,9 @@ export async function listEnrolledCoursesForUser(
         eb("e.access_expires_at", ">", new Date()),
       ]),
     )
-    // Only include published courses (hide draft/archived from student view)
-    .where("c.status", "=", "published")
+    // A learner keeps a course that was archived after they got it; a draft
+    // stays out of the student view.
+    .where("c.status", "in", ["published", "archived"])
     .where("c.deleted_at", "is", null)
     .orderBy("e.created_at", "desc")
     .execute();

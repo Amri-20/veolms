@@ -17,11 +17,14 @@ import { isUniqueViolation } from "../shared/db-errors.ts";
 import {
   CHECKOUT_HAND_OUT_ATTEMPT_STATUS,
   isOrderOpen,
+  manualPaymentBlockingSince,
 } from "../shared/open-orders.ts";
 import * as paymentRepo from "./payment.repository.ts";
 import * as manualPaymentRepo from "./manual-payment.repository.ts";
 import * as orderRepo from "../orders/order.repository.ts";
 import { createPaymentReconciliationService } from "./payment-reconciliation.service.ts";
+import { createExtraPaymentRefundService } from "./extra-payment-refund.service.ts";
+import { config } from "../../../config.ts";
 import { toPaymentProvider } from "./payment.mapper.ts";
 import { reportDuplicatePurchases } from "./duplicate-purchase.ts";
 
@@ -90,14 +93,28 @@ export interface PaymentServiceOptions {
   paymentGateway: PaymentGateway;
   /** Where a duplicate purchase found on verification is reported. */
   logger?: FastifyBaseLogger;
+  /** See `AUTO_REFUND_EXTRA_PAYMENTS`. */
+  autoRefundExtraPayments?: boolean;
+  /** See `MANUAL_PAYMENT_BLOCK_DAYS`. */
+  manualPaymentBlockDays?: number;
 }
 
 export function createPaymentService({
   database,
   paymentGateway,
   logger,
+  autoRefundExtraPayments = config.AUTO_REFUND_EXTRA_PAYMENTS,
+  manualPaymentBlockDays = config.MANUAL_PAYMENT_BLOCK_DAYS,
 }: PaymentServiceOptions): PaymentService {
-  const reconciliation = createPaymentReconciliationService({ database });
+  const reconciliation = createPaymentReconciliationService({
+    database,
+    autoRefundExtraPayments,
+  });
+  const extraPaymentRefunds = createExtraPaymentRefundService({
+    database,
+    paymentGateway,
+    logger,
+  });
   /**
    * Initializes a payment for an internal pending order through the injected PaymentGateway.
    */
@@ -128,12 +145,14 @@ export function createPaymentService({
     }
     // A transfer the buyer reported for this order is with staff. Paying
     // through the gateway as well would pay for it twice. An order written
-    // a moment ago cannot have one.
+    // a moment ago cannot have one. One that staff have left unanswered
+    // for MANUAL_PAYMENT_BLOCK_DAYS no longer stands in the way.
     if (
       !knownOrder &&
       (await manualPaymentRepo.findPendingManualPaymentRequestByOrderId(
         database,
         orderId,
+        manualPaymentBlockingSince(new Date(), manualPaymentBlockDays),
       ))
     ) {
       const items = await orderRepo.listOrderItems(database, orderId);
@@ -422,6 +441,23 @@ export function createPaymentService({
           }
         : null,
     });
+
+    if (
+      result.outcome === "recorded_as_surplus" ||
+      result.outcome === "recorded_as_extra"
+    ) {
+      // Extra money: the order was already paid, or the buyer already has
+      // what it sells. Nothing was granted for it. It goes back to the
+      // buyer when automatic refunds are on, and is on the staff list until
+      // it has.
+      if (result.autoRefundReserved) {
+        await extraPaymentRefunds.refundExtraPayment(payment.id);
+      }
+      if (result.outcome === "recorded_as_extra") {
+        const closed = await orderRepo.findOrderById(database, order.id);
+        return { verified: true, orderStatus: closed?.status ?? "expired" };
+      }
+    }
 
     if (result.outcome === "finalized") {
       // This payment may be for an order the buyer had already replaced and

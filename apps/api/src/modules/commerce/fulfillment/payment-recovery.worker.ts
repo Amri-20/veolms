@@ -8,7 +8,9 @@ import { createPaymentReconciliationService } from "../payments/payment-reconcil
 import * as paymentRepo from "../payments/payment.repository.ts";
 import { findGatewayCapture } from "../payments/captured-gateway-payment.ts";
 import { reportDuplicatePurchases } from "../payments/duplicate-purchase.ts";
+import { createExtraPaymentRefundService } from "../payments/extra-payment-refund.service.ts";
 import { mapWithConcurrency } from "../../../lib/concurrency.ts";
+import { config } from "../../../config.ts";
 
 export interface PaymentRecoveryWorkerOptions {
   database: Kysely<Database>;
@@ -32,6 +34,8 @@ export interface PaymentRecoveryWorkerOptions {
    * Max gateway calls in flight at once (see mapWithConcurrency). Default: 5
    */
   concurrency?: number;
+  /** See `AUTO_REFUND_EXTRA_PAYMENTS`. */
+  autoRefundExtraPayments?: boolean;
 }
 
 /**
@@ -53,10 +57,17 @@ export function createPaymentRecoveryWorker({
   maxAgeHours = 24,
   batchSize = 50,
   concurrency = 5,
+  autoRefundExtraPayments = config.AUTO_REFUND_EXTRA_PAYMENTS,
 }: PaymentRecoveryWorkerOptions) {
   const reconciliation = createPaymentReconciliationService({
     database,
     accessService,
+    autoRefundExtraPayments,
+  });
+  const extraPaymentRefunds = createExtraPaymentRefundService({
+    database,
+    paymentGateway,
+    logger,
   });
 
   async function recoverStalePayments(): Promise<{
@@ -130,6 +141,27 @@ export function createPaymentRecoveryWorker({
           });
         }
         return "recovered";
+      }
+      if (result.autoRefundReserved) {
+        // The money was captured for an order that is already paid, or for
+        // something the buyer already has. It goes back to them.
+        log?.warn(
+          { paymentId: payment.id, orderId: result.orderId },
+          "Recovered payment is an extra payment; nothing granted, and it is being refunded automatically",
+        );
+        await extraPaymentRefunds.refundExtraPayment(payment.id);
+        return "already-final";
+      }
+      if (
+        result.outcome === "recorded_as_surplus" ||
+        result.outcome === "recorded_as_extra"
+      ) {
+        // Logged as an error on purpose: someone has to return this money.
+        log?.error(
+          { paymentId: payment.id, orderId: result.orderId },
+          "Recovered payment is an extra payment that is not refunded automatically; nothing granted. Refund it from the gateway dashboard",
+        );
+        return "already-final";
       }
       log?.info(
         { paymentId: payment.id },

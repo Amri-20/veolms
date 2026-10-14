@@ -1,6 +1,6 @@
 import type { DatabaseExecutor } from "@veolms/database";
 import type { DiscussionVisibility } from "@veolms/contracts";
-import { findSettingsByCourseId } from "../../../courses/configuration/configuration.repository.ts";
+import { findCourseSettings } from "../../../courses/index.ts";
 import {
   createAccessService,
   isOpenFreeCourse,
@@ -188,7 +188,7 @@ export function createDiscussionAccess(): DiscussionAccess {
     },
 
     async assertNotesEnabled(db, courseId) {
-      const settings = await findSettingsByCourseId(db, courseId);
+      const settings = await findCourseSettings(db, courseId);
       if (settings && settings.allow_notes === false) {
         throw DiscussionErrors.notesDisabled();
       }
@@ -197,17 +197,17 @@ export function createDiscussionAccess(): DiscussionAccess {
     async assertThreadKindEnabled(db, courseId, kind) {
       const normalized = kind === "qna" ? "question" : kind;
       if (normalized === "question") {
-        const settings = await findSettingsByCourseId(db, courseId);
+        const settings = await findCourseSettings(db, courseId);
         if (settings && settings.allow_qa === false) {
           throw DiscussionErrors.qaDisabled();
         }
       } else if (normalized === "comment") {
-        const settings = await findSettingsByCourseId(db, courseId);
+        const settings = await findCourseSettings(db, courseId);
         if (settings && settings.allow_comments === false) {
           throw DiscussionErrors.commentsDisabled();
         }
       } else if (normalized === "note") {
-        const settings = await findSettingsByCourseId(db, courseId);
+        const settings = await findCourseSettings(db, courseId);
         if (settings && settings.allow_notes === false) {
           throw DiscussionErrors.notesDisabled();
         }
@@ -216,31 +216,31 @@ export function createDiscussionAccess(): DiscussionAccess {
 
     assertThreadVisibleToMember(actor, thread, canModerate) {
       if (thread.visibility === "private" && thread.userId !== actor.userId) {
-        throw DiscussionErrors.notFound("Discussion thread");
+        throw DiscussionErrors.threadNotFound();
       }
       if (
         (thread.status === "hidden" || thread.status === "deleted") &&
         !canModerate
       ) {
-        throw DiscussionErrors.notFound("Discussion thread");
+        throw DiscussionErrors.threadNotFound();
       }
     },
 
     async assertCanAccessThread(db, actor, thread) {
       const allowed = await canAccessCourse(db, actor, thread.courseId);
       if (!allowed) {
-        throw DiscussionErrors.notFound("Discussion thread");
+        throw DiscussionErrors.threadNotFound();
       }
 
       const isOwner = thread.userId === actor.userId;
       if (thread.visibility === "private" && !isOwner) {
-        throw DiscussionErrors.notFound("Discussion thread");
+        throw DiscussionErrors.threadNotFound();
       }
 
       if (thread.status === "hidden" || thread.status === "deleted") {
         const staff = await canModerateCourse(db, actor, thread.courseId);
         if (!staff) {
-          throw DiscussionErrors.notFound("Discussion thread");
+          throw DiscussionErrors.threadNotFound();
         }
       }
     },
@@ -263,13 +263,13 @@ export function createDiscussionAccess(): DiscussionAccess {
 
     assertThreadIsActive(thread) {
       if (thread.status && thread.status !== "active") {
-        throw DiscussionErrors.notFound("Discussion thread");
+        throw DiscussionErrors.threadNotFound();
       }
     },
 
     assertReplyIsActive(reply) {
       if (reply.status && reply.status !== "active") {
-        throw DiscussionErrors.notFound("Reply");
+        throw DiscussionErrors.replyNotFound();
       }
     },
 

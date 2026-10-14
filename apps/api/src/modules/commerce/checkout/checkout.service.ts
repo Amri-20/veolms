@@ -11,15 +11,19 @@ import {
 import type { Database, DatabaseExecutor as Executor } from "@veolms/database";
 import type { Kysely } from "kysely";
 import { AppError } from "../../../lib/errors.ts";
+import { config } from "../../../config.ts";
+import * as courseRepo from "../../courses/course/course.repository.ts";
 import { CommerceErrors } from "../shared/commerce.errors.ts";
 import { isUniqueViolation } from "../shared/db-errors.ts";
 import {
   CHECKOUT_WINDOW_GRACE_SECONDS,
   checkoutSecondsLeft,
+  coverageCovers,
   coverageOf,
   coverageOverlaps,
   decideOpenOrders,
   isOrderOpen,
+  manualPaymentBlockingSince,
   sameItems,
 } from "../shared/open-orders.ts";
 import * as quizPricingRepo from "../../quizzes/shared/quiz-pricing.repository.ts";
@@ -38,6 +42,8 @@ import {
   type PaymentService,
 } from "../payments/payment.service.ts";
 import { findGatewayCapture } from "../payments/captured-gateway-payment.ts";
+import { createExtraPaymentRefundService } from "../payments/extra-payment-refund.service.ts";
+import { courseSaleState } from "../pricing/purchasable.ts";
 import {
   createPaymentReconciliationService,
   type PaymentReconciliationService,
@@ -75,15 +81,33 @@ export interface CheckoutServiceOptions {
   pricingService?: PricingService;
   paymentService?: PaymentService;
   reconciliationService?: PaymentReconciliationService;
+  /** See `AUTO_REFUND_EXTRA_PAYMENTS`. */
+  autoRefundExtraPayments?: boolean;
+  /** See `MANUAL_PAYMENT_BLOCK_DAYS`. */
+  manualPaymentBlockDays?: number;
 }
 
 export function createCheckoutService({
   database,
   paymentGateway,
+  autoRefundExtraPayments = config.AUTO_REFUND_EXTRA_PAYMENTS,
+  manualPaymentBlockDays = config.MANUAL_PAYMENT_BLOCK_DAYS,
   pricingService = createPricingService({ database }),
-  paymentService = createPaymentService({ database, paymentGateway }),
-  reconciliationService = createPaymentReconciliationService({ database }),
+  paymentService = createPaymentService({
+    database,
+    paymentGateway,
+    autoRefundExtraPayments,
+    manualPaymentBlockDays,
+  }),
+  reconciliationService = createPaymentReconciliationService({
+    database,
+    autoRefundExtraPayments,
+  }),
 }: CheckoutServiceOptions): CheckoutService {
+  const extraPaymentRefunds = createExtraPaymentRefundService({
+    database,
+    paymentGateway,
+  });
   /**
    * Generates a preview of checkout calculation with live item pricing and optional coupon.
    */
@@ -159,6 +183,9 @@ export function createCheckoutService({
    * own since it was created (another order of theirs was paid, or access
    * was granted). New orders are refused for this by pricing; a resumed one
    * skipped that check and handed out a gateway order for a second payment.
+   *
+   * Refuses it too for a course that has been archived since: archiving
+   * stops new purchases, and continuing an unpaid order is one.
    */
   async function assertStillPurchasable(
     order: OrderRow,
@@ -173,10 +200,18 @@ export function createCheckoutService({
     const bundleIds = items
       .filter((item) => item.item_type === "bundle" && item.bundle_id)
       .map((item) => item.bundle_id!);
-    const bundleCourses =
-      owned.size === 0
-        ? []
-        : await bundleRepo.listBundleCoursesForBundleIds(executor, bundleIds);
+    const [bundleCourses, courseRows] = await Promise.all([
+      bundleRepo.listBundleCoursesForBundleIds(executor, bundleIds),
+      courseRepo.findCoursesByIds(
+        executor,
+        items.flatMap((item) =>
+          item.item_type === "course" && item.course_id ? [item.course_id] : [],
+        ),
+      ),
+    ]);
+    const courseStatusById = new Map(
+      courseRows.map((course) => [course.id, course.status]),
+    );
     const now = new Date();
 
     for (const item of items) {
@@ -184,10 +219,22 @@ export function createCheckoutService({
         if (owned.has(item.course_id)) {
           throw CommerceErrors.COURSE_ALREADY_OWNED(item.title_snapshot);
         }
+        if (
+          courseSaleState(courseStatusById.get(item.course_id)) === "archived"
+        ) {
+          throw CommerceErrors.COURSE_NOT_AVAILABLE();
+        }
       } else if (item.item_type === "bundle" && item.bundle_id) {
         const courses = bundleCourses.filter(
           (row) => row.bundle_id === item.bundle_id,
         );
+        if (
+          courses.some(
+            (row) => courseSaleState(row.course_status) === "archived",
+          )
+        ) {
+          throw CommerceErrors.BUNDLE_COURSE_NOT_AVAILABLE(item.title_snapshot);
+        }
         const ownedCourses = courses.filter((row) => owned.has(row.course_id));
         if (courses.length > 0 && ownedCourses.length === courses.length) {
           throw CommerceErrors.BUNDLE_ALL_COURSES_OWNED(item.title_snapshot);
@@ -213,6 +260,17 @@ export function createCheckoutService({
           }))
         ) {
           throw CommerceErrors.QUIZ_ALREADY_OWNED(item.title_snapshot);
+        }
+        // A quiz pass is sold with its course: pricing refuses a new order
+        // for one once the course is no longer published, and continuing
+        // an unpaid order is refused the same way as for the course itself.
+        if (offering) {
+          const [quizCourse] = await courseRepo.findCoursesByIds(executor, [
+            offering.course_id,
+          ]);
+          if (courseSaleState(quizCourse?.status) === "archived") {
+            throw CommerceErrors.COURSE_NOT_AVAILABLE();
+          }
         }
       }
     }
@@ -247,10 +305,13 @@ export function createCheckoutService({
     await assertStillPurchasable(order, trx);
     // A transfer the buyer reported for this order is with staff; paying
     // through the gateway as well would pay for it twice.
+    // One staff have left unanswered for MANUAL_PAYMENT_BLOCK_DAYS no
+    // longer stands in the way.
     if (
       await manualPaymentRepo.findPendingManualPaymentRequestByOrderId(
         trx,
         order.id,
+        manualPaymentBlockingSince(new Date(), manualPaymentBlockDays),
       )
     ) {
       throw CommerceErrors.MANUAL_PAYMENT_PENDING(
@@ -294,11 +355,23 @@ export function createCheckoutService({
     }
     if (capture.state !== "captured") return false;
 
-    await reconciliationService.finalizeSuccessfulPayment({
+    const result = await reconciliationService.finalizeSuccessfulPayment({
       paymentId: payment.id,
       gatewayPaymentId: capture.gatewayPaymentId,
       paymentMethod: capture.paymentMethod,
     });
+    // The capture found here is settled by the rule every capture is: money
+    // for an order that is already paid, or for something the buyer already
+    // has, is not a purchase. Nothing was granted for it and it goes back.
+    if (result.autoRefundReserved) {
+      await extraPaymentRefunds.refundExtraPayment(payment.id);
+    }
+    if (result.outcome === "recorded_as_extra") {
+      // The order was closed unpaid. The buyer is told why it cannot be
+      // continued, as for any order for something they already have.
+      await assertStillPurchasable(existingOrder);
+      throw CommerceErrors.ORDER_EXPIRED();
+    }
     return true;
   }
 
@@ -421,7 +494,15 @@ export function createCheckoutService({
     userId: string,
     pricing: PricingCalculation,
     now: Date,
-  ): Promise<{ resumableOrder?: OrderRow; supersededOrderIds: string[] }> {
+  ): Promise<{
+    resumableOrder?: OrderRow;
+    supersededOrderIds: string[];
+    /**
+     * Closed for a free enrolment that covers all they sell, while a
+     * transfer for them waits for staff.
+     */
+    cancelledOrderIds: string[];
+  }> {
     const openOrders = await orderRepo.listOrdersAwaitingPayment(trx, {
       userId,
       now,
@@ -429,8 +510,14 @@ export function createCheckoutService({
         now.getTime() -
           (CHECKOUT_WINDOW_SECONDS + CHECKOUT_WINDOW_GRACE_SECONDS) * 1000,
       ),
+      manualPaymentSince: manualPaymentBlockingSince(
+        now,
+        manualPaymentBlockDays,
+      ),
     });
-    if (openOrders.length === 0) return { supersededOrderIds: [] };
+    if (openOrders.length === 0) {
+      return { supersededOrderIds: [], cancelledOrderIds: [] };
+    }
 
     const openItems = await orderRepo.listOrderItemsByOrderIds(
       trx,
@@ -469,6 +556,7 @@ export function createCheckoutService({
           isOpen,
           sameItems: sameItems(held, wanted),
           overlaps: coverageOverlaps(held, wanted),
+          coveredByRequest: coverageCovers(wanted, held),
           sameTerms:
             openOrder.total_amount === pricing.totalAmount &&
             openOrder.currency === pricing.currency &&
@@ -485,6 +573,9 @@ export function createCheckoutService({
           ),
         };
       }),
+      // An order with nothing to pay cannot be a second payment, so the
+      // buyer is not made to wait for an earlier checkout to close.
+      { freeOrder: pricing.totalAmount === 0 },
     );
 
     if (decision.kind === "manual_payment_pending") {
@@ -503,6 +594,7 @@ export function createCheckoutService({
         (openOrder) => openOrder.id === decision.resumeOrderId,
       ),
       supersededOrderIds: decision.supersedeOrderIds,
+      cancelledOrderIds: decision.cancelOrderIds ?? [],
     };
   }
 
@@ -638,15 +730,12 @@ export function createCheckoutService({
     async function insertOrderWithItems() {
       return await database.transaction().execute(async (trx) => {
         await orderRepo.lockBuyerCheckout(trx, user.id);
-        const { resumableOrder, supersededOrderIds } = await settleOpenOrders(
-          trx,
-          user.id,
-          pricing,
-          now,
-        );
+        const { resumableOrder, supersededOrderIds, cancelledOrderIds } =
+          await settleOpenOrders(trx, user.id, pricing, now);
         // Before the coupon's limits are counted, so the earlier order's hold
         // is not counted against this one.
         await orderRepo.expirePendingOrders(trx, supersededOrderIds, now);
+        await orderRepo.cancelUnpaidOrders(trx, cancelledOrderIds, now);
         if (resumableOrder) {
           return {
             resumableOrder,

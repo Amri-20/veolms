@@ -119,6 +119,7 @@ export interface AttachmentsService {
     db: DatabaseExecutor,
     attachmentId: string,
     userId: string,
+    logger?: AttachmentUploadLogger,
   ): Promise<UploadedAttachment>;
 
   processUpload(
@@ -662,7 +663,7 @@ export function createAttachmentsService(
       return presentUploadedAttachment(updated);
     },
 
-    async completeUpload(db, attachmentId, userId) {
+    async completeUpload(db, attachmentId, userId, logger) {
       const existing = await attachmentsRepo.findAttachmentById(
         db,
         attachmentId,
@@ -691,7 +692,24 @@ export function createAttachmentsService(
         return presentUploadedAttachment(existing);
       }
 
-      const uploadedObject = await storage.headObject(existing.storageKey);
+      // The store answers "no such object" with null, which is the upload
+      // not having arrived yet. Anything it throws is the store itself not
+      // answering: nothing is wrong with the upload, and asking again later
+      // can succeed, so it is not reported as a server fault.
+      let uploadedObject: Awaited<ReturnType<typeof storage.headObject>>;
+      try {
+        uploadedObject = await storage.headObject(existing.storageKey);
+      } catch (error) {
+        logger?.warn(
+          { err: error, attachmentId, storageKey: existing.storageKey },
+          "Could not reach the file store to confirm an upload",
+        );
+        throw httpError(
+          503,
+          "STORAGE_UNAVAILABLE",
+          "The file store could not be reached. Try again.",
+        );
+      }
       if (!uploadedObject) {
         throw httpError(
           400,

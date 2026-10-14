@@ -18,6 +18,7 @@ import {
   resolveCourseCharge,
 } from "./pricing.amount.ts";
 import { resolveQuizCharge } from "./quiz-pricing.amount.ts";
+import { courseSaleState, resolveCoursePricing } from "./purchasable.ts";
 
 export interface CalculatePricingParams {
   userId?: string | null;
@@ -246,7 +247,15 @@ export function createPricingService({
         // An unpublished course answers exactly like a missing one: this runs
         // for anonymous callers too, and naming the course would disclose a
         // draft's title to anyone holding its id.
-        if (!course || course.status !== "published") {
+        //
+        // An archived course was on sale once and is known to those who
+        // saw it, so it says what it is: no longer sold. Those who have it
+        // keep it; nobody can buy it.
+        const saleState = courseSaleState(course?.status);
+        if (saleState === "archived") {
+          throw CommerceErrors.COURSE_NOT_AVAILABLE();
+        }
+        if (!course || saleState !== "on_sale") {
           throw CommerceErrors.COURSE_NOT_FOUND(courseId);
         }
         if (enrolledCourseIds.has(courseId)) {
@@ -261,23 +270,21 @@ export function createPricingService({
         // voluntary amount does not change that: a tip buys no way in.
         // Asked after the ownership check, so a learner who was given
         // access is told they are enrolled, as for any other course.
+        //
+        // A course that sells for nothing is a free course here, whatever
+        // was stored as its pricing type (resolveCoursePricing): a sale
+        // price of zero must not turn a restricted course into one anyone
+        // can enrol in.
+        const { pricingType, catalogPrice } = resolveCoursePricing(pricing);
         if (
           isRestrictedFreeCourse({
-            pricing_type: pricing?.pricing_type,
+            pricing_type: pricingType,
             access_type: accessTypeByCourseId.get(courseId),
           })
         ) {
           throw CommerceErrors.COURSE_ACCESS_RESTRICTED(course.title);
         }
-        const isPaidCourse = Boolean(
-          pricing && pricing.pricing_type === "paid",
-        );
-        const catalogPrice =
-          isPaidCourse && pricing
-            ? pricing.sale_price !== null && pricing.sale_price !== undefined
-              ? pricing.sale_price
-              : pricing.price
-            : 0;
+        const isPaidCourse = pricingType === "paid";
         const itemCurrency = pricing?.currency ?? "INR";
         const { unitPrice, couponBase } = resolveCourseCharge({
           isPaidCourse,
@@ -316,6 +323,16 @@ export function createPricingService({
 
         const bundleCourses = bundleCoursesByBundleId.get(bundleId) ?? [];
         const bundleCourseIds = bundleCourses.map((c) => c.course_id);
+
+        // A bundle is sold whole. With a course in it that is no longer
+        // sold, buying the bundle would be buying that course.
+        if (
+          bundleCourses.some(
+            (c) => courseSaleState(c.course_status) === "archived",
+          )
+        ) {
+          throw CommerceErrors.BUNDLE_COURSE_NOT_AVAILABLE(bundle.title);
+        }
 
         // Check if student already owns ALL courses in bundle
         const allOwned =

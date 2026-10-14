@@ -9,6 +9,8 @@ import { toMinorUnits } from "../shared/currency.ts";
 import { createCourseAccessService } from "../shared/course-access.service.ts";
 import { mapWithConcurrency } from "../../../lib/concurrency.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
+import { settleExtraPaymentRefund } from "../payments/extra-payment-refund.service.ts";
+import { SURPLUS_CAPTURE_ERROR_CODE } from "../payments/surplus-payment.ts";
 
 export interface RefundReconciliationWorkerOptions {
   database: Kysely<Database>;
@@ -145,6 +147,32 @@ export function createRefundReconciliationWorker({
         }
 
         if (gatewayRefund.status === "processed") {
+          // A refund of an extra payment (payments/extra-payment.ts) is not
+          // a refund of the order: its status and its access stay as they
+          // are. It is completed the way its own answer or the gateway's
+          // event would have completed it.
+          const refundedPayment = await paymentRepo.findPaymentById(
+            database,
+            refund.payment_id,
+          );
+          if (refundedPayment?.error_code === SURPLUS_CAPTURE_ERROR_CODE) {
+            await database.transaction().execute((trx) =>
+              settleExtraPaymentRefund(trx, {
+                paymentId: refundedPayment.id,
+                gatewayRefundId: gatewayRefund.gatewayRefundId,
+                amount: gatewayRefund.amount,
+                currency: gatewayRefund.currency,
+                now: new Date(),
+              }),
+            );
+            log?.info(
+              { refundId: refund.id, paymentId: refundedPayment.id },
+              "Refund of an extra payment reconciled to processed; the order was not changed",
+            );
+            resolved++;
+            continue;
+          }
+
           const order = await orderRepo.findOrderById(
             database,
             refund.order_id,

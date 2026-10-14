@@ -1,6 +1,9 @@
 import type { DatabaseExecutor } from "@veolms/database";
 import { sql } from "kysely";
 
+/** The statuses of a course its enrolled learners still have. */
+const LEARNER_COURSE_STATUSES = ["published", "archived"] as const;
+
 export interface RecentUpdateCourseRow {
   course_id: string;
   course_slug: string;
@@ -75,7 +78,9 @@ export function createRecentUpdatesRepository({
             ),
         ),
       )
-      .where("c.status", "=", "published")
+      // The learner is enrolled in every course listed here, so an
+      // archived one stays: archiving does not end an enrolment.
+      .where("c.status", "in", LEARNER_COURSE_STATUSES)
       .where("c.deleted_at", "is", null)
       .whereRef("l.course_id", "=", "c.id")
       .where("s.deleted_at", "is", null)
@@ -125,7 +130,7 @@ export function createRecentUpdatesRepository({
         )`.as("lesson_number"),
       ])
       .where("c.id", "in", courseIds)
-      .where("c.status", "=", "published")
+      .where("c.status", "in", LEARNER_COURSE_STATUSES)
       .where("c.deleted_at", "is", null)
       .whereRef("l.course_id", "=", "c.id")
       .where("s.deleted_at", "is", null)

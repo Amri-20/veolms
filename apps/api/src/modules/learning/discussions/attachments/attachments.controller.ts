@@ -92,6 +92,7 @@ export function createAttachmentsController({
         database,
         attachmentId,
         user.id,
+        request.log,
       );
       await reply.status(200).send(attachment);
     },

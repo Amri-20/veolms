@@ -106,3 +106,16 @@ await test("the refunds noted on a surplus payment add up, and a payment with no
   );
   assert.equal(refundedSoFar(twice.errorDescription), 12500);
 });
+
+await test("only a refund note counts as a refund, not other text that mentions one", () => {
+  const description =
+    describeSurplusCapture("ORD-20261013-AB12CD") +
+    ' The buyer already had "Refund Policy of 49900 Rupees Explained".';
+  assert.equal(refundedSoFar(description), 0);
+  const next = applySurplusRefund(
+    { amount: 49900, error_description: description },
+    { gatewayRefundId: "rfnd_1", amount: 100, currency: "INR" },
+  );
+  assert.equal(next.status, "captured");
+  assert.equal(refundedSoFar(next.errorDescription), 100);
+});

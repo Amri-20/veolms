@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { Kysely } from "kysely";
-import type { Database } from "@veolms/database";
+import type { Database, DatabaseExecutor } from "@veolms/database";
 import type {
   UpdateCourseAccessRuleRequest,
   UpdateCoursePricingRequest,
@@ -15,6 +15,17 @@ import {
   presentPricing,
   presentSettings,
 } from "../shared/courses.presenters.ts";
+
+/**
+ * A course's settings row, for another module that reads it with its own
+ * executor (inside its own transaction, for one).
+ */
+export async function findCourseSettings(
+  database: DatabaseExecutor,
+  courseId: string,
+) {
+  return await configRepo.findSettingsByCourseId(database, courseId);
+}
 
 export interface ConfigurationServiceOptions {
   database: Kysely<Database>;
