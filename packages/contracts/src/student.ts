@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { enrollmentStatusSchema } from "./course/enrollment.ts";
 
 /**
  * Summary representation of a student learner in list views.
@@ -95,6 +96,18 @@ export const studentCourseDetailSchema = z.strictObject({
   difficulty: z.string().nullable().optional(),
   enrolledAt: z.string().or(z.date()),
   enrollmentSource: z.string(),
+  /**
+   * Whether the learner can open the course now. An enrollment whose access
+   * period has run out reads "expired" even while its row still says active.
+   */
+  accessStatus: enrollmentStatusSchema,
+  /**
+   * The order this enrollment came from, and whether that order can still be
+   * refunded. Sent to admins only; null and false for everyone else and for
+   * an enrollment no order paid for.
+   */
+  orderId: z.string().uuid().nullable(),
+  refundable: z.boolean(),
   progressPercent: z.number().min(0).max(100),
   completedLessonsCount: z.number().int().nonnegative(),
   totalLessonsCount: z.number().int().nonnegative(),
@@ -107,6 +120,7 @@ export type StudentCourseDetail = z.infer<typeof studentCourseDetailSchema>;
  */
 export const studentDetailResponseSchema = z.strictObject({
   student: z.strictObject({
+    id: z.string().uuid(),
     username: z.string(),
     displayName: z.string(),
     email: z.string().email().nullable().optional(),

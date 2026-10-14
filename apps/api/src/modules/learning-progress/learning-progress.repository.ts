@@ -49,6 +49,23 @@ export function findCoursePricingType(
  * removing the row is the one way a lesson stops counting as started or
  * finished; a learner's later progress on it is then recorded from nothing.
  */
+/**
+ * Removes everything one learner has recorded in one course, so the course
+ * reads as never started for them; returns how many lessons were cleared.
+ */
+export async function deleteCourseProgressForUser(
+  database: LearningProgressExecutor,
+  userId: string,
+  courseId: string,
+): Promise<number> {
+  const result = await database
+    .deleteFrom("learning_progress")
+    .where("user_id", "=", userId)
+    .where("course_id", "=", courseId)
+    .executeTakeFirst();
+  return Number(result.numDeletedRows ?? 0);
+}
+
 export async function deleteLessonProgress(
   database: LearningProgressExecutor,
   lessonId: string,

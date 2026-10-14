@@ -74,6 +74,7 @@ import {
   readAccountScopedItem,
 } from "../store/accountScopedStorage";
 import { useAuthStore } from "../store/auth.store";
+import { ElevatedCard } from "../components/ElevatedCard";
 
 interface Props {
   courseId?: string;
@@ -1531,10 +1532,7 @@ export function QuizAuthoringPanel({
   return (
     <div data-quiz-surface="" className="space-y-3 sm:space-y-5 text-(--text)">
       {/* Top Header Card with Quiz Selector and Back Action */}
-      <div
-        className="rounded-[14px] sm:rounded-[20px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface,var(--surface)) px-2.5 py-2 sm:p-5"
-        style={{ boxShadow: "var(--card-shadow)" }}
-      >
+      <ElevatedCard as="div" className="px-2.5 py-2 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {onBack ? (
@@ -1640,7 +1638,7 @@ export function QuizAuthoringPanel({
             </button>
           </div>
         </div>
-      </div>
+      </ElevatedCard>
 
       {quiz.isLoading && !quiz.data && !lastLoadedQuizIdRef.current ? (
         <div className="my-8">
@@ -1651,10 +1649,7 @@ export function QuizAuthoringPanel({
       {!quizId || quiz.data || lastLoadedQuizIdRef.current ? (
         <div className="space-y-3 sm:space-y-5">
           {/* Card 1: Quiz Details */}
-          <div
-            className="rounded-[14px] sm:rounded-[20px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface,var(--surface)) p-2.5 sm:p-6"
-            style={{ boxShadow: "var(--card-shadow)" }}
-          >
+          <ElevatedCard as="div" className="p-2.5 sm:p-6">
             <div className="flex items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
               <div>
                 <h3 className="text-sm sm:text-base font-bold text-(--text) tracking-tight">
@@ -1750,13 +1745,10 @@ export function QuizAuthoringPanel({
                 />
               </div>
             </div>
-          </div>
+          </ElevatedCard>
 
           {/* Card 2: Questions with In-Place Curriculum-Style Accordion Authoring */}
-          <div
-            className="rounded-[14px] sm:rounded-[20px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface,var(--surface)) p-2.5 sm:p-6"
-            style={{ boxShadow: "var(--card-shadow)" }}
-          >
+          <ElevatedCard as="div" className="p-2.5 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3 sm:mb-4">
               <div>
                 <h3 className="text-sm sm:text-base font-bold text-(--text) tracking-tight">
@@ -2255,13 +2247,10 @@ export function QuizAuthoringPanel({
                 <span>Add question</span>
               </button>
             </div>
-          </div>
+          </ElevatedCard>
 
           {/* Card 4: Course Assignment & Delivery Rules */}
-          <div
-            className="rounded-[14px] sm:rounded-[20px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface,var(--surface)) p-2.5 sm:p-6"
-            style={{ boxShadow: "var(--card-shadow)" }}
-          >
+          <ElevatedCard as="div" className="p-2.5 sm:p-6">
             <div className="flex items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
               <div>
                 <h3 className="text-sm sm:text-base font-bold text-(--text) tracking-tight">
@@ -2781,7 +2770,7 @@ export function QuizAuthoringPanel({
                 )}
               </div>
             )}
-          </div>
+          </ElevatedCard>
         </div>
       ) : null}
 

@@ -1,5 +1,9 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import type { CreateManualAccessGrantRequest } from "@veolms/contracts";
+import type {
+  CourseAccessChangeResponse,
+  CourseAccessParams,
+  CreateManualAccessGrantRequest,
+} from "@veolms/contracts";
 import type { AccessService } from "./access.service.ts";
 import type { Executor } from "./access.repository.ts";
 
@@ -12,6 +16,12 @@ export interface AccessController {
     request: FastifyRequest<{ Params: { grantId: string } }>,
     reply: FastifyReply,
   ): Promise<void>;
+  revokeCourseAccess(
+    request: FastifyRequest<{ Params: CourseAccessParams }>,
+  ): Promise<CourseAccessChangeResponse>;
+  restoreCourseAccess(
+    request: FastifyRequest<{ Params: CourseAccessParams }>,
+  ): Promise<CourseAccessChangeResponse>;
   listUserGrants(
     request: FastifyRequest<{ Params: { userId: string } }>,
     reply: FastifyReply,
@@ -55,6 +65,22 @@ export function createAccessController({
       .send({ message: "Access grant revoked successfully." });
   }
 
+  async function revokeCourseAccess(
+    request: FastifyRequest<{ Params: CourseAccessParams }>,
+  ): Promise<CourseAccessChangeResponse> {
+    const { userId, courseId } = request.params;
+    await service.revokeCourseAccess(database, userId, courseId);
+    return { userId, courseId, status: "revoked" };
+  }
+
+  async function restoreCourseAccess(
+    request: FastifyRequest<{ Params: CourseAccessParams }>,
+  ): Promise<CourseAccessChangeResponse> {
+    const { userId, courseId } = request.params;
+    await service.restoreCourseAccess(database, userId, courseId);
+    return { userId, courseId, status: "active" };
+  }
+
   async function listUserGrants(
     request: FastifyRequest<{ Params: { userId: string } }>,
     reply: FastifyReply,
@@ -67,6 +93,8 @@ export function createAccessController({
   return {
     grantManualAccess,
     revokeAccessGrant,
+    revokeCourseAccess,
+    restoreCourseAccess,
     listUserGrants,
   };
 }

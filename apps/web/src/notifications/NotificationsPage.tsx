@@ -16,6 +16,7 @@ import {
   CenteredLoadingSpinner,
   LoadingSpinnerIcon,
 } from "../components/LoadingSpinner";
+import { ElevatedCard } from "../components/ElevatedCard";
 
 export interface NotificationsPageProps {
   onNavigatePage?: NavigateTo;
@@ -169,10 +170,10 @@ export function NotificationsPage({
               className="min-h-52 rounded-[18px] bg-(--card-surface) p-8"
             />
           ) : isError ? (
-            <div
+            <ElevatedCard
+              as="div"
               role="alert"
-              className="flex flex-col items-center justify-center rounded-[18px] bg-(--card-surface) p-8 sm:p-12 text-center"
-              style={{ boxShadow: "var(--card-shadow)" }}
+              className="flex flex-col items-center justify-center p-8 sm:p-12 text-center"
             >
               <div
                 className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-400 mb-3.5"
@@ -195,7 +196,7 @@ export function NotificationsPage({
                 <ArrowClockwise size={15} weight="bold" />
                 <span>Try again</span>
               </button>
-            </div>
+            </ElevatedCard>
           ) : totalFilteredCount > 0 ? (
             <>
               {/* Today Section */}

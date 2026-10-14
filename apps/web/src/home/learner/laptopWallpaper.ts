@@ -4,6 +4,10 @@ import contoursWallpaper from "../../assets/home/wallpapers/contours.webp";
 import duskWallpaper from "../../assets/home/wallpapers/dusk.webp";
 import silkWallpaper from "../../assets/home/wallpapers/silk.webp";
 import sunsetWallpaper from "../../assets/home/wallpapers/sunset.webp";
+import {
+  isWallpaperAccent,
+  readWallpaperAccent,
+} from "./laptopWallpaperAccent";
 
 /**
  * The wallpaper on the laptop in the learner's hero. The learner's goal is
@@ -20,10 +24,12 @@ import sunsetWallpaper from "../../assets/home/wallpapers/sunset.webp";
  * project's owner supplied; the others are drawn by
  * `scripts/generate-laptop-wallpapers.mjs`.
  *
- * Each has an accent: the colour the day's progress is drawn in over it,
- * picked to sit with the picture (a warm bar on a sunset, a cool one on
- * blue). A learner's own picture has none, and the screen falls back to
- * the theme's accent.
+ * Each has an accent: the colour the day's progress and the words are drawn
+ * in over it, picked to sit with the picture (warm on a sunset, cool on
+ * blue). A learner's own picture has its accent taken from it (see
+ * `laptopWallpaperAccent`). That is worked out once, the first time the
+ * picture is shown, and kept beside it; until it is known, and for a
+ * picture with no colour in it, the screen uses the theme's accent.
  */
 export const LAPTOP_WALLPAPERS = [
   { id: "sunset", name: "Sunset", src: sunsetWallpaper, accent: "#fdba74" },
@@ -46,6 +52,8 @@ const DEFAULT_WALLPAPER: LaptopWallpaperPresetId = "sunset";
 
 const CHOICE_KEY = "veolms-laptop-wallpaper";
 const OWN_IMAGE_KEY = "veolms-laptop-wallpaper-image";
+/** The accent taken from the learner's own picture. */
+const OWN_ACCENT_KEY = "veolms-laptop-wallpaper-accent";
 const CHANGE_EVENT = "veolms-laptop-wallpaper-change";
 
 const isPreset = (value: unknown): value is LaptopWallpaperPresetId =>
@@ -55,7 +63,10 @@ export interface LaptopWallpaperState {
   /** What the laptop shows. */
   id: LaptopWallpaperId;
   src: string;
-  /** The colour progress is drawn in over it; none for an own picture. */
+  /**
+   * The colour progress and the words are drawn in over it. None for an own
+   * picture whose colour has not been worked out yet, or that has none.
+   */
   accent: string | null;
   /** The learner's own picture, whether or not it is the one in use. */
   ownSrc: string | null;
@@ -82,7 +93,13 @@ function readState(): LaptopWallpaperState {
     const stored = window.localStorage.getItem(OWN_IMAGE_KEY);
     const ownSrc = stored?.startsWith("data:image/") ? stored : null;
     if (choice === "own" && ownSrc) {
-      return { id: "own", src: ownSrc, accent: null, ownSrc };
+      const accent = window.localStorage.getItem(OWN_ACCENT_KEY);
+      return {
+        id: "own",
+        src: ownSrc,
+        accent: isWallpaperAccent(accent) ? accent : null,
+        ownSrc,
+      };
     }
     return stateOfPreset(isPreset(choice) ? choice : DEFAULT_WALLPAPER, ownSrc);
   } catch {
@@ -104,6 +121,37 @@ function announce() {
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
+/**
+ * The picture whose accent is being worked out, or was and had none, so it
+ * is asked for once and not on every look.
+ */
+let accentTriedFor: string | undefined;
+
+/**
+ * Works out the accent of the learner's own picture if it is the one in use
+ * and has none kept: a picture saved before accents were taken, or one just
+ * saved. The screen is told when it is known.
+ */
+function ensureOwnAccent() {
+  const state = getState();
+  if (state.id !== "own" || state.accent || accentTriedFor === state.src) {
+    return;
+  }
+  const src = state.src;
+  accentTriedFor = src;
+  void readWallpaperAccent(src).then((accent) => {
+    if (!accent) return;
+    try {
+      // The picture may have been changed or taken off meanwhile.
+      if (window.localStorage.getItem(OWN_IMAGE_KEY) !== src) return;
+      window.localStorage.setItem(OWN_ACCENT_KEY, accent);
+    } catch {
+      return;
+    }
+    announce();
+  });
+}
+
 function subscribe(onChange: () => void) {
   const refresh = () => {
     current = undefined;
@@ -112,6 +160,7 @@ function subscribe(onChange: () => void) {
   window.addEventListener(CHANGE_EVENT, onChange);
   // Another tab of the same browser.
   window.addEventListener("storage", refresh);
+  ensureOwnAccent();
   return () => {
     window.removeEventListener(CHANGE_EVENT, onChange);
     window.removeEventListener("storage", refresh);
@@ -131,6 +180,7 @@ export function chooseLaptopWallpaper(id: LaptopWallpaperId) {
     // Without storage the choice lasts until the page is closed.
   }
   announce();
+  ensureOwnAccent();
 }
 
 /**
@@ -141,10 +191,13 @@ export function saveOwnLaptopWallpaper(dataUrl: string): boolean {
   try {
     window.localStorage.setItem(OWN_IMAGE_KEY, dataUrl);
     window.localStorage.setItem(CHOICE_KEY, "own");
+    // The accent kept is the old picture's.
+    window.localStorage.removeItem(OWN_ACCENT_KEY);
   } catch {
     return false;
   }
   announce();
+  ensureOwnAccent();
   return true;
 }
 
@@ -152,6 +205,7 @@ export function saveOwnLaptopWallpaper(dataUrl: string): boolean {
 export function removeOwnLaptopWallpaper() {
   try {
     window.localStorage.removeItem(OWN_IMAGE_KEY);
+    window.localStorage.removeItem(OWN_ACCENT_KEY);
     if (window.localStorage.getItem(CHOICE_KEY) === "own") {
       window.localStorage.removeItem(CHOICE_KEY);
     }

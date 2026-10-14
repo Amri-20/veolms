@@ -37,6 +37,7 @@ import {
   getOrderStatusStyle,
 } from "./orderHelpers";
 import { StudentAvatar } from "./StudentAvatar";
+import { ElevatedCard } from "../components/ElevatedCard";
 
 const ORDER_ROW_ESTIMATE = 76;
 const ORDER_MOBILE_ROW_ESTIMATE = 118;
@@ -534,9 +535,9 @@ export const OrdersTable = memo(function OrdersTable({
   // Loading Initial Skeleton
   if (isLoading && orders.length === 0) {
     return (
-      <div
-        className="w-full overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface-raised,var(--surface)) p-12 text-center"
-        style={{ boxShadow: "var(--card-shadow)" }}
+      <ElevatedCard
+        as="div"
+        className="w-full overflow-hidden p-12 text-center"
       >
         <div
           role="status"
@@ -545,7 +546,7 @@ export const OrdersTable = memo(function OrdersTable({
         >
           <CircleNotch size={32} className="animate-spin text-(--accent)" />
         </div>
-      </div>
+      </ElevatedCard>
     );
   }
 
@@ -553,10 +554,10 @@ export const OrdersTable = memo(function OrdersTable({
   // used to fall through to "No orders found" as if the academy had no sales.
   if (!isLoading && loadError && orders.length === 0) {
     return (
-      <div
+      <ElevatedCard
+        as="div"
         role="alert"
-        className="relative w-full overflow-hidden rounded-2xl sm:rounded-[22px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface) p-8 sm:p-12 text-center shadow-(--card-shadow)"
-        style={{ boxShadow: "var(--card-shadow)" }}
+        className="relative w-full overflow-hidden p-8 sm:p-12 text-center"
       >
         <div
           className="mx-auto mb-4 flex size-14 sm:size-16 items-center justify-center rounded-2xl sm:rounded-[20px] border border-rose-500/25 bg-rose-500/10 text-rose-400"
@@ -579,7 +580,7 @@ export const OrdersTable = memo(function OrdersTable({
             <span>Try again</span>
           </button>
         )}
-      </div>
+      </ElevatedCard>
     );
   }
 
@@ -624,10 +625,7 @@ export const OrdersTable = memo(function OrdersTable({
 
   return (
     <div className="w-full">
-      <div
-        className="overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface-raised,var(--surface))"
-        style={{ boxShadow: "var(--card-shadow)" }}
-      >
+      <ElevatedCard as="div" className="overflow-hidden">
         <div className="@container/orders overflow-x-auto">
           <div role="table" aria-label="Orders list" className="min-w-0 w-full">
             {/* Table Header */}
@@ -714,7 +712,7 @@ export const OrdersTable = memo(function OrdersTable({
             </div>
           </div>
         </div>
-      </div>
+      </ElevatedCard>
 
       {/* Infinite Scroll Footer Spinner */}
       {isFetchingNextPage && (

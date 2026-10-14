@@ -31,6 +31,7 @@ import {
 import { LearningExpandPlaceholderSheet } from "./LearningExpandPlaceholderSheet";
 import {
   expandLearningPlayerFromRect,
+  fitLearningPlayerExpandTarget,
   startLearningPlayerExpand,
   type LearningPagePartRect,
   type LearningPlayerExpandMotion,
@@ -67,6 +68,13 @@ const EXPAND_ABANDON_MS = 5000;
 interface RememberedLessonPageLayout extends LearningPlayerExpandTarget {
   viewportWidth: number;
   viewportHeight: number;
+  /**
+   * The left edge of the frame the page was laid out in (the main scroll
+   * area). The sidebar can change width while the small player is up, and
+   * the layout is then fitted to where that edge is when the player
+   * expands.
+   */
+  frameLeft: number;
 }
 
 export type LearningPlayerPresentation = "full" | "mini";
@@ -186,14 +194,28 @@ export function PersistentLearningPlayerHost({
     expandTurnedBackRef.current = false;
     const host = hostRef.current;
     if (host) lastMiniRectRef.current = host.getBoundingClientRect();
-    const target = lastFullRectRef.current;
+    const remembered = lastFullRectRef.current;
+    const frame = mainScrollportRef.current?.getBoundingClientRect();
+    // Where the lesson page will be now, not where it was when the player
+    // was minimized: the sidebar may have been collapsed, opened or resized
+    // since, and the window (with the page's stand-ins) used to head for
+    // the old place first.
+    const target =
+      remembered && frame
+        ? fitLearningPlayerExpandTarget(
+            remembered,
+            remembered.frameLeft,
+            frame.left,
+          )
+        : remembered;
     const expand =
       host &&
+      remembered &&
       target &&
       host.hasAttribute("data-learning-mini-player") &&
       isDesktopLearningMinimizeViewport() &&
-      target.viewportWidth === window.innerWidth &&
-      target.viewportHeight === window.innerHeight
+      remembered.viewportWidth === window.innerWidth &&
+      remembered.viewportHeight === window.innerHeight
         ? startLearningPlayerExpand(
             host,
             target,
@@ -352,6 +374,7 @@ export function PersistentLearningPlayerHost({
         : null;
     };
     const content = measurePagePart(".learning-workspace__lesson-content");
+    const frame = mainScrollportRef.current?.getBoundingClientRect();
     lastFullRectRef.current = {
       left: rect.left,
       top,
@@ -361,6 +384,7 @@ export function PersistentLearningPlayerHost({
       content: content ? { ...content, top: content.top + scrollTop } : null,
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
+      frameLeft: frame?.left ?? 0,
     };
   }, []);
 

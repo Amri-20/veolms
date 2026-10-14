@@ -6,9 +6,9 @@ import { FunnelSimpleIcon as FunnelSimple } from "@phosphor-icons/react/FunnelSi
 import { LightbulbIcon as Lightbulb } from "@phosphor-icons/react/Lightbulb";
 import { EmptyState, SectionHeading } from "../components/analytics/StatTiles";
 import { formatTrendDate } from "./trendDate";
+import { ElevatedCard, elevatedCardClasses } from "../components/ElevatedCard";
 
-export const surfaceClass =
-  "rounded-[14px] sm:rounded-[22px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface,var(--surface)) text-(--text) shadow-(--card-shadow,var(--surface-depth-shadow))";
+export const surfaceClass = `${elevatedCardClasses} text-(--text)`;
 export const selectTriggerClass =
   "!h-9 sm:!h-10 !rounded-[9px] sm:!rounded-[10px] !border !border-[color-mix(in_srgb,var(--text)_12%,transparent)] !bg-[color-mix(in_srgb,var(--canvas)_75%,var(--surface))] !px-2.5 sm:!px-3.5 !text-xs sm:!text-sm !font-medium !text-(--text) focus:!border-(--accent)";
 export const kpiGridClass =
@@ -110,10 +110,7 @@ export function KpiCard({
   const hasTrend = kpi.changePercent !== null;
   const isPositive = (kpi.changePercent ?? 0) >= 0;
   return (
-    <div
-      className="rounded-[12px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface-raised,var(--surface)) p-2.5 sm:p-5 transition-all duration-200 hover:shadow-(--card-hover-shadow)"
-      style={{ boxShadow: "var(--card-shadow)" }}
-    >
+    <ElevatedCard as="div" className="p-2.5 sm:p-5 transition-all duration-200">
       <div className="flex items-start justify-between gap-1.5 sm:gap-2">
         <p className="text-[0.7rem] sm:text-xs font-semibold leading-snug text-(--muted) tracking-wide">
           {label}
@@ -146,7 +143,7 @@ export function KpiCard({
           No earlier period to compare
         </p>
       )}
-    </div>
+    </ElevatedCard>
   );
 }
 

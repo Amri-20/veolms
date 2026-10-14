@@ -7,7 +7,12 @@ import { PushPinIcon as PushPin } from "@phosphor-icons/react/PushPin";
 import { PushPinSlashIcon as PushPinSlash } from "@phosphor-icons/react/PushPinSlash";
 import type { EnrolledCourse } from "@veolms/contracts";
 import { useRef } from "react";
-import { CourseActionMenu, MenuAction } from "../../courses/CourseActionMenu";
+import {
+  CourseActionMenu,
+  MenuAction,
+  MenuDivider,
+} from "../../courses/CourseActionMenu";
+import { SignOutIcon as SignOut } from "@phosphor-icons/react/SignOut";
 import type { NavigateTo } from "../../routing/navigation";
 import { GuestHomeLink } from "../guest/GuestHomeLink";
 import { LearnerCourseThumbnail } from "./LearnerCourseThumbnail";
@@ -65,6 +70,7 @@ export function LearnerCourseCard({
   pinned,
   onPin,
   onUnpin,
+  onUnenroll,
   onNavigatePage,
 }: {
   course: EnrolledCourse;
@@ -80,6 +86,8 @@ export function LearnerCourseCard({
   /** Makes this the course the home's hero leads with. */
   onPin: () => void;
   onUnpin: () => void;
+  /** Offers "Unenroll" in the menu (an admin's own courses). */
+  onUnenroll?: () => void;
   onNavigatePage: NavigateTo;
 }) {
   const progress = course.progress ?? 0;
@@ -188,6 +196,17 @@ export function LearnerCourseCard({
                 )
               }
             />
+            {onUnenroll ? (
+              <>
+                <MenuDivider />
+                <MenuAction
+                  Icon={SignOut}
+                  label="Unenroll"
+                  destructive
+                  onClick={() => closeThen(onUnenroll)}
+                />
+              </>
+            ) : null}
           </CourseActionMenu>
         </div>
 

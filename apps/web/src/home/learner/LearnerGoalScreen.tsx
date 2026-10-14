@@ -38,15 +38,23 @@ import {
  *
  * The screen is a wallpaper with a sheet of frosted glass risen from its
  * bottom edge, and the day's goal on the sheet. It is always a dark one,
- * whatever the theme. Progress is drawn in the wallpaper's own accent; a
- * learner's own picture has none, and the theme's accent is used, held to
- * a lightness that reads on a dark screen (several day palettes have an
- * accent that is nearly black).
+ * whatever the theme. Progress is drawn in the wallpaper's own accent: the
+ * one picked for a wallpaper that comes with the app, or the one taken from
+ * a learner's own picture (see `laptopWallpaperAccent`). Until a picture's
+ * colour is known the theme's accent is used, held to a lightness that
+ * reads on a dark screen (several day palettes have an accent that is
+ * nearly black).
+ *
+ * The words are in that colour too (`--goal-ink`), let down with white far
+ * enough to read on the dark sheet, so the screen is of a piece with its
+ * wallpaper: warm over a sunset, cool over blue. They were plain white.
+ * The quieter words are the same ink, let through less.
  */
 const screenClasses = [
-  "relative size-full overflow-hidden bg-[#070b1c] text-white",
+  "relative size-full overflow-hidden bg-[#070b1c] text-(--goal-ink)",
   "[--goal-accent:color-mix(in_srgb,var(--accent)_60%,white)]",
   "supports-[color:oklch(from_white_l_c_h)]:[--goal-accent:oklch(from_var(--accent)_max(l,0.76)_c_h)]",
+  "[--goal-ink:color-mix(in_srgb,var(--goal-accent)_88%,white)]",
 ].join(" ");
 
 /**
@@ -116,7 +124,7 @@ function GoalStat({
   icon,
   amount,
   label,
-  className = "text-white/80",
+  className = "text-(--goal-ink)/80",
 }: {
   icon: ReactNode;
   amount?: string;
@@ -130,7 +138,7 @@ function GoalStat({
       {icon}
       <span>
         {amount ? (
-          <strong className="font-bold text-white">{amount} </strong>
+          <strong className="font-bold text-(--goal-ink)">{amount} </strong>
         ) : null}
         {label}
       </span>
@@ -155,7 +163,7 @@ const celebrationIconClasses =
  */
 function GoalHeading({ standing }: { standing: GoalStanding }) {
   return (
-    <p className="flex items-center gap-3.5 text-[44px] leading-none font-semibold whitespace-nowrap text-white/90 @[50rem]/home:gap-3 @[50rem]/home:text-[36px]">
+    <p className="flex items-center gap-3.5 text-[44px] leading-none font-semibold whitespace-nowrap text-(--goal-ink)/90 @[50rem]/home:gap-3 @[50rem]/home:text-[36px]">
       {standing === "under" ? "Today's goal" : null}
       {standing === "completed" ? (
         <>
@@ -264,12 +272,15 @@ export function LearnerGoalScreen({
           </div>
         ) : (
           <div role="status" className="flex items-center gap-6 py-6">
-            <Target aria-hidden="true" className="size-20 text-white/60" />
+            <Target
+              aria-hidden="true"
+              className="size-20 text-(--goal-ink)/60"
+            />
             <p className="grid gap-3 leading-none">
               <strong className="text-[44px] font-bold @[50rem]/home:text-[40px]">
                 Learning goals
               </strong>
-              <span className="text-[34px] font-medium text-white/70 @[50rem]/home:text-[30px]">
+              <span className="text-[34px] font-medium text-(--goal-ink)/70 @[50rem]/home:text-[30px]">
                 Unavailable right now
               </span>
             </p>
@@ -320,7 +331,7 @@ export function LearnerGoalScreen({
         <strong className="text-[128px] font-extrabold tracking-[-0.03em] @[50rem]/home:text-[104px]">
           {today.done}
         </strong>
-        <span className="ml-5 text-[66px] font-semibold text-white/75 @[50rem]/home:text-[56px]">
+        <span className="ml-5 text-[66px] font-semibold text-(--goal-ink)/75 @[50rem]/home:text-[56px]">
           / {today.goal} {today.unit}
         </span>
       </p>

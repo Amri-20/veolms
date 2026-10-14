@@ -6,6 +6,7 @@ import { ShoppingCartIcon as ShoppingCart } from "@phosphor-icons/react/Shopping
 import { UsersIcon as Users } from "@phosphor-icons/react/Users";
 import { ArrowCounterClockwiseIcon as ArrowCounterClockwise } from "@phosphor-icons/react/ArrowCounterClockwise";
 import { formatCurrency, formatNumber } from "./orderHelpers";
+import { ElevatedCard } from "../components/ElevatedCard";
 
 export interface OrderSummaryCardsProps {
   stats: OrderStatsResponse | undefined;
@@ -64,10 +65,10 @@ export const OrderSummaryCards = memo(function OrderSummaryCards({
       className="grid grid-cols-2 gap-2 sm:gap-3.5 md:grid-cols-3 xl:grid-cols-5"
     >
       {cards.map((card) => (
-        <article
+        <ElevatedCard
+          as="article"
           key={card.id}
-          className="rounded-[12px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface-raised,var(--surface)) p-2.5 sm:p-5 transition-all duration-200 hover:shadow-(--card-hover-shadow)"
-          style={{ boxShadow: "var(--card-shadow)" }}
+          className="p-2.5 sm:p-5 transition-all duration-200"
         >
           <div className="flex items-center justify-between gap-1 sm:gap-2">
             <p className="text-[0.68rem] sm:text-xs font-semibold text-(--muted) tracking-wide truncate">
@@ -87,7 +88,7 @@ export const OrderSummaryCards = memo(function OrderSummaryCards({
               {card.value}
             </p>
           )}
-        </article>
+        </ElevatedCard>
       ))}
     </section>
   );

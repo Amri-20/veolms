@@ -38,6 +38,7 @@ import {
 } from "./LessonMediaWorkspace";
 import { LessonResourceIcon } from "../lesson-resources/LessonResourceIcon";
 import { mediaService } from "../../services/media";
+import { ElevatedCard } from "../../components/ElevatedCard";
 
 export interface StudioLessonResourceItem {
   id: string;
@@ -564,16 +565,19 @@ export const LessonStudioEditor = forwardRef<
         {/* RIGHT COLUMN: Content Type, Visibility, Preview, Resources (5 of 12 cols) */}
         <div className="lg:col-span-5 flex flex-col gap-4 min-w-0">
           {/* Card 1: Content Type */}
-          <div className="flex flex-col rounded-[14px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface,var(--surface)) p-4 sm:p-4.5 shadow-(--card-shadow)">
+          <ElevatedCard as="div" className="flex flex-col p-4 sm:p-4.5">
             <LessonContentTypeSelector
               value={contentType}
               onChange={handleContentTypeChange}
               disabled={isSaving}
             />
-          </div>
+          </ElevatedCard>
 
           {/* Card 2: Visibility Setting */}
-          <div className="flex items-center justify-between rounded-[14px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface,var(--surface)) p-4 sm:p-4.5 shadow-(--card-shadow)">
+          <ElevatedCard
+            as="div"
+            className="flex items-center justify-between p-4 sm:p-4.5"
+          >
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[color-mix(in_srgb,var(--text)_8%,transparent)] text-(--text)">
                 <Eye size={18} weight="bold" />
@@ -596,10 +600,13 @@ export const LessonStudioEditor = forwardRef<
                 triggerClassName="!h-9 !w-full !rounded-[9px] !border !border-[color-mix(in_srgb,var(--text)_12%,transparent)] !px-3 !text-[0.80rem] !text-(--text) !bg-[color-mix(in_srgb,var(--canvas)_50%,var(--surface))] font-semibold"
               />
             </div>
-          </div>
+          </ElevatedCard>
 
           {/* Card 3: Free Preview Toggle */}
-          <div className="flex items-center justify-between rounded-[14px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface,var(--surface)) p-4 sm:p-4.5 shadow-(--card-shadow)">
+          <ElevatedCard
+            as="div"
+            className="flex items-center justify-between p-4 sm:p-4.5"
+          >
             <div className="flex items-start gap-3 pr-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[color-mix(in_srgb,var(--text)_8%,transparent)] text-(--text)">
                 <LockKey size={18} weight="bold" />
@@ -620,12 +627,12 @@ export const LessonStudioEditor = forwardRef<
               onChange={setIsPreview}
               label="Toggle free preview"
             />
-          </div>
+          </ElevatedCard>
         </div>
       </div>
 
       {/* Full-width lesson content tabs */}
-      <div className="flex w-full flex-col overflow-hidden rounded-[14px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface,var(--surface)) shadow-(--card-shadow)">
+      <ElevatedCard as="div" className="flex w-full flex-col overflow-hidden">
         <div className="flex items-center border-b border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--text)_2%,transparent)] px-3">
           <button
             type="button"
@@ -676,7 +683,7 @@ export const LessonStudioEditor = forwardRef<
           {activeContentTab === "description" && descriptionSection}
           {activeContentTab === "quiz" && quizSection}
         </div>
-      </div>
+      </ElevatedCard>
     </div>
   );
 

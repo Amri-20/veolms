@@ -92,7 +92,7 @@
   z-index: 26;
   margin-top: 23px;
   margin-bottom: 0;
-  background: var(--main-surface);
+  background: var(--card-ground, var(--main-surface));
 }
 
 .discussion-hub__sticky-region .discussion-hub__tabs {
@@ -104,7 +104,7 @@
 
 .discussion-hub__sticky-region .discussion-hub__filters {
   margin-top: 0;
-  background: var(--main-surface);
+  background: var(--card-ground, var(--main-surface));
 }
 
 .discussion-hub__sticky-region ~ .swipeable-tab-panel .discussion-hub__layout {
@@ -127,7 +127,11 @@
   scrollbar-width: none;
   border-bottom: 1px solid
     color-mix(in srgb, var(--surface-strong) 72%, transparent);
-  background: color-mix(in srgb, var(--main-surface) 95%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--card-ground, var(--main-surface)) 95%,
+    transparent
+  );
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }
@@ -204,26 +208,23 @@
   padding-inline: var(--application-page-inline-gutter, 0px);
   border: 1px solid transparent;
   border-radius: 0;
-  background: var(--main-surface);
+  background: var(--card-ground, var(--main-surface));
 }
 
 .discussion-hub__filter-toolbar {
   display: grid;
+  /* Takes back the 1px line around `.discussion-hub__filters`, so the
+     controls end exactly where the cards do. */
   margin-inline: -1px;
   min-width: 0;
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
   gap: inherit;
-  min-height: 39px;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
-  border-radius: 14px;
-  background: var(--card-surface, var(--surface));
-  box-shadow: var(--surface-depth-edge-shadow);
-}
-
-:root[data-theme="light"] .discussion-hub__filter-toolbar {
-  box-shadow: var(--card-compact-shadow);
+  min-height: 44px;
+  /* No box of its own: the search field and the filters lie straight on
+     the page, in line with the cards under them. */
+  padding: 0;
+  border: 0;
 }
 
 .discussion-hub__filter-controls {
@@ -357,10 +358,10 @@
 .discussion-hub__select {
   display: flex;
   min-width: 0;
-  min-height: 39px;
+  min-height: 44px;
   align-items: center;
   gap: 8px;
-  border-radius: 9px;
+  border-radius: 12px;
   padding: 0 10px;
   color: var(--muted);
   background: color-mix(in srgb, var(--surface-strong) 72%, var(--canvas));
@@ -381,7 +382,7 @@
   color: var(--text-secondary);
   background: transparent;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.875rem;
 }
 
 .discussion-hub__search input::placeholder {
@@ -392,7 +393,7 @@
   gap: 7px;
 }
 .discussion-hub__select .themed-select__trigger {
-  min-height: 39px;
+  min-height: 44px;
   padding: 0;
   border-radius: inherit;
   color: var(--text-secondary);
@@ -425,7 +426,7 @@
   display: grid;
   gap: 12px;
   margin-top: 15px;
-  border-radius: 15px;
+  border-radius: 16px;
   padding: 16px;
   background: var(--card-surface);
   box-shadow: var(--card-shadow);
@@ -513,9 +514,6 @@
 }
 
 .discussion-hub__thread-list {
-  --card-shadow: var(--surface-depth-edge-shadow), var(--card-compact-shadow);
-  --card-hover-shadow:
-    var(--surface-depth-edge-shadow), var(--card-compact-shadow);
   display: grid;
   gap: 10px;
   margin-top: 4px;
@@ -529,7 +527,7 @@
   align-items: center;
   min-width: 0;
   min-height: 126px;
-  border-radius: 15px;
+  border-radius: 16px;
   padding: 17px;
   background: var(--card-surface-raised);
   box-shadow: var(--card-shadow);
@@ -779,7 +777,7 @@
   display: grid;
   justify-items: center;
   gap: 7px;
-  border-radius: 15px;
+  border-radius: 16px;
   padding: 44px 22px;
   color: var(--muted);
   text-align: center;
@@ -837,13 +835,13 @@
   .discussion-hub__mobile-filter-trigger {
     display: inline-flex;
     min-width: 0;
-    min-height: 39px;
+    min-height: 44px;
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
     gap: 7px;
     border: 0;
-    border-radius: 9px;
+    border-radius: 12px;
     padding: 0 12px;
     color: var(--text-secondary);
     background: color-mix(in srgb, var(--surface-strong) 72%, var(--canvas));
@@ -1017,14 +1015,10 @@
 .discussion-thread--question {
   min-height: 0;
   padding: 13px 17px;
-  box-shadow:
-    var(--card-shadow),
-    inset 0 0 0 1px color-mix(in srgb, var(--text) 9%, transparent);
+  box-shadow: var(--card-shadow);
 }
 .discussion-thread--question:hover {
-  box-shadow:
-    var(--card-hover-shadow),
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: var(--card-hover-shadow);
 }
 .discussion-thread--question.is-collapsed {
   box-sizing: border-box;
@@ -1482,14 +1476,10 @@
 .discussion-thread--comment {
   min-height: 0;
   padding: 13px 17px;
-  box-shadow:
-    var(--card-shadow),
-    inset 0 0 0 1px color-mix(in srgb, var(--text) 9%, transparent);
+  box-shadow: var(--card-shadow);
 }
 .discussion-thread--comment:hover {
-  box-shadow:
-    var(--card-hover-shadow),
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: var(--card-hover-shadow);
 }
 .discussion-thread--comment.is-collapsed {
   box-sizing: border-box;
@@ -1848,14 +1838,10 @@
 .discussion-thread--mention {
   min-height: 0;
   padding: 13px 17px;
-  box-shadow:
-    var(--card-shadow),
-    inset 0 0 0 1px color-mix(in srgb, var(--text) 9%, transparent);
+  box-shadow: var(--card-shadow);
 }
 .discussion-thread--mention:hover {
-  box-shadow:
-    var(--card-hover-shadow),
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: var(--card-hover-shadow);
 }
 .discussion-thread--mention.is-collapsed {
   box-sizing: border-box;
@@ -2277,14 +2263,10 @@
 .discussion-thread--note {
   min-height: 0;
   padding: 13px 17px;
-  box-shadow:
-    var(--card-shadow),
-    inset 0 0 0 1px color-mix(in srgb, var(--text) 9%, transparent);
+  box-shadow: var(--card-shadow);
 }
 .discussion-thread--note:hover {
-  box-shadow:
-    var(--card-hover-shadow),
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: var(--card-hover-shadow);
 }
 .discussion-thread--note.is-collapsed {
   box-sizing: border-box;
@@ -2667,14 +2649,10 @@
 .discussion-thread--following {
   min-height: 0;
   padding: 13px 17px;
-  box-shadow:
-    var(--card-shadow),
-    inset 0 0 0 1px color-mix(in srgb, var(--text) 9%, transparent);
+  box-shadow: var(--card-shadow);
 }
 .discussion-thread--following:hover {
-  box-shadow:
-    var(--card-hover-shadow),
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: var(--card-hover-shadow);
 }
 .discussion-thread--following.is-collapsed {
   box-sizing: border-box;
@@ -3123,15 +3101,11 @@
 .discussion-thread--bookmark {
   min-height: 0;
   padding: 13px 17px;
-  box-shadow:
-    var(--card-shadow),
-    inset 0 0 0 1px color-mix(in srgb, var(--text) 9%, transparent);
+  box-shadow: var(--card-shadow);
 }
 
 .discussion-thread--bookmark:hover {
-  box-shadow:
-    var(--card-hover-shadow),
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: var(--card-hover-shadow);
 }
 
 .discussion-thread--bookmark.is-collapsed {

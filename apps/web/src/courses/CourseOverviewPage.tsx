@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -43,6 +44,7 @@ import {
   resolveCourseEnrollmentOffer,
 } from "./courseEnrollmentOffer";
 import { readCustomAmount } from "./customAmountEntry";
+import { readPastedCouponCode } from "./pastedCouponCode";
 import { useCourseWishlisted, useToggleWishlistCourse } from "../wishlist";
 import type { CourseSection } from "../learning/courseContent";
 import { getCoursePlayerPath } from "../learning/coursePlayerNavigation";
@@ -71,6 +73,12 @@ import {
 import { CourseOverviewSkeleton } from "./overview/CourseOverviewSkeleton";
 import { CourseLoadError } from "./overview/CourseLoadError";
 import { CourseManagerBar } from "./overview/CourseManagerBar";
+import { CourseViewerBandPlaceholder } from "./overview/CourseViewerBandPlaceholder";
+import {
+  presumedGuestOnlyClasses,
+  sessionExpectedOnlyClasses,
+  type CourseViewerState,
+} from "./overview/courseViewerState";
 import { HoverFillIcon } from "./overview/HoverFillIcon";
 import { PayCardIcon } from "./overview/PayCardIcon";
 import "../services/payments/razorpay-checkout.css";
@@ -462,11 +470,24 @@ function CoursePurchaseSection({
     !isFree && appliedCoupon
       ? describeCouponSaving(appliedCoupon, baseNumericPrice)
       : null;
+  // A coupon used on a course that is already on sale: both savings are
+  // shown, the sale's own and then the coupon's ("30% OFF + 20% OFF"), and
+  // the price struck through stays the marked one. The two are not added
+  // up: the coupon's share is of the sale price, and one figure for both
+  // would be a third number that is written nowhere else.
+  const couponOnTopOfSale =
+    couponSaving?.against === "catalogue" && Boolean(originalPrice && discount);
+  const couponSavingLabel = appliedCoupon
+    ? appliedCoupon.discountLabel ||
+      `${formatPriceWithCurrency(appliedCoupon.discountAmount, appliedCoupon.currency)} OFF`
+    : undefined;
   const struckThroughPrice =
     !couponSaving || !appliedCoupon
       ? originalPrice
       : couponSaving.against === "catalogue"
-        ? basePrice
+        ? couponOnTopOfSale
+          ? originalPrice
+          : basePrice
         : couponSaving.against === "ownAmount"
           ? formatPriceWithCurrency(
               couponSaving.wasAmount,
@@ -479,8 +500,9 @@ function CoursePurchaseSection({
       ? `${formatPriceWithCurrency(couponSaving.savedAmount, appliedCoupon.currency)} OFF`
       : couponSaving?.against === "nothing"
         ? undefined
-        : appliedCoupon.discountLabel ||
-          `${formatPriceWithCurrency(appliedCoupon.discountAmount, appliedCoupon.currency)} OFF`;
+        : couponOnTopOfSale
+          ? discount
+          : couponSavingLabel;
   const perksList = inclusions ?? [
     "Full lifetime access",
     "Access on mobile & desktop",
@@ -488,11 +510,17 @@ function CoursePurchaseSection({
   ];
   const priceSizeVariant = getPriceSizeVariant(displayPrice);
 
-  const handleApplyCoupon = async () => {
-    const code = couponCodeInput.trim().toUpperCase();
+  const applyCouponCode = async (rawCode: string) => {
+    const code = rawCode.trim().toUpperCase();
     if (!code) return;
     setCouponBusy(true);
     setCouponError(null);
+    // A code tried while another is applied (it was pasted on the page)
+    // does not take the applied one off unless it is good; a refusal says
+    // that the applied one is still there.
+    const stillApplied = appliedCoupon
+      ? ` ${appliedCoupon.code} is still applied.`
+      : "";
 
     try {
       const res = await preview.mutateAsync({
@@ -501,7 +529,10 @@ function CoursePurchaseSection({
       });
 
       if (res.couponValidation && !res.couponValidation.valid) {
-        setCouponError(res.couponValidation.message || "Invalid coupon code.");
+        setCouponError(
+          (res.couponValidation.message || "Invalid coupon code.") +
+            stillApplied,
+        );
         return;
       }
 
@@ -512,11 +543,22 @@ function CoursePurchaseSection({
       setCouponInputOpen(false);
       setCouponCodeInput("");
     } catch (err) {
-      setCouponError(getApiError(err).message);
+      setCouponError(getApiError(err).message + stillApplied);
     } finally {
       setCouponBusy(false);
     }
   };
+
+  const handleApplyCoupon = () => void applyCouponCode(couponCodeInput);
+
+  // With a coupon applied there is no field for a refusal to hang from, so
+  // it is a line under the bar; it has nothing to be corrected in, and
+  // goes away by itself.
+  useEffect(() => {
+    if (!appliedCouponCode || !couponError) return undefined;
+    const handle = window.setTimeout(() => setCouponError(null), 6000);
+    return () => window.clearTimeout(handle);
+  }, [appliedCouponCode, couponError]);
 
   const handleRemoveCoupon = () => {
     setAppliedCoupon(null);
@@ -763,6 +805,48 @@ function CoursePurchaseSection({
   // "Continue Learning" suggested there was still something to pay for.
   const showApplyCoupon =
     !isCreatorNormal && !isFree && !isEnrolled && !isInvitationOnly;
+
+  // A code copied somewhere else is used by pasting it anywhere on the page
+  // (Ctrl+V), without opening the field first: the field opens with the
+  // code in it and the code is tried at once. A good one is applied; a bad
+  // one stays in the field with what is wrong with it. Pasting into the
+  // coupon field does the same. Text pasted into any other field is that
+  // field's, and what cannot be a code (a sentence, a link) is ignored.
+  // With a coupon already applied, a different pasted code takes its place
+  // only if it is good; otherwise the applied one stays and the bar says
+  // why the new one was refused.
+  const tryPastedCoupon = useEffectEvent((event: ClipboardEvent) => {
+    if (event.defaultPrevented || couponBusy || isPaymentBusy) return;
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    const inCouponField = Boolean(target?.closest("[data-coupon-code-input]"));
+    if (
+      !inCouponField &&
+      target &&
+      (target.isContentEditable || target.closest("input, textarea, select"))
+    ) {
+      return;
+    }
+    const code = readPastedCouponCode(
+      event.clipboardData?.getData("text/plain"),
+    );
+    if (!code || code === appliedCoupon?.code) return;
+    // In the coupon field the code is put there from here, not typed in a
+    // second time by the browser.
+    event.preventDefault();
+    if (!appliedCoupon) {
+      setCouponInputOpen(true);
+      setCouponCodeInput(code);
+    }
+    void applyCouponCode(code);
+  });
+  // Not in the course editor's preview: nothing is bought from there.
+  const listensForPastedCoupon = showApplyCoupon && !isPreview;
+  useEffect(() => {
+    if (!listensForPastedCoupon) return undefined;
+    const onPaste = (event: ClipboardEvent) => tryPastedCoupon(event);
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [listensForPastedCoupon]);
   const isCustomUnderPrice =
     !isFree &&
     selectedPreset === "custom" &&
@@ -952,17 +1036,18 @@ function CoursePurchaseSection({
               sizeClassName: priceTextClasses[priceSizeVariant],
               struckThrough: struckThroughPrice,
               badge: priceBadge,
+              // The only saving shown, and it is the coupon's.
+              badgeIsCoupon: Boolean(
+                priceBadge && appliedCoupon && !couponOnTopOfSale,
+              ),
+              couponBadge:
+                priceBadge && couponOnTopOfSale ? couponSavingLabel : undefined,
             }
       }
       coupon={
         appliedCoupon || showApplyCoupon
           ? {
-              applied: appliedCoupon
-                ? {
-                    code: appliedCoupon.code,
-                    discountLabel: appliedCoupon.discountLabel,
-                  }
-                : null,
+              applied: appliedCoupon ? { code: appliedCoupon.code } : null,
               isOpen: couponInputOpen,
               code: couponCodeInput,
               busy: couponBusy,
@@ -983,9 +1068,11 @@ function CoursePurchaseSection({
             }
           : undefined
       }
-      // Shown under the open box, and also when the box is closed: a coupon
-      // that came off by itself would otherwise give no reason at all.
-      couponError={appliedCoupon ? null : couponError}
+      // Said beside the open field, and under the bar when there is no
+      // open field: a coupon that came off by itself would otherwise give
+      // no reason at all, and neither would a pasted code that was refused
+      // while another coupon is applied.
+      couponError={couponError}
       action={{
         label: ctaLabel,
         icon: ctaIcon,
@@ -1092,7 +1179,7 @@ function CourseAboutCard({ description, onEdit }: CourseAboutCardProps) {
             {needsClamp && !expanded && (
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-(--cov-card) to-transparent"
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-(--elevated-card) to-transparent"
               />
             )}
           </div>
@@ -1157,6 +1244,18 @@ export interface CourseOverviewPageProps {
   customPricing?: CourseOverviewPricingProps;
   customTrailerMediaId?: string | null;
   isReadOnlyPreview?: boolean;
+  /**
+   * Whether the session has answered and, for someone signed in, which view
+   * they are in (learner or manager). Passed by the course page's own
+   * route; left out where there is nobody to wait for (the editor's
+   * preview), which is the same as true. See `courseViewerState`.
+   */
+  viewerSettled?: boolean;
+  /**
+   * Nothing has answered yet and nothing remembers a session on this
+   * browser: the visitor is taken for a guest meanwhile.
+   */
+  presumeGuest?: boolean;
 }
 
 export interface AdaptedOverviewData {
@@ -1440,9 +1539,25 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
 
   const course = activeAdapted?.course ?? props.customCourse;
 
-  const { data: enrolledData } = useEnrolledCourses({
-    enabled: Boolean(authUser) && props.role !== "creator",
-  });
+  const awaitsEnrollments = Boolean(authUser) && props.role !== "creator";
+  const { data: enrolledData, isPending: enrollmentsPending } =
+    useEnrolledCourses({ enabled: awaitsEnrollments });
+  // What the parts of the page that depend on the viewer may show yet. A
+  // learner's enrolments are the last answer in: whether this course is
+  // theirs decides between the price and their progress.
+  const viewer: CourseViewerState =
+    props.viewerSettled === undefined ||
+    props.previewData ||
+    props.customCourse ||
+    props.isReadOnlyPreview
+      ? "known"
+      : !props.viewerSettled
+        ? props.presumeGuest
+          ? "presumed-guest"
+          : "pending"
+        : awaitsEnrollments && enrollmentsPending
+          ? "pending"
+          : "known";
 
   const enrolledCourse = useMemo(
     () =>
@@ -1541,6 +1656,7 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
       courseSlug={courseSlug}
       adaptedFromPreview={activeAdapted}
       isCreator={isCreator}
+      viewer={viewer}
     />
   );
 }
@@ -1550,6 +1666,7 @@ type CourseOverviewContentProps = CourseOverviewPageProps & {
   courseSlug: string | undefined;
   adaptedFromPreview: AdaptedOverviewData | null;
   isCreator?: boolean;
+  viewer?: CourseViewerState;
 };
 
 function CourseOverviewContent({
@@ -1571,6 +1688,7 @@ function CourseOverviewContent({
   isReadOnlyPreview = false,
   isCreator = false,
   isPaidCourse: propIsPaidCourse,
+  viewer = "known",
 }: CourseOverviewContentProps) {
   const user = useAuthStore((state) => state.user);
   const handleSelectLesson = (lessonNumber: number) => {
@@ -1717,9 +1835,17 @@ function CourseOverviewContent({
         .flatMap((section) => section.lessons)
         .find((lesson) => lesson[4])?.[0]
     : undefined;
+  // With a trailer the preview is there for everyone. Without one it stands
+  // for the free lessons, which only someone who neither manages the course
+  // nor holds it is offered: that waits until the viewer is known.
+  const previewDependsOnViewer =
+    !trailerMediaId && firstFreeLessonNumber !== undefined;
   const canPreview =
     Boolean(trailerMediaId) ||
-    (!managesCourse && !isEnrolled && firstFreeLessonNumber !== undefined);
+    (viewer !== "pending" &&
+      !managesCourse &&
+      !isEnrolled &&
+      firstFreeLessonNumber !== undefined);
   const openPreview = () => {
     if (isReadOnlyPreview || !onNavigatePage) return;
     const courseKey = getCourseRouteKey(course);
@@ -1757,7 +1883,7 @@ function CourseOverviewContent({
       // No heart for someone who manages the course, nor for a learner who
       // is enrolled in it: a wish list is for courses not yet taken.
       wishlist={
-        managesCourse || isEnrolled
+        managesCourse || isEnrolled || viewer === "pending"
           ? undefined
           : {
               wishlisted,
@@ -1769,6 +1895,15 @@ function CourseOverviewContent({
         canPreview
           ? { onOpen: openPreview, disabled: isReadOnlyPreview }
           : undefined
+      }
+      viewerPlaceholders={
+        viewer === "known"
+          ? undefined
+          : {
+              for: viewer === "pending" ? "everyone" : "expected-session",
+              preview: previewDependsOnViewer,
+              wishlist: true,
+            }
       }
     />
   );
@@ -1798,32 +1933,61 @@ function CourseOverviewContent({
         {/* 2. For someone who manages the course, its state and the ways
             into the editor; for an enrolled learner, where they are in the
             course; otherwise the price, the coupon and the button that
-            buys it. */}
-        {managesCourse ? (
-          <CourseManagerBar
-            course={course}
-            priceLabel={managerPriceLabel}
-            onNavigatePage={onNavigatePage}
-          />
-        ) : isEnrolled ? (
-          <CourseLearnerProgressBar
-            courseKey={getCourseRouteKey(course)}
-            courseTitle={title}
-            progress={course.progress ?? 0}
-            totalLessons={course.lectures}
-            onNavigatePage={onNavigatePage}
-          />
-        ) : (
-          <CoursePurchaseSection
-            course={course}
-            pricing={activePricing}
-            inclusions={inclusions}
-            onNavigatePage={onNavigatePage}
-            isReadOnlyPreview={isReadOnlyPreview}
-            isCreator={isCreator}
-            canSelfEnroll={adaptedFromPreview?.canSelfEnroll}
-          />
-        )}
+            buys it. Which of the three is not known until the viewer is
+            (see `courseViewerState`), and a placeholder holds the band's
+            place until then: the price and "Pay Now" used to stand there
+            for a learner until their enrolments arrived.
+
+            The band is always in the one box, and in the same place in it
+            whether the visitor is known or only presumed a guest, so that
+            learning which it is does not start the band over (an open
+            coupon field would lose what was typed in it). */}
+        <div>
+          {viewer === "pending" ? (
+            <CourseViewerBandPlaceholder />
+          ) : (
+            <>
+              <div
+                className={
+                  viewer === "presumed-guest"
+                    ? presumedGuestOnlyClasses
+                    : undefined
+                }
+              >
+                {managesCourse ? (
+                  <CourseManagerBar
+                    course={course}
+                    priceLabel={managerPriceLabel}
+                    onNavigatePage={onNavigatePage}
+                  />
+                ) : isEnrolled ? (
+                  <CourseLearnerProgressBar
+                    courseKey={getCourseRouteKey(course)}
+                    courseTitle={title}
+                    progress={course.progress ?? 0}
+                    totalLessons={course.lectures}
+                    onNavigatePage={onNavigatePage}
+                  />
+                ) : (
+                  <CoursePurchaseSection
+                    course={course}
+                    pricing={activePricing}
+                    inclusions={inclusions}
+                    onNavigatePage={onNavigatePage}
+                    isReadOnlyPreview={isReadOnlyPreview}
+                    isCreator={isCreator}
+                    canSelfEnroll={adaptedFromPreview?.canSelfEnroll}
+                  />
+                )}
+              </div>
+              {viewer === "presumed-guest" ? (
+                <div className={sessionExpectedOnlyClasses}>
+                  <CourseViewerBandPlaceholder />
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
 
         {/* 3. Course curriculum */}
         <CourseOverviewCurriculum

@@ -18,6 +18,11 @@ import {
 } from "../../students/index.ts";
 import type { CourseService } from "../../courses/index.ts";
 import { ADMIN_ROLE } from "../../auth/index.ts";
+import { createAccessService, type AccessService } from "../../access/index.ts";
+import {
+  createLessonProgressResetService,
+  type LessonProgressResetService,
+} from "../../learning-progress/index.ts";
 
 export interface EnrollmentService {
   listEnrolledCourses(
@@ -25,10 +30,20 @@ export interface EnrollmentService {
     userRoles?: readonly string[],
   ): Promise<EnrolledCourse[]>;
   /**
-   * Removes the learner from a free course they joined at no cost. Their
+   * Removes the learner from a course.
+   *
+   * A learner may leave only a free course they joined at no cost; their
    * progress is kept, so enrolling again picks up where they left off.
+   *
+   * An admin may leave any course they are enrolled in, however they got
+   * it (they enroll to try the academy as a learner would). No money is
+   * returned and the order is left as it is, and their progress in the
+   * course is cleared, so the next enrollment starts from nothing.
    */
-  unenrollFromFreeCourse(userId: string, courseId: string): Promise<void>;
+  unenrollFromCourse(
+    actor: { id: string; roles: readonly string[] },
+    courseId: string,
+  ): Promise<void>;
   listAcademyEnrollments(
     limit: number,
     actor: { id: string; roles: readonly string[] },
@@ -55,11 +70,18 @@ export function createEnrollmentService({
   courseService,
   studentsService = createStudentsService({ database }),
   courseAccessService = createCourseAccessService(),
+  accessService = createAccessService(),
+  progressResetService = createLessonProgressResetService({ database }),
 }: {
   database: Executor;
   courseService: Pick<CourseService, "resolveCourseThumbnailUrls">;
   studentsService?: Pick<StudentsService, "resolveStudentAvatars">;
   courseAccessService?: Pick<CourseAccessService, "withdrawCourseFromOrder">;
+  accessService?: Pick<AccessService, "revokeCourseAccess">;
+  progressResetService?: Pick<
+    LessonProgressResetService,
+    "clearCourseProgressForLearner"
+  >;
 }): EnrollmentService {
   async function listAcademyEnrollments(
     limit: number,
@@ -133,10 +155,12 @@ export function createEnrollmentService({
     );
   }
 
-  async function unenrollFromFreeCourse(
-    userId: string,
+  async function unenrollFromCourse(
+    actor: { id: string; roles: readonly string[] },
     courseId: string,
   ): Promise<void> {
+    const userId = actor.id;
+    const isAdmin = actor.roles.includes(ADMIN_ROLE);
     await database.transaction().execute(async (trx) => {
       const enrollment = await enrollmentRepo.findEnrollment(
         trx,
@@ -148,43 +172,61 @@ export function createEnrollmentService({
       }
 
       // Only an enrollment that cost nothing, in a course that is still
-      // free, can be left: the learner can come back whenever they like.
-      // Anything bought (on its own or in a bundle) or granted by staff
-      // stays, so a paid place is never given up by accident.
+      // free, can be left by a learner: they can come back whenever they
+      // like. Anything bought (on its own or in a bundle) or granted by
+      // staff stays, so a paid place is never given up by accident.
       const orderId = enrollment.order_id;
-      if (!orderId || enrollment.source !== "direct_purchase") {
-        throw CommerceErrors.UNENROLL_NOT_ALLOWED();
-      }
-      const [[pricing], orderItems] = await Promise.all([
-        courseConfigRepo.findPricingByCourseIds(trx, [courseId]),
-        orderRepo.listOrderItems(trx, orderId),
-      ]);
-      const orderItem = orderItems.find(
-        (item) => item.item_type === "course" && item.course_id === courseId,
-      );
-      if (
-        pricing?.pricing_type !== "free" ||
-        !orderItem ||
-        orderItem.final_amount !== 0
-      ) {
-        throw CommerceErrors.UNENROLL_NOT_ALLOWED();
-      }
-
-      await courseAccessService.withdrawCourseFromOrder(
-        trx,
-        { id: orderId, user_id: userId },
-        courseId,
-      );
-
-      // An order with nothing left on it is closed. One that still holds
-      // another course (several free courses enrolled together) stays paid.
-      const remainingCourseIds =
-        await enrollmentRepo.listActiveEnrollmentCourseIdsByOrderId(
-          trx,
-          orderId,
+      let freeOrderId: string | null = null;
+      if (orderId && enrollment.source === "direct_purchase") {
+        const [[pricing], orderItems] = await Promise.all([
+          courseConfigRepo.findPricingByCourseIds(trx, [courseId]),
+          orderRepo.listOrderItems(trx, orderId),
+        ]);
+        const orderItem = orderItems.find(
+          (item) => item.item_type === "course" && item.course_id === courseId,
         );
-      if (remainingCourseIds.length === 0) {
-        await orderRepo.cancelFreeOrder(trx, orderId);
+        if (
+          pricing?.pricing_type === "free" &&
+          orderItem &&
+          orderItem.final_amount === 0
+        ) {
+          freeOrderId = orderId;
+        }
+      }
+      if (!freeOrderId && !isAdmin) {
+        throw CommerceErrors.UNENROLL_NOT_ALLOWED();
+      }
+
+      if (freeOrderId) {
+        await courseAccessService.withdrawCourseFromOrder(
+          trx,
+          { id: freeOrderId, user_id: userId },
+          courseId,
+        );
+
+        // An order with nothing left on it is closed. One that still holds
+        // another course (several free courses enrolled together) stays
+        // paid.
+        const remainingCourseIds =
+          await enrollmentRepo.listActiveEnrollmentCourseIdsByOrderId(
+            trx,
+            freeOrderId,
+          );
+        if (remainingCourseIds.length === 0) {
+          await orderRepo.cancelFreeOrder(trx, freeOrderId);
+        }
+      } else {
+        // An admin leaving a course that was bought, came in a bundle or
+        // was granted: the access goes, the order behind it is not touched.
+        await accessService.revokeCourseAccess(trx, userId, courseId);
+      }
+
+      if (isAdmin) {
+        await progressResetService.clearCourseProgressForLearner(
+          trx,
+          userId,
+          courseId,
+        );
       }
     });
   }
@@ -221,7 +263,7 @@ export function createEnrollmentService({
   return {
     listAcademyEnrollments,
     listEnrolledCourses,
-    unenrollFromFreeCourse,
+    unenrollFromCourse,
     getEnrollmentStats,
     getEnrollmentActivityBuckets,
     listTopCoursesByEnrollment,

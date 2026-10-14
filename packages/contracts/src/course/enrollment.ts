@@ -56,6 +56,23 @@ export const accessGrantSchema = z.strictObject({
 });
 export type AccessGrant = z.infer<typeof accessGrantSchema>;
 
+/** One learner's access to one course, addressed without a grant id. */
+export const courseAccessParamsSchema = z.object({
+  userId: z.uuid(),
+  courseId: z.uuid(),
+});
+export type CourseAccessParams = z.infer<typeof courseAccessParamsSchema>;
+
+/** What a learner's access to a course is after staff revoked or restored it. */
+export const courseAccessChangeResponseSchema = z.strictObject({
+  userId: z.uuid(),
+  courseId: z.uuid(),
+  status: accessGrantStatusSchema,
+});
+export type CourseAccessChangeResponse = z.infer<
+  typeof courseAccessChangeResponseSchema
+>;
+
 export const enrollmentSchema = z.strictObject({
   id: z.uuid(),
   userId: z.uuid(),

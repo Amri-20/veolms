@@ -25,9 +25,9 @@
 .settings-profile__live-preview,
 .settings-profile__form {
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
-  border-radius: 14px;
-  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: var(--card-surface);
   box-shadow: var(--card-shadow);
 }
 

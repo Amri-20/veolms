@@ -34,7 +34,10 @@ export function createEnrollmentController({
     request: FastifyRequest<{ Params: UnenrollCourseParams }>,
   ): Promise<UnenrollCourseResponse> {
     const { courseId } = request.params;
-    await service.unenrollFromFreeCourse(request.user!.id, courseId);
+    await service.unenrollFromCourse(
+      { id: request.user!.id, roles: request.user!.roles },
+      courseId,
+    );
     return { courseId };
   }
 

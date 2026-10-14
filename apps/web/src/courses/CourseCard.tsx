@@ -81,6 +81,8 @@ export interface CourseCardProps {
   onRestoreRequested?: (course: Course) => Promise<void> | void;
   /** Offers "Unenroll" on a free course the learner is enrolled in. */
   onUnenrollRequested?: (course: Course) => void;
+  /** Offers it on every enrolled course, free or not (an admin's own). */
+  canUnenrollFromAnyCourse?: boolean;
   onNavigatePage: (destination: string) => void;
   menuOpen: boolean;
   setMenuOpen: (courseId: string | null) => void;
@@ -113,6 +115,7 @@ export function CourseCard({
   onDeleteRequested,
   onRestoreRequested,
   onUnenrollRequested,
+  canUnenrollFromAnyCourse = false,
   onNavigatePage,
   menuOpen,
   setMenuOpen,
@@ -195,6 +198,10 @@ export function CourseCard({
     onOpen(course);
   };
 
+  // A course the learner holds but has not begun is started, not continued
+  // (the home's cards and the course's own page say the same).
+  const enrolledActionLabel =
+    progress > 0 ? "Continue Learning" : "Start Learning";
   const thumbnailActionLabel = isPublic
     ? isPublicEnrollmentAction
       ? `Enroll in ${course.title}`
@@ -211,7 +218,7 @@ export function CourseCard({
     : role === "creator"
       ? "Play Course"
       : course.enrolled
-        ? "Continue Learning"
+        ? enrolledActionLabel
         : "Preview Course";
 
   const lifecycleAction = () => {
@@ -515,7 +522,8 @@ export function CourseCard({
                       )
                     }
                   />
-                  {onUnenrollRequested && course.pricing?.free ? (
+                  {onUnenrollRequested &&
+                  (course.pricing?.free || canUnenrollFromAnyCourse) ? (
                     <>
                       <MenuDivider />
                       <MenuAction
@@ -738,7 +746,7 @@ export function CourseCard({
                         weight="fill"
                         aria-hidden="true"
                       />
-                      <span className="truncate">Continue Learning</span>
+                      <span className="truncate">{enrolledActionLabel}</span>
                     </>
                   ) : learnerAction === "view" ? (
                     <>

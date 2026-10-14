@@ -39,6 +39,24 @@ export interface AccessService {
 
   revokeAccessGrantById(database: Executor, grantId: string): Promise<void>;
 
+  /**
+   * Takes a learner's access to a course away, whichever way they got it.
+   * The order that paid for it, if any, is left as it is: this is not a
+   * refund.
+   */
+  revokeCourseAccess(
+    database: Executor,
+    userId: string,
+    courseId: string,
+  ): Promise<void>;
+
+  /** Gives back access that was revoked, as it was before. */
+  restoreCourseAccess(
+    database: Executor,
+    userId: string,
+    courseId: string,
+  ): Promise<void>;
+
   listUserGrants(database: Executor, userId: string): Promise<AccessGrant[]>;
 
   hasActiveAccess(
@@ -221,6 +239,65 @@ export function createAccessService(): AccessService {
     });
   }
 
+  async function revokeCourseAccess(
+    outerDatabase: Executor,
+    userId: string,
+    courseId: string,
+  ): Promise<void> {
+    await inTransaction(outerDatabase, async (database) => {
+      const [grant, enrollment] = await Promise.all([
+        accessRepo.findAccessGrant(database, userId, courseId),
+        accessRepo.findEnrollmentForCourse(database, userId, courseId),
+      ]);
+
+      // Nothing live to take away: an unknown pair, or access that was
+      // already revoked or has lapsed. Revoking a lapsed row would relabel
+      // it, and "Restore" would then bring back access that had run out.
+      if (grant?.status !== "active" && enrollment?.status !== "active") {
+        throw new AppError(
+          404,
+          "COURSE_ACCESS_NOT_FOUND",
+          "This learner has no active access to this course.",
+        );
+      }
+
+      if (grant) {
+        await accessRepo.updateAccessGrantStatus(database, grant.id, "revoked");
+      }
+      await accessRepo.revokeEnrollment(database, userId, courseId);
+    });
+  }
+
+  async function restoreCourseAccess(
+    outerDatabase: Executor,
+    userId: string,
+    courseId: string,
+  ): Promise<void> {
+    await inTransaction(outerDatabase, async (database) => {
+      const [grant, enrollment] = await Promise.all([
+        accessRepo.findAccessGrant(database, userId, courseId),
+        accessRepo.findEnrollmentForCourse(database, userId, courseId),
+      ]);
+
+      if (!grant && !enrollment) {
+        throw new AppError(
+          404,
+          "COURSE_ACCESS_NOT_FOUND",
+          "This learner was never enrolled in this course.",
+        );
+      }
+      if (grant?.status !== "revoked" && enrollment?.status !== "revoked") {
+        throw new AppError(
+          409,
+          "COURSE_ACCESS_NOT_REVOKED",
+          "This learner's access to this course is not revoked.",
+        );
+      }
+
+      await accessRepo.restoreRevokedCourseAccess(database, userId, courseId);
+    });
+  }
+
   async function listUserGrants(
     database: Executor,
     userId: string,
@@ -309,6 +386,8 @@ export function createAccessService(): AccessService {
     grantAccess,
     grantManualAccess,
     revokeAccessGrantById,
+    revokeCourseAccess,
+    restoreCourseAccess,
     listUserGrants,
     hasActiveAccess,
     listActiveUserIdsForCourse,

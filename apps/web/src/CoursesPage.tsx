@@ -38,6 +38,7 @@ import {
 import { CaretDownIcon as CaretDown } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon as CaretRight } from "@phosphor-icons/react/CaretRight";
 import { CircleNotchIcon as CircleNotch } from "@phosphor-icons/react/CircleNotch";
+import { deepGroundClasses } from "./components/ElevatedCard";
 import { CenteredLoadingSpinner } from "./components/LoadingSpinner";
 import { LongScrollElasticScroller } from "./components/elastic-scroller";
 import { CornersInIcon as CornersIn } from "@phosphor-icons/react/CornersIn";
@@ -127,6 +128,9 @@ import {
   CATALOGUE_CHUNK_URL_PLACEHOLDER,
   CATALOGUE_CSS_URLS_PLACEHOLDER,
   CATALOGUE_JS_URLS_PLACEHOLDER,
+  COURSE_OVERVIEW_CHUNK_URL_PLACEHOLDER,
+  COURSE_OVERVIEW_CSS_URLS_PLACEHOLDER,
+  COURSE_OVERVIEW_JS_URLS_PLACEHOLDER,
   GUEST_HOME_CHUNK_URL_PLACEHOLDER,
   GUEST_HOME_CSS_URLS_PLACEHOLDER,
   GUEST_HOME_JS_URLS_PLACEHOLDER,
@@ -135,6 +139,7 @@ import {
 import { ChunkStylesheets } from "./routing/ChunkStylesheets";
 import {
   courseCatalogueBody,
+  courseOverviewBody,
   creatorDashboardBody,
   guestHomeBody,
   settingsPageBody,
@@ -148,6 +153,12 @@ const GUEST_HOME_CSS_URLS = splitChunkCssUrls(GUEST_HOME_CSS_URLS_PLACEHOLDER);
 const CATALOGUE_CSS_URLS = splitChunkCssUrls(CATALOGUE_CSS_URLS_PLACEHOLDER);
 const GUEST_HOME_JS_URLS = splitChunkCssUrls(GUEST_HOME_JS_URLS_PLACEHOLDER);
 const CATALOGUE_JS_URLS = splitChunkCssUrls(CATALOGUE_JS_URLS_PLACEHOLDER);
+const COURSE_OVERVIEW_CSS_URLS = splitChunkCssUrls(
+  COURSE_OVERVIEW_CSS_URLS_PLACEHOLDER,
+);
+const COURSE_OVERVIEW_JS_URLS = splitChunkCssUrls(
+  COURSE_OVERVIEW_JS_URLS_PLACEHOLDER,
+);
 import {
   getMobileOverflowNavigation,
   getMobilePrimaryNavigation,
@@ -335,11 +346,7 @@ const SettingsQuickMenu = lazy(() =>
     default: module.SettingsQuickMenu,
   })),
 );
-const CourseOverviewPage = lazy(() =>
-  import("./courses/CourseOverviewPage").then((module) => ({
-    default: module.CourseOverviewPage,
-  })),
-);
+const CourseOverviewPage = courseOverviewBody.Body;
 const AnalyticsDashboardPage = lazy(() =>
   import("./analytics/AnalyticsDashboardPage").then((module) => ({
     default: module.AnalyticsDashboardPage,
@@ -1015,13 +1022,6 @@ function LoginProfileButton({
 
 const subscribeToNothing = () => () => {};
 
-/** The course page's deeper ground; see where it is used. */
-const COURSE_PAGE_GROUND_CLASSES = [
-  "in-data-[content-layout=framed]:bg-(--cov-ground)!",
-  "in-data-[content-layout=framed]:[--cov-ground:color-mix(in_srgb,var(--main-surface)_42%,var(--canvas))]",
-  "[:root[data-theme=light]_&]:supports-[color:oklch(from_white_l_c_h)]:in-data-[content-layout=framed]:[--cov-ground:oklch(from_var(--main-surface)_calc(l_-_0.018)_c_h)]",
-].join(" ");
-
 export function CoursesPage({
   initialPublishedCoursePage,
   initialPublishedCoursePageNeedsRefresh = false,
@@ -1644,6 +1644,10 @@ export function CoursesPage({
     [mobileMenuCollapsedSnapPoint],
   );
   const isLearningSurface = Boolean(renderMain);
+  // Every page's cards are the shared `ElevatedCard`, a lighter pane on a
+  // ground deeper than the frame's. A lesson's page is the exception: its
+  // scroller lies over the shell's own surfaces and its panels keep theirs.
+  const onDeepGround = !renderMain;
   const { ref: mobileSheetSizeRef, snapPoint: mobileMenuContentSnapPoint } =
     useMobileProfileDrawerSize({
       open: mobileMenuOpen,
@@ -5089,6 +5093,18 @@ export function CoursesPage({
     if (surfacePage === "course-overview") {
       return (
         <Suspense fallback={null}>
+          {/* The course page is built into the document. As for the
+              catalogue and the guest home, the document preloads the page's
+              code and links its stylesheets, so the built page is kept
+              through hydration and is styled from its first paint. */}
+          <link
+            rel="modulepreload"
+            href={COURSE_OVERVIEW_CHUNK_URL_PLACEHOLDER}
+          />
+          {COURSE_OVERVIEW_JS_URLS.map((href) => (
+            <link key={href} rel="modulepreload" href={href} />
+          ))}
+          <ChunkStylesheets hrefs={COURSE_OVERVIEW_CSS_URLS} />
           <CourseOverviewPage
             courseSlug={surfaceCourseSlug}
             initialOverview={initialCourseOverview}
@@ -5098,6 +5114,14 @@ export function CoursesPage({
             backSection={onNavigateBack ? navigateBackSection : "Courses"}
             onNavigatePage={onNavigatePage}
             role={role}
+            // The page is the same for everyone but for three parts, which
+            // hold their places until these have answered (see
+            // `courseViewerState`): the session, and for someone signed in
+            // the view they are in.
+            viewerSettled={
+              isAuthReady && (!isAuthenticated || isWorkspaceRoleHydrated)
+            }
+            presumeGuest={!isAuthReady && !sessionPresentAtBoot}
           />
         </Suspense>
       );
@@ -6086,11 +6110,9 @@ export function CoursesPage({
         <main
           id="courses-main-scrollport"
           ref={mainScrollportRef}
-          // Tells the course page's boxes which ground they lie on (see
-          // `overviewCardClasses`).
-          data-deep-ground={
-            !renderMain && page === "course-overview" ? "" : undefined
-          }
+          // Tells a page's cards which ground they lie on (see
+          // `ElevatedCard`).
+          data-deep-ground={onDeepGround ? "" : undefined}
           className={[
             "courses-main",
             // While the page is being scrolled nothing in it answers the
@@ -6106,20 +6128,20 @@ export function CoursesPage({
             // scroller lies over the shell's own surfaces.
             renderMain
               ? ""
-              : page === "course-overview"
-                ? // A course's page lies on a deeper ground than the other
-                  // pages, so that its boxes stand out from it the way the
-                  // pinned course stands out from the home page's picture.
-                  // The ground is kept in `--cov-ground`, which the boxes
+              : onDeepGround
+                ? // These pages lie on a deeper ground than the others, so
+                  // that their cards stand out from it the way the pinned
+                  // course stands out from the home page's picture.
+                  // The ground is kept in `--card-ground`, which the boxes
                   // read to set themselves one fixed step lighter (see
-                  // `overviewCardClasses`), and is solid, as the note above
+                  // `ElevatedCard`), and is solid, as the note above
                   // requires. By night it is the frame's colour taken part
                   // of the way to the shell's. By day the frame is already
                   // close to white, with no room above it for a lighter
                   // box, so the ground is the frame's colour made a fixed
                   // step darker instead; the plain mix is what a browser
                   // without relative colours falls back to.
-                  COURSE_PAGE_GROUND_CLASSES
+                  deepGroundClasses
                 : "in-data-[content-layout=framed]:bg-(--main-surface)!",
             renderMain
               ? "courses-main--learning overflow-x-clip!"

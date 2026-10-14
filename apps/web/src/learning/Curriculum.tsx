@@ -56,6 +56,11 @@ interface CurriculumProps {
    * instead of drawing a header out of the address's slug and blanks.
    */
   unavailable?: boolean;
+  /**
+   * With `unavailable`: the course is not missing or empty, loading it
+   * failed (the server could not be reached, say), and the panel says that.
+   */
+  loadFailed?: boolean;
   scrollportId?: string;
   scrollportRef?: RefObject<HTMLElement | null>;
   scrollControlBottomClearance?: number | string;
@@ -133,6 +138,7 @@ export const Curriculum = memo(function Curriculum({
   lockedLessonNumbers,
   isLoading = false,
   unavailable = false,
+  loadFailed = false,
   scrollportId,
   scrollportRef,
   scrollControlBottomClearance,
@@ -702,14 +708,18 @@ export const Curriculum = memo(function Curriculum({
             <div className="grid min-h-60 place-items-center px-6 py-10 text-center">
               <div className="space-y-2">
                 <OctopusIllustration
-                  kind="not-found"
+                  kind={loadFailed ? "went-wrong" : "not-found"}
                   className="mx-auto mb-3 h-28 w-auto"
                 />
                 <p className="text-sm font-semibold text-(--text)">
-                  No course content
+                  {loadFailed
+                    ? "Couldn't load the lessons"
+                    : "No course content"}
                 </p>
                 <p className="text-[0.8125rem] leading-5 text-(--muted)">
-                  Lessons will be listed here once the course opens.
+                  {loadFailed
+                    ? "They will be listed here once the course loads."
+                    : "Lessons will be listed here once the course opens."}
                 </p>
               </div>
             </div>

@@ -33,6 +33,8 @@ import type {
   CourseStatusFilter,
 } from "./catalogue";
 import { courseSurfaceElevation } from "../components/cardElevation";
+import { useCurrentUser } from "../services/auth";
+import { hasAdminRole } from "../shell/workspaceRole";
 import { courseMatchesWishlist, getCourseRouteKey } from "./catalogue";
 
 // Only a learner leaving a free course needs this, so it stays out of the
@@ -137,6 +139,9 @@ export function CourseCatalogue({
 }: CourseCatalogueProps) {
   const [pendingDelete, setPendingDelete] = useState<Course | null>(null);
   const [pendingUnenroll, setPendingUnenroll] = useState<Course | null>(null);
+  // An admin in Student view can leave any course they enrolled in, and
+  // doing so clears their progress in it.
+  const accountIsAdmin = hasAdminRole(useCurrentUser().data?.roles);
   const quickFilterTabsRef = useRef<HTMLDivElement>(null);
   const [hasQuickFilterOverflow, setHasQuickFilterOverflow] = useState(false);
   const [localDeletingIds, setLocalDeletingIds] = useState<Set<string>>(
@@ -299,6 +304,7 @@ export function CourseCatalogue({
       onDeleteRequested={setPendingDelete}
       onRestoreRequested={onRestoreCourse}
       onUnenrollRequested={role === "student" ? setPendingUnenroll : undefined}
+      canUnenrollFromAnyCourse={accountIsAdmin}
       onNavigatePage={onNavigatePage}
       menuOpen={courseMenu === course.id}
       setMenuOpen={setCourseMenu}
@@ -607,6 +613,7 @@ export function CourseCatalogue({
         <Suspense fallback={null}>
           <UnenrollCourseModal
             course={pendingUnenroll}
+            resetsProgress={accountIsAdmin}
             onClose={() => setPendingUnenroll(null)}
             setNotice={setNotice}
           />

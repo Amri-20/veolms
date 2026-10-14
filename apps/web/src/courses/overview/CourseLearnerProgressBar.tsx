@@ -45,10 +45,12 @@ export function CourseLearnerProgressBar({
   const lessonCount = place?.totalLessons ?? totalLessons;
   const isComplete = percent >= 100;
   const lesson = isComplete ? null : (place?.resumeLesson ?? null);
-  const hasStarted =
-    percent > 0 ||
-    (place?.completedLessons ?? 0) > 0 ||
-    (lesson?.progressPercent ?? 0) > 0;
+  // Started once the course shows progress or a lesson is finished: what
+  // the band says beside the button ("0% complete, 0 of 678 lessons"), and
+  // the rule the home and the course cards go by. A first lesson opened
+  // and left after a few seconds used to count, and the button said
+  // "Continue Learning" on a course the band itself called not begun.
+  const hasStarted = percent > 0 || (place?.completedLessons ?? 0) > 0;
 
   const actionLabel = isComplete
     ? "Review Course"

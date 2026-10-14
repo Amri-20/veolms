@@ -5,8 +5,24 @@
   --control-radius-menu: 8px;
 }
 
+/* The search field and filters above a list (`components/FilterBar`) are a
+   little rounder than other structured controls, whatever the roundness
+   preference is: the bar hands its controls this radius in place of the
+   structured one. Worked out on the root, so it is a plain length by the
+   time the bar reads it. */
+:root {
+  --control-radius-filter: calc(var(--control-radius-structured) + 4px);
+}
+
+[data-filter-bar] {
+  --control-radius-structured: var(--control-radius-filter);
+}
+
 /* Structured controls stop at the Rounded preset. This keeps filters, search
    fields, option cards, and navigation usable when CTA buttons use Pill. */
+/* A search field's own input is left square: the label around it is the
+   control and carries the radius, and a rounded input clipped the caret at
+   the start of the field. */
 :root[data-control-radius]
   .courses-app
   :where(
@@ -19,15 +35,17 @@
     [data-control-radius-surface],
     :where(label, div):has(> [data-search-shortcut-target]),
     :where(label, div):has(> .themed-select__trigger)
-  ):not([data-fixed-radius]):not([data-control-radius-preview]):not(
-    [data-player-control]
-  ):not([data-control-radius-action]):not([data-learning-radius-compact]):not(
-    .creator-primary-action
-  ):not(.primary-learning-action):not(.workspace-button):not(
-    .settings-profile__primary-action
-  ):not(.is-primary):not([role="switch"]):not([class~="rounded-full"]):not(
-    .themed-select__item
-  ):not([data-theme-swatch]):not(.learning-workspace__back):not(
+  ):not([data-fixed-radius]):not([data-search-shortcut-target]):not(
+    [data-control-radius-preview]
+  ):not([data-player-control]):not([data-control-radius-action]):not(
+    [data-learning-radius-compact]
+  ):not(.creator-primary-action):not(.primary-learning-action):not(
+    .workspace-button
+  ):not(.settings-profile__primary-action):not(.is-primary):not(
+    [role="switch"]
+  ):not([class~="rounded-full"]):not(.themed-select__item):not(
+    [data-theme-swatch]
+  ):not(.learning-workspace__back):not(
     .learning-workspace__curriculum-toggle
   ):not(.learning-workspace__lesson-heading):not(
     .learning-curriculum__section-toggle
@@ -82,9 +100,9 @@
     [data-course-overview] select,
     [data-course-overview] [role="listitem"],
     .delete-modal-card
-  ):not([data-fixed-radius]):not([data-control-radius-preview]):not(
-    [class~="rounded-full"]
-  ):not(.page-tabs__indicator) {
+  ):not([data-fixed-radius]):not([data-search-shortcut-target]):not(
+    [data-control-radius-preview]
+  ):not([class~="rounded-full"]):not(.page-tabs__indicator) {
   border-radius: var(--control-radius-structured) !important;
 }
 

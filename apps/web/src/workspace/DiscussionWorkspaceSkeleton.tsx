@@ -6,6 +6,8 @@ export const DISCUSSION_LOADING_SKELETON_COUNT = 4;
 export const DISCUSSION_PREVIEW_SKELETON_COUNT = 5;
 
 const skeletonVariantClassNames: Readonly<Record<DiscussionTab, string>> = {
+  // Mostly questions and comments, which share one row shape.
+  all: "discussion-thread--question",
   "q-and-a": "discussion-thread--question",
   comments: "discussion-thread--comment",
   notes: "discussion-thread--note",

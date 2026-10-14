@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { ElevatedCard } from "../ElevatedCard";
 export function StatCard({
   icon,
   label,
@@ -16,11 +17,11 @@ export function StatCard({
   compact?: boolean;
 }) {
   return (
-    <div
-      className={`rounded-[12px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface-raised,var(--surface)) transition-all duration-200 hover:shadow-(--card-hover-shadow) ${
+    <ElevatedCard
+      as="div"
+      className={` transition-all duration-200 ${
         compact ? "p-2 sm:p-3.5" : "p-2.5 sm:p-5"
       }`}
-      style={{ boxShadow: "var(--card-shadow)" }}
     >
       <div className="flex items-center justify-between gap-1.5 sm:gap-2">
         <p className="text-[0.7rem] sm:text-xs font-semibold text-(--muted) tracking-wide truncate">
@@ -48,7 +49,7 @@ export function StatCard({
           {detail}
         </p>
       ) : null}
-    </div>
+    </ElevatedCard>
   );
 }
 

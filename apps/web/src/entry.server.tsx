@@ -31,8 +31,17 @@ function createLowPriorityModulePreloadTransform() {
         LOW_PRIORITY_MODULE_PRELOAD_LINK,
       );
       const keep = Math.min(MODULE_PRELOAD_LINK.length - 1, text.length);
-      carry = text.slice(text.length - keep);
-      callback(null, text.slice(0, text.length - keep));
+      let cut = text.length - keep;
+      // Never between the two halves of a character outside the basic plane
+      // (an emoji is two code units). Each half was then written out on its
+      // own, which cannot be encoded, and the built page had two U+FFFD in place
+      // of the emoji: wrong on screen until the app took over, and a text
+      // React could not match when it did. The first half is held back with
+      // the second.
+      const second = text.charCodeAt(cut);
+      if (cut > 0 && second >= 0xdc00 && second <= 0xdfff) cut -= 1;
+      carry = text.slice(cut);
+      callback(null, text.slice(0, cut));
     },
     flush(callback) {
       callback(null, carry + decoder.end());

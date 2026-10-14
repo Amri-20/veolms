@@ -20,6 +20,7 @@ import { useStudents } from "../services/students";
 import { StudentsTable } from "./StudentsTable";
 import { StudentFiltersBar } from "./StudentFiltersBar";
 import { StudentsTableSkeleton } from "./StudentsTableSkeleton";
+import { ElevatedCard } from "../components/ElevatedCard";
 
 export interface StudentsPageProps {
   onNavigatePage?: NavigateTo;
@@ -169,9 +170,9 @@ export function StudentsPage({ onNavigatePage, setNotice }: StudentsPageProps) {
       {/* Key Stats Summary Banner */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3.5 mb-6">
         {/* Card 1: Total Learners */}
-        <div
-          className="rounded-[12px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface-raised,var(--surface)) p-3 sm:p-5 transition-all duration-200 hover:shadow-(--card-hover-shadow)"
-          style={{ boxShadow: "var(--card-shadow)" }}
+        <ElevatedCard
+          as="div"
+          className="p-3 sm:p-5 transition-all duration-200"
         >
           <div className="flex items-center justify-between gap-1.5 sm:gap-2">
             <p className="text-[0.7rem] sm:text-xs font-semibold text-(--muted) tracking-wide truncate">
@@ -185,12 +186,12 @@ export function StudentsPage({ onNavigatePage, setNotice }: StudentsPageProps) {
             {totalCount.toLocaleString()}
           </p>
           <p className="mt-1 text-xs text-(--muted)">Academy learners</p>
-        </div>
+        </ElevatedCard>
 
         {/* Card 2: Active Learners */}
-        <div
-          className="rounded-[12px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface-raised,var(--surface)) p-3 sm:p-5 transition-all duration-200 hover:shadow-(--card-hover-shadow)"
-          style={{ boxShadow: "var(--card-shadow)" }}
+        <ElevatedCard
+          as="div"
+          className="p-3 sm:p-5 transition-all duration-200"
         >
           <div className="flex items-center justify-between gap-1.5 sm:gap-2">
             <p className="text-[0.7rem] sm:text-xs font-semibold text-(--muted) tracking-wide truncate">
@@ -204,12 +205,12 @@ export function StudentsPage({ onNavigatePage, setNotice }: StudentsPageProps) {
             {metrics.activeLearnersCount.toLocaleString()}
           </p>
           <p className="mt-1 text-xs text-(--muted)">Enrolled in courses</p>
-        </div>
+        </ElevatedCard>
 
         {/* Card 3: Total Enrollments */}
-        <div
-          className="rounded-[12px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface-raised,var(--surface)) p-3 sm:p-5 transition-all duration-200 hover:shadow-(--card-hover-shadow)"
-          style={{ boxShadow: "var(--card-shadow)" }}
+        <ElevatedCard
+          as="div"
+          className="p-3 sm:p-5 transition-all duration-200"
         >
           <div className="flex items-center justify-between gap-1.5 sm:gap-2">
             <p className="text-[0.7rem] sm:text-xs font-semibold text-(--muted) tracking-wide truncate">
@@ -223,12 +224,12 @@ export function StudentsPage({ onNavigatePage, setNotice }: StudentsPageProps) {
             {metrics.totalEnrollmentsCount.toLocaleString()}
           </p>
           <p className="mt-1 text-xs text-(--muted)">Course enrollments</p>
-        </div>
+        </ElevatedCard>
 
         {/* Card 4: Avg Completion */}
-        <div
-          className="rounded-[12px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface-raised,var(--surface)) p-3 sm:p-5 transition-all duration-200 hover:shadow-(--card-hover-shadow)"
-          style={{ boxShadow: "var(--card-shadow)" }}
+        <ElevatedCard
+          as="div"
+          className="p-3 sm:p-5 transition-all duration-200"
         >
           <div className="flex items-center justify-between gap-1.5 sm:gap-2">
             <p className="text-[0.7rem] sm:text-xs font-semibold text-(--muted) tracking-wide truncate">
@@ -242,7 +243,7 @@ export function StudentsPage({ onNavigatePage, setNotice }: StudentsPageProps) {
             {metrics.avgProgress}%
           </p>
           <p className="mt-1 text-xs text-(--muted)">Overall learning rate</p>
-        </div>
+        </ElevatedCard>
       </div>
 
       {/* Filter toolbar */}
@@ -269,9 +270,9 @@ export function StudentsPage({ onNavigatePage, setNotice }: StudentsPageProps) {
           <StudentsTableSkeleton />
         ) : isError ? (
           // Error State
-          <div
-            className="flex flex-col items-center justify-center rounded-[18px] border border-(--border) bg-(--card-surface) p-12 text-center"
-            style={{ boxShadow: "var(--card-shadow)" }}
+          <ElevatedCard
+            as="div"
+            className="flex flex-col items-center justify-center p-12 text-center"
           >
             <WarningCircle size={36} className="text-rose-400 mb-3" />
             <h3 className="text-base font-semibold text-(--text)">
@@ -289,7 +290,7 @@ export function StudentsPage({ onNavigatePage, setNotice }: StudentsPageProps) {
               <ArrowCounterClockwise size={14} />
               <span>Retry</span>
             </button>
-          </div>
+          </ElevatedCard>
         ) : students.length > 0 ? (
           // Modern ProCodrr Students Table
           <StudentsTable
@@ -307,9 +308,9 @@ export function StudentsPage({ onNavigatePage, setNotice }: StudentsPageProps) {
           />
         ) : (
           // Empty State
-          <div
-            className="flex flex-col items-center justify-center rounded-[18px] border border-(--border) bg-(--card-surface) p-12 text-center"
-            style={{ boxShadow: "var(--card-shadow)" }}
+          <ElevatedCard
+            as="div"
+            className="flex flex-col items-center justify-center p-12 text-center"
           >
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-(--hover) text-(--muted) mb-3">
               <Users size={28} weight="duotone" />
@@ -334,7 +335,7 @@ export function StudentsPage({ onNavigatePage, setNotice }: StudentsPageProps) {
                 <span>Reset filters</span>
               </button>
             )}
-          </div>
+          </ElevatedCard>
         )}
       </main>
     </div>

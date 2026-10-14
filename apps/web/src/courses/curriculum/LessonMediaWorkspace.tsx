@@ -34,6 +34,7 @@ import {
   mediaService,
   useMediaImageVariantManifest,
 } from "../../services/media";
+import { ElevatedCard } from "../../components/ElevatedCard";
 
 export interface AttachedMediaInfo {
   id?: string;
@@ -652,7 +653,7 @@ export function LessonMediaWorkspace({
           </div>
         ) : (
           /* Image or Document Guidelines */
-          <div className="flex flex-col rounded-[14px] sm:rounded-[16px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface,var(--surface)) p-4 sm:p-4.5 shadow-(--card-shadow)">
+          <ElevatedCard as="div" className="flex flex-col p-4 sm:p-4.5">
             <div className="flex items-start gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[color-mix(in_srgb,var(--text)_8%,transparent)] text-(--text)">
                 {contentType === "image" ? (
@@ -674,7 +675,7 @@ export function LessonMediaWorkspace({
                 </p>
               </div>
             </div>
-          </div>
+          </ElevatedCard>
         )}
       </div>
     </div>

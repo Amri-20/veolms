@@ -11,7 +11,7 @@
  * promises changes.
  */
 export type CourseCardLearnerAction =
-  /** Holds the course: "Continue Learning". */
+  /** Holds the course: "Continue Learning", or "Start Learning" before any progress. */
   | "continue"
   /** "View Course": the overview is all the card leads to. */
   | "view"

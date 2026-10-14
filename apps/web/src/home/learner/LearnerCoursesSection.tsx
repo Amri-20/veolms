@@ -29,6 +29,7 @@ export function LearnerCoursesSection({
   pinnedCourseId,
   onPinCourse,
   onUnpinCourse,
+  onUnenrollCourse,
   onNavigatePage,
 }: {
   courses: readonly EnrolledCourse[];
@@ -43,6 +44,8 @@ export function LearnerCoursesSection({
   /** Makes the course the one the home's hero leads with. */
   onPinCourse: (course: EnrolledCourse) => void;
   onUnpinCourse: () => void;
+  /** Offers "Unenroll" in each course's menu (an admin's own courses). */
+  onUnenrollCourse?: (course: EnrolledCourse) => void;
   onNavigatePage: NavigateTo;
 }) {
   return (
@@ -72,6 +75,9 @@ export function LearnerCoursesSection({
             pinned={course.courseId === pinnedCourseId}
             onPin={() => onPinCourse(course)}
             onUnpin={onUnpinCourse}
+            onUnenroll={
+              onUnenrollCourse ? () => onUnenrollCourse(course) : undefined
+            }
             onNavigatePage={onNavigatePage}
           />
         ))}

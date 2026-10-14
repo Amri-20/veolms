@@ -178,6 +178,17 @@ const getApplicationScrollStorageKey = (
 
 const ACADEMY_NAVIGATION_ORIGIN_PATH = "academyNavigationOriginPath";
 const ACADEMY_NAVIGATION_ORIGIN_SECTION = "academyNavigationOriginSection";
+/**
+ * The lesson a course's page was opened from (the course picture in the
+ * lesson page's content panel leads there). The origin above is a menu page
+ * and is carried through the lesson unchanged, so "back" on the course's
+ * page used to skip the lesson and return to that menu page; with this the
+ * course's page goes back to the lesson it came from, and says so.
+ */
+const ACADEMY_NAVIGATION_LESSON_RETURN_PATH =
+  "academyNavigationLessonReturnPath";
+/** What the course page's back link is called when it returns to a lesson. */
+const LESSON_RETURN_LABEL = "Learning page";
 
 function readAcademyNavigationState(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -319,6 +330,21 @@ const isLearningReturnCandidate = (path: string) =>
 const isLessonOpenedFromSettings = (path: string) =>
   isLearningRoutePath(path) && isSettingsPath(getLearningReturnLocation().path);
 
+/** The course a course-overview address is for; null for any other address. */
+const getCourseOverviewRouteKey = (path: string) => {
+  const pathname = normalizeNavigationPath(path.split(/[?#]/, 1)[0] || "/");
+  const parts = pathname.split("/").filter(Boolean);
+  if (
+    parts.length !== 3 ||
+    parts[0] !== "courses" ||
+    !parts[1] ||
+    parts[2] !== "overview"
+  ) {
+    return null;
+  }
+  return parts[1];
+};
+
 const getLearningCourseRouteKey = (path: string) => {
   const pathname = normalizeNavigationPath(path.split(/[?#]/, 1)[0] || "/");
   const parts = pathname.split("/").filter(Boolean);
@@ -433,6 +459,15 @@ export default function AcademyLayout() {
     !originPathValue.startsWith("//") &&
     typeof originSectionValue === "string" &&
     workspaceNavigationItems.some(([label]) => label === originSectionValue);
+  const lessonReturnPathValue =
+    currentNavigationState[ACADEMY_NAVIGATION_LESSON_RETURN_PATH];
+  // Only a course's page returns to a lesson, and only to a lesson address.
+  const lessonReturnPath =
+    route.kind === "course-overview" &&
+    typeof lessonReturnPathValue === "string" &&
+    isLearningRoutePath(lessonReturnPathValue)
+      ? lessonReturnPathValue
+      : null;
   const currentNavigationMatch = getNavigationMatch(
     location.pathname,
     workspaceNavigationItems,
@@ -679,6 +714,23 @@ export default function AcademyLayout() {
             navigationState[ACADEMY_NAVIGATION_ORIGIN_SECTION] = originSection;
           }
         }
+        // A course's page opened from a lesson remembers the lesson, and
+        // keeps it while the page only changes its own address. Any other
+        // move forgets it.
+        const targetCourseOverviewKey = getCourseOverviewRouteKey(path);
+        if (
+          targetCourseOverviewKey &&
+          isLearningRoutePath(activeLocationPath)
+        ) {
+          navigationState[ACADEMY_NAVIGATION_LESSON_RETURN_PATH] =
+            activeLocationPath;
+        } else if (
+          !targetCourseOverviewKey ||
+          getCourseOverviewRouteKey(activeLocationPath) !==
+            targetCourseOverviewKey
+        ) {
+          delete navigationState[ACADEMY_NAVIGATION_LESSON_RETURN_PATH];
+        }
         if (
           !restoringPlayerRef.current &&
           shouldRestoreMiniPlayerForMatchingCourse({
@@ -819,12 +871,18 @@ export default function AcademyLayout() {
     navigateToRef.current = navigateTo;
   }, [navigateTo]);
   const navigateBackToOrigin = useCallback(() => {
-    const targetPath = hasValidNavigationOrigin
-      ? (originPathValue as string)
-      : getFallbackNavigationPath(location.pathname, workspaceNavigationItems);
+    const targetPath =
+      lessonReturnPath ??
+      (hasValidNavigationOrigin
+        ? (originPathValue as string)
+        : getFallbackNavigationPath(
+            location.pathname,
+            workspaceNavigationItems,
+          ));
     navigateTo(targetPath, { replace: true });
   }, [
     hasValidNavigationOrigin,
+    lessonReturnPath,
     location.pathname,
     navigateTo,
     originPathValue,
@@ -1810,7 +1868,11 @@ export default function AcademyLayout() {
         onNavigatePage={navigateTo}
         onNavigateBack={navigateBackToOrigin}
         navigateBackSection={
-          hasValidNavigationOrigin ? (originSectionValue as string) : undefined
+          lessonReturnPath
+            ? LESSON_RETURN_LABEL
+            : hasValidNavigationOrigin
+              ? (originSectionValue as string)
+              : undefined
         }
         onExitSettings={exitSettings}
         onOpenCourse={openCourse}

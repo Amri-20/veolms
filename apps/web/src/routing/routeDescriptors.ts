@@ -250,6 +250,10 @@ export const routeDescriptors = {
     ...discussionsRouteBase,
     discussionTab: "q-and-a",
   },
+  "discussions-all": {
+    ...discussionsRouteBase,
+    discussionTab: "all",
+  },
   "discussions-q-and-a": {
     ...discussionsRouteBase,
     discussionTab: "q-and-a",
@@ -500,6 +504,7 @@ const canonicalPathsByRouteId = {
   "quiz-edit": "/quizzes/:quizId",
   "quiz-attempt": "/quizzes/attempt/:assignmentId",
   discussions: "/discussions",
+  "discussions-all": "/discussions/all",
   "discussions-q-and-a": "/discussions/q-and-a",
   "discussions-comments": "/discussions/comments",
   "discussions-notes": "/discussions/notes",

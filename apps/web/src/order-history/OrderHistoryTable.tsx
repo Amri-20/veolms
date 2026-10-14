@@ -23,6 +23,7 @@ import {
   getCourseBrandBadge,
   getOrderStatusStyle,
 } from "../orders/orderHelpers";
+import { ElevatedCard } from "../components/ElevatedCard";
 
 export interface OrderHistoryTableProps {
   orders: readonly OrderHistoryItem[];
@@ -174,9 +175,9 @@ export function OrderHistoryTable({
   });
 
   return (
-    <div
-      className="@container/history min-w-0 overflow-hidden rounded-[18px] sm:rounded-[20px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-(--card-surface-raised,var(--surface)) shadow-(--card-shadow)"
-      style={{ boxShadow: "var(--card-shadow)" }}
+    <ElevatedCard
+      as="div"
+      className="@container/history min-w-0 overflow-hidden"
       aria-label="Purchase history"
     >
       {/* Desktop / Tablet Table View */}
@@ -385,6 +386,6 @@ export function OrderHistoryTable({
           );
         })}
       </div>
-    </div>
+    </ElevatedCard>
   );
 }
