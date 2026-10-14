@@ -64,8 +64,12 @@ export async function listLessonsByIds(
     .execute();
 }
 
-/** Titles of the published courses among these, in one query. */
-export async function listPublishedCourseTitles(
+/**
+ * Titles of the courses among these that a learner can still be shown, in
+ * one query: published ones and archived ones. Whether the learner holds an
+ * archived course is the caller's to have established.
+ */
+export async function listLearnerCourseTitles(
   database: DatabaseExecutor,
   courseIds: readonly string[],
 ) {
@@ -74,7 +78,7 @@ export async function listPublishedCourseTitles(
     .selectFrom("courses")
     .select(["id", "title"])
     .where("id", "in", courseIds)
-    .where("status", "=", "published")
+    .where("status", "in", ["published", "archived"])
     .where("deleted_at", "is", null)
     .execute();
 }

@@ -259,8 +259,9 @@ export function createAssignmentService(options: QuizServiceOptions) {
   /**
    * The quizzes attached to a course. Whoever manages the course sees all of
    * them. A learner sees only what has been released: nothing while the
-   * course is unpublished, and never a quiz on an unpublished lesson — the
-   * same rule that decides whether an attempt can be started.
+   * course is a draft, nothing of an archived course they do not hold, and
+   * never a quiz on an unpublished lesson — the same rule that decides
+   * whether an attempt can be started.
    */
   async function listForCourse(actor: QuizActor, courseId: string) {
     const course = await requireCourse(courseId);
@@ -281,7 +282,15 @@ export function createAssignmentService(options: QuizServiceOptions) {
         "COURSE_ACCESS_REQUIRED",
         "You need active course access to view this Quiz assignment.",
       );
-    if (!canManageCourse && course.status !== "published") return [];
+    if (
+      !canManageCourse &&
+      !(await options.accessService.isCourseOpenToLearner(
+        database,
+        actor.id,
+        course,
+      ))
+    )
+      return [];
     let rows = await repo.listAssignmentsForCourse(database, courseId);
     if (!canManageCourse) {
       const releasedLessonIds = new Set(

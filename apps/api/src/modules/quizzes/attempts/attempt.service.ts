@@ -141,8 +141,11 @@ export function createAttemptService(options: QuizServiceOptions) {
    * preparing — and, with feedback on, read its answers before release.
    * The course owner and admins may try it out beforehand. Reported as
    * "not found" so an unreleased quiz is not revealed.
+   *
+   * An archived course's quizzes stay open to a learner who holds access to
+   * the course, and to no other learner.
    */
-  function assertAssignmentReleased(
+  async function assertAssignmentReleased(
     placement: Placement,
     userId: string,
     roles: readonly string[],
@@ -152,8 +155,8 @@ export function createAttemptService(options: QuizServiceOptions) {
     if (
       !course ||
       course.deleted_at ||
-      course.status !== "published" ||
-      !lesson?.is_published
+      !lesson?.is_published ||
+      !(await accessService.isCourseOpenToLearner(database, userId, course))
     )
       throw new AppError(
         404,
@@ -268,7 +271,7 @@ export function createAttemptService(options: QuizServiceOptions) {
   ) {
     const assignment = await getAssignment(assignmentId);
     const placement = await loadPlacement(assignment);
-    assertAssignmentReleased(placement, userId, roles);
+    await assertAssignmentReleased(placement, userId, roles);
     await assertAssignmentAccess(
       assignment,
       placement,
@@ -737,9 +740,10 @@ export function createAttemptService(options: QuizServiceOptions) {
     );
     // Batched lookups instead of a query per assignment or per course.
     const [courseRows, quizRows, lessonRows, userAttempts] = await Promise.all([
-      // Only published courses: a quiz in a course that was unpublished or
-      // deleted after the student got access is not offered.
-      repo.listPublishedCourseTitles(database, [
+      // A quiz in a course that went back to draft or was deleted after
+      // the student got access is not offered. An archived course is here
+      // only through the student's own grant, and its quizzes stay.
+      repo.listLearnerCourseTitles(database, [
         ...new Set(assignments.map((assignment) => assignment.course_id)),
       ]),
       repo.listQuizzesByIds(database, [

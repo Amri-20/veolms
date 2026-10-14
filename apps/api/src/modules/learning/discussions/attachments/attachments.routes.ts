@@ -102,6 +102,9 @@ const attachmentsRoutes: RoutePlugin = async (app, options) => {
           200: jsonResponse("Attachment completed", uploadedAttachmentSchema),
           401: errorResponse("Unauthorized"),
           404: errorResponse("Attachment not found"),
+          503: errorResponse(
+            "The file store could not be reached; the request can be repeated.",
+          ),
         },
       },
     },

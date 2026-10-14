@@ -16,6 +16,9 @@ export function slugify(text: string): string {
 }
 
 import { ADMIN_ROLE } from "../../auth/index.ts";
+import { createAccessService } from "../../access/index.ts";
+
+const accessService = createAccessService();
 
 /**
  * The single course-management rule: an admin manages every course, anyone
@@ -60,8 +63,9 @@ export async function getCourseAndVerifyOwner(
 
 /**
  * Loads a course for a read that is public once the course is published.
- * Unpublished courses are visible only to whoever may manage them; for
- * everyone else they answer exactly like a missing course.
+ * A draft is visible only to whoever may manage it, an archived course to
+ * them and to learners who hold access to it; for everyone else they answer
+ * exactly like a missing course.
  */
 export async function getCourseForViewer(
   database: Kysely<Database>,
@@ -71,8 +75,12 @@ export async function getCourseForViewer(
   const course = await courseRepo.findCourseById(database, courseId);
   if (
     !course ||
-    (course.status !== "published" &&
-      !canManageCourse(course, viewer?.id, viewer?.roles))
+    (!canManageCourse(course, viewer?.id, viewer?.roles) &&
+      !(await accessService.isCourseOpenToLearner(
+        database,
+        viewer?.id,
+        course,
+      )))
   ) {
     throw new AppError(404, "COURSE_NOT_FOUND", "Course not found.");
   }

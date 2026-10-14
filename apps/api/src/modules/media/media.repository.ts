@@ -78,10 +78,31 @@ export async function isMediaAttachedToPublishedCourse(
   database: Kysely<Database>,
   mediaId: string,
 ) {
-  const row = await database
+  const rows = await listCourseIdsShowingMedia(database, mediaId, "published");
+  return rows.length > 0;
+}
+
+/**
+ * The archived courses an asset is the thumbnail or trailer of, by the same
+ * slot rule. Such an asset is not public; the caller decides who may be
+ * given it.
+ */
+export async function listArchivedCourseIdsShowingMedia(
+  database: Kysely<Database>,
+  mediaId: string,
+): Promise<string[]> {
+  return listCourseIdsShowingMedia(database, mediaId, "archived");
+}
+
+async function listCourseIdsShowingMedia(
+  database: Kysely<Database>,
+  mediaId: string,
+  status: "published" | "archived",
+): Promise<string[]> {
+  const rows = await database
     .selectFrom("courses as c")
     .select("c.id")
-    .where("c.status", "=", "published")
+    .where("c.status", "=", status)
     .where("c.deleted_at", "is", null)
     .where((eb) => {
       const assetOfType = (type: string) =>
@@ -100,9 +121,9 @@ export async function isMediaAttachedToPublishedCourse(
         eb.and([eb("c.trailer_media_id", "=", mediaId), assetOfType("video")]),
       ]);
     })
-    .executeTakeFirst();
+    .execute();
 
-  return row !== undefined;
+  return rows.map((row) => row.id);
 }
 
 export async function findMediaAssetsByIds(

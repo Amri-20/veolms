@@ -7,7 +7,7 @@ import type {
   LessonDiscussionsListResponse,
   ListLessonDiscussionsQuery,
 } from "@veolms/contracts";
-import { findSettingsByCourseId } from "../../../courses/configuration/configuration.repository.ts";
+import { findCourseSettings } from "../../../courses/index.ts";
 import { httpError } from "../../../../lib/errors.ts";
 import {
   decodeCursor,
@@ -243,7 +243,7 @@ export function createLearningDiscussionsFeedService(options?: {
         actor,
       });
 
-      const settings = await findSettingsByCourseId(db, courseId);
+      const settings = await findCourseSettings(db, courseId);
       const capabilities: FeedCapabilities = {
         allowComments: settings?.allow_comments !== false,
         allowQa: settings?.allow_qa !== false,

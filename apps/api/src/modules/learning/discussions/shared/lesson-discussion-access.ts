@@ -84,10 +84,16 @@ export function createLessonDiscussionAccess(options?: {
         lessonId,
       });
 
+      if (!lesson || lesson.isPublished === false) {
+        throw DiscussionErrors.notFound("Lesson discussion");
+      }
+      // An archived course's discussions stay readable to a learner who
+      // holds access to it. A draft's are read by nobody here, as before.
       if (
-        !lesson ||
-        lesson.courseStatus !== "published" ||
-        lesson.isPublished === false
+        !(await access.isCourseOpenToLearner(db, actor?.userId, {
+          id: courseId,
+          status: lesson.courseStatus,
+        }))
       ) {
         throw DiscussionErrors.notFound("Lesson discussion");
       }

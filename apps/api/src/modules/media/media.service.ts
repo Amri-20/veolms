@@ -941,7 +941,14 @@ export function createMediaService({
 
     if (isOwner || isAdmin) return;
 
-    if (context.course_status !== "published") {
+    // An archived course plays on for a learner who holds access to it.
+    // Nobody else is played anything from it, a preview lesson included.
+    if (
+      !(await accessService.isCourseOpenToLearner(database, user?.id, {
+        id: context.course_id,
+        status: context.course_status,
+      }))
+    ) {
       throw new AppError(404, "COURSE_NOT_FOUND", "Course not found.");
     }
 
@@ -1033,6 +1040,28 @@ export function createMediaService({
     return getCdnDeliveryUrl(services.storage, storageKey);
   }
 
+  /**
+   * Whether the asset is the thumbnail or trailer of an archived course the
+   * viewer holds access to. Such a course is no longer public, so its
+   * picture and trailer are not either, but its learners still open it.
+   */
+  async function isMediaOfHeldArchivedCourse(
+    mediaId: string,
+    userId: string | undefined,
+  ): Promise<boolean> {
+    if (!userId) return false;
+    const courseIds = await mediaRepo.listArchivedCourseIdsShowingMedia(
+      database,
+      mediaId,
+    );
+    for (const courseId of courseIds) {
+      if (await accessService.hasActiveAccess(database, userId, courseId)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   async function getMediaDelivery(
     mediaId: string,
     requestingUserId?: string,
@@ -1048,7 +1077,12 @@ export function createMediaService({
       database,
       mediaId,
     );
-    if (!isPublic && media.owner_id !== requestingUserId && !isAdmin) {
+    if (
+      !isPublic &&
+      media.owner_id !== requestingUserId &&
+      !isAdmin &&
+      !(await isMediaOfHeldArchivedCourse(mediaId, requestingUserId))
+    ) {
       throw new AppError(404, "MEDIA_NOT_FOUND", "Media asset not found.");
     }
 
@@ -1149,7 +1183,10 @@ export function createMediaService({
     );
     const canManageCourse = isOwner || isAdmin;
 
-    if (course.status !== "published" && !canManageCourse) {
+    if (
+      !canManageCourse &&
+      !(await accessService.isCourseOpenToLearner(database, user?.id, course))
+    ) {
       throw new AppError(404, "COURSE_NOT_FOUND", "Course not published.");
     }
 
@@ -1427,7 +1464,12 @@ export function createMediaService({
       database,
       mediaId,
     );
-    if (!isPublic && media.owner_id !== requestingUserId && !isAdmin)
+    if (
+      !isPublic &&
+      media.owner_id !== requestingUserId &&
+      !isAdmin &&
+      !(await isMediaOfHeldArchivedCourse(mediaId, requestingUserId))
+    )
       throw new AppError(404, "MEDIA_NOT_FOUND", "Media asset not found.");
     const variants =
       isRecord(media.metadata) && Array.isArray(media.metadata.variants)

@@ -19,14 +19,19 @@ import type { Database } from "@veolms/database";
 import type { Kysely } from "kysely";
 
 import { ADMIN_ROLE } from "../auth/index.ts";
-import { createAccessService, type AccessService } from "../access/index.ts";
+import {
+  createAccessService,
+  isOpenFreeCourse,
+  type AccessService,
+} from "../access/index.ts";
 import { AppError } from "../../lib/errors.ts";
 import type { AppServices } from "../../services/index.ts";
 import {
+  createCourseService,
   createCurriculumService,
+  type CourseService,
   type CurriculumService,
 } from "../courses/index.ts";
-import * as courseRepository from "../courses/course/course.repository.ts";
 import { createOutboxService } from "../../events/outbox.service.ts";
 import {
   createQuizCompletionService,
@@ -295,12 +300,14 @@ export function createLearningProgressService({
   services,
   accessService = createAccessService(),
   curriculumService = createCurriculumService({ database, services }),
+  courseService = createCourseService({ database, services }),
   quizCompletionService = createQuizCompletionService({ database }),
 }: {
   database: Kysely<Database>;
   services: AppServices;
   accessService?: AccessService;
   curriculumService?: CurriculumService;
+  courseService?: Pick<CourseService, "findCourseById" | "findCourseBySlug">;
   quizCompletionService?: QuizCompletionService;
 }): LearningProgressService {
   const outbox = createOutboxService();
@@ -310,8 +317,8 @@ export function createLearningProgressService({
 
   async function findCourse(courseKey: string) {
     return isUuid(courseKey)
-      ? await courseRepository.findCourseById(database, courseKey)
-      : await courseRepository.findCourseBySlug(database, courseKey);
+      ? await courseService.findCourseById(courseKey)
+      : await courseService.findCourseBySlug(courseKey);
   }
 
   async function requireCourse(user: UserContext, courseKey: string) {
@@ -322,20 +329,28 @@ export function createLearningProgressService({
 
     const isOwner = course.creator_id === user.id;
     const isAdmin = user.roles.includes(ADMIN_ROLE);
-    if (course.status !== "published" && !isOwner && !isAdmin) {
+    if (isOwner || isAdmin) return course;
+
+    // An archived course keeps the progress of a learner who holds access
+    // to it, and goes on recording it.
+    if (
+      !(await accessService.isCourseOpenToLearner(database, user.id, course))
+    ) {
       throw new AppError(404, "COURSE_NOT_FOUND", "Course not published.");
     }
-
-    if (isOwner || isAdmin) return course;
 
     const [accessRule, pricing] = await Promise.all([
       learningProgressRepository.findCourseAccessType(database, course.id),
       learningProgressRepository.findCoursePricingType(database, course.id),
     ]);
 
-    const requiresGrant =
-      accessRule?.access_type === "restricted" ||
-      pricing?.pricing_type === "paid";
+    // The rule playback and discussions apply: open without a grant only
+    // when free and not restricted. Written out here it also opened a
+    // course with no pricing row, which neither of them plays.
+    const requiresGrant = !isOpenFreeCourse({
+      pricing_type: pricing?.pricing_type,
+      access_type: accessRule?.access_type,
+    });
     if (
       requiresGrant &&
       !(await accessService.hasActiveAccess(database, user.id, course.id))
