@@ -536,11 +536,11 @@ export default function AcademyLayout() {
   useEffect(() => {
     const pathname = normalizeNavigationPath(location.pathname);
     if (pathname === "/logout") {
-      void signOut().catch(() => {
-        // A critical sync barrier must be allowed to stop logout. Return to
-        // the previous screen so an offline/blocked draft is not stranded on
-        // a route with no actionable UI.
-        void navigate(-1);
+      void signOut().then((result) => {
+        // Signed out: the home page, as a visitor. Still signed in (the
+        // server did not end the session): back to where they came from.
+        if (result === "signed-out") void navigate("/", { replace: true });
+        else void navigate(-1);
       });
       return;
     }

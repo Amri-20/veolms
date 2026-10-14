@@ -11,6 +11,11 @@ import { normalizeAppPath, sanitizeReturnTo } from "../routing/routeAccess";
 import { resolvePostAuthPath } from "./postAuthNavigation";
 import { ToastNotification } from "../ToastNotification";
 import { GoogleBrandIcon } from "./SocialBrandIcons";
+import {
+  OneTapSigningInCard,
+  type CredentialAccount,
+} from "./OneTapSigningInCard";
+import { rememberGoogleSignIn } from "./lastGoogleAccount";
 
 const GOOGLE_IDENTITY_SCRIPT = "https://accounts.google.com/gsi/client";
 
@@ -180,6 +185,7 @@ export function GoogleOneTap({
                 { credential: response.credential },
                 {
                   onSuccess: (result) => {
+                    rememberGoogleSignIn(result.user);
                     navigateRef.current(
                       resolvePostAuthPath(result, returnToRef.current),
                       { replace: true },
@@ -211,35 +217,38 @@ export function GoogleOneTap({
   return null;
 }
 
-function OneTapVerifyingOverlay() {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs px-4 text-(--text) animate-in fade-in duration-200"
-      role="status"
-      aria-live="polite"
-      aria-label="Signing in with Google"
-    >
-      <div className="relative flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl border border-(--border-subtle) bg-(--surface) p-6 text-center shadow-(--surface-depth-shadow)">
-        <div className="grid size-14 place-items-center rounded-2xl bg-(--surface-active) shadow-(--surface-depth-shadow)">
-          <GoogleBrandIcon size={32} />
-        </div>
-        <div className="space-y-1">
-          <p className="text-base font-semibold tracking-tight text-(--text)">
-            Signing you in with Google
-          </p>
-          <p className="text-xs leading-5 text-(--muted)">
-            Verifying your account… please wait a moment.
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5 pt-1" aria-hidden="true">
-          <span className="size-1.5 animate-pulse rounded-full bg-(--accent) motion-reduce:animate-none" />
-          <span className="size-1.5 animate-pulse rounded-full bg-(--accent) [animation-delay:160ms] motion-reduce:animate-none" />
-          <span className="size-1.5 animate-pulse rounded-full bg-(--accent) [animation-delay:320ms] motion-reduce:animate-none" />
-        </div>
-      </div>
-    </div>
-  );
+/**
+ * Who the credential Google handed over is for, read from its payload only
+ * to say so while it is checked. Nothing here is trusted: the API verifies
+ * the credential itself.
+ */
+function readCredentialAccount(credential: string): CredentialAccount {
+  try {
+    const part = credential.split(".")[1] ?? "";
+    const base64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const bytes = Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
+    const claims = JSON.parse(new TextDecoder().decode(bytes)) as Record<
+      string,
+      unknown
+    >;
+    const text = (value: unknown) =>
+      typeof value === "string" ? value.trim() : "";
+    const picture =
+      typeof claims.picture === "string" && /^https:\/\//.test(claims.picture)
+        ? claims.picture
+        : undefined;
+    return {
+      // The whole name and the address, as the browser's card shows them.
+      name: text(claims.name) || text(claims.given_name),
+      email: text(claims.email),
+      ...(picture ? { picture } : {}),
+    };
+  } catch {
+    return { name: "", email: "" };
+  }
 }
+
 const EXCLUDED_ONE_TAP_PATHS = new Set([
   "/mfa-setup",
   "/auth/callback",
@@ -259,7 +268,9 @@ export function GlobalGoogleOneTap() {
   const { data: authConfig } = useAuthConfig();
   const login = useGoogleOneTapLogin();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isVerifying, setIsVerifying] = useState(false);
+  // The account being checked after Google's prompt, while it is.
+  const [verifyingAccount, setVerifyingAccount] =
+    useState<CredentialAccount | null>(null);
 
   const clientId = authConfig?.googleClientId || "";
   const normalizedPath = normalizeAppPath(location.pathname);
@@ -310,19 +321,20 @@ export function GlobalGoogleOneTap() {
             callback: (response) => {
               if (!active || !response.credential) return;
 
-              setIsVerifying(true);
+              setVerifyingAccount(readCredentialAccount(response.credential));
               loginRef.current(
                 { credential: response.credential },
                 {
                   onSuccess: (result) => {
-                    setIsVerifying(false);
+                    rememberGoogleSignIn(result.user);
+                    setVerifyingAccount(null);
                     navigateRef.current(
                       resolvePostAuthPath(result, returnToRef.current),
                       { replace: true },
                     );
                   },
                   onError: (error) => {
-                    setIsVerifying(false);
+                    setVerifyingAccount(null);
                     setErrorMessage(toOneTapErrorMessage(error));
                   },
                 },
@@ -351,7 +363,9 @@ export function GlobalGoogleOneTap() {
 
   return (
     <>
-      {isVerifying ? <OneTapVerifyingOverlay /> : null}
+      {verifyingAccount ? (
+        <OneTapSigningInCard account={verifyingAccount} />
+      ) : null}
       {errorMessage ? (
         <ToastNotification
           message={errorMessage}

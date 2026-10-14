@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import "./auth.css";
 import { AUTH_CARD_HEADING_ID } from "./authFlow";
 import { LoginView } from "./LoginView";
+import { removeLoginDialogSnapshot } from "./loginDialogSnapshot";
 
 /**
  * The login card as a pop-up over whatever page asked for it. It is the same
@@ -29,6 +30,9 @@ export default function LoginDialog({
     const dialog = dialogRef.current;
     if (!dialog) return undefined;
     if (!dialog.open) dialog.showModal();
+    // In the same frame: the copy that stood in for the pop-up while the
+    // page loaded (after a full-tab sign-in) goes as the pop-up opens.
+    removeLoginDialogSnapshot();
     return () => dialog.close();
   }, []);
 

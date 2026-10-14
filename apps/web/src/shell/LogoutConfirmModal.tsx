@@ -31,6 +31,7 @@ export function LogoutConfirmModal({
       icon={SignOut}
       iconWeight="regular"
       emphasis="cancel"
+      closeOnConfirm
       title="Sign out?"
       description={
         notice ? (

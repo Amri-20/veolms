@@ -40,6 +40,13 @@ export interface ConfirmActionModalProps {
    * the confirming button first, unhighlighted.
    */
   emphasis?: "confirm" | "cancel";
+  /**
+   * Close first, then confirm: for an action that takes effect elsewhere
+   * (signing out moves the page on). The dialog's Back-button history entry
+   * is gone by the time `onConfirm` runs, so stepping it back cannot undo a
+   * navigation the action starts.
+   */
+  closeOnConfirm?: boolean;
 }
 
 const ACTION_BUTTON_CLASS =
@@ -64,6 +71,7 @@ export function ConfirmActionModal({
   pendingLabel,
   tone = "accent",
   emphasis = "confirm",
+  closeOnConfirm = false,
 }: ConfirmActionModalProps) {
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const cancelBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -156,7 +164,7 @@ export function ConfirmActionModal({
       ref={confirmBtnRef}
       motion="static"
       className={`${ACTION_BUTTON_CLASS}${cancelEmphasized ? ` ${QUIET_ACTION_BUTTON_CLASS}` : ""}`}
-      onClick={onConfirm}
+      onClick={closeOnConfirm ? () => dismissThen(onConfirm) : onConfirm}
       disabled={isPending || confirmDisabled}
       aria-busy={isPending}
     >

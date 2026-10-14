@@ -1,10 +1,9 @@
 import type { Route } from "./+types/auth-layout";
 import "../auth/auth.css";
 import "../styles/components/toast-notification.css";
-import type { ReactNode } from "react";
 import { redirect } from "react-router";
+import { AuthPageFrame } from "../auth/AuthPageFrame";
 import { useAuthAppearance } from "../auth/useAuthAppearance";
-import { AppLoadingScreen } from "../bootstrap/AppLoadingScreen";
 import { queryClient } from "../lib/query-client";
 import { loginDialogBody } from "../routing/prerenderedBodies";
 import { AuthRouteGuard } from "../routing/RouteGuards";
@@ -16,7 +15,6 @@ import {
   resolveSessionAccess,
 } from "../routing/routeAccess";
 import { authKeys, currentUserQueryOptions } from "../services/auth";
-import { productName } from "../routing/routeDescriptors";
 import { authStore } from "../store/auth.store";
 
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
@@ -68,32 +66,10 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   return null;
 }
 
+// While this loader waits on the session check the root HydrateFallback
+// draws the auth frame: React Router allows that export only on the root
+// route while the dev server runs without prerendering.
 clientLoader.hydrate = true as const;
-
-function AuthPageFrame({ children }: { children: ReactNode }) {
-  return (
-    <div className="auth-page">
-      <div className="auth-page__container">
-        <div className="auth-page__form-column">{children}</div>
-      </div>
-
-      <p className="auth-page__footer">
-        <span>&copy; 2026 {productName}. All rights reserved.</span>
-      </p>
-    </div>
-  );
-}
-
-// Shown while the loader above waits for the session check, and built into
-// the prerendered auth pages, so they paint this instead of an empty canvas.
-// It is the same loading card the route guard shows once it takes over.
-export function HydrateFallback() {
-  return (
-    <AuthPageFrame>
-      <AppLoadingScreen variant="embedded" />
-    </AuthPageFrame>
-  );
-}
 
 export default function AuthLayout() {
   useAuthAppearance();

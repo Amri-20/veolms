@@ -3,7 +3,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useRef } from "react";
+import { useCallback, useState } from "react";
 import type {
   AuthMessageResponse,
   BackupCodesResponse,
@@ -31,6 +31,7 @@ import type {
 import type { ApiError } from "../../lib/api-error";
 import { autosyncManager } from "../../lib/autosync/manager";
 import { authStore } from "../../store/auth.store";
+import { writeSessionPresence } from "../../store/sessionPresence";
 import {
   endPendingMfaLogin,
   notePendingMfaLogin,
@@ -91,6 +92,7 @@ function persistAuthenticatedSession(
       predicate: (query) => query.queryKey[0] !== authKeys.all[0],
     });
   }
+  signedOutHere = false;
   notePendingMfaLogin(data.mfaRequired);
   authStore.setUser(data.user);
   resetRegisteredInteractionState();
@@ -464,24 +466,95 @@ export function useDeactivateAccount() {
   });
 }
 
+let signedOutHere = false;
+
+/**
+ * Whether the visitor signed out in this tab themselves, rather than their
+ * session running out. A page that needs a session then sends them to the
+ * home page instead of asking them to sign in again.
+ */
+export function wasSignedOutHere(): boolean {
+  return signedOutHere;
+}
+
+/**
+ * Cached answers that are the same for a visitor: kept on screen through a
+ * sign-out and asked for again as one. Everything else in the cache was the
+ * account's and is dropped.
+ */
+function isVisitorQuery(queryKey: readonly unknown[]): boolean {
+  const [root, part] = queryKey;
+  // "me" holds the answer "nobody", set as the page signed out.
+  if (root === authKeys.all[0])
+    return part === "me" || part === "config" || part === "public-profile";
+  if (root === courseKeys.all[0]) return part !== "mine";
+  if (root === "home") return part === "guest-page" || part === "discovery";
+  return root === "quotes";
+}
+
+export type SignOutResult = "signed-out" | "still-signed-in";
+
+/**
+ * Signs out on screen at once and tells the server after: the page becomes
+ * its signed-out version the moment the visitor confirms (a page that needs
+ * a session goes to the home page, see wasSignedOutHere), with no reload.
+ * Unsaved editor work is sent first, while the session still holds; usually
+ * there is none and nothing waits.
+ *
+ * Should the server not end the session (the request fails and `/auth/me`
+ * still finds it), the account is put back on screen and the result says
+ * so, for the caller to tell the visitor. A session the request did end
+ * anyway, or that is gone, stays signed out.
+ */
 export function useSignOut() {
-  const logoutMutation = useLogout();
-  const logoutMutationRef = useRef(logoutMutation);
-  logoutMutationRef.current = logoutMutation;
+  const queryClient = useQueryClient();
+  const [isPending, setIsPending] = useState(false);
 
-  const signOut = useCallback(async () => {
-    try {
-      await autosyncManager.requireSynced();
-    } catch {
-      // Autosync failed or timed out, proceed with logout so user is never trapped
+  const signOut = useCallback(async (): Promise<SignOutResult> => {
+    if (autosyncManager.hasUnsavedWork()) {
+      setIsPending(true);
+      try {
+        await autosyncManager.requireSynced();
+      } catch {
+        // Autosync failed or timed out; sign out anyway so the visitor is
+        // never trapped (the draft stays in this browser).
+      }
+      setIsPending(false);
     }
-    await logoutMutationRef.current.mutateAsync().catch(() => undefined);
-    authStore.clearAuth();
-    clearCoursePlayerSessions();
-    // Redirect even when the API request cannot complete. This prevents a
-    // stale authenticated shell from trapping the user in the workspace.
-    if (typeof window !== "undefined") window.location.href = "/";
-  }, []);
 
-  return { isPending: logoutMutation.isPending, signOut };
+    const previousUser =
+      queryClient.getQueryData<CurrentUserResponse>(authKeys.me()) ?? null;
+    signedOutHere = true;
+    clearSignedOutState(queryClient, true);
+
+    try {
+      await authService.logout();
+    } catch {
+      let user: CurrentUserResponse | null = previousUser;
+      try {
+        user = await authService.getMe();
+      } catch (error) {
+        // Signed out after all; otherwise (the API not answering) the
+        // session is most likely still there, as it was before.
+        if ((error as Partial<ApiError>)?.status === 401) user = null;
+      }
+      if (user) {
+        signedOutHere = false;
+        writeSessionPresence(true);
+        authStore.setUser(user);
+        queryClient.setQueryData(authKeys.me(), user);
+        return "still-signed-in";
+      }
+    }
+
+    queryClient.removeQueries({
+      predicate: (query) => !isVisitorQuery(query.queryKey),
+    });
+    void queryClient.invalidateQueries({
+      predicate: (query) => isVisitorQuery(query.queryKey),
+    });
+    return "signed-out";
+  }, [queryClient]);
+
+  return { isPending, signOut };
 }

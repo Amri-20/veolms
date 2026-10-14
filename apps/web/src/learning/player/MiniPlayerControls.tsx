@@ -145,16 +145,18 @@ export function MiniPlayerCloseControl({
   );
 }
 
-/** Expand on the left, close on the right: the wide-screen window's top row. */
+/**
+ * Expand on the left, close on the right: the wide-screen window's top row.
+ * Like the buttons in the middle, they move the window when dragged and
+ * act only when pressed and let go in place (a drag starts after a few
+ * pixels and swallows the click that follows).
+ */
 function MiniPlayerTopBar({
   onClose,
   onRestore,
 }: Pick<MiniPlayerControlsProps, "onClose" | "onRestore">) {
   return (
-    <div
-      className="pointer-events-none absolute inset-x-2 top-2 z-50 flex items-center justify-between"
-      data-learning-mini-player-gesture-ignore=""
-    >
+    <div className="pointer-events-none absolute inset-x-2 top-2 z-50 flex items-center justify-between">
       <MiniPlayerRestoreControl onRestore={onRestore} />
       <MiniPlayerCloseControl onClose={onClose} />
     </div>
@@ -348,11 +350,9 @@ export function MiniPlayerControls({
         {/* Subtle dark backdrop for readability of controls over bright scenes */}
         <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/75 via-black/25 to-black/60" />
 
-        {/* Center Controls: Previous, Play/Pause, Next */}
-        <div
-          className="pointer-events-none absolute top-1/2 left-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-6"
-          data-learning-mini-player-gesture-ignore=""
-        >
+        {/* Center Controls: Previous, Play/Pause, Next. A drag that starts
+            on one moves the window, as anywhere but the timeline does. */}
+        <div className="pointer-events-none absolute top-1/2 left-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-6">
           <button
             type="button"
             aria-label="Previous lesson"

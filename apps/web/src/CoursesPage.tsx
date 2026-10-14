@@ -31,6 +31,7 @@ import type {
   GuestHomePageResponse,
 } from "@veolms/contracts";
 import {
+  SETTINGS_DEFAULT_TAB,
   normalizeSettingsTab,
   rememberSettingsTab,
   type SettingsTab,
@@ -1038,7 +1039,7 @@ export function CoursesPage({
   routeCatalogueEnrollmentFilter = "all",
   page = "courses",
   section: requestedSection = null,
-  settingsTab = "profile",
+  settingsTab = SETTINGS_DEFAULT_TAB,
   discussionTab = "q-and-a",
   courseSlug,
   quizId,
@@ -1314,6 +1315,15 @@ export function CoursesPage({
   } = useAcademyRouteGuardState();
   const isEditingOrCreatingCourse = page === "course-create";
   const isAuthReady = Boolean(storeUser) || authUserFetched;
+  // Whether this page has shown someone signed out. Signing in after that
+  // keeps the guest home up until the learner's own home is ready, just as
+  // for a browser that opened the page signed out: signing out and back in
+  // without a reload used to show the placeholders of a learner with
+  // courses in between, whatever the account had.
+  const [shownSignedOut, setShownSignedOut] = useState(false);
+  if (isAuthReady && !isAuthenticated && !shownSignedOut) {
+    setShownSignedOut(true);
+  }
   // The Discussions page needs a session, and the route guard holds every
   // such page back until the session check has answered. A browser that was
   // signed in last time is shown the page meanwhile: its heading, tabs and
@@ -1368,12 +1378,16 @@ export function CoursesPage({
   );
   const { isPending: isSigningOut, signOut } = useSignOut();
   const signOutAfterSync = useCallback(async () => {
-    try {
-      await signOut();
-    } catch {
-      if (typeof window !== "undefined") window.location.href = "/";
+    // The question has closed itself by now (see closeOnConfirm).
+    const result = await signOut();
+    if (result === "still-signed-in") {
+      setNotice({
+        type: "error",
+        message:
+          "We couldn't sign you out, so you're still signed in. Please try again.",
+      });
     }
-  }, [signOut]);
+  }, [setNotice, signOut]);
   const isCourseCataloguePage =
     page === "courses" || learningBackground?.page === "courses";
   const isStudentCatalogueRoute =
@@ -2198,8 +2212,14 @@ export function CoursesPage({
   }, [pendingProfileMenuOpen, profileMenuSurfaceMounted]);
 
   useEffect(() => {
-    if (logoutConfirmOpen) setLogoutModalMounted(true);
-  }, [logoutConfirmOpen]);
+    if (!logoutConfirmOpen) return;
+    setLogoutModalMounted(true);
+    // The signed-out page is put up the moment "Sign out" is pressed. The
+    // guest home (where a page that needs a session goes) is fetched while
+    // the question is open, so it is ready by then.
+    void guestHomeBody.preload();
+    void prefetchGuestHomePage(queryClient);
+  }, [logoutConfirmOpen, queryClient]);
 
   // Settings and Discussions are fetched once the shell is idle, or sooner
   // if the pointer or the keyboard reaches one of the ways into them. The page's own code comes
@@ -4902,6 +4922,23 @@ export function CoursesPage({
           learnerName={shellProfileKnownName?.trim() ?? ""}
         />
       );
+      // Someone who has just signed in on this page: the guest home they
+      // signed in over stays until their own home is ready, so the page
+      // swaps once. It stands in from the moment they are signed in, both
+      // while the home's code loads and while their courses are on the way;
+      // the code's loading state used to be the learner's placeholders, and
+      // the page went guest home, placeholders, guest home, their home.
+      const justSignedInHome =
+        initialGuestHomePage &&
+        (showGuestHomeWhilePending ||
+          (shownSignedOut && hydratedWorkspaceRoleHint !== "creator")) ? (
+          <GuestHome
+            onNavigatePage={onNavigatePage}
+            courseCardActions={guestHomeCourseCardActions}
+            initialPage={initialGuestHomePage}
+            initialCopy={initialGuestHomeCopy}
+          />
+        ) : undefined;
       // The guest home's hero picture is the page's largest paint. Emitting
       // its preload here (not inside the lazy GuestHome) places it in the
       // prerendered document head, so the browser starts the download before
@@ -4987,11 +5024,13 @@ export function CoursesPage({
               fallback={
                 // While the home's own code loads. A learner who had no
                 // courses last time gets their home here already.
-                learnerWasNotEnrolled ? (
-                  newLearnerHome
-                ) : (
-                  <LearnerHomeShell learnerName={shellProfileKnownName ?? ""} />
-                )
+                learnerWasNotEnrolled
+                  ? newLearnerHome
+                  : (justSignedInHome ?? (
+                      <LearnerHomeShell
+                        learnerName={shellProfileKnownName ?? ""}
+                      />
+                    ))
               }
             >
               <AuthenticatedHomeBoundary
@@ -5004,18 +5043,7 @@ export function CoursesPage({
                 courseCardActions={guestHomeCourseCardActions}
                 sessionPending={!isAuthReady}
                 notEnrolledContent={newLearnerHome}
-                pendingContent={
-                  initialGuestHomePage && showGuestHomeWhilePending ? (
-                    // Keep the already-painted guest home on screen until
-                    // the learner's home is ready: one content swap.
-                    <GuestHome
-                      onNavigatePage={onNavigatePage}
-                      courseCardActions={guestHomeCourseCardActions}
-                      initialPage={initialGuestHomePage}
-                      initialCopy={initialGuestHomeCopy}
-                    />
-                  ) : undefined
-                }
+                pendingContent={justSignedInHome}
               />
             </Suspense>
           )}
@@ -5030,6 +5058,7 @@ export function CoursesPage({
             role={role}
             userRoles={userRoles}
             isAuthenticated={isAuthenticated}
+            isAuthReady={isAuthReady}
             onNavigatePage={onNavigatePage}
             onExitSettings={onExitSettings}
             showBackButton={showPageBackButton}
@@ -6077,6 +6106,7 @@ export function CoursesPage({
                         : null
                     }
                     onNavigate={navigateSettingsQuickMenu}
+                    showSignedInTabs={isAuthenticated}
                   />
                 </Suspense>
               )}
@@ -6381,6 +6411,7 @@ export function CoursesPage({
                             : null
                         }
                         onNavigate={navigateSettingsQuickMenu}
+                        showSignedInTabs={isAuthenticated}
                       />
                     </Suspense>
                   )}

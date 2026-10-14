@@ -1,4 +1,5 @@
 import type { OauthProvider } from "@veolms/contracts";
+import { OAUTH_POPUP_WINDOW_NAME } from "./oauthPopup";
 
 export const OAUTH_PROVIDER_STORAGE_KEY = "veolms_oauth_provider";
 export const OAUTH_RETURN_TO_STORAGE_KEY = "veolms_oauth_return_to";
@@ -12,4 +13,62 @@ export function clearOauthHandoff(): void {
 
   window.sessionStorage.removeItem(OAUTH_PROVIDER_STORAGE_KEY);
   window.sessionStorage.removeItem(OAUTH_RETURN_TO_STORAGE_KEY);
+  window.sessionStorage.removeItem(OAUTH_DIALOG_PAGE_STORAGE_KEY);
+  window.sessionStorage.removeItem(OAUTH_REDIRECT_RESULT_STORAGE_KEY);
+}
+
+// When the sign-in window is blocked the whole tab goes to the provider.
+// The page the login pop-up was open over is kept here, so the provider's
+// answer is taken back to it, with the pop-up open, instead of to a
+// separate callback page; the answer waits under the second key.
+const OAUTH_DIALOG_PAGE_STORAGE_KEY = "veolms_oauth_dialog_page";
+export const OAUTH_REDIRECT_RESULT_STORAGE_KEY = "veolms_oauth_redirect_result";
+const OAUTH_RETURN_ATTRIBUTE = "data-oauth-return";
+
+export function rememberOauthDialogPage(): void {
+  const { pathname, search, hash } = window.location;
+  window.sessionStorage.setItem(
+    OAUTH_DIALOG_PAGE_STORAGE_KEY,
+    `${pathname}${search}${hash}`,
+  );
+}
+
+/**
+ * Runs in the head of every document. On /auth/callback after a full-tab
+ * sign-in that started in the login pop-up, it puts the provider's answer
+ * aside and replaces the address with the page the pop-up was open over,
+ * before anything of the callback page is drawn (its content is hidden
+ * meanwhile). That page loads its own document, opens the pop-up, and the
+ * pop-up finishes signing in. A sign-in window or hidden frame (see
+ * oauthPopup) is left to its own script.
+ */
+export function getOauthDialogReturnScript(): string {
+  return `(function(){try{if(location.pathname!=="/auth/callback"||window.name===${JSON.stringify(OAUTH_POPUP_WINDOW_NAME)}||window.parent!==window)return;var page=sessionStorage.getItem(${JSON.stringify(OAUTH_DIALOG_PAGE_STORAGE_KEY)});sessionStorage.removeItem(${JSON.stringify(OAUTH_DIALOG_PAGE_STORAGE_KEY)});if(!page||page.charAt(0)!=="/"||page.charAt(1)==="/"||page.charAt(1)===${JSON.stringify("\\")})return;sessionStorage.setItem(${JSON.stringify(OAUTH_REDIRECT_RESULT_STORAGE_KEY)},location.search);document.documentElement.setAttribute(${JSON.stringify(OAUTH_RETURN_ATTRIBUTE)},"");var style=document.createElement("style");style.textContent="html[${OAUTH_RETURN_ATTRIBUTE}] #root{visibility:hidden}";document.head.appendChild(style);location.replace(page);}catch(e){}})();`;
+}
+
+/** True on a callback document the script above is replacing. */
+export function isReturningToOauthDialog(): boolean {
+  return document.documentElement.hasAttribute(OAUTH_RETURN_ATTRIBUTE);
+}
+
+/**
+ * The provider's answer put aside above, with the provider it is from.
+ * Read on the pop-up's first render, so it opens already saying it is
+ * signing in; taken with `clearOauthRedirectResult` once acted on.
+ */
+export function peekOauthRedirectResult(): {
+  provider: OauthProvider;
+  params: URLSearchParams;
+} | null {
+  if (typeof window === "undefined") return null;
+  const search = window.sessionStorage.getItem(
+    OAUTH_REDIRECT_RESULT_STORAGE_KEY,
+  );
+  const provider = window.sessionStorage.getItem(OAUTH_PROVIDER_STORAGE_KEY);
+  if (search === null || !isOauthProvider(provider)) return null;
+  return { provider, params: new URLSearchParams(search) };
+}
+
+export function clearOauthRedirectResult(): void {
+  window.sessionStorage.removeItem(OAUTH_REDIRECT_RESULT_STORAGE_KEY);
 }

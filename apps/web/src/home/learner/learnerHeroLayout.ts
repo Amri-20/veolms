@@ -2,6 +2,10 @@ import {
   guestHomeGutter,
   guestHomeGutterBleed,
 } from "../guest/guestHomeSpacing";
+import {
+  homeHeroHeightClasses,
+  homeHeroPictureSizeClasses,
+} from "../guest/homeHeroHeight";
 
 /**
  * The band the picture gets on a page too narrow to show it beside the copy:
@@ -23,8 +27,11 @@ export const pictureBandClasses = [
  * the picture then is. Both are handed down as custom properties because the
  * copy is placed from them (see `copyOnDeskClasses`).
  *
- * The hero is a third of its width tall, between 29rem and 34rem. Under
- * 85rem of page it eases down, to 27rem at 80rem and narrower: the picture
+ * The sizes in this comment are the formula's; the hero is drawn at 92% of
+ * them, the height it shares with the visitor's hero (see
+ * `homeHeroHeightClasses`). The hero is a third of its width tall, between
+ * 29rem and 34rem. Under 85rem of page it eases down, to 27rem at 80rem and
+ * narrower: the picture
  * covers the hero from its right edge, so a shorter hero draws the desk
  * smaller, and that is what leaves the copy room beside the mug and the
  * laptop.
@@ -46,11 +53,13 @@ export const pictureBandClasses = [
  */
 export const heroSizeClasses = [
   "justify-start",
-  "@[50rem]/home:[--hero-h:max(calc(clamp(25rem,17.85rem_+_14.3cqw,27rem)_+_clamp(27rem,40.22cqw_-_5rem,29rem)_-_27rem),min(33.4cqw,34rem))]",
-  "@[50rem]/home:[--picture-h:max(var(--hero-h),33.35cqw)]",
-  "@[50rem]/home:[--picture-shift:min(calc(var(--picture-h)_*_0.216),max(0px,calc(var(--picture-h)_*_2.9985_-_100cqw)))]",
+  // The height itself, shared with the visitor's hero (92% of the sizes
+  // described above).
+  homeHeroHeightClasses,
+  // The picture's size and shift beside the copy, shared with the visitor's
+  // hero so the desk stands in the same place in both.
+  homeHeroPictureSizeClasses,
   "@max-[50rem]/home:sm:[--picture-shift:calc(clamp(20rem,46cqw,23rem)_*_0.216)]",
-  "@[50rem]/home:min-h-(--hero-h)",
 ].join(" ");
 
 /**

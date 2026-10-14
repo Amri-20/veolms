@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from "react";
+import { rememberCodeSignIn } from "./lastGoogleAccount";
 import { useNavigate, useSearchParams } from "react-router";
 import { AccountForm } from "./AccountForm";
 import { MfaEnrollmentSetup } from "./MfaEnrollmentSetup";
@@ -258,6 +259,7 @@ export function LoginView({
         }
       }
 
+      rememberCodeSignIn();
       authStore.setUser(response.user);
       dispatch({ type: "OTP_VERIFIED", next: "authenticated" });
     } catch (err: unknown) {
@@ -327,6 +329,7 @@ export function LoginView({
 
       const response = await registerMutation.mutateAsync(payload);
       forgetCodeSent();
+      rememberCodeSignIn();
       authStore.setUser(response.user);
 
       if (
@@ -519,6 +522,7 @@ export function LoginView({
           <div className="auth-card__form-slot">
             <IdentifierForm
               errorMessage={identifierError ?? undefined}
+              onEdit={() => setIdentifierError(null)}
               forcedMethod={pendingSecondaryMethod}
               onSubmit={(identifier) => handleSendCode(identifier)}
               status={
@@ -548,6 +552,7 @@ export function LoginView({
           <IdentifierForm
             disabled={oneTapPending}
             errorMessage={identifierError ?? undefined}
+            onEdit={() => setIdentifierError(null)}
             onSubmit={(identifier) => handleSendCode(identifier)}
             status={
               flow.status === "sendingOtp" || sendOtpMutation.isPending

@@ -1,15 +1,19 @@
 import { GearSixIcon as GearSix } from "@phosphor-icons/react/GearSix";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   handleRovingTabKeyDown,
   scrollKeyboardFocusedTabIntoView,
 } from "./accessibility/rovingTabFocus";
-import { AccountSettings } from "./settings/AccountSettings";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { LearningSettings } from "./settings/LearningSettings";
-import { NotificationSettings } from "./settings/NotificationSettings";
-import { ProfileSettings } from "./settings/ProfileSettings";
-import { SecuritySettings } from "./settings/SecuritySettings";
 import { SidebarSettings } from "./settings/SidebarSettings";
 import type { DisplayMode } from "./settings/AppearanceSettings";
 import type { ThemeRevealOrigin } from "./shell/themeViewTransition";
@@ -22,6 +26,8 @@ import type {
 import type { NavigateTo } from "./routing/navigation";
 import { PageHeading } from "./components/PageHeading";
 import {
+  SETTINGS_DEFAULT_TAB,
+  isSignedInSettingsTab,
   normalizeSettingsTab,
   readSettingsTab,
   rememberSettingsTab,
@@ -32,13 +38,30 @@ import {
   isEditingShortcutTarget,
 } from "./keyboardShortcuts";
 import { SwipeableTabPanel } from "./navigation/SwipeableTabPanel";
-import { useAuthStore } from "./store/auth.store";
-import { SETTINGS_TABS } from "./settings/settingsTabs";
+import { authStore, useAuthStore } from "./store/auth.store";
+import { getSettingsTabs } from "./settings/settingsTabs";
+import { definePrerenderedBody } from "./routing/prerenderedBodies";
 import "./styles/features/settings/foundation.css";
 import "./styles/features/settings/preferences-responsive.css";
 export type { SettingsTab } from "./routing/tabSessionState";
 
-const SETTINGS_TAB_IDS = SETTINGS_TABS.map(({ id }) => id);
+// Profile, notifications, privacy and the account only mean something to a
+// signed-in account, so their code is a chunk of its own that a guest's
+// Settings never asks for. A browser that looks signed in fetches it along
+// with this page (see settingsPageBody), and an address that opens on one of
+// them waits for it, so the section is there on the first render.
+const signedInSettingsTabBody = definePrerenderedBody(
+  () => import("./settings/SignedInSettingsTab"),
+  (module) => module.SignedInSettingsTab,
+);
+const SignedInSettingsTab = signedInSettingsTabBody.Body;
+
+export function preloadSignedInSettings() {
+  return authStore.hasSessionHint()
+    ? signedInSettingsTabBody.preload()
+    : undefined;
+}
+
 const SETTINGS_ARROW_KEY_OWNER_SELECTOR = [
   '[role="dialog"]',
   '[role="grid"]',
@@ -55,6 +78,8 @@ export interface SettingsPageProps {
   tab?: string;
   role?: ProfileRole;
   isAuthenticated: boolean;
+  /** Whether the session check has answered (false while prerendering). */
+  isAuthReady?: boolean;
   onNavigatePage?: NavigateTo;
   onExitSettings?: () => void;
   showBackButton?: boolean;
@@ -84,14 +109,6 @@ const SettingsTabContent = memo(function SettingsTabContent({
   pageProps: SettingsPageProps;
 }) {
   switch (panelTab) {
-    case "profile":
-      return (
-        <ProfileSettings
-          role={pageProps.role}
-          onProfileSaved={pageProps.onProfileSaved}
-          isAuthenticated={pageProps.isAuthenticated}
-        />
-      );
     case "appearance":
       return (
         <AppearanceSettings
@@ -119,28 +136,20 @@ const SettingsTabContent = memo(function SettingsTabContent({
       );
     case "learning":
       return <LearningSettings isAuthenticated={pageProps.isAuthenticated} />;
-    case "notifications":
+    default:
       return (
-        <NotificationSettings isAuthenticated={pageProps.isAuthenticated} />
-      );
-    case "security":
-      return <SecuritySettings isAuthenticated={pageProps.isAuthenticated} />;
-    case "account":
-      return (
-        <AccountSettings
-          role={pageProps.role ?? "student"}
-          userRoles={pageProps.userRoles}
-          isAuthenticated={pageProps.isAuthenticated}
-          onNavigatePage={pageProps.onNavigatePage}
-        />
+        <Suspense fallback={null}>
+          <SignedInSettingsTab panelTab={panelTab} pageProps={pageProps} />
+        </Suspense>
       );
   }
 });
 
 export function SettingsPage({
-  tab = "profile",
+  tab = SETTINGS_DEFAULT_TAB,
   role = "student",
   isAuthenticated,
+  isAuthReady = false,
   onNavigatePage,
   onExitSettings,
   showBackButton = false,
@@ -159,6 +168,7 @@ export function SettingsPage({
   onSidebarModeChange,
   sidebarWidthIsDefault,
   onSidebarWidthReset,
+  userRoles,
 }: SettingsPageProps) {
   const activeTab = normalizeSettingsTab(tab);
   const storeIsAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -167,7 +177,17 @@ export function SettingsPage({
   // shell. This also prevents stale route props from leaving controls active
   // for a signed-out user.
   const canEditAuthenticatedSettings = isAuthenticated && storeIsAuthenticated;
-  const activeTabIndex = SETTINGS_TAB_IDS.indexOf(activeTab);
+  // Until the session check answers (and in the prerendered document) every
+  // tab is in the markup, and the signed-in ones are hidden by the head's
+  // session hint, so neither a guest nor an account sees the tab row change
+  // on a reload. Once it has answered, a guest's row has only their tabs.
+  const isConfirmedGuest = isAuthReady && !isAuthenticated;
+  const visibleTabs = getSettingsTabs(!isConfirmedGuest);
+  const visibleTabIds = useMemo(
+    () => visibleTabs.map(({ id }) => id),
+    [visibleTabs],
+  );
+  const activeTabIndex = visibleTabIds.indexOf(activeTab);
   const [preparedTabs, setPreparedTabs] = useState<ReadonlySet<SettingsTab>>(
     () => new Set([activeTab]),
   );
@@ -193,6 +213,7 @@ export function SettingsPage({
       onSidebarModeChange,
       sidebarWidthIsDefault,
       onSidebarWidthReset,
+      userRoles,
     }),
     [
       academyTheme,
@@ -214,6 +235,7 @@ export function SettingsPage({
       sidebarPreferences,
       sidebarWidthIsDefault,
       theme,
+      userRoles,
     ],
   );
   const navigateTab = useCallback(
@@ -259,18 +281,29 @@ export function SettingsPage({
   const prepareSwipeNeighbors = useCallback(() => {
     setPreparedTabs((current) => {
       const next = new Set(current);
-      const previous = SETTINGS_TAB_IDS[activeTabIndex - 1];
-      const following = SETTINGS_TAB_IDS[activeTabIndex + 1];
+      const previous = visibleTabIds[activeTabIndex - 1];
+      const following = visibleTabIds[activeTabIndex + 1];
       if (previous) next.add(previous);
       if (following) next.add(following);
       return next.size === current.size ? current : next;
     });
-  }, [activeTabIndex]);
+  }, [activeTabIndex, visibleTabIds]);
+
+  // A guest who reaches a signed-in section (an old link, the tab remembered
+  // from before signing out) is taken to the first of their own.
+  const guestIsOnSignedInTab =
+    isConfirmedGuest && isSignedInSettingsTab(activeTab);
+  useEffect(() => {
+    if (!guestIsOnSignedInTab) return;
+    rememberSettingsTab(SETTINGS_DEFAULT_TAB);
+    onNavigatePage?.(`/settings/${SETTINGS_DEFAULT_TAB}`, { replace: true });
+  }, [guestIsOnSignedInTab, onNavigatePage]);
 
   useEffect(() => {
+    if (guestIsOnSignedInTab) return;
     rememberSettingsTab(activeTab);
     prepareTab(activeTab);
-  }, [activeTab, prepareTab]);
+  }, [activeTab, guestIsOnSignedInTab, prepareTab]);
 
   useEffect(() => {
     const exitSettings = (event: KeyboardEvent) => {
@@ -308,10 +341,10 @@ export function SettingsPage({
       if (event.defaultPrevented || isEditingShortcutTarget(event.target))
         return;
 
-      let destination: (typeof SETTINGS_TABS)[number] | undefined;
+      let destination: (typeof visibleTabs)[number] | undefined;
       if (event.altKey) {
         const index = getNumberShortcutIndex(event);
-        destination = index === null ? undefined : SETTINGS_TABS[index];
+        destination = index === null ? undefined : visibleTabs[index];
       } else if (
         !event.ctrlKey &&
         !event.metaKey &&
@@ -323,10 +356,10 @@ export function SettingsPage({
         )
       ) {
         const offset = event.key === "ArrowRight" ? 1 : -1;
-        const currentIndex = SETTINGS_TAB_IDS.indexOf(readSettingsTab());
+        const currentIndex = visibleTabIds.indexOf(readSettingsTab());
         const nextIndex =
-          (currentIndex + offset + SETTINGS_TABS.length) % SETTINGS_TABS.length;
-        destination = SETTINGS_TABS[nextIndex];
+          (currentIndex + offset + visibleTabs.length) % visibleTabs.length;
+        destination = visibleTabs[nextIndex];
       }
 
       if (!destination) return;
@@ -336,7 +369,7 @@ export function SettingsPage({
 
     document.addEventListener("keydown", navigateSettingsTab);
     return () => document.removeEventListener("keydown", navigateSettingsTab);
-  }, [navigateTabShortcut]);
+  }, [navigateTabShortcut, visibleTabIds, visibleTabs]);
 
   return (
     <div className="settings-page" aria-labelledby="settings-page-title">
@@ -358,13 +391,17 @@ export function SettingsPage({
           </div>
         </div>
 
+        {/* The tabs stay pinned while the page scrolls under them, so they
+            have a ground of their own: exactly the page's (the main area's
+            own rule, see deepGroundClasses), so no band of another colour
+            shows. */}
         <nav
           ref={tabListRef}
-          className="settings-tabs page-tabs sticky! top-(--settings-page-sticky-top,0px) z-25 mx-[calc(-1*var(--settings-tab-nav-bleed))]! bg-(--main-surface) px-(--settings-tab-nav-bleed)!"
+          className="settings-tabs page-tabs sticky! top-(--settings-page-sticky-top,0px) z-25 mx-[calc(-1*var(--settings-tab-nav-bleed))]! bg-(--main-surface) px-(--settings-tab-nav-bleed)! in-data-[content-layout=framed]:bg-(--card-ground)!"
           aria-label="Settings sections"
           role="tablist"
         >
-          {SETTINGS_TABS.map(({ id, label, Icon, tone }, index) => (
+          {visibleTabs.map(({ id, label, Icon, tone }, index) => (
             <button
               type="button"
               key={id}
@@ -376,7 +413,11 @@ export function SettingsPage({
               data-page-tab-tone={tone}
               data-swipe-tab-id={id}
               tabIndex={activeTab === id ? 0 : -1}
-              className={activeTab === id ? "group is-active" : "group"}
+              className={`group${activeTab === id ? " is-active" : ""}${
+                !isAuthReady && isSignedInSettingsTab(id)
+                  ? " [html:not([data-session-hint])_&]:hidden!"
+                  : ""
+              }`}
               onPointerEnter={() => prepareTab(id)}
               onPointerDown={() => prepareTab(id)}
               onClick={() => navigateTab(id)}
@@ -400,7 +441,7 @@ export function SettingsPage({
       </header>
 
       <SwipeableTabPanel
-        tabs={SETTINGS_TAB_IDS}
+        tabs={visibleTabIds}
         activeTab={activeTab}
         onTabChange={(nextTab) => void navigateTab(nextTab)}
         tabListRef={tabListRef}

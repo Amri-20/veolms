@@ -45,16 +45,18 @@ import {
  * reads on a dark screen (several day palettes have an accent that is
  * nearly black).
  *
- * The words are in that colour too (`--goal-ink`), let down with white far
- * enough to read on the dark sheet, so the screen is of a piece with its
- * wallpaper: warm over a sunset, cool over blue. They were plain white.
- * The quieter words are the same ink, let through less.
+ * The words are in that colour too (`--goal-ink`), lifted to a bright tint
+ * of it (high lightness, the hue kept) that stands out on the dark sheet,
+ * so the screen is of a piece with its wallpaper: warm over a sunset, cool
+ * over blue. They were plain white.
+ * The quieter words are the same ink, let through a little less.
  */
 const screenClasses = [
   "relative size-full overflow-hidden bg-[#070b1c] text-(--goal-ink)",
   "[--goal-accent:color-mix(in_srgb,var(--accent)_60%,white)]",
   "supports-[color:oklch(from_white_l_c_h)]:[--goal-accent:oklch(from_var(--accent)_max(l,0.76)_c_h)]",
-  "[--goal-ink:color-mix(in_srgb,var(--goal-accent)_88%,white)]",
+  "[--goal-ink:color-mix(in_srgb,var(--goal-accent)_55%,white)]",
+  "supports-[color:oklch(from_white_l_c_h)]:[--goal-ink:oklch(from_var(--goal-accent)_max(l,0.92)_min(c,0.11)_h)]",
 ].join(" ");
 
 /**
@@ -124,7 +126,7 @@ function GoalStat({
   icon,
   amount,
   label,
-  className = "text-(--goal-ink)/80",
+  className = "text-(--goal-ink)/90",
 }: {
   icon: ReactNode;
   amount?: string;
@@ -163,7 +165,7 @@ const celebrationIconClasses =
  */
 function GoalHeading({ standing }: { standing: GoalStanding }) {
   return (
-    <p className="flex items-center gap-3.5 text-[44px] leading-none font-semibold whitespace-nowrap text-(--goal-ink)/90 @[50rem]/home:gap-3 @[50rem]/home:text-[36px]">
+    <p className="flex items-center gap-3.5 text-[44px] leading-none font-semibold whitespace-nowrap text-(--goal-ink) @[50rem]/home:gap-3 @[50rem]/home:text-[36px]">
       {standing === "under" ? "Today's goal" : null}
       {standing === "completed" ? (
         <>
@@ -274,13 +276,13 @@ export function LearnerGoalScreen({
           <div role="status" className="flex items-center gap-6 py-6">
             <Target
               aria-hidden="true"
-              className="size-20 text-(--goal-ink)/60"
+              className="size-20 text-(--goal-ink)/80"
             />
             <p className="grid gap-3 leading-none">
               <strong className="text-[44px] font-bold @[50rem]/home:text-[40px]">
                 Learning goals
               </strong>
-              <span className="text-[34px] font-medium text-(--goal-ink)/70 @[50rem]/home:text-[30px]">
+              <span className="text-[34px] font-medium text-(--goal-ink)/90 @[50rem]/home:text-[30px]">
                 Unavailable right now
               </span>
             </p>
@@ -331,7 +333,7 @@ export function LearnerGoalScreen({
         <strong className="text-[128px] font-extrabold tracking-[-0.03em] @[50rem]/home:text-[104px]">
           {today.done}
         </strong>
-        <span className="ml-5 text-[66px] font-semibold text-(--goal-ink)/75 @[50rem]/home:text-[56px]">
+        <span className="ml-5 text-[66px] font-semibold text-(--goal-ink)/90 @[50rem]/home:text-[56px]">
           / {today.goal} {today.unit}
         </span>
       </p>
