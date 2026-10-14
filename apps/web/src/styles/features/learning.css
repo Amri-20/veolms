@@ -1639,9 +1639,12 @@ html[data-app-hydrated="false"] .learning-workspace__main {
     font-size: 1.125rem;
   }
 
+  /* The discussion scrolls inside its own box here, so room below the box
+     would only cut the comments off above the screen's edge; the room after
+     the last comment is inside the scroller instead (Discussion.tsx). */
   .learning-discussion {
     margin-top: 0;
-    padding: 0 0 22px;
+    padding: 0;
   }
 
   .learning-comment-card {

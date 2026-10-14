@@ -20,6 +20,7 @@ import type {
   OauthUrlRequest,
   OauthUrlResponse,
   OtpSendRequest,
+  OtpSendResponse,
   PhoneVerificationSendRequest,
   PhoneVerificationVerifyRequest,
   RegisterRequest,
@@ -171,7 +172,7 @@ export function cancelPendingLogin(queryClient: QueryClient): Promise<void> {
 }
 
 export function useSendOtp() {
-  return useMutation<AuthMessageResponse, ApiError, OtpSendRequest>({
+  return useMutation<OtpSendResponse, ApiError, OtpSendRequest>({
     mutationFn: (payload) => authService.sendOtp(payload),
   });
 }

@@ -1,14 +1,19 @@
+import { CaretLeftIcon as CaretLeft } from "@phosphor-icons/react/CaretLeft";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { AuthBrandMark } from "./AuthBrandPanel.tsx";
-import { AuthBusySubmit } from "./AuthProgress.tsx";
+import { Icon } from "../icons/Icon";
+import { cn } from "../lib/utils";
+import {
+  LoginFieldError,
+  LoginHeading,
+  LoginSubmitButton,
+  loginCardCornerButtonClasses,
+  loginLinkClasses,
+} from "./LoginCardParts";
 import { OtpCodeInput } from "./OtpCodeInput.tsx";
 import {
-  AUTH_CARD_HEADING_ID,
-  OTP_ACTION_LABELS,
   OTP_MESSAGES,
   RESEND_COOLDOWN_SECONDS,
-  formatResendCountdown,
   maskIdentifier,
   validateOtpCode,
 } from "./authFlow.ts";
@@ -38,17 +43,19 @@ export interface OtpFormProps {
   onResend: () => void;
   onIdentifierChange: () => void;
   resending?: boolean;
+  /** The button's words, when not "Verify". */
+  submitLabel?: string;
 }
 
 const CODE_LABEL = "Verification code";
 const MESSAGE_ID = "auth-otp-message";
 const MILLISECONDS_PER_SECOND = 1000;
-const RESEND_WAITING_STATUS = `You can request a new code in ${formatResendCountdown(RESEND_COOLDOWN_SECONDS)}.`;
-const RESEND_READY_STATUS = "You can request a new code now.";
-const SUBHEADINGS = {
-  email: "Enter the 6-digit code sent to your email",
-  mobile: "Enter the 6-digit code sent to your mobile number",
-} as const;
+
+/** "0:58": minutes and seconds, as the wait reads on the card. */
+function formatWait(seconds: number): string {
+  const whole = Math.max(0, seconds);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
 
 /**
  * Seconds left before another code may be requested. This form is taken off
@@ -93,6 +100,7 @@ export function OtpForm({
   onResend,
   onSubmit,
   resending = false,
+  submitLabel = "Verify",
   sendCount,
   sentAt,
   status,
@@ -143,95 +151,116 @@ export function OtpForm({
     onSubmit(code);
   };
 
-  return (
-    <div className="auth-otp-form">
-      <AuthBrandMark />
-      <h1 className="auth-card__heading" id={AUTH_CARD_HEADING_ID}>
-        Verify your OTP
-      </h1>
-      <p className="auth-card__subheading">
-        {notice || SUBHEADINGS[identifier.method]}
-      </p>
+  const byEmail = identifier.method === "email";
+  const destination = (
+    <span className="font-semibold text-(--text)">
+      {maskIdentifier(identifier)}
+    </span>
+  );
 
-      <div className="auth-otp-form__destination">
-        <p className="auth-otp-form__destination-label">Code sent to</p>
-        <p className="auth-otp-form__mask">{maskIdentifier(identifier)}</p>
+  return (
+    <div className="flex w-full flex-col gap-6.5">
+      <button
+        aria-label={
+          byEmail
+            ? "Back, use a different email"
+            : "Back, use a different number"
+        }
+        className={cn(loginCardCornerButtonClasses, "left-3.5")}
+        disabled={resending || verifying}
+        onClick={onIdentifierChange}
+        type="button"
+      >
+        <CaretLeft aria-hidden size={18} weight="bold" />
+      </button>
+
+      <div className="flex flex-col items-center gap-4.5 pt-2.5">
+        <span
+          aria-hidden="true"
+          className="grid size-13 place-items-center rounded-[14px] border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-(--accent-ink,var(--accent))"
+        >
+          <Icon aria-hidden name={byEmail ? "email" : "mobile"} size={24} />
+        </span>
+        <LoginHeading
+          centered
+          title={byEmail ? "Check your email" : "Check your phone"}
+          subtitle={
+            notice ? (
+              <>We already sent a code to {destination}. Enter it below.</>
+            ) : (
+              <>We sent a 6-digit code to {destination}</>
+            )
+          }
+        />
       </div>
 
-      <div className="auth-card__form-slot">
-        <form className="auth-form" noValidate onSubmit={submit}>
-          <div className="auth-form__field">
-            <OtpCodeInput
-              describedBy={message === null ? undefined : MESSAGE_ID}
-              disabled={verifying || resending}
-              invalid={message !== null}
-              label={CODE_LABEL}
-              autoFocus
-              onChange={changeCode}
-              value={code}
-            />
+      <form className="flex flex-col gap-3.5" noValidate onSubmit={submit}>
+        <OtpCodeInput
+          describedBy={message === null ? undefined : MESSAGE_ID}
+          disabled={verifying || resending}
+          invalid={message !== null}
+          label={CODE_LABEL}
+          look="login"
+          autoFocus
+          onChange={changeCode}
+          value={code}
+        />
 
-            {message === null ? null : (
-              <p className="auth-form__error" id={MESSAGE_ID} role="alert">
-                {message.title === null ? null : (
-                  <strong className="auth-form__error-title">
-                    {message.title}
-                  </strong>
-                )}
-                {message.body}
-              </p>
+        {message === null ? null : (
+          <LoginFieldError id={MESSAGE_ID}>
+            {message.title === null ? null : (
+              <strong className="block font-semibold">{message.title}</strong>
             )}
-          </div>
+            {message.body}
+          </LoginFieldError>
+        )}
 
-          <div className="auth-otp-form__resend">
-            <p className="auth-otp-form__resend-prompt">
-              Didn&apos;t receive the code?
-            </p>
+        <LoginSubmitButton
+          busy={verifying || resending}
+          busyLabel={resending ? "Sending a new code…" : "Verifying…"}
+          className="mt-1.5"
+          label={submitLabel}
+          pendingMessage={
+            verifying
+              ? "Checking your code. Please wait."
+              : "Sending a new code. Please wait."
+          }
+        />
+      </form>
 
+      <div className="flex flex-col items-center gap-2.5 text-center">
+        <p
+          className="m-0 text-[0.84375rem] leading-5 text-(--muted)"
+          role="status"
+        >
+          Didn&apos;t get it?{" "}
+          {resending ? (
+            <span className="text-[color-mix(in_srgb,var(--muted)_78%,var(--surface))]">
+              Sending a new code…
+            </span>
+          ) : cooling ? (
+            <span className="text-[color-mix(in_srgb,var(--muted)_78%,var(--surface))]">
+              Resend in {formatWait(remaining)}
+            </span>
+          ) : (
             <button
-              className="auth-otp-form__resend-button"
-              disabled={cooling || resending || verifying}
+              className={loginLinkClasses}
+              disabled={verifying}
               onClick={onResend}
               type="button"
             >
-              {resending
-                ? "Sending a new code…"
-                : cooling
-                  ? `Resend in ${formatResendCountdown(remaining)}`
-                  : OTP_ACTION_LABELS.resend}
+              Resend code
             </button>
-
-            <p className="auth-otp-form__status" role="status">
-              {resending
-                ? "Sending a new code. Please wait."
-                : cooling
-                  ? RESEND_WAITING_STATUS
-                  : RESEND_READY_STATUS}
-            </p>
-          </div>
-
-          <AuthBusySubmit
-            busy={verifying || resending}
-            busyLabel={
-              resending ? "Sending a new code…" : OTP_ACTION_LABELS.verifying
-            }
-            label={OTP_ACTION_LABELS.verify}
-            pendingMessage={
-              verifying ? "Checking your code. Please wait." : undefined
-            }
-          />
-
-          <button
-            className="auth-otp-form__change"
-            disabled={resending || verifying}
-            onClick={onIdentifierChange}
-            type="button"
-          >
-            {identifier.method === "email"
-              ? OTP_ACTION_LABELS.changeEmail
-              : OTP_ACTION_LABELS.changeMobile}
-          </button>
-        </form>
+          )}
+        </p>
+        <button
+          className={loginLinkClasses}
+          disabled={resending || verifying}
+          onClick={onIdentifierChange}
+          type="button"
+        >
+          {byEmail ? "Use a different email" : "Use a different number"}
+        </button>
       </div>
     </div>
   );

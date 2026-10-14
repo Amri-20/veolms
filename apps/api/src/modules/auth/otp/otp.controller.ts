@@ -1,11 +1,13 @@
 import type {
   EmailVerificationVerifyRequest,
   OtpSendRequest,
+  OtpSendResponse,
   PhoneVerificationSendRequest,
   PhoneVerificationVerifyRequest,
 } from "@veolms/contracts";
 import type { FastifyRequest } from "fastify";
 
+import { config } from "../../../config.ts";
 import type { AuthContext } from "../shared/auth.context.ts";
 import { resolveIdentifier } from "../shared/auth.utils.ts";
 
@@ -14,10 +16,15 @@ export function createOtpController(context: AuthContext) {
 
   async function send(
     request: FastifyRequest<{ Body: OtpSendRequest }>,
-  ): Promise<{ message: string }> {
+  ): Promise<OtpSendResponse> {
     const { identifier, identifierType } = resolveIdentifier(request.body);
     await otpService.sendOtp(identifier, identifierType, { ip: request.ip });
-    return { message: "Verification OTP sent successfully." };
+    // The same for every address (a deactivated account's included), so the
+    // answer says nothing about the account behind it.
+    return {
+      message: "Verification OTP sent successfully.",
+      codeExpiresInSeconds: config.OTP_TTL_MINUTES * 60,
+    };
   }
 
   async function sendPhoneVerification(

@@ -16,6 +16,7 @@ import type {
   OauthUrlRequest,
   OauthUrlResponse,
   OtpSendRequest,
+  OtpSendResponse,
   PhoneVerificationSendRequest,
   PhoneVerificationVerifyRequest,
   PasskeyAuthenticationOptionsResponse,
@@ -130,8 +131,8 @@ async function generatedAvatarFile(previewUrl: string): Promise<File> {
 }
 
 export const authService = {
-  sendOtp: (payload: OtpSendRequest): Promise<AuthMessageResponse> => {
-    return api.post<AuthMessageResponse>("/auth/otp/send", payload);
+  sendOtp: (payload: OtpSendRequest): Promise<OtpSendResponse> => {
+    return api.post<OtpSendResponse>("/auth/otp/send", payload);
   },
 
   sendPhoneVerificationOtp: (

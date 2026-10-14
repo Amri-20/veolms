@@ -81,10 +81,27 @@ export const oauthRegisterRequestSchema = oauthCallbackRequestSchema.extend({
 
 export const authConfigResponseSchema = z.object({
   googleClientId: z.string().optional(),
+  /**
+   * A verified mobile number is needed before buying or enrolling: the
+   * course page asks for it first (REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT).
+   */
+  requireVerifiedPhoneForEnrollment: z.boolean().optional(),
 });
 
 export const authMessageResponseSchema = z.object({
   message: z.string().max(255),
+});
+
+export const otpSendResponseSchema = authMessageResponseSchema.extend({
+  codeExpiresInSeconds: z
+    .number()
+    .int()
+    .positive()
+    .meta({
+      description:
+        "How long the code just sent can be used, counted from this answer " +
+        "(OTP_TTL_MINUTES on the server).",
+    }),
 });
 
 export const loginResponseSchema = z.object({
@@ -308,6 +325,7 @@ export type OauthCallbackRequest = z.input<typeof oauthCallbackRequestSchema>;
 export type AuthConfigResponse = z.output<typeof authConfigResponseSchema>;
 export type LoginResponse = z.output<typeof loginResponseSchema>;
 export type AuthMessageResponse = z.output<typeof authMessageResponseSchema>;
+export type OtpSendResponse = z.output<typeof otpSendResponseSchema>;
 export type SessionParams = z.input<typeof sessionParamsSchema>;
 export type SessionResponse = z.output<typeof sessionResponseSchema>;
 export type PasskeyRegisterVerifyRequest = z.input<

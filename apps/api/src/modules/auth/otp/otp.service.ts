@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { BlockList, isIP } from "node:net";
 
+import type { AcademyBrandResponse } from "@veolms/contracts";
 import type { Database } from "@veolms/database";
 import { sql, type Kysely } from "kysely";
 
@@ -18,8 +19,6 @@ import {
   OTP_IDENTIFIER_DAILY_CEILING,
   OTP_IP_WINDOW_MS,
   OTP_MAX_ATTEMPTS,
-  OTP_TTL_MINUTES,
-  OTP_TTL_MS,
   OTP_USER_DAILY_LIMIT,
   STUDENT_ROLE,
 } from "../shared/auth.constants.ts";
@@ -32,7 +31,8 @@ import { hashToken } from "../shared/auth.utils.ts";
 export interface OtpServiceOptions {
   database: Kysely<Database>;
   services: AppServices;
-  academyName: string;
+  /** The academy's name and logo, which its emails carry. */
+  getAcademyBrand: () => Promise<AcademyBrandResponse>;
 }
 
 /** Who is asking for a code; drives the per-requester send limits. */
@@ -98,7 +98,7 @@ function identifiesClient(address: string): boolean {
 export function createOtpService({
   database,
   services,
-  academyName,
+  getAcademyBrand,
 }: OtpServiceOptions) {
   /**
    * Existing accounts get a login code; unknown identifiers get a signup
@@ -305,9 +305,13 @@ export function createOtpService({
 
     if (identifierType !== "email") return;
 
+    const brand = await getAcademyBrand();
     const delivery = await services.email.send(
       identifier,
-      deactivatedAccountSignInEmail({ academyName }),
+      deactivatedAccountSignInEmail({
+        academyName: brand.name,
+        logoUrl: brand.logoUrl,
+      }),
     );
     if (delivery.status === "failed") {
       await otpRepository.deleteOtp(database, placeholderId);
@@ -434,7 +438,7 @@ export function createOtpService({
         identifierType,
         purpose,
         codeHash: hashToken(code),
-        expiresAt: new Date(now.getTime() + OTP_TTL_MS),
+        expiresAt: new Date(now.getTime() + config.OTP_TTL_MINUTES * 60_000),
         requesterIp: requester.ip,
         requesterUserId: requester.userId,
       });
@@ -442,22 +446,24 @@ export function createOtpService({
 
     if (fixedCode) return;
 
+    const brand = await getAcademyBrand();
     const delivery =
       identifierType === "email"
         ? await services.email.send(
             identifier,
             otpVerificationEmail({
               code,
-              academyName,
-              expiresInMinutes: OTP_TTL_MINUTES,
+              academyName: brand.name,
+              logoUrl: brand.logoUrl,
+              expiresInMinutes: config.OTP_TTL_MINUTES,
             }),
           )
         : await services.sms.send(
             identifier,
             otpVerificationSms({
               code,
-              academyName,
-              expiresInMinutes: OTP_TTL_MINUTES,
+              academyName: brand.name,
+              expiresInMinutes: config.OTP_TTL_MINUTES,
             }),
           );
 

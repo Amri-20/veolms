@@ -1,24 +1,44 @@
+import { ArrowsInLineVertical } from "@phosphor-icons/react/ArrowsInLineVertical";
+import { ArrowsOutLineVertical } from "@phosphor-icons/react/ArrowsOutLineVertical";
 import { CaretDown } from "@phosphor-icons/react/CaretDown";
+import { Check } from "@phosphor-icons/react/Check";
 import { CheckCircle } from "@phosphor-icons/react/CheckCircle";
+import { Eye } from "@phosphor-icons/react/Eye";
 import { FileText } from "@phosphor-icons/react/FileText";
 import { PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { PlayCircle } from "@phosphor-icons/react/PlayCircle";
 import { Question } from "@phosphor-icons/react/Question";
 import { useDeferredValue, useState } from "react";
+import { flushSync } from "react-dom";
 import type { CourseSection } from "../../learning/courseContent";
 import { formatDuration } from "../courseAdapter";
+import {
+  readApplicationScrollPosition,
+  scrollApplicationTo,
+} from "../../shell/applicationScroll";
 import { useContinuousLessonNumbering } from "../../learning/useContinuousLessonNumbering";
 import {
   bandHeaderClasses,
   bandLinkClasses,
-  bandSubtitleClasses,
   bandTitleClasses,
   overviewCardClasses,
   overviewCardPaddingClasses,
 } from "./overviewStyles";
 
-/** A lesson row's height: one line of title in a row 42px tall. */
-const LESSON_ROW_HEIGHT = 42;
+/**
+ * A long outline starts with its first sections only and a button for the
+ * rest, so the page under it is not a long scroll away. An outline only
+ * one longer than that is shown in full: a button for a single section
+ * would save nothing.
+ */
+const SECTIONS_SHOWN_FIRST = 3;
+const SECTIONS_SHOWN_IN_FULL = 4;
+
+/**
+ * The room a lesson takes: a card of one line of title and the line under
+ * it (70px), and the gap to the next.
+ */
+const LESSON_ROW_HEIGHT = 76;
 
 function parseDurationLabel(label: string): number {
   const hours = Number(label.match(/(\d+)h/)?.[1] ?? 0);
@@ -43,10 +63,11 @@ interface CurriculumSectionRowProps {
 }
 
 /**
- * One section of the outline: its numbered title and facts on a row that
- * opens its lessons underneath. The row has no box of its own; under the
- * pointer it lights up as a rounded strip. The lessons start at the same
- * left edge as the title. Sections are parted by hairlines.
+ * One section of the outline, a block of its own: a numbered badge, the
+ * title with its facts under it, and a round caret. A press opens the
+ * section's lessons inside the block, under a hairline; an open block takes
+ * a faint accent edge and a trace of the accent in its fill (not a grey:
+ * the theme's own colour) so it stands out from the closed ones around it.
  */
 function CurriculumSectionRow({
   section,
@@ -95,51 +116,86 @@ function CurriculumSectionRow({
     : (section.lessons[0]?.[0] ?? 1) - 1;
 
   return (
-    <div role="listitem" data-fixed-radius>
+    <div
+      role="listitem"
+      data-fixed-radius
+      className={`overflow-hidden rounded-2xl border transition-[border-color,background-color] duration-200 ${
+        isOpen
+          ? "border-[color-mix(in_srgb,var(--accent)_32%,transparent)] bg-[color-mix(in_srgb,var(--accent)_6%,transparent)]"
+          : "border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--text)_2%,transparent)] hover:border-[color-mix(in_srgb,var(--text)_14%,transparent)]"
+      }`}
+    >
       <button
         id={buttonId}
         type="button"
-        className="group/section -mx-3 flex w-[calc(100%+1.5rem)] cursor-pointer items-center gap-3 rounded-xl border-0 bg-transparent px-3 py-3.5 text-left text-(--text) transition-colors duration-140 hover:bg-(--hover) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--accent)"
+        className="group/section flex w-full cursor-pointer items-center gap-4 border-0 bg-transparent px-4 py-4 text-left text-(--text) transition-colors duration-140 hover:bg-[color-mix(in_srgb,var(--text)_3%,transparent)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--accent) max-[640px]:gap-3 max-[640px]:px-3.5 @xl/curriculum:px-5"
         aria-expanded={isOpen}
         aria-controls={panelId}
         onClick={onToggle}
       >
-        <span className="flex min-w-0 flex-1 flex-col gap-1 @xl/curriculum:flex-row @xl/curriculum:items-baseline @xl/curriculum:gap-4">
-          <span className="min-w-0 flex-1 text-[0.98rem] leading-snug font-semibold">
-            {index + 1}. {section.title}
+        {/* The section's number, two figures, on a tinted tile; a done
+            section's tile turns green and holds a tick instead. */}
+        <span
+          aria-hidden="true"
+          className={`inline-flex size-11 shrink-0 items-center justify-center rounded-xl text-[0.92rem] font-bold tabular-nums transition-colors duration-200 max-[640px]:size-10 ${
+            sectionDone
+              ? "bg-emerald-500/14 text-emerald-500"
+              : isOpen
+                ? "bg-(--accent) text-(--on-accent,white)"
+                : "bg-[color-mix(in_srgb,var(--accent)_13%,transparent)] text-(--accent-ink,var(--accent))"
+          }`}
+        >
+          {sectionDone ? (
+            <Check size={18} weight="bold" />
+          ) : (
+            String(index + 1).padStart(2, "0")
+          )}
+        </span>
+
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="line-clamp-2 text-[1.02rem] leading-snug font-semibold tracking-[-0.01em]">
+            <span className="sr-only">Section {index + 1}: </span>
+            {section.title}
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1.5 text-[0.82rem] font-normal text-(--muted) tabular-nums">
-            {sectionDone ? (
-              <CheckCircle
-                size={15}
-                weight="fill"
-                className="text-emerald-500"
-                aria-label="All lessons done"
-              />
-            ) : doneCount > 0 ? (
-              <span>
-                {doneCount}/{lessonCount} done
-              </span>
-            ) : (
-              <span>
-                {lessonCount} Lesson{lessonCount === 1 ? "" : "s"}
-              </span>
-            )}
+          <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.82rem] text-(--muted) tabular-nums">
+            <span>
+              {lessonCount} lesson{lessonCount === 1 ? "" : "s"}
+            </span>
             {durationLabel ? (
               <>
-                <span aria-hidden="true">·</span>
+                <span aria-hidden="true" className="opacity-60">
+                  ·
+                </span>
                 <span>{durationLabel}</span>
+              </>
+            ) : null}
+            {sectionDone ? (
+              <>
+                <span aria-hidden="true" className="opacity-60">
+                  ·
+                </span>
+                <span className="font-medium text-emerald-500">Completed</span>
+              </>
+            ) : doneCount > 0 ? (
+              <>
+                <span aria-hidden="true" className="opacity-60">
+                  ·
+                </span>
+                <span className="font-medium text-(--text-secondary,var(--text))">
+                  {doneCount}/{lessonCount} done
+                </span>
               </>
             ) : null}
           </span>
         </span>
+
         <span
-          className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full text-(--muted) transition-[transform,background-color,color] duration-200 ease-out group-hover/section:text-(--text) motion-reduce:transition-none ${
-            isOpen ? "rotate-180" : ""
+          className={`inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--text)_6%,transparent)] text-(--muted) transition-[transform,background-color,color] duration-200 ease-out group-hover/section:bg-[color-mix(in_srgb,var(--text)_10%,transparent)] group-hover/section:text-(--text) motion-reduce:transition-none ${
+            isOpen ? "rotate-180 text-(--text)" : ""
           }`}
           aria-hidden="true"
         >
-          <CaretDown size={16} weight="bold" />
+          <CaretDown size={15} weight="bold" />
         </span>
       </button>
 
@@ -159,107 +215,131 @@ function CurriculumSectionRow({
         }`}
       >
         <div className="min-h-0 overflow-hidden">
-          {/* Each lesson is a rounded row with room on both sides, kept
-              inside the column: this box clips anything that bleeds out. */}
-          <div
-            className="mb-2 [content-visibility:auto]"
-            // The lessons' room is held before they are drawn, while the
-            // section shuts after they are gone, and while the browser
-            // skips the list off screen (`contain-intrinsic-size` is the
-            // height it assumes for a list it has not laid out).
-            style={{
-              minHeight: lessonCount * LESSON_ROW_HEIGHT,
-              containIntrinsicSize: `auto ${lessonCount * LESSON_ROW_HEIGHT}px`,
-            }}
-          >
-            {section.lessons.length > 0 ? (
-              lessonsShown ? (
-                section.lessons.map(
-                  ([
-                    number,
-                    title,
-                    duration,
-                    status,
-                    isPreview,
-                    contentType,
-                  ]) => {
-                    const isDoc = contentType === "document";
-                    const isQuiz = contentType === "quiz";
-                    const isDone = status === "done";
-                    return (
-                      <button
-                        type="button"
-                        data-fixed-radius
-                        className={`group/lesson flex min-h-10.5 w-full items-center gap-3 rounded-xl border-0 bg-transparent px-3 py-1.5 text-left text-[0.88rem] transition-colors duration-140 ${
-                          isDone ? "text-(--muted)" : "text-(--text-secondary)"
-                        } ${
-                          isReadOnlyPreview
-                            ? "cursor-default"
-                            : "cursor-pointer hover:bg-(--hover) hover:text-(--text) focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:outline-none focus-visible:ring-inset"
-                        }`}
-                        key={number}
-                        disabled={isReadOnlyPreview}
-                        onClick={() => {
-                          if (isReadOnlyPreview) return;
-                          onSelectLesson?.(number);
-                        }}
-                      >
-                        <span
-                          className={`inline-flex w-5 shrink-0 items-center justify-start transition-colors duration-140 ${
-                            isDone
-                              ? "text-emerald-500"
-                              : isReadOnlyPreview
-                                ? "text-(--muted)"
-                                : "text-(--muted) group-hover/lesson:text-(--accent)"
+          <div className="border-t border-[color-mix(in_srgb,var(--text)_8%,transparent)] p-2 max-[640px]:px-1.5 @xl/curriculum:px-3">
+            <div
+              className="flex flex-col gap-1.5 [content-visibility:auto]"
+              // The lessons' room is held before they are drawn, while the
+              // section shuts after they are gone, and while the browser
+              // skips the list off screen (`contain-intrinsic-size` is the
+              // height it assumes for a list it has not laid out).
+              style={{
+                minHeight: lessonCount * LESSON_ROW_HEIGHT,
+                containIntrinsicSize: `auto ${lessonCount * LESSON_ROW_HEIGHT}px`,
+              }}
+            >
+              {section.lessons.length > 0 ? (
+                lessonsShown ? (
+                  section.lessons.map(
+                    ([
+                      number,
+                      title,
+                      duration,
+                      status,
+                      isPreview,
+                      contentType,
+                    ]) => {
+                      const isDoc = contentType === "document";
+                      const isQuiz = contentType === "quiz";
+                      const isDone = status === "done";
+                      // What the lesson is: a video, a document or a quiz,
+                      // or a tick once it is done. It leads the line under
+                      // the title, before the lesson's length.
+                      const TypeIcon = isDone
+                        ? CheckCircle
+                        : isDoc
+                          ? FileText
+                          : isQuiz
+                            ? Question
+                            : PlayCircle;
+                      const typeLabel = isDoc
+                        ? "Document"
+                        : isQuiz
+                          ? "Quiz"
+                          : "Video";
+                      return (
+                        // A lesson is a small card of its own, as on the
+                        // learning page: its title (two lines at most),
+                        // and under it what kind of lesson it is, how long
+                        // it takes and, on a paid course, whether it is a
+                        // free preview.
+                        <button
+                          type="button"
+                          data-fixed-radius
+                          className={`group/lesson flex w-full flex-col gap-2 rounded-xl border-0 bg-[color-mix(in_srgb,var(--text)_4%,transparent)] px-3.5 py-3 text-left transition-colors duration-140 ${
+                            isReadOnlyPreview
+                              ? "cursor-default"
+                              : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)] focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:outline-none focus-visible:ring-inset"
                           }`}
-                          aria-hidden="true"
+                          key={number}
+                          disabled={isReadOnlyPreview}
+                          onClick={() => {
+                            if (isReadOnlyPreview) return;
+                            onSelectLesson?.(number);
+                          }}
                         >
-                          {isDone ? (
-                            <CheckCircle size={17} weight="fill" />
-                          ) : isDoc ? (
-                            <FileText size={17} weight="regular" />
-                          ) : isQuiz ? (
-                            <Question size={17} weight="regular" />
-                          ) : (
-                            <PlayCircle size={17} weight="regular" />
-                          )}
-                        </span>
-
-                        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                          {/* Numbered as on the learning page. */}
-                          {number - lessonNumberBase}. {title}
-                        </span>
-
-                        {/* Free preview: only on a paid course, for a lesson
-                            marked as one. */}
-                        {isPaidCourse && isPreview ? (
                           <span
-                            className="inline-flex shrink-0 items-center rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-2 py-0.5 text-[0.7rem] leading-none font-bold text-(--accent-ink,var(--accent))"
-                            aria-label="Free preview"
+                            className={`line-clamp-2 text-[0.92rem] leading-[1.4] font-semibold ${
+                              isDone ? "text-(--muted)" : "text-(--text)"
+                            }`}
                           >
-                            Free
+                            {/* Numbered as on the learning page. */}
+                            {number - lessonNumberBase}. {title}
                           </span>
-                        ) : null}
 
-                        {isDone ? (
-                          <span className="sr-only">, done</span>
-                        ) : null}
+                          <span className="flex min-h-6 w-full items-center gap-2 text-[0.8rem] font-medium text-(--muted) tabular-nums">
+                            {/* Filled and coloured by kind, in the hero's
+                                colours: a sky-blue video, a violet document,
+                                an amber quiz; green once done. */}
+                            <TypeIcon
+                              size={17}
+                              weight="fill"
+                              aria-hidden="true"
+                              className={`shrink-0 ${
+                                isDone
+                                  ? "text-emerald-500"
+                                  : isDoc
+                                    ? "text-violet-400 [:root[data-theme=light]_&]:text-violet-600"
+                                    : isQuiz
+                                      ? "text-amber-400 [:root[data-theme=light]_&]:text-amber-600"
+                                      : "text-sky-400 [:root[data-theme=light]_&]:text-sky-600"
+                              }`}
+                            />
+                            <span className="sr-only">{typeLabel}, </span>
+                            {/* A document with no length says what it is
+                                instead. */}
+                            <span>{duration || typeLabel}</span>
+                            {isDone ? (
+                              <span className="text-emerald-500">· Done</span>
+                            ) : null}
 
-                        {duration ? (
-                          <span className="w-11.25 shrink-0 text-right text-[0.78rem] text-(--muted) tabular-nums">
-                            {duration}
+                            {/* Free preview: only on a paid course, for a
+                                lesson marked as one. Green, as the saving
+                                beside the price is. */}
+                            {isPaidCourse && isPreview ? (
+                              <span
+                                className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--success,#10b981)_14%,transparent)] px-2.5 py-1 text-[0.72rem] leading-none font-bold text-[color-mix(in_srgb,var(--success,#10b981)_72%,var(--text))]"
+                                aria-label="Free preview"
+                              >
+                                <Eye
+                                  size={13}
+                                  weight="bold"
+                                  aria-hidden="true"
+                                />
+                                Free
+                              </span>
+                            ) : null}
                           </span>
-                        ) : null}
-                      </button>
-                    );
-                  },
-                )
-              ) : null
-            ) : (
-              <div className="px-3 py-2 text-[0.84rem] text-(--muted) italic">
-                No lessons added yet
-              </div>
-            )}
+                        </button>
+                      );
+                    },
+                  )
+                ) : null
+              ) : (
+                <div className="px-3 py-3 text-[0.86rem] text-(--muted) italic">
+                  No lessons added yet
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -268,13 +348,11 @@ function CurriculumSectionRow({
 }
 
 interface CourseOverviewCurriculumProps {
-  sectionCount: number;
-  lessonCount: number;
-  duration?: string;
   courseSections: CourseSection[];
   openSections: Set<number>;
   onToggleSection: (index: number) => void;
-  onExpandAll: () => void;
+  /** Opens the first `count` sections (the ones on the page). */
+  onExpandAll: (count: number) => void;
   onCollapseAll: () => void;
   onSelectLesson?: (lessonNumber: number) => void;
   isReadOnlyPreview?: boolean;
@@ -284,9 +362,6 @@ interface CourseOverviewCurriculumProps {
 }
 
 export function CourseOverviewCurriculum({
-  sectionCount,
-  lessonCount,
-  duration,
   courseSections,
   openSections,
   onToggleSection,
@@ -297,10 +372,20 @@ export function CourseOverviewCurriculum({
   isPaidCourse = false,
   onEdit,
 }: CourseOverviewCurriculumProps) {
-  const allSectionsExpanded =
-    courseSections.length > 0 && openSections.size === courseSections.length;
   // Whether the last change was to every section at once (see `animate`).
   const [changedTogether, setChangedTogether] = useState(false);
+  const [showingAllSections, setShowingAllSections] = useState(false);
+  const sectionsCut =
+    !showingAllSections && courseSections.length > SECTIONS_SHOWN_IN_FULL;
+  const shownSections = sectionsCut
+    ? courseSections.slice(0, SECTIONS_SHOWN_FIRST)
+    : courseSections;
+  // "Expand all" and "Collapse all" are about the sections on the page:
+  // while the outline is cut short, the ones under the button are left
+  // as they are.
+  const allSectionsExpanded =
+    shownSections.length > 0 &&
+    shownSections.every((_, index) => openSections.has(index));
 
   return (
     <section
@@ -308,16 +393,11 @@ export function CourseOverviewCurriculum({
       aria-labelledby="cov-curriculum-heading"
       data-fixed-radius
     >
-      <div className={bandHeaderClasses}>
+      <div className={`${bandHeaderClasses} flex-nowrap! items-center!`}>
         <div className="min-w-0">
           <h2 id="cov-curriculum-heading" className={bandTitleClasses}>
             Curriculum
           </h2>
-          <p className={bandSubtitleClasses}>
-            {sectionCount} section{sectionCount === 1 ? "" : "s"} &middot;{" "}
-            {lessonCount} lesson{lessonCount === 1 ? "" : "s"}
-            {duration ? <> &middot; {duration}</> : null}
-          </p>
         </div>
         <div className="flex items-center gap-5">
           {onEdit ? (
@@ -327,31 +407,64 @@ export function CourseOverviewCurriculum({
             </button>
           ) : null}
           {courseSections.length > 0 ? (
-            <button
-              type="button"
-              className={bandLinkClasses}
-              onClick={() => {
-                setChangedTogether(true);
-                if (allSectionsExpanded) onCollapseAll();
-                else onExpandAll();
-              }}
-            >
-              {allSectionsExpanded ? "Collapse all" : "Expand all"}
-            </button>
+            // An icon that says what a press does: arrows pointing apart
+            // to open every section, together to close them. Its name comes
+            // up in a tooltip over it on hover or keyboard focus, as the
+            // discussion's publishing options do theirs.
+            <span className="group/expand relative inline-flex">
+              <button
+                type="button"
+                aria-label={
+                  allSectionsExpanded
+                    ? "Collapse all sections"
+                    : "Expand all sections"
+                }
+                aria-describedby="cov-curriculum-expand-tip"
+                className="peer inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border-0 bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] text-(--accent-ink,var(--accent)) transition-colors duration-140 hover:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) active:bg-[color-mix(in_srgb,var(--accent)_18%,transparent)]"
+                onClick={() => {
+                  setChangedTogether(true);
+                  if (allSectionsExpanded) onCollapseAll();
+                  else onExpandAll(shownSections.length);
+                }}
+              >
+                {allSectionsExpanded ? (
+                  <ArrowsInLineVertical
+                    size={19}
+                    weight="bold"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <ArrowsOutLineVertical
+                    size={19}
+                    weight="bold"
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+              <span
+                id="cov-curriculum-expand-tip"
+                role="tooltip"
+                className="pointer-events-none invisible absolute right-0 bottom-[calc(100%+0.375rem)] z-30 w-max translate-y-1 rounded-lg bg-(--surface-elevated,var(--surface)) px-2.5 py-1.5 text-xs leading-4 font-medium text-(--text) opacity-0 shadow-[0_10px_26px_color-mix(in_srgb,var(--canvas)_48%,transparent),inset_0_0_0_1px_color-mix(in_srgb,var(--text)_10%,transparent)] transition-[opacity,transform,visibility] duration-150 group-hover/expand:visible group-hover/expand:translate-y-0 group-hover/expand:opacity-100 peer-focus-visible:visible peer-focus-visible:translate-y-0 peer-focus-visible:opacity-100"
+              >
+                {allSectionsExpanded ? "Collapse all" : "Expand all"}
+              </span>
+            </span>
           ) : null}
         </div>
       </div>
 
       {courseSections.length === 0 ? (
-        <div className="mt-2 py-10 text-center text-[0.9rem] text-(--muted)">
+        <div className="mt-6 rounded-2xl border border-dashed border-[color-mix(in_srgb,var(--text)_12%,transparent)] py-10 text-center text-[0.9rem] text-(--muted)">
           No sections added yet
         </div>
       ) : (
+        // On a phone the sections run to 1px short of the screen's edges, past
+        // the card's own room.
         <div
-          className="mt-2 flex flex-col divide-y divide-[color-mix(in_srgb,var(--text)_9%,transparent)]"
+          className="mt-6 flex flex-col gap-3 max-[640px]:-mx-[15px]"
           role="list"
         >
-          {courseSections.map((section, index) => (
+          {shownSections.map((section, index) => (
             <CurriculumSectionRow
               key={section.id}
               section={section}
@@ -369,6 +482,57 @@ export function CourseOverviewCurriculum({
           ))}
         </div>
       )}
+
+      {courseSections.length > SECTIONS_SHOWN_IN_FULL ? (
+        // The rest of the outline, in one press, and the way back to the
+        // first few. The rest comes in under the sections already shown, so
+        // nothing on screen moves. Hiding them again keeps this button where
+        // it was on the screen: the page is scrolled by as much as the
+        // outline shrank, so the reader is not left far down the page.
+        <button
+          type="button"
+          aria-expanded={showingAllSections}
+          // On a wide screen it is dressed as a closed section above it: the
+          // same faint fill, thin edge (stronger under the pointer) and
+          // corners, which the roundness preference leaves alone, as it
+          // does the sections'; a little lower. On a phone it is plainer,
+          // words only, with no fill or edge until it is pressed, and its
+          // press area takes all the room under the last section, down to
+          // the card's bottom edge (past the card's own padding there).
+          data-fixed-radius
+          className="mt-3 flex min-h-16 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--text)_2%,transparent)] px-4 text-[0.92rem] font-semibold text-(--accent-ink,var(--accent)) transition-colors duration-140 hover:border-[color-mix(in_srgb,var(--text)_14%,transparent)] hover:bg-[color-mix(in_srgb,var(--text)_4%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) active:bg-[color-mix(in_srgb,var(--text)_6%,transparent)] max-[640px]:-mx-[15px] max-[640px]:mt-1 max-[640px]:-mb-5 max-[640px]:min-h-16 max-[640px]:w-[calc(100%+30px)] max-[640px]:border-transparent max-[640px]:bg-transparent max-[640px]:active:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)]"
+          onClick={(event) => {
+            if (!showingAllSections) {
+              setShowingAllSections(true);
+              return;
+            }
+            const button = event.currentTarget;
+            const topBefore = button.getBoundingClientRect().top;
+            flushSync(() => setShowingAllSections(false));
+            const shrunkBy = topBefore - button.getBoundingClientRect().top;
+            if (shrunkBy > 0) {
+              scrollApplicationTo({
+                top: readApplicationScrollPosition().top - shrunkBy,
+                behavior: "auto",
+              });
+            }
+          }}
+        >
+          <span>
+            {showingAllSections
+              ? `Show first ${SECTIONS_SHOWN_FIRST} sections`
+              : `Show all ${courseSections.length} sections`}
+          </span>
+          <CaretDown
+            size={15}
+            weight="bold"
+            aria-hidden="true"
+            className={`transition-transform duration-200 motion-reduce:transition-none ${
+              showingAllSections ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+      ) : null}
     </section>
   );
 }

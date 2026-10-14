@@ -1,6 +1,7 @@
 export * from "./auth/index.ts";
 export * from "./navigation.ts";
 export * from "./course/index.ts";
+export * from "./academy-brand.ts";
 export * from "./home.ts";
 export * from "./learner-home.ts";
 export * from "./learner-home-plan.ts";

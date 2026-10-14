@@ -22,6 +22,7 @@ import {
   createSetupService,
   type SetupService,
 } from "../setup/setup.service.ts";
+import { createAcademyBrandService } from "../../academy/academy-brand.service.ts";
 
 export interface AuthContext {
   middleware: AuthMiddleware;
@@ -48,10 +49,11 @@ export function createAuthContext({
   database,
   services,
 }: RoutePluginOptions): AuthContext {
+  const academyBrandService = createAcademyBrandService({ database });
   const otpService = createOtpService({
     database,
     services,
-    academyName: config.RP_NAME,
+    getAcademyBrand: academyBrandService.getBrand,
   });
   const sessionService = createSessionService({ database });
   const middleware = createAuthMiddleware(sessionService);

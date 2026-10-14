@@ -4507,7 +4507,7 @@ function ThreadSurface({
             // and pads itself by the same amount, so its content stays where
             // it was while a highlighted comment's tint can reach the screen
             // edges instead of being clipped at the padding.
-            className="-mx-(--learning-lesson-content-inset) flex min-h-0 min-w-0 flex-1 flex-col touch-pan-y overflow-x-hidden overflow-y-auto px-(--learning-lesson-content-inset) pt-2.5"
+            className="-mx-(--learning-lesson-content-inset) flex min-h-0 min-w-0 flex-1 flex-col touch-pan-y overflow-x-hidden overflow-y-auto px-(--learning-lesson-content-inset) pt-2.5 pb-5.5"
             style={{
               minHeight: 0,
               overflowX: "hidden",

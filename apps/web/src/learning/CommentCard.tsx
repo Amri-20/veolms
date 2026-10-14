@@ -205,6 +205,9 @@ export const CommentCard = React.memo(function CommentCard({
   constrainToContainer = false,
 }: CommentCardProps) {
   const articleRef = useRef<HTMLElement>(null);
+  // Where the press that ends in a click began. A press that travelled
+  // (selecting text by dragging) is a selection, not a click on the card.
+  const pressStartRef = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
     const article = articleRef.current;
     if (!isHighlighted || !article) return undefined;
@@ -520,8 +523,28 @@ export const CommentCard = React.memo(function CommentCard({
       tabIndex={isDeepLinkTarget ? -1 : undefined}
       data-deletion-pending={deletion.hidden || undefined}
       className={`relative ${constrainToContainer ? "-mx-(--learning-lesson-content-inset) px-(--learning-lesson-content-inset) py-3.5 sm:py-4" : "-mx-3 px-3 py-3.5 sm:-mx-4 sm:px-4 sm:py-4"} ${hasReplies ? "cursor-pointer transition-[background-color,box-shadow] duration-200 ease-out hover:bg-[color-mix(in_srgb,var(--text)_4%,transparent)] active:bg-[color-mix(in_srgb,var(--text)_7%,transparent)]" : ""} ${isDeepLinkTarget ? "focus:outline-2 focus:outline-offset-2 focus:outline-(--accent)" : ""} ${deletion.hidden ? "min-h-19" : ""} ${showHighlightedLabel ? `max-sm:mt-4 bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] shadow-[inset_3px_0_0_var(--accent)]` : ""}`}
+      onPointerDown={(event) => {
+        pressStartRef.current = { x: event.clientX, y: event.clientY };
+      }}
       onClick={(event) => {
         if (!hasReplies) return;
+        const pressStart = pressStartRef.current;
+        pressStartRef.current = null;
+        // Selecting text, by dragging or by a double or triple click, opens
+        // and closes nothing: only a plain click on the card does.
+        const moved =
+          pressStart !== null &&
+          Math.hypot(
+            event.clientX - pressStart.x,
+            event.clientY - pressStart.y,
+          ) > 4;
+        const selection = window.getSelection();
+        const selectedHere =
+          selection !== null &&
+          !selection.isCollapsed &&
+          selection.anchorNode !== null &&
+          event.currentTarget.contains(selection.anchorNode);
+        if (moved || selectedHere || event.detail > 1) return;
         const target = event.target;
         if (
           target instanceof Element &&

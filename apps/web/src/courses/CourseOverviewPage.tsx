@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useEffectEvent,
@@ -45,6 +47,7 @@ import {
 } from "./courseEnrollmentOffer";
 import { readCustomAmount } from "./customAmountEntry";
 import { readPastedCouponCode } from "./pastedCouponCode";
+import { formatPlainDescription } from "./overview/formatPlainDescription";
 import { useCourseWishlisted, useToggleWishlistCourse } from "../wishlist";
 import type { CourseSection } from "../learning/courseContent";
 import { getCoursePlayerPath } from "../learning/coursePlayerNavigation";
@@ -61,6 +64,7 @@ import {
   useCreateCheckoutOrder,
   useVerifyPayment,
 } from "../services/payments";
+import { useAuthConfig, useCurrentUser } from "../services/auth";
 import { DiscussionMarkdown } from "../learning/discussion-editor/DiscussionMarkdown";
 import { createDiscussionDraft } from "../learning/discussion-editor/types";
 import { formatDuration, resolveCourseDurationSeconds } from "./courseAdapter";
@@ -97,6 +101,12 @@ import {
 } from "./overview/CourseSupportAmountPicker";
 import { formatPriceWithCurrency } from "./overview/coursePriceFormat";
 import { getCourseEditorPath } from "./courseEditorRouting";
+
+// Asked for only when an enrolment needs a verified number first, so its
+// code is fetched then and not with the page.
+const PhoneVerificationDialog = lazy(
+  () => import("../auth/PhoneVerificationDialog"),
+);
 
 export { CourseOverviewSkeleton };
 
@@ -338,6 +348,15 @@ function CoursePurchaseSection({
   const isEnrolled = Boolean(user && course.enrolled);
 
   const [isPaymentBusy, setIsPaymentBusy] = useState(false);
+  // A verified mobile number before the first enrolment, where the academy
+  // asks for one (REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT): the enrolment
+  // waits behind the number's pop-up and carries on once it is verified.
+  const requiresVerifiedPhone =
+    useAuthConfig().data?.requireVerifiedPhoneForEnrollment === true;
+  const currentUser = useCurrentUser();
+  const [phoneGate, setPhoneGate] = useState<{
+    amount: number | undefined;
+  } | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
 
@@ -652,13 +671,26 @@ function CoursePurchaseSection({
     }
   };
 
-  const handlePayNow = async (voluntaryContributionAmount?: number) => {
+  const handlePayNow = async (
+    voluntaryContributionAmount?: number,
+    { phoneChecked = false }: { phoneChecked?: boolean } = {},
+  ) => {
     if (isReadOnlyPreview) return;
     if (!user) {
       // Opens the login pop-up over this course page, so the visitor is back
       // on the price card as soon as they are signed in.
       if (onNavigatePage) onNavigatePage("/login");
       else setPaymentError("Please log in before enrolling.");
+      return;
+    }
+    if (
+      !phoneChecked &&
+      requiresVerifiedPhone &&
+      currentUser.data &&
+      !currentUser.data.mobileVerified
+    ) {
+      setPaymentError(null);
+      setPhoneGate({ amount: voluntaryContributionAmount });
       return;
     }
 
@@ -770,6 +802,16 @@ function CoursePurchaseSection({
       rzp.open();
       watchForUnansweredClose(order.order.id, () => checkoutAnswered);
     } catch (error) {
+      // The server asks for the number when this page could not tell
+      // (the account had not loaded yet, or the setting was just turned on).
+      if (
+        (error as { code?: string } | null)?.code ===
+        "PHONE_VERIFICATION_REQUIRED"
+      ) {
+        setIsPaymentBusy(false);
+        setPhoneGate({ amount: voluntaryContributionAmount });
+        return;
+      }
       setPaymentError(
         readCheckoutStartError(
           error,
@@ -1103,6 +1145,19 @@ function CoursePurchaseSection({
           onCustomAmountErrorChange={setCustomAmountError}
         />
       ) : null}
+      {phoneGate ? (
+        <Suspense fallback={null}>
+          <PhoneVerificationDialog
+            purpose={isFree && !phoneGate.amount ? "enroll" : "pay"}
+            onClose={() => setPhoneGate(null)}
+            onVerified={() => {
+              const { amount } = phoneGate;
+              setPhoneGate(null);
+              void handlePayNow(amount, { phoneChecked: true });
+            }}
+          />
+        </Suspense>
+      ) : null}
     </CoursePriceBar>
   );
 }
@@ -1167,12 +1222,16 @@ function CourseAboutCard({ description, onEdit }: CourseAboutCardProps) {
               }}
             >
               <DiscussionMarkdown
-                content={createDiscussionDraft(description!.trim())}
+                content={createDiscussionDraft(
+                  formatPlainDescription(description!),
+                )}
                 label="About this course"
                 // The description is written with single line breaks; they
                 // are kept as lines instead of being run into one paragraph.
+                // One written as plain lines is spaced out first (see
+                // `formatPlainDescription`).
                 preserveSoftBreaks
-                className="[&>:first-child]:mt-0 max-w-none"
+                className="max-w-none [&_p]:my-2.5 [&>:first-child]:mt-0"
               />
             </div>
 
@@ -1765,7 +1824,8 @@ function CourseOverviewContent({
         : undefined;
 
   const [openSections, setOpenSections] = useState<Set<number>>(
-    () => new Set([0]),
+    // Every section starts closed: the list reads as a table of contents.
+    () => new Set(),
   );
   const wishlistTarget = useMemo(
     (): Pick<Course, "id" | "slug"> => ({
@@ -1789,8 +1849,12 @@ function CourseOverviewContent({
     });
   };
 
-  const expandAllSections = () => {
-    setOpenSections(new Set(courseSections.map((_, index) => index)));
+  // Opens the first `count` sections: the curriculum may show only its
+  // first few, and "Expand all" opens what is on the page.
+  const expandAllSections = (count: number) => {
+    setOpenSections(
+      new Set(courseSections.slice(0, count).map((_, index) => index)),
+    );
   };
 
   const collapseAllSections = () => {
@@ -1991,9 +2055,6 @@ function CourseOverviewContent({
 
         {/* 3. Course curriculum */}
         <CourseOverviewCurriculum
-          sectionCount={course.sections}
-          lessonCount={course.lectures}
-          duration={course.duration}
           onEdit={managesCourse ? openEditor("curriculum") : undefined}
           courseSections={courseSections}
           openSections={openSections}

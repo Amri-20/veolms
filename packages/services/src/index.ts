@@ -94,7 +94,7 @@ export function createServices({
   const smsConfig: SmsTransportConfig = {
     provider: config.SMS_PROVIDER,
     transport: smsTransport,
-    senderId: config.RP_NAME,
+    senderId: config.ACADEMY_NAME,
     msg91: {
       authKey: config.MSG91_AUTH_KEY,
       templateId: config.MSG91_TEMPLATE_ID,
