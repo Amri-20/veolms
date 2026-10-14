@@ -27,6 +27,11 @@ export interface IdentifierFormProps {
   errorMessage?: string;
   forcedMethod?: IdentifierMethod;
   onSubmit: (submission: IdentifierSubmission) => void;
+  /**
+   * The visitor typed again: an error the parent shows (`errorMessage`) is
+   * cleared there, as this form clears its own.
+   */
+  onEdit?: () => void;
 }
 
 const EMAIL_FIELD_ID = "auth-identifier-email";
@@ -51,6 +56,7 @@ export function IdentifierForm({
   errorMessage,
   forcedMethod,
   onSubmit,
+  onEdit,
 }: IdentifierFormProps) {
   const sending = status === "sending";
   const locked = sending || disabled;
@@ -67,6 +73,15 @@ export function IdentifierForm({
 
   const checkIdentifier = () =>
     method === "email" ? validateEmail(email) : validateMobile(mobile, country);
+
+  // An address is only judged when the visitor presses Continue, and the
+  // verdict goes as soon as they type again: an unfinished address is not
+  // an error.
+  const edit = (update: () => void) => {
+    update();
+    setInvalidReason(null);
+    onEdit?.();
+  };
 
   const changeMethod = (next: IdentifierMethod) => {
     setMethod(next);
@@ -93,10 +108,7 @@ export function IdentifierForm({
   };
 
   const selectCountry = (next: CountryOption) => {
-    setCountry(next);
-    setInvalidReason(
-      mobile.trim().length > 0 ? validateMobile(mobile, next) : null,
-    );
+    edit(() => setCountry(next));
   };
 
   const showEmailOnly = forcedMethod
@@ -157,8 +169,10 @@ export function IdentifierForm({
               id={EMAIL_FIELD_ID}
               inputMode="email"
               name="email"
-              onBlur={() => setInvalidReason(checkIdentifier())}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                edit(() => setEmail(value));
+              }}
               placeholder="Enter your email address"
               type="email"
               value={email}
@@ -199,8 +213,10 @@ export function IdentifierForm({
                 id={MOBILE_FIELD_ID}
                 inputMode="numeric"
                 name="mobile"
-                onBlur={() => setInvalidReason(checkIdentifier())}
-                onChange={(event) => setMobile(event.target.value)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  edit(() => setMobile(value));
+                }}
                 placeholder="Enter your mobile number"
                 type="tel"
                 value={mobile}

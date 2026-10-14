@@ -519,6 +519,7 @@ export function LoginView({
           <div className="auth-card__form-slot">
             <IdentifierForm
               errorMessage={identifierError ?? undefined}
+              onEdit={() => setIdentifierError(null)}
               forcedMethod={pendingSecondaryMethod}
               onSubmit={(identifier) => handleSendCode(identifier)}
               status={
@@ -548,6 +549,7 @@ export function LoginView({
           <IdentifierForm
             disabled={oneTapPending}
             errorMessage={identifierError ?? undefined}
+            onEdit={() => setIdentifierError(null)}
             onSubmit={(identifier) => handleSendCode(identifier)}
             status={
               flow.status === "sendingOtp" || sendOtpMutation.isPending

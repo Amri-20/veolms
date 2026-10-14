@@ -30,6 +30,31 @@ import { LoadingSpinnerIcon } from "../components/LoadingSpinner";
  */
 const SILENT_CHECK_WAIT_MS = 1500;
 
+/** GitHub sign-in is hidden for the time being; everything else of it stays. */
+const SHOW_GITHUB_SIGN_IN = false;
+
+/**
+ * The Google button, drawn to Google's sign-in branding guidelines: the
+ * standard four-colour "G" at 20px, Roboto Medium at 14/20px, 12px at the
+ * sides and 10px between the logo and the words, 40px tall, a 4px corner.
+ * Their dark theme (#131314, a #8E918F edge, #E3E3E3 words) on the app's
+ * dark themes and their light one (white, #747775, #1F1F1F) on its light
+ * theme. Hovered and pressed it takes their state layer: the words' colour
+ * at 8% and 12%. As wide as the login card.
+ */
+const googleButtonClasses = [
+  "inline-flex h-10 w-full shrink-0 cursor-pointer items-center justify-center gap-2.5 rounded-sm border px-3",
+  // Important: the login card's stylesheet sets `font: inherit` on buttons,
+  // which outranks utility classes.
+  "font-['Roboto',Arial,sans-serif]! text-sm! leading-5! font-medium! tracking-[0.25px]! whitespace-nowrap",
+  "border-[#8E918F] bg-[#131314] text-[#E3E3E3]",
+  "[:root[data-theme=light]_&]:border-[#747775] [:root[data-theme=light]_&]:bg-white [:root[data-theme=light]_&]:text-[#1F1F1F]",
+  "transition-colors hover:bg-[color-mix(in_srgb,#E3E3E3_8%,#131314)] active:bg-[color-mix(in_srgb,#E3E3E3_12%,#131314)]",
+  "[:root[data-theme=light]_&]:hover:bg-[color-mix(in_srgb,#1F1F1F_8%,white)] [:root[data-theme=light]_&]:active:bg-[color-mix(in_srgb,#1F1F1F_12%,white)]",
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)",
+  "disabled:cursor-progress",
+].join(" ");
+
 interface SocialLoginActionsProps {
   onError?: (message: string) => void;
   oneTapPending?: boolean;
@@ -275,15 +300,15 @@ export function SocialLoginActions({
         <button
           aria-busy={googleBusy}
           aria-label={googleBusy ? "Verifying Google sign-in" : undefined}
-          className="auth-social__button"
+          className={googleButtonClasses}
           disabled={actionsLocked}
           onClick={() => handleOauth("google")}
           type="button"
         >
-          <GoogleBrandIcon size={18} />
+          <GoogleBrandIcon size={20} />
           {googleBusy ? (
             <>
-              <LoadingSpinnerIcon size={18} />
+              <LoadingSpinnerIcon size={18} className="text-current!" />
               {popupStage === "popup" ? "Waiting for Google…" : "Verifying…"}
             </>
           ) : (
@@ -291,23 +316,27 @@ export function SocialLoginActions({
           )}
         </button>
 
-        <button
-          aria-busy={loadingProvider === "github"}
-          aria-label={
-            loadingProvider === "github" ? "Connecting to GitHub" : undefined
-          }
-          className="auth-social__button"
-          disabled={actionsLocked}
-          onClick={() => handleOauth("github")}
-          type="button"
-        >
-          <GitHubBrandIcon size={18} />
-          {loadingProvider === "github" ? (
-            <LoadingSpinnerIcon size={18} />
-          ) : (
-            "Continue with GitHub"
-          )}
-        </button>
+        {/* Off for now (see SHOW_GITHUB_SIGN_IN); the sign-in itself still
+            works and the API keeps its GitHub routes. */}
+        {SHOW_GITHUB_SIGN_IN ? (
+          <button
+            aria-busy={loadingProvider === "github"}
+            aria-label={
+              loadingProvider === "github" ? "Connecting to GitHub" : undefined
+            }
+            className="auth-social__button"
+            disabled={actionsLocked}
+            onClick={() => handleOauth("github")}
+            type="button"
+          >
+            <GitHubBrandIcon size={18} />
+            {loadingProvider === "github" ? (
+              <LoadingSpinnerIcon size={18} />
+            ) : (
+              "Continue with GitHub"
+            )}
+          </button>
+        ) : null}
       </div>
     </div>
   );
