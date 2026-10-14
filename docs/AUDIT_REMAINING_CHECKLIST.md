@@ -1,6 +1,6 @@
 # What is left after the audit: checklist
 
-Updated 14 Oct 2026, after the independent review. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 28. This file is the short list to work from. Tick a box when it is done.
+Updated 14 Oct 2026, after the owner's decisions round. The full record is `docs/AUDIT_RECONCILIATION_2026-10-11.md`, sections 19 to 29. This file is the short list to work from. Tick a box when it is done.
 
 ## Done in phases 1 to 3 (13 Oct)
 
@@ -101,11 +101,23 @@ Updated 14 Oct 2026, after the independent review. The full record is `docs/AUDI
 - [x] Refunding only the quiz item of an order removes the quiz pass.
 - [x] Quick wishlist clicks no longer undo each other.
 
+## Done in the owner's decisions round (14 Oct)
+
+- [x] An extra payment is refunded to the buyer automatically.
+- [x] Free enrolment is instant.
+- [x] A bank transfer can be reported at once, withdrawn by the buyer, and stops blocking after 7 days.
+- [x] Archived courses: students keep access; nobody can buy them.
+- [x] A sale price of 0 makes the course free.
+- [x] The low-risk observations from section 26.2.
+- [x] Text lessons wait for their text, so the overview switch is safe.
+- [x] Share previews can carry the page address.
+- [x] Staging checks of section B: confirmed working by the owner.
+
 ## A. Right after each push
 
 Pushing `dev` deploys the API and the web together.
 
-- [ ] Confirm the deploy finished and these four migrations ran: `20261013100000-shorten-legacy-user-names`, `20261013110000-lowercase-user-emails`, `20261013120000-create-order-item-courses` and `20261014100000-create-wishlist-items`.
+- [ ] Confirm the deploy finished and migration `20261015100000-manual-payment-withdrawn` ran, as well as these four: `20261013100000-shorten-legacy-user-names`, `20261013110000-lowercase-user-emails`, `20261013120000-create-order-item-courses` and `20261014100000-create-wishlist-items`.
 - [x] Run the count file on the production database. Done by the owner on 14 Oct: every count is 0. It only counts, and writes nothing:
 
   ```bash
@@ -113,7 +125,8 @@ Pushing `dev` deploys the API and the web together.
   ```
 
 - [x] Check 5 (accounts sharing an email in different letter case): 0 found. Nothing to merge.
-- [ ] **Not yet, and not before I fix reading lessons (section 28.1, point 6):** set `COURSE_OVERVIEW_LESSON_DESCRIPTIONS=false` on the API. The course overview shrinks to about a sixth for a long course. Do it only after the web from this release is live.
+- [ ] **One release after this one:** set `COURSE_OVERVIEW_LESSON_DESCRIPTIONS=false` on the API. Text lessons are now safe with it.
+- [ ] Set `VITE_SITE_URL` (for example `https://dev.veolms.org`) in the environment of the build that deploys the web. The course overview shrinks to about a sixth for a long course. Do it only after the web from this release is live.
 - [ ] Check the server's `TRUST_PROXY` value (section 18 of the report says which value fits which setup).
 - [ ] Check that every address people sign in from is in `WEB_URL` or `CORS_ORIGINS`.
 
