@@ -430,6 +430,16 @@ const serverConfigSchema = z.object({
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+
+  // An extra payment taken by the gateway (a second payment for a paid
+  // order, or a late payment for something the buyer already has) is sent
+  // back to the buyer automatically. Set to false to only list such
+  // payments for staff, who then refund them by hand.
+  AUTO_REFUND_EXTRA_PAYMENTS: booleanEnvironmentValueSchema.default(true),
+  // How many days a bank transfer a buyer reported keeps the gateway closed
+  // for that purchase while staff have not answered it. After that the buyer
+  // can pay another way; the request still waits for staff.
+  MANUAL_PAYMENT_BLOCK_DAYS: z.coerce.number().int().min(1).max(365).default(7),
 });
 
 const webConfigSchema = z.object({

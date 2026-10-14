@@ -68,6 +68,31 @@ export const CommerceErrors = {
       "MANUAL_PAYMENT_PENDING",
       `You reported a bank transfer for "${title}". It is being checked, so another payment cannot be started for it now.`,
     ),
+  MANUAL_PAYMENT_NOT_PENDING: () =>
+    new AppError(
+      409,
+      "MANUAL_PAYMENT_NOT_PENDING",
+      "There is no bank transfer waiting to be checked for this order, so there is nothing to withdraw.",
+    ),
+  /** For staff: the buyer already has what the transfer would pay for. */
+  MANUAL_PAYMENT_ALREADY_COVERED: (heldTitles: readonly string[]) =>
+    new AppError(
+      409,
+      "MANUAL_PAYMENT_ALREADY_COVERED",
+      `The buyer already has access to ${heldTitles.map((title) => `"${title}"`).join(", ")}, so this transfer cannot be verified: it would be a second payment. If the transfer arrived, return it outside the platform, then reject this request.`,
+    ),
+  COURSE_NOT_AVAILABLE: () =>
+    new AppError(
+      409,
+      "COURSE_NOT_AVAILABLE",
+      "This course is no longer available for purchase.",
+    ),
+  BUNDLE_COURSE_NOT_AVAILABLE: (title: string) =>
+    new AppError(
+      409,
+      "COURSE_NOT_AVAILABLE",
+      `Bundle "${title}" includes a course that is no longer available for purchase, so the bundle cannot be bought.`,
+    ),
   CART_ITEMS_OVERLAP: () =>
     new AppError(
       409,

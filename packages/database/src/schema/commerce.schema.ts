@@ -253,7 +253,8 @@ export interface RefundRequestTable {
   updated_at: Generated<Date>;
 }
 
-export type ManualPaymentStatus = "pending" | "verified" | "rejected";
+export type ManualPaymentStatus =
+  "pending" | "verified" | "rejected" | "withdrawn";
 
 export interface ManualPaymentRequestTable {
   id: string;

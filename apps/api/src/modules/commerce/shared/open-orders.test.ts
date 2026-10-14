@@ -6,10 +6,13 @@ import {
   CHECKOUT_WINDOW_GRACE_SECONDS,
   GATEWAY_ORDER_PENDING_SECONDS,
   checkoutSecondsLeft,
+  coverageCovers,
   coverageOf,
   coverageOverlaps,
   decideOpenOrders,
   isOrderOpen,
+  manualPaymentBlockingSince,
+  manualPaymentStillBlocks,
   sameItems,
   type OpenOrderFacts,
 } from "./open-orders.ts";
@@ -159,6 +162,8 @@ const facts = (over: Partial<OpenOrderFacts>): OpenOrderFacts => ({
   isOpen: true,
   sameItems: true,
   overlaps: true,
+  // The helper's default order has the request's own items.
+  coveredByRequest: true,
   sameTerms: true,
   manualPaymentPending: false,
   checkoutSecondsLeft: 0,
@@ -300,4 +305,230 @@ await test("the refusals are 409s that say what to do", () => {
   const owned = CommerceErrors.BUNDLE_CONTAINS_OWNED_COURSE("Pack", ["A", "B"]);
   assert.equal(owned.statusCode, 409);
   assert.match(owned.message, /"Pack" includes "A", "B"/);
+});
+
+await test("an order with nothing to pay is never refused for a checkout in progress", () => {
+  assert.deepEqual(
+    decideOpenOrders(
+      [facts({ id: "busy", sameTerms: false, checkoutSecondsLeft: 500 })],
+      { freeOrder: true },
+    ),
+    { kind: "proceed", supersedeOrderIds: ["busy"] },
+  );
+  // The same orders refuse a request that takes money.
+  assert.equal(
+    decideOpenOrders([
+      facts({ id: "busy", sameTerms: false, checkoutSecondsLeft: 500 }),
+    ]).kind,
+    "checkout_in_progress",
+  );
+});
+
+await test("an order with nothing to pay closes an order in checkout that it covers entirely", () => {
+  assert.deepEqual(
+    decideOpenOrders(
+      [
+        facts({
+          id: "part",
+          sameItems: false,
+          coveredByRequest: true,
+          checkoutSecondsLeft: 90,
+        }),
+      ],
+      { freeOrder: true },
+    ),
+    { kind: "proceed", supersedeOrderIds: ["part"] },
+  );
+});
+
+await test("an order with nothing to pay leaves alone an order that also sells something else", () => {
+  // Open, in checkout or not: it stays payable for the rest.
+  assert.deepEqual(
+    decideOpenOrders(
+      [
+        facts({
+          id: "bundle",
+          sameItems: false,
+          coveredByRequest: false,
+          checkoutSecondsLeft: 90,
+        }),
+        facts({ id: "cart", sameItems: false, coveredByRequest: false }),
+      ],
+      { freeOrder: true },
+    ),
+    { kind: "proceed", supersedeOrderIds: [] },
+  );
+});
+
+await test("an order with nothing to pay does not cancel a pending transfer for an order that also sells something else", () => {
+  assert.deepEqual(
+    decideOpenOrders(
+      [
+        // Free course A + paid course B, transfer waiting for staff.
+        facts({
+          id: "a-and-b",
+          sameItems: false,
+          coveredByRequest: false,
+          manualPaymentPending: true,
+        }),
+        // Course A alone, transfer waiting for staff: nothing left to buy.
+        facts({
+          id: "a-alone",
+          sameTerms: false,
+          manualPaymentPending: true,
+        }),
+      ],
+      { freeOrder: true },
+    ),
+    {
+      kind: "proceed",
+      supersedeOrderIds: [],
+      cancelOrderIds: ["a-alone"],
+    },
+  );
+  // With only the part-covered order there is nothing to cancel at all.
+  assert.deepEqual(
+    decideOpenOrders(
+      [
+        facts({
+          id: "a-and-b",
+          sameItems: false,
+          coveredByRequest: false,
+          manualPaymentPending: true,
+        }),
+      ],
+      { freeOrder: true },
+    ),
+    { kind: "proceed", supersedeOrderIds: [] },
+  );
+});
+
+await test("a request covers an order when it gives every course and quiz pass the order sells", () => {
+  // The same course, and a course inside a bundle the request holds.
+  assert.equal(coverageCovers(cover(course("x")), cover(course("x"))), true);
+  assert.equal(coverageCovers(cover(bundle("b1")), cover(course("x"))), true);
+  assert.equal(
+    coverageCovers(cover(bundle("b1")), cover(course("x"), course("y"))),
+    true,
+  );
+  // The order also sells something the request does not give.
+  assert.equal(
+    coverageCovers(cover(course("x")), cover(course("x"), course("k"))),
+    false,
+  );
+  assert.equal(coverageCovers(cover(course("x")), cover(bundle("b1"))), false);
+  assert.equal(
+    coverageCovers(cover(course("x")), cover(course("x"), quiz("q"))),
+    false,
+  );
+  assert.equal(
+    coverageCovers(
+      cover(course("x"), quiz("q")),
+      cover(course("x"), quiz("q")),
+    ),
+    true,
+  );
+  // A quiz pass is not its course.
+  assert.equal(coverageCovers(cover(course("x")), cover(quiz("x"))), false);
+  // Nothing in common.
+  assert.equal(coverageCovers(cover(course("k")), cover(course("x"))), false);
+});
+
+await test("an order that holds nothing is covered only by the same items", () => {
+  assert.equal(
+    coverageCovers(cover(bundle("empty")), cover(bundle("empty"))),
+    true,
+  );
+  assert.equal(
+    coverageCovers(cover(course("x")), cover(bundle("empty"))),
+    false,
+  );
+});
+
+await test("an order with nothing to pay goes through beside a pending transfer, whose order is cancelled", () => {
+  assert.deepEqual(
+    decideOpenOrders(
+      [
+        facts({ id: "transfer", sameTerms: false, manualPaymentPending: true }),
+        facts({ id: "plain", sameTerms: false }),
+        // Expired, and still waiting for staff: cancelled as well.
+        facts({
+          id: "old-transfer",
+          sameTerms: false,
+          isOpen: false,
+          manualPaymentPending: true,
+        }),
+        // Expired with nothing waiting: already closed, left as it is.
+        facts({ id: "expired", sameTerms: false, isOpen: false }),
+      ],
+      { freeOrder: true },
+    ),
+    {
+      kind: "proceed",
+      supersedeOrderIds: ["plain"],
+      cancelOrderIds: ["transfer", "old-transfer"],
+    },
+  );
+});
+
+await test("an order with nothing to pay still continues the same unfinished order", () => {
+  assert.deepEqual(
+    decideOpenOrders([facts({ id: "same" })], { freeOrder: true }),
+    {
+      kind: "proceed",
+      resumeOrderId: "same",
+      supersedeOrderIds: [],
+    },
+  );
+});
+
+await test("an order with nothing to pay leaves orders for other things alone", () => {
+  assert.deepEqual(
+    decideOpenOrders(
+      [
+        facts({
+          id: "other",
+          sameItems: false,
+          overlaps: false,
+          checkoutSecondsLeft: 500,
+          manualPaymentPending: true,
+        }),
+      ],
+      { freeOrder: true },
+    ),
+    { kind: "proceed", supersedeOrderIds: [] },
+  );
+});
+
+await test("a reported transfer keeps the gateway closed for the set number of days, then no longer", () => {
+  const days = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+  assert.deepEqual(manualPaymentBlockingSince(now, 7), days(7));
+  assert.equal(manualPaymentStillBlocks(now, now, 7), true);
+  assert.equal(manualPaymentStillBlocks(days(6.9), now, 7), true);
+  assert.equal(manualPaymentStillBlocks(days(7), now, 7), false);
+  assert.equal(manualPaymentStillBlocks(days(8).toISOString(), now, 7), false);
+  // A shorter setting lets go sooner.
+  assert.equal(manualPaymentStillBlocks(days(2), now, 1), false);
+});
+
+await test("the new refusals say what happened in plain words", () => {
+  const gone = CommerceErrors.COURSE_NOT_AVAILABLE();
+  assert.equal(gone.statusCode, 409);
+  assert.equal(gone.code, "COURSE_NOT_AVAILABLE");
+  assert.equal(
+    gone.message,
+    "This course is no longer available for purchase.",
+  );
+  const bundle = CommerceErrors.BUNDLE_COURSE_NOT_AVAILABLE("Pack");
+  assert.equal(bundle.code, "COURSE_NOT_AVAILABLE");
+  assert.match(
+    bundle.message,
+    /Bundle "Pack" includes a course that is no longer available/,
+  );
+  const nothing = CommerceErrors.MANUAL_PAYMENT_NOT_PENDING();
+  assert.equal(nothing.statusCode, 409);
+  assert.equal(nothing.code, "MANUAL_PAYMENT_NOT_PENDING");
+  const covered = CommerceErrors.MANUAL_PAYMENT_ALREADY_COVERED(["Course X"]);
+  assert.equal(covered.statusCode, 409);
+  assert.match(covered.message, /already has access to "Course X"/);
 });

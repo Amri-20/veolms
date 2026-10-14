@@ -50,6 +50,9 @@ export function registerBackgroundJobs(
   const paymentWorker = createPaymentWorker({
     database,
     logger: app.log,
+    // With the gateway, an extra payment is refunded as soon as its event
+    // is processed rather than on the scheduler's next pass.
+    paymentGateway: services.paymentGateway,
   });
 
   const paymentEventQueue = new BackgroundPaymentEventQueue({

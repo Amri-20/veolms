@@ -139,8 +139,9 @@ export interface StuckManualTransferRow {
 
 /**
  * Reported transfers that can no longer be verified, newest first by when
- * they were reported: manual payment requests still `pending` whose order
- * will not take a payment any more. Two ways that happens:
+ * they were reported: manual payment requests still `pending`, or
+ * `withdrawn` by the buyer, whose order will not take a payment any more.
+ * Two ways that happens:
  *
  *  - the order was paid another way (`paid`, `partially_refunded` or
  *    `refunded`). A pending request has paid for nothing, so whatever paid
@@ -154,9 +155,16 @@ export interface StuckManualTransferRow {
  *
  * What counts, and why:
  *
- *  - Only `pending` requests. Rejecting one (the review action that
- *    already exists) is how staff say it has been dealt with, and takes it
- *    off the list. A verified one is the payment that paid its order.
+ *  - Only `pending` requests, and ones the buyer took back (`withdrawn`).
+ *    Rejecting one (the review action that already exists) is how staff say
+ *    it has been dealt with, and takes it off the list. A verified one is
+ *    the payment that paid its order.
+ *  - A withdrawn request counts because withdrawing says only that the
+ *    buyer no longer wants the order paid by it; the money may have been
+ *    sent all the same. Once the order was paid another way or closed,
+ *    staff check their bank, return the transfer if it arrived, and reject
+ *    the request. While its order is still open it is not listed: the buyer
+ *    can report the transfer again.
  *  - Not an order that is still open (`pending`, `payment_processing`) or
  *    has only run out of time (`expired`): verifying the request still pays
  *    that order. That is the ordinary review queue, not money to return.
@@ -200,7 +208,7 @@ export async function listStuckManualTransfers(
         m.created_at as submitted_at
       from manual_payment_requests m
       join orders o on o.id = m.order_id
-      where m.status = 'pending'
+      where m.status in ('pending', 'withdrawn')
         and o.status = any(${stuckOrderStatuses}::text[])
         and ${
           cursor
@@ -294,6 +302,17 @@ export interface DuplicatePurchases {
   bundles: DuplicateBundlePurchaseRow[];
 }
 
+/**
+ * Leaves out refunds of an extra payment where an order's refunds are added
+ * up: that money was never part of what the order was paid with (see
+ * order.repository.ts). For a query that names the refunds table `r`.
+ */
+const notOfExtraPayment = sql`not exists (
+            select 1 from payments xp
+            where xp.id = r.payment_id
+              and xp.error_code = ${SURPLUS_CAPTURE_ERROR_CODE}
+          )`;
+
 /** An item that has been refunded, or has a refund under way. */
 const itemRefunded = (itemId: string) => sql`
   exists (
@@ -312,6 +331,7 @@ const laterOrderMoney = sql`
         select coalesce(sum(r.amount), 0)::bigint
         from refunds r
         where r.order_id = later.order_id and r.status = 'processed'
+          and ${notOfExtraPayment}
       ) as refunded_amount,
       pay.gateway_provider,
       pay.gateway_payment_id
@@ -479,6 +499,7 @@ export async function listDuplicatePurchases(
         where r.order_id = later.order_id
           and r.status = 'processed'
           and r.order_item_id is null
+          and ${notOfExtraPayment}
       ) as order_level_refunded_amount,
       ${laterOrderMoney}
     order by later.paid_at desc, later.id desc

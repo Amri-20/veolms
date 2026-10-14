@@ -3,6 +3,7 @@ import {
   verifyPaymentRequestSchema,
   verifyPaymentResponseSchema,
   manualPaymentRequestSchema,
+  manualPaymentStatusSchema,
   learnerManualPaymentRequestSchema,
   submitManualPaymentRequestSchema,
   verifyManualPaymentRequestSchema,
@@ -89,6 +90,33 @@ const paymentRoutes: RoutePlugin = async (app, options) => {
     manualController.submitPayment,
   );
 
+  // 2b. POST /orders/:orderId/manual-payment/withdraw - The buyer takes a
+  //     reported transfer back while staff have not answered it
+  app.post(
+    "/orders/:orderId/manual-payment/withdraw",
+    {
+      preHandler: ctx.requireAuthenticated,
+      schema: {
+        operationId: "withdrawManualPayment",
+        tags: ["Commerce - Manual Payments"],
+        summary: "Withdraw a reported transfer that is still being checked",
+        description:
+          "Takes back the bank or UPI transfer the buyer reported for their own order, while staff have not verified or rejected it. The order can then be paid another way.",
+        params: z.object({ orderId: z.uuid() }),
+        response: {
+          200: jsonResponse(
+            "The withdrawn request",
+            learnerManualPaymentRequestSchema,
+          ),
+          401: errorResponse("Unauthorized"),
+          404: errorResponse("Order not found"),
+          409: errorResponse("No transfer is waiting to be checked"),
+        },
+      },
+    },
+    manualController.withdrawPayment,
+  );
+
   // 3. GET /manual-payments/my - List student's manual payments
   app.get(
     "/manual-payments/my",
@@ -120,7 +148,7 @@ const paymentRoutes: RoutePlugin = async (app, options) => {
         tags: ["Commerce - Manual Payments"],
         summary: "List manual payments queue for review",
         querystring: z.object({
-          status: z.enum(["pending", "verified", "rejected"]).optional(),
+          status: manualPaymentStatusSchema.optional(),
         }),
         response: {
           200: jsonResponse(

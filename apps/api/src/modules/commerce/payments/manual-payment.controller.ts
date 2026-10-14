@@ -14,6 +14,10 @@ export interface ManualPaymentController {
     }>,
     reply: FastifyReply,
   ): Promise<void>;
+  withdrawPayment(
+    request: FastifyRequest<{ Params: { orderId: string } }>,
+    reply: FastifyReply,
+  ): Promise<void>;
   listMyPayments(request: FastifyRequest, reply: FastifyReply): Promise<void>;
   listAllPayments(
     request: FastifyRequest<{ Querystring: { status?: ManualPaymentStatus } }>,
@@ -50,6 +54,17 @@ export function createManualPaymentController({
     await reply.status(201).send(result);
   }
 
+  async function withdrawPayment(
+    request: FastifyRequest<{ Params: { orderId: string } }>,
+    reply: FastifyReply,
+  ) {
+    const result = await service.withdrawManualPayment(
+      request.user!.id,
+      request.params.orderId,
+    );
+    await reply.status(200).send(result);
+  }
+
   async function listMyPayments(request: FastifyRequest, reply: FastifyReply) {
     const userId = request.user!.id;
     const items = await service.listUserManualPayments(userId);
@@ -84,6 +99,7 @@ export function createManualPaymentController({
 
   return {
     submitPayment,
+    withdrawPayment,
     listMyPayments,
     listAllPayments,
     verifyPayment,

@@ -9,6 +9,17 @@ import { recordCouponRedemptionForPaidOrder } from "../coupons/coupon-redemption
 import * as cartRepo from "../cart/cart.repository.ts";
 import { createCourseAccessService } from "../shared/course-access.service.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
+import { config } from "../../../config.ts";
+import * as refundRepo from "../refunds/refund.repository.ts";
+import { listHeldItemTitles } from "../shared/order-holdings.ts";
+import {
+  AUTO_REFUND_REASON,
+  autoRefundKey,
+  decideCapturedPayment,
+  describeExtraCaptureForClosedOrder,
+  describeExtraCaptureForHeldItems,
+  isGatewayMoney,
+} from "./extra-payment.ts";
 import {
   SURPLUS_CAPTURE_ERROR_CODE,
   describeSurplusCapture,
@@ -22,6 +33,12 @@ export interface FinalizePaymentParams {
   gatewayPaymentId: string;
   /** Structured payment method information from the gateway */
   paymentMethod?: Json | null;
+  /**
+   * Set when the caller already knows the gateway has refunded this
+   * payment (it is recording the capture from a refund event): an extra
+   * payment is then recorded without reserving an automatic refund.
+   */
+  skipAutoRefund?: boolean;
 }
 
 export interface FinalizePaymentResult {
@@ -32,12 +49,28 @@ export interface FinalizePaymentResult {
    *   already been paid another way. The payment is recorded as captured and
    *   marked (see surplus-payment.ts); the order, its coupon and its access
    *   were not touched.
+   * "recorded_as_extra" — The gateway took this money for an order that was
+   *   not paid, when the buyer already had something the order sells, or
+   *   for an order that had been closed and cannot be paid any more
+   *   (cancelled, failed) (see extra-payment.ts). The payment is recorded
+   *   and marked the same way, nothing was granted, and the order is closed
+   *   unpaid.
    */
-  outcome: "finalized" | "already_captured" | "recorded_as_surplus";
+  outcome:
+    | "finalized"
+    | "already_captured"
+    | "recorded_as_surplus"
+    | "recorded_as_extra";
   orderId?: string;
   /** The order's buyer. Set with `orderId`. */
   userId?: string;
   enrollmentCount?: number;
+  /**
+   * An automatic refund of this payment was reserved. The caller sends it
+   * (extra-payment-refund.service.ts) once this has returned; the scheduled
+   * pass sends it if the caller cannot.
+   */
+  autoRefundReserved?: boolean;
 }
 
 export interface PaymentReconciliationService {
@@ -60,9 +93,12 @@ export interface PaymentReconciliationService {
 export function createPaymentReconciliationService({
   database,
   accessService = createAccessService(),
+  autoRefundExtraPayments = config.AUTO_REFUND_EXTRA_PAYMENTS,
 }: {
   database: Kysely<Database>;
   accessService?: AccessService;
+  /** See `AUTO_REFUND_EXTRA_PAYMENTS`. */
+  autoRefundExtraPayments?: boolean;
 }): PaymentReconciliationService {
   const courseAccessService = createCourseAccessService({ accessService });
   const outbox = createOutboxService();
@@ -81,14 +117,66 @@ export function createPaymentReconciliationService({
     params: FinalizePaymentParams,
   ): Promise<FinalizePaymentResult> {
     const { paymentId, gatewayPaymentId, paymentMethod } = params;
+    const autoRefund = autoRefundExtraPayments && !params.skipAutoRefund;
 
     const now = new Date();
     let enrolledCourseIds: string[] = [];
     let orderId: string | undefined;
     let userId: string | undefined;
     let recordedAsSurplus = false;
+    let recordedAsExtra = false;
+    let autoRefundReserved = false;
 
     await database.transaction().execute(async (trx) => {
+      /**
+       * Marks the claimed payment as extra money (surplus-payment.ts) and,
+       * when it is to go back by itself, reserves its refund in this same
+       * transaction: one row per payment, written by the one caller that
+       * won the claim.
+       */
+      const recordExtraPayment = async (
+        claimed: {
+          id: string;
+          order_id: string;
+          amount: number;
+          currency: string;
+        },
+        description: string,
+        refund: boolean,
+      ) => {
+        await paymentRepo.transitionPaymentStatus(
+          trx,
+          claimed.id,
+          "captured",
+          ["captured"],
+          {
+            error_code: SURPLUS_CAPTURE_ERROR_CODE,
+            error_description: description,
+            updated_at: now,
+          },
+        );
+        if (!refund) return;
+        await refundRepo.insertRefund(trx, {
+          id: crypto.randomUUID(),
+          order_id: claimed.order_id,
+          order_item_id: null,
+          payment_id: claimed.id,
+          gateway_refund_id: null,
+          amount: claimed.amount,
+          currency: claimed.currency,
+          reason: AUTO_REFUND_REASON,
+          status: "pending",
+          created_by: null,
+          idempotency_key: autoRefundKey(claimed.id),
+          // No access is tied to this money, and none may be taken away
+          // for it by any path that later completes this row.
+          preserve_access: true,
+          created_at: now,
+          updated_at: now,
+        });
+        autoRefundReserved = true;
+      };
+
       // ── Lock order: the order row first, then the payment row ───────────
       // Manual verification (manual-payment.service.ts) writes the order
       // and then closes its open gateway payment. This path used to claim
@@ -99,8 +187,16 @@ export function createPaymentReconciliationService({
       // each other instead: whichever is second sees what the first did
       // (the order already paid) and takes its normal branch below. The
       // refund paths take the same lock first.
+      //
+      // Before the order row, the buyer's checkout lock, in the order every
+      // checkout takes the two. Whether the buyer already has what this
+      // order sells is decided below, and two payments of one buyer settling
+      // at the same moment would otherwise each find the other's course not
+      // granted yet.
       const target = await paymentRepo.findPaymentById(trx, paymentId);
       if (target) {
+        const buyer = await orderRepo.findOrderById(trx, target.order_id);
+        if (buyer) await orderRepo.lockBuyerCheckout(trx, buyer.user_id);
         await orderRepo.findOrderByIdForUpdate(trx, target.order_id);
       }
 
@@ -160,6 +256,53 @@ export function createPaymentReconciliationService({
         status: "captured",
       });
 
+      // 1b. Is this money for something the buyer already has? The order
+      //     row and the buyer's checkout are locked, so what is read here
+      //     still holds when this transaction ends. Asked only for an
+      //     unpaid order paid through the gateway while automatic refunds
+      //     are on (decideCapturedPayment); an order that is already paid
+      //     takes the branch below as before.
+      const heldTitles =
+        autoRefund &&
+        isGatewayMoney(claimed) &&
+        !isOrderAlreadyPaid(order.status)
+          ? await listHeldItemTitles(trx, order, now)
+          : [];
+      const decision = decideCapturedPayment({
+        orderStatus: order.status,
+        payment: claimed,
+        heldTitles,
+        autoRefund,
+      });
+      if (decision.kind === "extra" && decision.why === "already_held") {
+        await recordExtraPayment(
+          claimed,
+          describeExtraCaptureForHeldItems(order.order_number, heldTitles),
+          decision.refund,
+        );
+        // The order sold nothing new: it is closed unpaid, as the expiry
+        // job would close it, and gives up its coupon.
+        await orderRepo.expirePendingOrders(trx, [order.id], now);
+        recordedAsExtra = true;
+        return;
+      }
+      if (decision.kind === "extra" && decision.why === "order_closed") {
+        // Money for an order that was closed without being paid and cannot
+        // be paid any more (cancelled, failed). This used to throw: the
+        // claim rolled back, the event was retried until it was
+        // dead-lettered, and money the gateway had taken was on no list at
+        // all. It is kept as an extra payment instead: nothing is granted,
+        // the order stays as it is, and the money goes back by itself or
+        // is listed for staff.
+        await recordExtraPayment(
+          claimed,
+          describeExtraCaptureForClosedOrder(order.order_number, order.status),
+          decision.refund,
+        );
+        recordedAsExtra = true;
+        return;
+      }
+
       // 2. Mark order paid — idempotent conditional UPDATE
       //    (safe even if somehow called twice because WHERE filters non-paid statuses)
       const markedPaid = await orderRepo.markOrderPaidIfPending(
@@ -185,24 +328,35 @@ export function createPaymentReconciliationService({
         // which may predate the change that made the update miss.
         const settled = await orderRepo.findOrderById(trx, order.id);
         if (settled && isOrderAlreadyPaid(settled.status)) {
-          await paymentRepo.transitionPaymentStatus(
-            trx,
-            paymentId,
-            "captured",
-            ["captured"],
-            {
-              error_code: SURPLUS_CAPTURE_ERROR_CODE,
-              error_description: describeSurplusCapture(order.order_number),
-              updated_at: now,
-            },
+          await recordExtraPayment(
+            claimed,
+            describeSurplusCapture(order.order_number),
+            autoRefund && isGatewayMoney(claimed),
           );
           recordedAsSurplus = true;
           return;
         }
 
-        // Any other settled state (cancelled, failed): abort the whole
-        // transaction — the payment claim rolls back too — so this gets
-        // caught and retried/investigated instead of silently fulfilling.
+        // Any other settled state (cancelled, failed) was decided above,
+        // before the order was touched; the order row is locked, so it is
+        // not expected here. If money was taken it is still never dropped:
+        // it is kept as an extra payment, as above.
+        if (claimed.amount > 0) {
+          await recordExtraPayment(
+            claimed,
+            describeExtraCaptureForClosedOrder(
+              order.order_number,
+              settled?.status ?? order.status,
+            ),
+            autoRefund && isGatewayMoney(claimed),
+          );
+          recordedAsExtra = true;
+          return;
+        }
+
+        // A no-cost payment for an order that cannot be paid: no money
+        // exists to keep. Abort the whole transaction (the payment claim
+        // rolls back too) rather than grant access for it.
         throw new Error(
           `finalizeSuccessfulPayment: order ${order.id} is not in a fulfillable ` +
             `status (was "${order.status}") — refusing to grant access for payment ${paymentId}`,
@@ -265,8 +419,15 @@ export function createPaymentReconciliationService({
       return { outcome: "already_captured" };
     }
 
-    if (recordedAsSurplus) {
-      return { outcome: "recorded_as_surplus", orderId, userId };
+    if (recordedAsSurplus || recordedAsExtra) {
+      return {
+        outcome: recordedAsSurplus
+          ? "recorded_as_surplus"
+          : "recorded_as_extra",
+        orderId,
+        userId,
+        autoRefundReserved,
+      };
     }
 
     return {

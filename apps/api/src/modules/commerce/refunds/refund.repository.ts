@@ -1,5 +1,11 @@
+import { sql } from "kysely";
 import type { RefundStatus } from "@veolms/database";
 import type { Executor } from "../shared/repository.types.ts";
+import {
+  AUTO_REFUND_RETRY_MIN_MS,
+  autoRefundKey,
+} from "../payments/extra-payment.ts";
+import { SURPLUS_CAPTURE_ERROR_CODE } from "../payments/surplus-payment.ts";
 
 export async function findRefundById(database: Executor, refundId: string) {
   return await database
@@ -117,6 +123,28 @@ export async function finalizePendingRefund(
 }
 
 /**
+ * Gives up a reservation the gateway will not take, but only while it is
+ * still unconfirmed (`pending` with no gateway refund id). Another path may
+ * have completed it in the meantime (the gateway's refund event for money
+ * staff returned from the dashboard); that row is left as it is, and
+ * nothing is returned.
+ */
+export async function failUnsentRefund(
+  database: Executor,
+  refundId: string,
+  now: Date,
+) {
+  return await database
+    .updateTable("refunds")
+    .set({ status: "failed", updated_at: now })
+    .where("id", "=", refundId)
+    .where("status", "=", "pending")
+    .where("gateway_refund_id", "is", null)
+    .returning("id")
+    .executeTakeFirst();
+}
+
+/**
  * Idempotently records a refund confirmed by the gateway.
  * If a refund record with this gateway_refund_id already exists, updates its status.
  * If not, inserts a new record. Returns the upserted row.
@@ -167,13 +195,32 @@ export async function upsertRefundByGatewayRefundId(
  * for the same order was in flight at once — a future correctness fix
  * applied to one copy silently not reaching the other two is exactly the
  * failure mode this consolidation removes.
+ *
+ * A refund of an extra payment (payments/extra-payment.ts) is not counted:
+ * that money was never part of what the order was paid with, so sending it
+ * back takes nothing from what the order can still be refunded.
  */
 export async function sumOtherCountedRefunds(
   database: Executor,
   orderId: string,
   exclude?: { refundId?: string; gatewayRefundId?: string | null },
 ): Promise<number> {
-  const existingRefunds = await listRefundsByOrderId(database, orderId);
+  const existingRefunds = await database
+    .selectFrom("refunds as r")
+    .select(["r.id", "r.gateway_refund_id", "r.amount", "r.status"])
+    .where("r.order_id", "=", orderId)
+    .where((eb) =>
+      eb.not(
+        eb.exists(
+          eb
+            .selectFrom("payments as p")
+            .select("p.id")
+            .whereRef("p.id", "=", "r.payment_id")
+            .where("p.error_code", "=", SURPLUS_CAPTURE_ERROR_CODE),
+        ),
+      ),
+    )
+    .execute();
   return existingRefunds
     .filter((r) => {
       if (exclude?.refundId && r.id === exclude.refundId) return false;
@@ -276,5 +323,111 @@ export async function listStaleRefunds(
     .where("created_at", "<", cutoff)
     .orderBy("created_at", "asc")
     .limit(limit)
+    .execute();
+}
+
+/**
+ * The automatic refund reserved for an extra payment, if there is one. A
+ * payment has at most one: the row carries autoRefundKey(paymentId), which
+ * is unique within its order.
+ */
+export async function findAutoRefundForPayment(
+  database: Executor,
+  paymentId: string,
+) {
+  return await database
+    .selectFrom("refunds")
+    .selectAll()
+    .where("payment_id", "=", paymentId)
+    .where("idempotency_key", "=", autoRefundKey(paymentId))
+    .executeTakeFirst();
+}
+
+/**
+ * Automatic refunds reserved, not yet accepted by the gateway, and due for
+ * an attempt now, the one tried longest ago first.
+ *
+ * Only rows the pass will act on are returned, so none can hold a place at
+ * the head of the list and keep newer ones waiting:
+ *
+ *  - due: never tried, or the wait since the last attempt is over. The
+ *    same rule as extra-payment.ts's autoRefundAttemptDue, on the same two
+ *    columns (`updated_at` equal to `created_at` means never tried). Every
+ *    attempt moves `updated_at` on, which puts the row at the back;
+ *  - whose payment is still an extra payment of this gateway with the
+ *    money to return (`captured`), or has had it returned another way
+ *    (`refunded`), which the pass answers by giving the reservation up.
+ *    A reservation whose payment is anything else is never sent.
+ */
+export async function listDueAutoRefunds(
+  database: Executor,
+  input: { now: Date; gatewayProvider: string; limit?: number },
+) {
+  const minWaitSeconds = AUTO_REFUND_RETRY_MIN_MS / 1000;
+  return await database
+    .selectFrom("refunds as r")
+    .innerJoin("payments as p", "p.id", "r.payment_id")
+    .selectAll("r")
+    .where("r.status", "=", "pending")
+    .where("r.gateway_refund_id", "is", null)
+    .where("r.idempotency_key", "like", `${autoRefundKey("")}%`)
+    .where("p.error_code", "=", SURPLUS_CAPTURE_ERROR_CODE)
+    .where("p.status", "in", ["captured", "refunded"])
+    .where("p.gateway_provider", "=", input.gatewayProvider)
+    .where("p.gateway_payment_id", "is not", null)
+    .where(
+      sql<boolean>`(
+        r.updated_at <= r.created_at
+        or ${input.now}::timestamptz - r.updated_at
+          >= greatest(make_interval(secs => ${minWaitSeconds}::double precision), r.updated_at - r.created_at)
+      )`,
+    )
+    .orderBy("r.updated_at", "asc")
+    .orderBy("r.id", "asc")
+    .limit(input.limit ?? 100)
+    .execute();
+}
+
+/**
+ * Takes the next attempt to send an automatic refund, by moving its
+ * `updated_at` on from the value the caller read. Of two callers that read
+ * the same row, one gets it and the other gets nothing, so the gateway is
+ * asked once per attempt.
+ */
+export async function claimAutoRefundAttempt(
+  database: Executor,
+  refundId: string,
+  lastTouchedAt: Date,
+  now: Date,
+) {
+  return await database
+    .updateTable("refunds")
+    .set({ updated_at: now })
+    .where("id", "=", refundId)
+    .where("status", "=", "pending")
+    .where("gateway_refund_id", "is", null)
+    .where(
+      sql<boolean>`date_trunc('milliseconds', updated_at) = date_trunc('milliseconds', ${lastTouchedAt}::timestamptz)`,
+    )
+    .returning("id")
+    .executeTakeFirst();
+}
+
+/** The credit note a completed refund is recorded with (FR-PAY-009). */
+export async function insertCreditNote(
+  database: Executor,
+  values: {
+    id: string;
+    credit_note_number: string;
+    refund_id: string;
+    order_id: string;
+    user_id: string;
+    total_refund_amount: number;
+    created_at: Date;
+  },
+) {
+  await database
+    .insertInto("credit_notes")
+    .values({ ...values, tax_adjustment_amount: 0 })
     .execute();
 }

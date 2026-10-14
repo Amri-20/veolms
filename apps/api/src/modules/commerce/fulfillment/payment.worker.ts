@@ -1,10 +1,11 @@
 import crypto from "node:crypto";
 
-import type { NormalizedPaymentEvent } from "@veolms/contracts";
+import type { NormalizedPaymentEvent, PaymentGateway } from "@veolms/contracts";
 import type { Database } from "@veolms/database";
 import type { FastifyBaseLogger } from "fastify";
 import type { Kysely } from "kysely";
 
+import { config } from "../../../config.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
 import {
   createAccessService,
@@ -15,8 +16,11 @@ import { createPaymentReconciliationService } from "../payments/payment-reconcil
 import * as paymentRepository from "../payments/payment.repository.ts";
 import { reportDuplicatePurchases } from "../payments/duplicate-purchase.ts";
 import {
+  createExtraPaymentRefundService,
+  settleExtraPaymentRefund,
+} from "../payments/extra-payment-refund.service.ts";
+import {
   SURPLUS_CAPTURE_ERROR_CODE,
-  applySurplusRefund,
   isOrderAlreadyPaid,
 } from "../payments/surplus-payment.ts";
 import * as refundRepository from "../refunds/refund.repository.ts";
@@ -27,6 +31,14 @@ export interface PaymentWorkerOptions {
   database: Kysely<Database>;
   accessService?: AccessService;
   logger?: FastifyBaseLogger;
+  /**
+   * With it, the automatic refund of an extra payment is sent as soon as
+   * the payment has been recorded. Without it the refund is only reserved
+   * here, and the scheduled pass sends it within a few minutes.
+   */
+  paymentGateway?: PaymentGateway;
+  /** See `AUTO_REFUND_EXTRA_PAYMENTS`. */
+  autoRefundExtraPayments?: boolean;
 }
 
 export interface PaymentWorker {
@@ -42,11 +54,17 @@ export function createPaymentWorker({
   database,
   accessService = createAccessService(),
   logger,
+  paymentGateway,
+  autoRefundExtraPayments = config.AUTO_REFUND_EXTRA_PAYMENTS,
 }: PaymentWorkerOptions): PaymentWorker {
   const reconciliation = createPaymentReconciliationService({
     database,
     accessService,
+    autoRefundExtraPayments,
   });
+  const extraPaymentRefunds = paymentGateway
+    ? createExtraPaymentRefundService({ database, paymentGateway, logger })
+    : undefined;
   const courseAccessService = createCourseAccessService({ accessService });
   const outbox = createOutboxService();
 
@@ -118,18 +136,36 @@ export function createPaymentWorker({
     });
 
     await webhookRepository.markWebhookEventProcessed(database, event.eventId);
-    if (result.outcome === "recorded_as_surplus") {
-      // Logged as an error on purpose: someone has to return this money.
-      log?.error(
-        {
-          paymentId: payment.id,
-          orderId: result.orderId,
-          gatewayPaymentId: event.gatewayPaymentId,
-          amount: payment.amount,
-          currency: payment.currency,
-        },
-        "Gateway payment captured for an order that was already paid; recorded as a surplus payment, nothing granted. Refund it from the gateway dashboard",
-      );
+    if (
+      result.outcome === "recorded_as_surplus" ||
+      result.outcome === "recorded_as_extra"
+    ) {
+      const details = {
+        paymentId: payment.id,
+        orderId: result.orderId,
+        gatewayPaymentId: event.gatewayPaymentId,
+        amount: payment.amount,
+        currency: payment.currency,
+      };
+      if (result.autoRefundReserved) {
+        log?.warn(
+          details,
+          result.outcome === "recorded_as_surplus"
+            ? "Gateway payment captured for an order that was already paid; nothing granted, and it is being refunded automatically"
+            : "Gateway payment captured for something the buyer already has, or for an order that had been closed; nothing granted, and it is being refunded automatically",
+        );
+        // After the event is marked processed: the payment is recorded, and
+        // a refund that cannot be sent now is sent by the scheduled pass.
+        await extraPaymentRefunds?.refundExtraPayment(payment.id);
+      } else {
+        // Logged as an error on purpose: someone has to return this money.
+        log?.error(
+          details,
+          result.outcome === "recorded_as_surplus"
+            ? "Gateway payment captured for an order that was already paid; recorded as a surplus payment, nothing granted. Refund it from the gateway dashboard"
+            : "Gateway payment captured for an order that had been closed and cannot be paid; recorded as an extra payment, nothing granted. Refund it from the gateway dashboard",
+        );
+      }
     }
     if (result.outcome === "finalized" && result.orderId && result.userId) {
       // The other way money ends up needing a refund: this capture paid an
@@ -420,11 +456,14 @@ export function createPaymentWorker({
     if (!order || !isOrderAlreadyPaid(order.status)) return undefined;
 
     // The same path a capture event takes. For an order that is already
-    // paid it can only record the payment as surplus or leave it alone.
+    // paid it can only record the payment as surplus or leave it alone. No
+    // automatic refund is reserved: the gateway has refunded this payment
+    // already, which is how it came to be known.
     await reconciliation.finalizeSuccessfulPayment({
       paymentId: pending.id,
       gatewayPaymentId,
       paymentMethod: pending.payment_method,
+      skipAutoRefund: true,
     });
     const recorded = await paymentRepository.findPaymentByGatewayPaymentId(
       database,
@@ -452,35 +491,17 @@ export function createPaymentWorker({
     let status: string = payment.status;
 
     await database.transaction().execute(async (transaction) => {
-      // The order lock every refund path takes, so two refunds of the same
-      // payment cannot both read the description before either writes it.
-      await orderRepository.findOrderByIdForUpdate(
-        transaction,
-        payment.order_id,
-      );
-      const current = await paymentRepository.findPaymentById(
-        transaction,
-        payment.id,
-      );
-      // Already returned in full: a repeat of an event handled earlier.
-      if (!current || current.status !== "captured") {
-        status = current?.status ?? status;
-        return;
-      }
-
-      const next = applySurplusRefund(current, {
+      // Shared with the automatic refund, which may be what the gateway is
+      // reporting here: its reserved row is completed by whichever of the
+      // two hears of the refund first.
+      const settled = await settleExtraPaymentRefund(transaction, {
+        paymentId: payment.id,
         gatewayRefundId,
         amount: refundAmount,
-        currency: event.currency ?? current.currency,
+        currency: event.currency ?? payment.currency,
+        now,
       });
-      await paymentRepository.transitionPaymentStatus(
-        transaction,
-        current.id,
-        next.status,
-        ["captured"],
-        { error_description: next.errorDescription, updated_at: now },
-      );
-      status = next.status;
+      status = settled.paymentStatus ?? status;
     });
 
     await webhookRepository.markWebhookEventProcessed(database, event.eventId);

@@ -36,7 +36,7 @@ export interface RefundService {
  * network failure, timeout, 5xx, an in-progress 409, an unreadable response —
  * leaves the outcome unknown: the gateway may well have processed it.
  */
-function isDefinitiveGatewayRejection(err: unknown): boolean {
+export function isDefinitiveGatewayRejection(err: unknown): boolean {
   return (
     err instanceof AppError &&
     err.code === "PAYMENT_GATEWAY_ERROR" &&

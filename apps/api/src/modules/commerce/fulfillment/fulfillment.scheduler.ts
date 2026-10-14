@@ -6,6 +6,11 @@ import { createOrderExpirationWorker } from "./order-expiration.worker.ts";
 import { createPaymentRecoveryWorker } from "./payment-recovery.worker.ts";
 import { createRefundReconciliationWorker } from "./refund-reconciliation.worker.ts";
 import * as webhookRepo from "../webhooks/webhook.repository.ts";
+import {
+  createExtraPaymentRefundService,
+  type ExtraPaymentRefundService,
+} from "../payments/extra-payment-refund.service.ts";
+import { config } from "../../../config.ts";
 
 export interface FulfillmentSchedulerOptions {
   database: Kysely<Database>;
@@ -13,6 +18,8 @@ export interface FulfillmentSchedulerOptions {
   logger?: FastifyBaseLogger;
   /** Interval in milliseconds between reconciliation cycles. Default: 5 minutes */
   intervalMs?: number;
+  /** See `AUTO_REFUND_EXTRA_PAYMENTS`. */
+  autoRefundExtraPayments?: boolean;
 }
 
 /**
@@ -30,6 +37,8 @@ export class CommerceFulfillmentScheduler {
   private readonly refundReconciliationWorker: ReturnType<
     typeof createRefundReconciliationWorker
   >;
+  /** Unset while automatic refunds are switched off. */
+  private readonly extraPaymentRefunds?: ExtraPaymentRefundService;
   private readonly intervalMs: number;
   private readonly database: Kysely<Database>;
   private timer: NodeJS.Timeout | null = null;
@@ -48,16 +57,26 @@ export class CommerceFulfillmentScheduler {
       database: options.database,
       logger: options.logger,
     });
-    this.paymentRecoveryWorker = createPaymentRecoveryWorker({
-      database: options.database,
-      paymentGateway: options.paymentGateway,
-      logger: options.logger,
-    });
     this.refundReconciliationWorker = createRefundReconciliationWorker({
       database: options.database,
       paymentGateway: options.paymentGateway,
       logger: options.logger,
     });
+    const autoRefundExtraPayments =
+      options.autoRefundExtraPayments ?? config.AUTO_REFUND_EXTRA_PAYMENTS;
+    this.paymentRecoveryWorker = createPaymentRecoveryWorker({
+      database: options.database,
+      paymentGateway: options.paymentGateway,
+      logger: options.logger,
+      autoRefundExtraPayments,
+    });
+    if (autoRefundExtraPayments) {
+      this.extraPaymentRefunds = createExtraPaymentRefundService({
+        database: options.database,
+        paymentGateway: options.paymentGateway,
+        logger: options.logger,
+      });
+    }
   }
 
   start(): void {
@@ -171,6 +190,11 @@ export class CommerceFulfillmentScheduler {
       this.orderExpirationWorker.expireStaleOrders(),
       this.paymentRecoveryWorker.recoverStalePayments(),
       this.refundReconciliationWorker.reconcileStaleRefunds(),
+      // Extra payments whose automatic refund was reserved but has not been
+      // accepted by the gateway: the webhook worker has no gateway to send
+      // it with, or an earlier attempt could not reach the gateway. Each is
+      // tried a handful of times over a day, then left to staff.
+      this.extraPaymentRefunds?.refundDueExtraPayments(),
       // Retention: processed webhook events are otherwise kept forever,
       // degrading the (partial-indexed) poll and growing the table without
       // bound. One bounded batch per cycle is enough to keep up.
@@ -184,6 +208,7 @@ export class CommerceFulfillmentScheduler {
       "order-expiration",
       "payment-recovery",
       "refund-reconciliation",
+      "extra-payment-refunds",
       "webhook-retention",
     ] as const;
     results.forEach((result, i) => {

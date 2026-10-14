@@ -9,6 +9,19 @@ import type { Executor } from "../shared/repository.types.ts";
 import { toMinorUnits } from "../shared/currency.ts";
 import { CHECKOUT_HAND_OUT_ATTEMPT_STATUS } from "../shared/open-orders.ts";
 import { escapeLikePattern } from "../../../lib/like-pattern.ts";
+import { SURPLUS_CAPTURE_ERROR_CODE } from "../payments/surplus-payment.ts";
+
+/**
+ * Leaves out refunds of an extra payment (payments/extra-payment.ts) where
+ * an order's refunds are added up. That money was never part of what the
+ * order earned, so its going back is not a refund of the order. For a query
+ * that names the refunds table `r`.
+ */
+const notOfExtraPayment = sql`not exists (
+            select 1 from payments xp
+            where xp.id = r.payment_id
+              and xp.error_code = ${SURPLUS_CAPTURE_ERROR_CODE}
+          )`;
 
 export interface ListOrdersOptions {
   cursor?: OrderCursorPayload;
@@ -370,16 +383,19 @@ export async function getOrderStatsByCurrency(
         select coalesce(sum(r.amount), 0)
         from refunds r
         where r.order_id = o.id and r.status = 'processed'
+          and ${notOfExtraPayment}
       ) else 0 end), 0)::bigint`.as("unstored_refunded"),
       sql<number>`coalesce(sum((
         select coalesce(sum(r.amount), 0)
         from refunds r
         where r.order_id = o.id and r.status = 'processed'
+          and ${notOfExtraPayment}
       )), 0)::bigint`.as("refunded_amount"),
       sql<number>`coalesce(sum(case when o.status in ('paid', 'partially_refunded') then (
         select coalesce(sum(r.amount), 0)
         from refunds r
         where r.order_id = o.id and r.status = 'processed'
+          and ${notOfExtraPayment}
       ) else 0 end), 0)::bigint`.as("refunded_against_paid"),
     ])
     .groupBy("o.currency")
@@ -465,6 +481,7 @@ export async function getRevenueTrend(
         select coalesce(sum(r.amount), 0)
         from refunds r
         where r.order_id = o.id and r.status = 'processed'
+          and ${notOfExtraPayment}
       ) else 0 end), 0)::bigint`.as("refunded_amount"),
     ])
     .where("o.currency", "=", filters.currency)
@@ -553,8 +570,10 @@ export async function lockBuyerCheckout(
  * A buyer's orders that a payment may still arrive for, newest first:
  *
  *  - unpaid and not past their deadline;
- *  - unpaid or expired, with a bank transfer reported and not yet answered
- *    by staff (verifying it pays the order even after it expired);
+ *  - unpaid or expired, with a bank transfer reported since
+ *    `manualPaymentSince` and not yet answered by staff (verifying it pays
+ *    the order even after it expired). An older report still waits for
+ *    staff but no longer counts here: the buyer may pay another way;
  *  - unpaid or expired, whose gateway order was handed to the buyer since
  *    `handedOutSince`, so a payment window for it may still be open.
  *
@@ -564,7 +583,12 @@ export async function lockBuyerCheckout(
  */
 export async function listOrdersAwaitingPayment(
   database: Executor,
-  input: { userId: string; now: Date; handedOutSince: Date },
+  input: {
+    userId: string;
+    now: Date;
+    handedOutSince: Date;
+    manualPaymentSince: Date;
+  },
 ) {
   return await database
     .selectFrom("orders as o")
@@ -584,7 +608,8 @@ export async function listOrdersAwaitingPayment(
             .selectFrom("manual_payment_requests as m")
             .select("m.id")
             .whereRef("m.order_id", "=", "o.id")
-            .where("m.status", "=", "pending"),
+            .where("m.status", "=", "pending")
+            .where("m.created_at", ">", input.manualPaymentSince),
         )
         .as("manual_payment_pending"),
     ])
@@ -601,7 +626,8 @@ export async function listOrdersAwaitingPayment(
             .selectFrom("manual_payment_requests as m")
             .select("m.id")
             .whereRef("m.order_id", "=", "o.id")
-            .where("m.status", "=", "pending"),
+            .where("m.status", "=", "pending")
+            .where("m.created_at", ">", input.manualPaymentSince),
         ),
         eb.exists(
           eb
@@ -881,6 +907,28 @@ export async function expirePendingOrders(
     .set({ status: "expired", updated_at: now })
     .where("id", "in", orderIds)
     .where("status", "=", "pending")
+    .execute();
+}
+
+/**
+ * Cancels unpaid orders that a bank transfer was reported for, when the
+ * buyer has enrolled for free in everything they sell (an order that also
+ * sells something else is left alone). A cancelled order cannot
+ * be paid any more, so the transfer can no longer be verified and is listed
+ * for staff as money to check and return (needs-refund.repository.ts's
+ * listStuckManualTransfers), where they can reject it.
+ */
+export async function cancelUnpaidOrders(
+  database: Executor,
+  orderIds: string[],
+  now: Date,
+) {
+  if (orderIds.length === 0) return;
+  await database
+    .updateTable("orders")
+    .set({ status: "cancelled", idempotency_key: null, updated_at: now })
+    .where("id", "in", orderIds)
+    .where("status", "in", ["pending", "payment_processing", "expired"])
     .execute();
 }
 
