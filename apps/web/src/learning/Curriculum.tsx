@@ -24,6 +24,10 @@ import type { LessonDrawerHeroControlProps } from "./useLessonDrawerHeroControl"
 import { CurriculumLessonRows } from "./CurriculumLessonRows";
 import { useContinuousLessonNumbering } from "./useContinuousLessonNumbering";
 import { useCurriculumSectionScrollAnchor } from "./useCurriculumSectionScrollAnchor";
+import {
+  formatCourseProgress,
+  roundCourseProgress,
+} from "./courseProgressFormat";
 
 const EMPTY_CURRICULUM_SECTIONS: CourseSection[] = [];
 const EMPTY_LESSONS_BY_ID: ReadonlyMap<number, Lesson> = new Map();
@@ -273,9 +277,10 @@ export const Curriculum = memo(function Curriculum({
   };
 
   const allLessons = sections.flatMap(({ lessons }) => lessons);
+  // With two decimals, as course progress is shown everywhere (0.42%).
   const courseProgress =
     allLessons.length > 0
-      ? Math.round(
+      ? roundCourseProgress(
           allLessons.reduce(
             (total, [number, , , status]) =>
               total + getLessonProgress(number, status),
@@ -283,6 +288,12 @@ export const Curriculum = memo(function Curriculum({
           ) / allLessons.length,
         )
       : 0;
+  // Any lesson with progress kept, a few seconds of one included: the bar
+  // then shows a sliver even while the course is still at 0.00%.
+  const courseStarted = allLessons.some(
+    ([number, , , status]) =>
+      typeof lessonProgress[number] === "number" || status === "done",
+  );
   const scrollItemToTop = (element: HTMLElement | null) => {
     const curriculum = element?.closest<HTMLElement>(".learning-curriculum");
     if (!element || !curriculum) return;
@@ -636,7 +647,7 @@ export const Curriculum = memo(function Curriculum({
             <div className="learning-curriculum__sticky-meta">
               <div className="learning-curriculum__progress-copy">
                 <span>Progress</span>
-                <strong>{courseProgress}%</strong>
+                <strong>{formatCourseProgress(courseProgress)}</strong>
               </div>
               <div
                 className="learning-curriculum__progress-track"
@@ -646,7 +657,12 @@ export const Curriculum = memo(function Curriculum({
                 aria-valuemax={100}
                 aria-valuenow={courseProgress}
               >
-                <span style={{ width: `${courseProgress}%` }} />
+                <span
+                  style={{
+                    width: `${courseProgress}%`,
+                    minWidth: courseStarted ? "0.375rem" : undefined,
+                  }}
+                />
               </div>
               <div
                 className="learning-curriculum__current"

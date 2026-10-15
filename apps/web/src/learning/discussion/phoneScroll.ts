@@ -1,11 +1,11 @@
 import React, { useEffect, useRef } from "react";
 
 /**
- * Where each lesson's phone discussion was scrolled to, for as long as the
- * app stays open. On a phone the lesson's description and comments scroll in
- * their own area under the video, which is rebuilt whenever the lesson is
- * left and reopened (minimizing the player and expanding it again does
- * that), so its position is kept here rather than in the element.
+ * Where each lesson's phone page was scrolled to, for as long as the app
+ * stays open. On a phone the lesson column (video, description and comments)
+ * scrolls, and it is rebuilt whenever the lesson is left and reopened
+ * (minimizing the player and expanding it again does that), so its position
+ * is kept here rather than in the element.
  */
 const phoneDiscussionScrollPositions = new Map<string, number>();
 
@@ -15,7 +15,7 @@ export function usePhoneDiscussionScrollMemory({
   enabled,
   contentReady,
 }: {
-  viewportRef: React.RefObject<HTMLDivElement | null>;
+  viewportRef: React.RefObject<HTMLElement | null>;
   memoryKey: string | undefined;
   enabled: boolean;
   /** The lesson and its comments are in, so the page is its real height. */
@@ -51,6 +51,12 @@ export function usePhoneDiscussionScrollMemory({
     restoredKeyRef.current = memoryKey;
     const remembered = phoneDiscussionScrollPositions.get(memoryKey) ?? 0;
     if (remembered < 1) return undefined;
+    // A video at full height scrolls away with the page: the lesson opens
+    // at its top, video in view. Only a shortened video stays at the top
+    // while the page under it is put back where it was.
+    if (!viewport.querySelector("[data-learning-player-shortened]")) {
+      return undefined;
+    }
 
     // The list measures its comments as they appear, so the remembered
     // position may not be reachable at once. Keep going back to it until it

@@ -17,12 +17,9 @@ import {
 } from "react";
 import { useLaptopWallpaper } from "./laptopWallpaper";
 import {
-  goalShareOfDay,
-  goalStanding,
-  percentOfGoal,
+  describeGoalDay,
   timeLeftParts,
   timeOverGoalParts,
-  todayAgainstGoalParts,
   type GoalStanding,
 } from "./learnerGoalFormat";
 
@@ -142,12 +139,17 @@ function LaptopScreen({
   );
 }
 
-/** One of the three figures along the sheet's foot. */
+/**
+ * One of the three figures along the sheet's foot. They are set as the
+ * phone's goal card sets them (see `LearnerGoalCard`): one weight, near
+ * white, each with an icon in its own colour (blue, amber, green), rather
+ * than in the wallpaper's ink.
+ */
 function GoalStat({
   icon,
   amount,
   label,
-  className = "text-(--goal-ink)/90",
+  className = "text-white/90",
 }: {
   icon: ReactNode;
   amount?: string;
@@ -156,20 +158,15 @@ function GoalStat({
 }) {
   return (
     <p
-      className={`flex items-center gap-2.5 text-[29px] leading-none font-medium whitespace-nowrap ${className}`}
+      className={`flex items-center gap-2.5 text-[36px] leading-none font-normal whitespace-nowrap @[50rem]/home:text-[29px] ${className}`}
     >
       {icon}
-      <span>
-        {amount ? (
-          <strong className="font-bold text-(--goal-ink)">{amount} </strong>
-        ) : null}
-        {label}
-      </span>
+      <span>{amount ? `${amount} ${label}` : label}</span>
     </p>
   );
 }
 
-const statIconClasses = "size-9 shrink-0";
+const statIconClasses = "size-11 shrink-0 @[50rem]/home:size-9";
 
 /**
  * The picture after the sheet's first line once the goal is met. It hops
@@ -233,7 +230,7 @@ function GoalOutcomeStat({
           <Lightning
             weight="fill"
             aria-hidden="true"
-            className={`${statIconClasses} text-amber-300`}
+            className={`${statIconClasses} text-amber-400`}
           />
         }
         amount={over.amount}
@@ -248,7 +245,11 @@ function GoalOutcomeStat({
   return (
     <GoalStat
       icon={
-        <Clock weight="fill" aria-hidden="true" className={statIconClasses} />
+        <Clock
+          weight="fill"
+          aria-hidden="true"
+          className={`${statIconClasses} text-amber-400`}
+        />
       }
       amount={left.amount}
       label={left.label}
@@ -259,8 +260,8 @@ function GoalOutcomeStat({
 /**
  * What the laptop in the learner's hero shows: a wallpaper, and on a sheet
  * over it today's learning against the daily goal: the minutes, a bar, and
- * beside the copy three figures under it (lessons finished today, time
- * left, the share done).
+ * three figures under it (lessons finished today, time left, the share
+ * done).
  *
  * Meeting the goal changes the sheet: its first line says the goal is
  * completed, with applause, and no time is left. Going well past it
@@ -290,7 +291,7 @@ export function LearnerGoalScreen({
             <span className="block h-9 w-56 animate-pulse rounded-full bg-white/14 motion-reduce:animate-none" />
             <span className="mt-5 block h-24 w-96 animate-pulse rounded-3xl bg-white/14 motion-reduce:animate-none" />
             <span className="mt-8 block h-10 animate-pulse rounded-full bg-white/14 motion-reduce:animate-none @[50rem]/home:mt-6 @[50rem]/home:h-7" />
-            <span className="mt-8 hidden h-10 animate-pulse rounded-full bg-white/10 motion-reduce:animate-none @[50rem]/home:block" />
+            <span className="mt-8 block h-10 animate-pulse rounded-full bg-white/10 motion-reduce:animate-none" />
             <span className="sr-only">Loading your learning goals</span>
           </div>
         ) : (
@@ -316,18 +317,11 @@ export function LearnerGoalScreen({
   // An API that predates the default goal answers with none; the figures
   // are worked out here either way, so the two cannot disagree.
   const goalMinutes = summary.dailyGoalMinutes ?? DEFAULT_DAILY_GOAL_MINUTES;
-  const today = todayAgainstGoalParts(summary.todaySeconds, goalMinutes);
-  const percent = percentOfGoal(summary.todaySeconds, goalMinutes);
-  const standing = goalStanding(summary.todaySeconds, goalMinutes);
+  const { today, percent, standing, barShare } = describeGoalDay(
+    summary.todaySeconds,
+    goalMinutes,
+  );
   const beyond = standing === "beyond";
-  // The length of the bar's first part. Short of the goal that is the share
-  // done, with a little showing as soon as anything is. Past the goal it is
-  // the goal's share of the day, and the extra takes the rest.
-  const barShare = beyond
-    ? goalShareOfDay(summary.todaySeconds, goalMinutes)
-    : percent > 0
-      ? Math.min(100, Math.max(percent, 4))
-      : 0;
   // Not sent by an API that predates it; the figure is then left out.
   const lessons: number | undefined = summary.todayCompletions;
 
@@ -386,10 +380,11 @@ export function LearnerGoalScreen({
         ) : null}
       </div>
 
-      {/* Beside the copy only: at a quarter size these would not be read. */}
+      {/* At every size: in the band a narrower page gives the picture they
+          are set larger, as the rest of the sheet is. */}
       <div
         data-goal-stats=""
-        className="mt-8 hidden items-center justify-between gap-4 @[50rem]/home:flex"
+        className="mt-8 flex items-center justify-between gap-4"
       >
         {typeof lessons === "number" ? (
           <GoalStat
@@ -397,7 +392,8 @@ export function LearnerGoalScreen({
               <BookOpen
                 weight="fill"
                 aria-hidden="true"
-                className={statIconClasses}
+                // The same blue in every theme, as on the phone's card.
+                className={`${statIconClasses} text-[#5b82ff]`}
               />
             }
             amount={String(lessons)}
@@ -414,7 +410,7 @@ export function LearnerGoalScreen({
             <CheckCircle
               weight="fill"
               aria-hidden="true"
-              className={statIconClasses}
+              className={`${statIconClasses} text-emerald-500`}
             />
           }
           amount={`${beyond ? percent : Math.min(100, percent)}%`}

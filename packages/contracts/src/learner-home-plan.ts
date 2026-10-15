@@ -30,6 +30,17 @@ export interface LearnerHomePlan {
 
 const progressOf = (course: EnrolledCourse) => course.progress ?? 0;
 
+/**
+ * Whether the learner has begun the course: anything watched at all. A few
+ * seconds of a long course leave its progress at 0.00%, but they are kept,
+ * and the course has its last-watched time from then on.
+ */
+export function hasStartedCourse(
+  course: Pick<EnrolledCourse, "progress" | "lastAccessedAt">,
+): boolean {
+  return (course.progress ?? 0) > 0 || Boolean(course.lastAccessedAt);
+}
+
 function timestamp(value: string | Date | null | undefined) {
   if (!value) return null;
   const time = value instanceof Date ? value.getTime() : Date.parse(value);
@@ -70,10 +81,10 @@ export function planLearnerHome(
   pinnedCourseId?: string | null,
 ): LearnerHomePlan | null {
   const inProgress = enrolledCourses
-    .filter((course) => progressOf(course) > 0 && progressOf(course) < 100)
+    .filter((course) => hasStartedCourse(course) && progressOf(course) < 100)
     .sort(byLastAccessed);
   const notStarted = enrolledCourses
-    .filter((course) => progressOf(course) <= 0)
+    .filter((course) => !hasStartedCourse(course))
     .sort(byEnrolled);
   const completed = enrolledCourses
     .filter((course) => progressOf(course) >= 100)
@@ -90,7 +101,12 @@ export function planLearnerHome(
     const progress = progressOf(pinnedCourse);
     return {
       heroCourse: pinnedCourse,
-      intent: progress >= 100 ? "review" : progress > 0 ? "continue" : "start",
+      intent:
+        progress >= 100
+          ? "review"
+          : hasStartedCourse(pinnedCourse)
+            ? "continue"
+            : "start",
       heroPinned: true,
       courses,
     };

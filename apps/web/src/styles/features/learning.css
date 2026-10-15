@@ -1595,11 +1595,11 @@ html[data-app-hydrated="false"] .learning-workspace__main {
   }
 }
 
+/* A phone's video scrolls away with the page like a wider screen's, and stays
+   at the top only once shortened (the slot's own classes, LearningWorkspace). */
 @media (max-width: 640px) and (orientation: portrait) {
   .learning-workspace__player-wrap {
-    position: sticky;
     z-index: 40;
-    top: 0;
     background: var(--canvas);
     box-shadow: 0 10px 24px color-mix(in srgb, var(--canvas) 48%, transparent);
   }

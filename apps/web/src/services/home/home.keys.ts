@@ -4,4 +4,6 @@ export const homeKeys = {
   guestPage: () => [...homeKeys.all, "guest-page"] as const,
   pageSettings: () => [...homeKeys.all, "page-settings"] as const,
   pageSettingsOptions: () => [...homeKeys.pageSettings(), "options"] as const,
+  lessonVideoOptions: (courseId: string) =>
+    [...homeKeys.pageSettingsOptions(), "lesson-videos", courseId] as const,
 };

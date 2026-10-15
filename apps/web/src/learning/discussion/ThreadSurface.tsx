@@ -308,7 +308,18 @@ export function ThreadSurface({
   const deletionRevision = useOptimisticDeletionRevision();
   const composerHostRef = useRef<HTMLDivElement>(null);
   const feedSentinelRef = useRef<HTMLDivElement>(null);
-  const discussionViewportRef = useRef<HTMLDivElement>(null);
+  // On a phone the lesson's description and comments scroll together with
+  // the video above them, so what scrolls is the lesson column holding both,
+  // not this surface's own area.
+  const discussionViewportRef = useRef<HTMLElement | null>(null);
+  const attachDiscussionViewport = useCallback(
+    (viewport: HTMLDivElement | null) => {
+      discussionViewportRef.current =
+        viewport?.closest<HTMLElement>(".learning-workspace__lesson-column") ??
+        viewport;
+    },
+    [],
+  );
   usePhoneDiscussionScrollMemory({
     viewportRef: discussionViewportRef,
     memoryKey: scrollMemoryKey,
@@ -727,9 +738,9 @@ export function ThreadSurface({
       return (
         <div className="mt-2.5 flex min-h-0 min-w-0 flex-1 flex-col">
           <div
-            ref={discussionViewportRef}
+            ref={attachDiscussionViewport}
             data-discussion-scroll-viewport
-            className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col touch-pan-y overflow-x-hidden overflow-y-auto"
+            className="flex min-w-0 max-w-full flex-1 flex-col touch-pan-y"
           >
             <div
               data-discussion-scroll-header
@@ -757,18 +768,9 @@ export function ThreadSurface({
       return (
         <div className="mt-2.5 flex min-h-0 min-w-0 flex-1 flex-col">
           <div
-            ref={discussionViewportRef}
+            ref={attachDiscussionViewport}
             data-discussion-scroll-viewport
-            className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col touch-pan-y overflow-x-hidden overflow-y-auto"
-            style={{
-              minHeight: 0,
-              maxWidth: "100%",
-              overflowX: "hidden",
-              overflowY: "auto",
-              overscrollBehaviorX: "none",
-              overscrollBehaviorY: "auto",
-              touchAction: "pan-y",
-            }}
+            className="flex min-w-0 max-w-full flex-1 flex-col touch-pan-y"
           >
             <div
               data-discussion-scroll-header
@@ -888,22 +890,26 @@ export function ThreadSurface({
     </div>
   ) : isAllInitialLoading ? (
     discussionLoadingWithLinkedEntry
-  ) : entryFilter === "note" && isNotesLoading && entries.length === 0 ? (
-    discussionLoadingContent
-  ) : entryFilter === "note" && isNotesError && entries.length === 0 ? (
+  ) : // A failed list keeps its message while it is asked for again (see
+  // `DiscussionLoadError`), so it is checked before the loading state.
+  entryFilter === "note" && isNotesError && entries.length === 0 ? (
     <DiscussionLoadError
       subject="your notes"
       testId="learning-notes-error"
       onRetry={onRetryNotes}
+      retrying={isNotesLoading}
     />
-  ) : entryFilter !== "note" && isThreadsLoading && entries.length === 0 ? (
+  ) : entryFilter === "note" && isNotesLoading && entries.length === 0 ? (
     discussionLoadingContent
   ) : entryFilter !== "note" && isThreadsError && entries.length === 0 ? (
     <DiscussionLoadError
       subject="the discussion"
       testId="learning-threads-error"
       onRetry={onRetryThreads}
+      retrying={isThreadsLoading}
     />
+  ) : entryFilter !== "note" && isThreadsLoading && entries.length === 0 ? (
+    discussionLoadingContent
   ) : (
     <>
       <DiscussionVirtualFeed
@@ -1048,10 +1054,8 @@ export function ThreadSurface({
       <div
         className={
           isPhone
-            ? // No gap above the scroller on a phone: it starts at the
-              // video's edge and carries the space as its own padding, so
-              // what scrolls up passes under the timeline instead of being
-              // cut off a little below it.
+            ? // No gap above the list on a phone: it carries the space
+              // as its own padding.
               "flex min-h-0 min-w-0 flex-1 flex-col"
             : "mt-2.5 min-w-0 max-w-full"
         }
@@ -1059,23 +1063,15 @@ export function ThreadSurface({
       >
         {isPhone ? (
           <div
-            ref={discussionViewportRef}
+            ref={attachDiscussionViewport}
             data-discussion-scroll-viewport
-            // The scroller runs out through the lesson panel's side padding
-            // and pads itself by the same amount, so its content stays where
-            // it was while a highlighted comment's tint can reach the screen
-            // edges instead of being clipped at the padding.
-            className="-mx-(--learning-lesson-content-inset) flex min-h-0 min-w-0 flex-1 flex-col touch-pan-y overflow-x-hidden overflow-y-auto px-(--learning-lesson-content-inset) pt-2.5 pb-5.5"
-            style={{
-              minHeight: 0,
-              overflowX: "hidden",
-              overflowY: "auto",
-              overscrollBehaviorX: "none",
-              // Pulling down at the top of the lesson's description and
-              // comments reloads the page, as it does anywhere else.
-              overscrollBehaviorY: "auto",
-              touchAction: "pan-y",
-            }}
+            // This area runs out through the lesson panel's side padding and
+            // pads itself by the same amount, so its content stays where it
+            // was while a highlighted comment's tint can reach the screen
+            // edges instead of being clipped at the padding. It does not
+            // scroll itself: the lesson column around the video does (see
+            // attachDiscussionViewport).
+            className="-mx-(--learning-lesson-content-inset) flex min-w-0 flex-1 flex-col touch-pan-y overflow-x-clip px-(--learning-lesson-content-inset) pt-2.5 pb-5.5"
           >
             <div
               data-discussion-scroll-header

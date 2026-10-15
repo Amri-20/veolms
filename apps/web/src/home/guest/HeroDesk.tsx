@@ -94,6 +94,13 @@ function HeroLaptop({
 }
 
 /**
+ * The switch as a phone's hero corner: a target over the top right corner,
+ * above the date's line, wherever the lamp's measurement would put it.
+ */
+const phoneCornerSwitchClasses =
+  "max-sm:inset-auto! max-sm:top-0! max-sm:right-0! max-sm:block! max-sm:h-16! max-sm:w-24! max-sm:rounded-none! max-sm:rounded-bl-[2rem]!";
+
+/**
  * The lamp's switch, held over the lamp in the picture, and the mute button
  * that can be called up beside it. Like the laptop it follows a measurement
  * that changes on every frame of a resize, and is a component of its own
@@ -101,12 +108,18 @@ function HeroLaptop({
  */
 function HeroLampSwitch({
   pictureRef,
+  phoneCorner,
   action,
   onToggle,
   onShowSoundToggle,
   soundToggle,
 }: {
   pictureRef: RefObject<HTMLImageElement | null>;
+  /**
+   * On a phone, the switch is the hero's top right corner instead of the
+   * lamp, for a hero that shows no lamp there (see `HeroDesk`).
+   */
+  phoneCorner: boolean;
   /** What a press will do, for the switch's name and tooltip. */
   action: string;
   onToggle: () => void;
@@ -132,12 +145,13 @@ function HeroLampSwitch({
         aria-label={action}
         title={`${action} (Shift+L)`}
         aria-keyshortcuts="Shift+L"
+        data-hero-lamp-switch=""
         style={lampHotspot}
         // Until it has been measured it holds the corner the lamp hangs in
         // (on a phone, where the picture is further down, it waits instead).
         className={`absolute z-10 cursor-pointer rounded-b-[45%] outline-none ${
           lampHotspot ? "" : "top-0 right-0 hidden h-12 w-14 sm:block"
-        }`}
+        } ${phoneCorner ? phoneCornerSwitchClasses : ""}`}
       />
       {lampHotspot ? (
         <HeroLampSoundToggle lamp={lampHotspot} {...soundToggle} />
@@ -163,6 +177,7 @@ export function HeroDesk({
   fadeClassName,
   picturePosition = DEFAULT_PICTURE_POSITION,
   laptopScreen,
+  lampCornerOnPhone = false,
   children,
 }: {
   /** The id of the hero's title. */
@@ -182,6 +197,12 @@ export function HeroDesk({
    * it has no power and stays dark.
    */
   laptopScreen?: ReactNode;
+  /**
+   * A hero whose phone form shows no lamp: there the top right corner is
+   * the lamp's switch (same sound, same Shift+L), and the hero lights
+   * itself by `data-lamp` as the picture does.
+   */
+  lampCornerOnPhone?: boolean;
   children: (pictures: ReactNode) => ReactNode;
 }) {
   const [lampOverride, setLampOverride] = useState<LampOverride>();
@@ -348,6 +369,7 @@ export function HeroDesk({
       ) : null}
       <HeroLampSwitch
         pictureRef={litPictureRef}
+        phoneCorner={lampCornerOnPhone}
         action={lampAction}
         onToggle={toggleLamp}
         onShowSoundToggle={showSoundToggle}

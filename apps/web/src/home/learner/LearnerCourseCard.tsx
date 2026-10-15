@@ -16,8 +16,10 @@ import { SignOutIcon as SignOut } from "@phosphor-icons/react/SignOut";
 import type { NavigateTo } from "../../routing/navigation";
 import { GuestHomeLink } from "../guest/GuestHomeLink";
 import { LearnerCourseThumbnail } from "./LearnerCourseThumbnail";
+import { formatCourseProgress } from "../../learning/courseProgressFormat";
 import {
   getEnrolledCourseOverviewHref,
+  hasStartedCourse,
   VIEW_COURSE_CURRICULUM_HINT,
 } from "./learnerHomePlan";
 import { ALT_DRAG_TEXT_SELECT_CLASSES } from "../../courses/altDragTextSelect";
@@ -92,7 +94,7 @@ export function LearnerCourseCard({
 }) {
   const progress = course.progress ?? 0;
   const completed = progress >= 100;
-  const started = progress > 0;
+  const started = hasStartedCourse(course);
   const action = completed ? "Review" : started ? "Continue" : "Start";
   const actionLabel = completed ? "Review Course" : `${action} Learning`;
   const ActionIcon = completed ? BookOpen : Play;
@@ -110,7 +112,7 @@ export function LearnerCourseCard({
       data-learner-course-card=""
       aria-label={
         started
-          ? `${course.courseTitle}, ${progress}% complete`
+          ? `${course.courseTitle}, ${formatCourseProgress(progress)} complete`
           : course.courseTitle
       }
       className={`${ALT_DRAG_TEXT_SELECT_CLASSES} group/card relative flex min-w-0 items-center gap-3.5 overflow-hidden rounded-2xl border border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) p-3 shadow-(--card-shadow) transition-[background-color,box-shadow] duration-200 hover:bg-(--card-surface-hover,var(--hover)) hover:shadow-(--card-hover-shadow) @lg/courses:flex-col @lg/courses:items-stretch @lg/courses:gap-0 @lg/courses:p-0`}
@@ -218,7 +220,8 @@ export function LearnerCourseCard({
               data-sidebar-swipe-ignore=""
             >
               <span
-                className={`block h-full rounded-full ${completed ? "bg-(--success)" : "bg-(--accent)"}`}
+                // A course just begun shows a sliver rather than nothing.
+                className={`block h-full min-w-1.5 rounded-full ${completed ? "bg-(--success)" : "bg-(--accent)"}`}
                 style={{ width: `${progress}%` }}
               />
             </span>
@@ -234,7 +237,7 @@ export function LearnerCourseCard({
                   Completed
                 </>
               ) : (
-                `${progress}% complete`
+                `${formatCourseProgress(progress)} complete`
               )}
             </span>
           </div>

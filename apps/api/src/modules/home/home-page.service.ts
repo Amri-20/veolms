@@ -2,21 +2,24 @@ import {
   DEFAULT_HOME_PAGE_SETTINGS,
   HOME_PAGE_COURSES_PER_SECTION,
   HOME_PAGE_DISCUSSION_COUNT,
-  HOME_PAGE_HERO_LESSON,
   homePageSettingsSchema,
   type CourseSummary,
   type GuestHomePageResponse,
+  type HeroVideoPlayback,
   type HomePageCourseSection,
+  type HomePageLessonVideoOptionsResponse,
   type HomePageOptionsResponse,
   type HomePageSettings,
   type HomePageSettingsResponse,
   type PublicPopularDiscussion,
+  type VideoPlaybackToken,
 } from "@veolms/contracts";
 import type { Database } from "@veolms/database";
 import type { Kysely } from "kysely";
 import { httpError } from "../../lib/errors.ts";
 import type { CourseService } from "../courses/course/course.service.ts";
 import type { ThreadsService } from "../learning/discussions/index.ts";
+import type { HomeHeroVideoService } from "./home-hero-video.service.ts";
 import {
   findHomePageSettings,
   isMissingHomePageSettingsTable,
@@ -65,19 +68,24 @@ export interface HomePageService {
   ): Promise<HomePageSettingsResponse>;
   getOptions(): Promise<HomePageOptionsResponse>;
   getGuestPage(): Promise<GuestHomePageResponse>;
+  /** The lessons of a course an admin can pick as the hero video. */
+  getLessonVideoOptions(
+    courseId: string,
+  ): Promise<HomePageLessonVideoOptionsResponse>;
+  getHeroVideoPlayback(): Promise<HeroVideoPlayback>;
+  getHeroVideoPlaybackToken(): Promise<VideoPlaybackToken>;
 }
 
 export function createHomePageService({
   database,
   courseService,
   threadsService,
+  heroVideoService,
 }: {
   database: Kysely<Database>;
-  courseService: Pick<
-    CourseService,
-    "listPublicCourseSummaries" | "getPublishedCourseBySlug"
-  >;
+  courseService: Pick<CourseService, "listPublicCourseSummaries">;
   threadsService: Pick<ThreadsService, "listPublicPopularDiscussions">;
+  heroVideoService: HomeHeroVideoService;
 }): HomePageService {
   let cachedGuestPage:
     { expiresAt: number; page: Promise<GuestHomePageResponse> } | undefined;
@@ -156,21 +164,25 @@ export function createHomePageService({
   }
 
   /**
-   * The picture the hero's laptop shows until its lesson is played: that
-   * lesson's course thumbnail. The rows only list the course on some
-   * academies, so it is looked up when neither of them does.
+   * The picture the hero's laptop shows until its video is played: the
+   * thumbnail of the lesson's course, or the frame captured from an
+   * uploaded video. The rows only list the course on some academies, so it
+   * is looked up when neither of them does.
    */
   async function resolveHeroLessonPosterUrl(
+    settings: HomePageSettings,
     shownCourses: readonly CourseSummary[],
   ): Promise<string | null> {
-    const { courseSlug } = HOME_PAGE_HERO_LESSON;
-    const shown = shownCourses.find((course) => course.slug === courseSlug);
+    const poster = await heroVideoService.resolvePoster(settings.heroVideo);
+    if (!poster) return null;
+    if ("url" in poster) return poster.url;
+
+    const { courseId } = poster;
+    const shown = shownCourses.find((course) => course.id === courseId);
     if (shown) return heroPosterUrl(shown);
 
-    const course = await courseService.getPublishedCourseBySlug(courseSlug);
-    if (!course) return null;
     const [summary] = await courseService.listPublicCourseSummaries({
-      courseIds: [course.id],
+      courseIds: [courseId],
       limit: 1,
       order: "popular",
     });
@@ -208,7 +220,7 @@ export function createHomePageService({
       settings.freeCourses,
       popularCourses,
     );
-    const heroLessonPosterUrl = await resolveHeroLessonPosterUrl([
+    const heroLessonPosterUrl = await resolveHeroLessonPosterUrl(settings, [
       ...popularCourses,
       ...freeCourses,
     ]);
@@ -247,6 +259,7 @@ export function createHomePageService({
     },
 
     async updateSettings(settings, updatedBy) {
+      await heroVideoService.assertSelectable(settings.heroVideo);
       let row: Awaited<ReturnType<typeof saveHomePageSettings>>;
       try {
         row = await saveHomePageSettings(database, { settings, updatedBy });
@@ -282,6 +295,20 @@ export function createHomePageService({
         })),
         discussions: popular.discussions,
       };
+    },
+
+    async getLessonVideoOptions(courseId) {
+      return { lessons: await heroVideoService.listLessonOptions(courseId) };
+    },
+
+    async getHeroVideoPlayback() {
+      const { settings } = await readSettings();
+      return await heroVideoService.getPlayback(settings.heroVideo);
+    },
+
+    async getHeroVideoPlaybackToken() {
+      const { settings } = await readSettings();
+      return await heroVideoService.getPlaybackToken(settings.heroVideo);
     },
 
     async getGuestPage() {
