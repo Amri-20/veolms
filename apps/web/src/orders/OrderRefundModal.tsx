@@ -155,7 +155,7 @@ export const OrderRefundModal = memo(function OrderRefundModal({
 
   const content = (
     <div
-      className="fixed inset-0 z-[1200] flex items-center justify-center overflow-y-auto bg-black/60 p-2 sm:p-4 backdrop-blur-[8px] animate-in fade-in duration-150"
+      className="fixed inset-0 z-[1200] flex items-center justify-center overflow-y-auto bg-black/60 backdrop-blur-xs p-2 sm:p-4 animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
       aria-labelledby="refund-modal-title"

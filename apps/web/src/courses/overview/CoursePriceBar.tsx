@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
-import { CheckCircle } from "@phosphor-icons/react/CheckCircle";
+import type { CSSProperties, ReactNode } from "react";
+import { LockSimpleIcon as LockSimple } from "@phosphor-icons/react/LockSimple";
+import { ShieldCheckIcon as ShieldCheck } from "@phosphor-icons/react/ShieldCheck";
 import { Ticket } from "@phosphor-icons/react/Ticket";
 import { WarningCircle } from "@phosphor-icons/react/WarningCircle";
 import { X } from "@phosphor-icons/react/X";
@@ -12,6 +13,10 @@ import {
   CoursePriceBreakdown,
   type CoursePriceBreakdownData,
 } from "./CoursePriceBreakdown";
+import type {
+  CoursePurchaseGuarantee,
+  CoursePurchasePerk,
+} from "./coursePurchasePerks";
 import { overviewCardClasses } from "./overviewStyles";
 
 export interface CoursePriceBarProps {
@@ -54,7 +59,12 @@ export interface CoursePriceBarProps {
   notice?: string | null;
   error?: string | null;
   onDismissError: () => void;
-  perks: string[];
+  /** "This course includes", under the button (`getCoursePurchasePerks`). */
+  perks: readonly CoursePurchasePerk[];
+  /** A small line right under the button: how the payment is made. */
+  checkoutNote?: string;
+  /** The green box at the foot of the card, for a course that is paid for. */
+  guarantee?: CoursePurchaseGuarantee;
   /** A further row under the price, above the perks. */
   children?: ReactNode;
 }
@@ -154,16 +164,24 @@ const controlsReserveClasses = {
 
 /**
  * The bar with the receipt (`CoursePriceBreakdown`): one column on a phone;
- * on a wide bar two, the receipt on the left and, behind a thin rule, a
- * narrow column with the coupon over the button, both its full width. A
- * coupon then adds a line to the receipt and moves nothing else, as on a
+ * on a wide bar two, the receipt on the left and a narrow column with the
+ * coupon over the button, both its full width. Where the bar has room to
+ * spare (56rem) the space between them is the division; on a narrower one,
+ * where the receipt runs up to the column, a thin rule stands between them.
+ * A coupon then adds a line to the receipt and moves nothing else, as on a
  * phone. Between the two the coupon and the button share a line under the
  * receipt.
  */
 const receiptLayoutClasses =
-  "flex flex-col gap-3.5 @2xl/price:grid @2xl/price:grid-cols-[minmax(0,1fr)_minmax(15rem,19rem)] @2xl/price:items-center @2xl/price:gap-x-8";
+  "flex flex-col gap-3.5 @2xl/price:grid @2xl/price:grid-cols-[minmax(0,1fr)_minmax(17rem,21rem)] @2xl/price:items-center @2xl/price:gap-x-8";
 const receiptActionsClasses =
-  "grid grid-cols-1 gap-2.5 @md/price:flex @md/price:items-center @md/price:gap-4 @2xl/price:grid @2xl/price:gap-2.5 @2xl/price:self-stretch @2xl/price:content-center @2xl/price:border-l @2xl/price:border-[color-mix(in_srgb,var(--text)_10%,transparent)] @2xl/price:pl-8";
+  "grid grid-cols-1 gap-2.5 @md/price:flex @md/price:items-center @md/price:gap-4 @2xl/price:grid @2xl/price:grid-rows-[minmax(2.75rem,1fr)_auto] @2xl/price:gap-2.5 @2xl/price:self-stretch @2xl/price:border-l @2xl/price:border-[color-mix(in_srgb,var(--text)_10%,transparent)] @2xl/price:pl-8 @min-[56rem]/price:border-l-0 @min-[56rem]/price:pl-0";
+/**
+ * The coupon's place in that column: the column's full width (not the 20rem
+ * it stops at beside the price) and the height left over above the button,
+ * so an applied coupon stands as tall as the receipt beside it.
+ */
+const receiptCouponSlotClasses = "@2xl/price:h-full @2xl/price:max-w-none!";
 /** The button in that narrow column: its full width. */
 const receiptButtonClasses =
   "@md/price:max-w-[max(12.5rem,38%)] @2xl/price:w-full @2xl/price:max-w-none";
@@ -298,6 +316,8 @@ export function CoursePriceBar({
   error,
   onDismissError,
   perks,
+  checkoutNote,
+  guarantee,
   children,
 }: CoursePriceBarProps) {
   const receipt = Boolean(price && priceBreakdown);
@@ -348,7 +368,9 @@ export function CoursePriceBar({
               }
             >
               {coupon ? (
-                <div className={couponSlotClasses}>
+                <div
+                  className={`${couponSlotClasses} ${receipt ? receiptCouponSlotClasses : ""}`}
+                >
                   <CourseCouponControl
                     {...coupon}
                     error={couponError}
@@ -380,6 +402,13 @@ export function CoursePriceBar({
             </div>
           )}
         </div>
+
+        {checkoutNote && !closedMessage ? (
+          <p className="-mt-1 m-0 flex items-center justify-center gap-1.5 text-center text-[0.8rem] text-(--muted)">
+            <LockSimple size={15} className="shrink-0" aria-hidden="true" />
+            {checkoutNote}
+          </p>
+        ) : null}
 
         {/* A refused code is said beside the field while it is open (see
             `CourseCouponControl`). This line is for what is said with the
@@ -430,24 +459,70 @@ export function CoursePriceBar({
           </div>
         )}
 
-        {perks.length > 0 && (
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 pt-1 text-[0.84rem] text-(--muted)">
-            {perks.map((perk, index) => (
-              <span
-                key={`${index}-${perk}`}
-                className="inline-flex min-w-0 items-center gap-1.5 font-medium"
-              >
-                <CheckCircle
-                  size={15}
-                  weight="fill"
-                  className="shrink-0 text-emerald-500"
+        {/* What comes with the course, as a section of its own under the
+            button: a thin rule, a heading, and one line each with a large
+            icon in a tinted square, a title and a quieter line under it.
+            One column in the narrow card (a phone, or the column beside the
+            curriculum), two where the bar is wide. The money-back promise
+            closes it, in green. */}
+        {perks.length > 0 || guarantee ? (
+          <div className="mt-1 flex flex-col gap-4 border-t border-[color-mix(in_srgb,var(--text)_10%,transparent)] pt-5">
+            {perks.length > 0 ? (
+              <>
+                <h3 className="m-0 text-[1.05rem] leading-tight font-bold text-(--text)">
+                  This course includes
+                </h3>
+                <ul className="m-0 grid list-none gap-x-6 gap-y-4 p-0 @2xl/price:grid-cols-2">
+                  {perks.map(({ title, detail, icon: PerkIcon, tone }) => (
+                    <li
+                      key={title}
+                      className="flex min-w-0 items-start gap-3.5"
+                    >
+                      <span
+                        className="grid size-11 shrink-0 place-items-center rounded-xl bg-[color-mix(in_srgb,var(--perk-tone)_15%,transparent)] text-(--perk-tone)"
+                        style={{ "--perk-tone": tone } as CSSProperties}
+                      >
+                        <PerkIcon
+                          size={24}
+                          weight="duotone"
+                          aria-hidden="true"
+                        />
+                      </span>
+                      <span className="flex min-w-0 flex-col gap-0.5 pt-0.5">
+                        <span className="text-[0.95rem] leading-snug font-semibold text-(--text)">
+                          {title}
+                        </span>
+                        {detail ? (
+                          <span className="text-[0.84rem] leading-snug text-(--muted)">
+                            {detail}
+                          </span>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+            {guarantee ? (
+              <div className="flex items-start gap-3.5 rounded-xl border border-[color-mix(in_srgb,var(--success)_28%,transparent)] bg-[color-mix(in_srgb,var(--success)_9%,transparent)] px-4 py-3.5">
+                <ShieldCheck
+                  size={26}
+                  weight="duotone"
+                  className="mt-0.5 shrink-0 text-[color-mix(in_srgb,var(--success)_80%,var(--text))]"
                   aria-hidden="true"
                 />
-                <span>{perk}</span>
-              </span>
-            ))}
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-[0.95rem] leading-snug font-bold text-[color-mix(in_srgb,var(--success)_80%,var(--text))]">
+                    {guarantee.title}
+                  </span>
+                  <span className="text-[0.84rem] leading-snug text-(--muted)">
+                    {guarantee.detail}
+                  </span>
+                </span>
+              </div>
+            ) : null}
           </div>
-        )}
+        ) : null}
       </div>
     </section>
   );

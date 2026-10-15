@@ -7,7 +7,10 @@ import { CourseViewerBandPlaceholder } from "./CourseViewerBandPlaceholder";
 import {
   overviewCardClasses,
   overviewCardPaddingClasses,
+  overviewBandColumnClasses,
   overviewColumnUnderHeroClasses,
+  overviewPageContainerClasses,
+  overviewTwoColumnClasses,
 } from "./overviewStyles";
 
 const block = "rounded-md bg-[color-mix(in_srgb,var(--text)_10%,transparent)]";
@@ -60,14 +63,16 @@ export function CourseOverviewSkeleton({
   return (
     <div
       className={`flex w-full animate-pulse flex-col text-(--text) ${
-        heroPlacement === "edge" ? "" : "gap-4"
+        heroPlacement === "edge" ? overviewPageContainerClasses : "gap-4"
       }`}
       data-testid="course-overview-skeleton"
     >
       {heroPlacement === "edge" ? hero : null}
       <div
         className={`${overviewColumnClasses} ${
-          heroPlacement === "edge" ? overviewColumnUnderHeroClasses : ""
+          heroPlacement === "edge"
+            ? `${overviewColumnUnderHeroClasses} ${overviewTwoColumnClasses}`
+            : ""
         }`}
         data-fixed-radius
       >
@@ -75,7 +80,13 @@ export function CourseOverviewSkeleton({
 
         {/* The first band: price or progress, and the button. The whole
             page pulses here, so the band does not pulse again. */}
-        <CourseViewerBandPlaceholder pulse={false} />
+        <div
+          className={
+            heroPlacement === "edge" ? overviewBandColumnClasses : undefined
+          }
+        >
+          <CourseViewerBandPlaceholder pulse={false} />
+        </div>
 
         {/* Curriculum */}
         <div

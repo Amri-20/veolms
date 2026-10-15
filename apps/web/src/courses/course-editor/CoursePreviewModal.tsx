@@ -42,7 +42,7 @@ export function CoursePreviewModal({
   // prettier-ignore
   return (
     <div
-      className="fixed inset-0 z-1200 flex flex-col bg-black/80 backdrop-blur-xl animate-[deleteModalFadeIn_0.2s_ease-out] p-4 box-border max-[640px]:p-0"
+      className="fixed inset-0 z-1200 flex flex-col bg-black/80 backdrop-blur-xs animate-[deleteModalFadeIn_0.2s_ease-out] p-4 box-border max-[640px]:p-0"
       onClick={() => setIsPreviewModalOpen(false)}
       role="dialog"
       aria-modal="true"

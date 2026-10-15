@@ -305,7 +305,7 @@ export function ReviewsPage({ onNavigatePage, setNotice }: ReviewsPageProps) {
       {/* Contact Support Dialog Modal */}
       {isSupportModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs animate-in fade-in duration-150"
           role="dialog"
           aria-modal="true"
         >

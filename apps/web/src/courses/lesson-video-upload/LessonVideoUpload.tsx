@@ -1217,7 +1217,7 @@ export const LessonVideoUpload = forwardRef<
       {isOpen && typeof document !== "undefined"
         ? createPortal(
             <div
-              className="fixed inset-0 z-[1200] flex items-center justify-center overflow-y-auto bg-black/60 p-2 sm:p-4 backdrop-blur-[8px]"
+              className="fixed inset-0 z-[1200] flex items-center justify-center overflow-y-auto bg-black/60 backdrop-blur-xs p-2 sm:p-4"
               role="dialog"
               aria-modal="true"
               aria-labelledby="lesson-video-upload-title"

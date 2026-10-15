@@ -46,13 +46,11 @@ import { CornersInIcon as CornersIn } from "@phosphor-icons/react/CornersIn";
 import { CornersOutIcon as CornersOut } from "@phosphor-icons/react/CornersOut";
 import { EyeIcon as Eye } from "@phosphor-icons/react/Eye";
 import { GearSixIcon as GearSix } from "@phosphor-icons/react/GearSix";
-import { MoonIcon as Moon } from "@phosphor-icons/react/Moon";
 import { PaletteIcon as Palette } from "@phosphor-icons/react/Palette";
 import { QuestionIcon as Question } from "@phosphor-icons/react/Question";
 import { ShieldCheckIcon as ShieldCheck } from "@phosphor-icons/react/ShieldCheck";
 import { StudentIcon as Student } from "@phosphor-icons/react/Student";
 import { ToastNotification, type ToastMessage } from "./ToastNotification";
-import { SunIcon as Sun } from "@phosphor-icons/react/Sun";
 import { GuestProfileIcon } from "./icons/GuestProfileIcon";
 import { UsersIcon as Users } from "@phosphor-icons/react/Users";
 import logoDarkSvg from "./assets/procodrr-logo-dark.svg?raw";
@@ -865,13 +863,14 @@ const getSidebarResizeRenderKey = (width: number) =>
 // square on the collapsed rail. There the buttons also take the same
 // squircle as the profile button and menu items, under the same rule: only
 // once the rail is narrow, and unaffected by holding the resize handle.
-// The colour menu opens inside the dock, so its swatches are excluded from
-// every button rule here.
+// The colour and reading-mode menus open inside the dock, so every button in
+// them (swatches, the light/dark switch, the reading-mode toggle and its
+// selects) is excluded from every button rule here.
 // The dark/light and reading-mode icons take their own colours from the same
 // source as the menu icons (so they follow the icon style setting), and each
 // icon's glow follows its own colour instead of the theme accent.
 const SIDEBAR_DOCK_CLASS =
-  "[&.sidebar-appearance--vertical_button:not([data-theme-swatch])]:w-full! [&.sidebar-appearance--vertical_button:not([data-theme-swatch])]:basis-auto! [&.sidebar-appearance--vertical_.sidebar-palette-wrap]:w-full! [&.sidebar-appearance--vertical_.sidebar-palette-wrap]:h-auto! [&.sidebar-appearance--vertical_.sidebar-palette-wrap]:basis-auto! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@max-[60px]:[&_button:not([data-theme-swatch])]:rounded-[50%]! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@max-[60px]:[&_button:not([data-theme-swatch])]:[corner-shape:squircle]! bg-transparent! p-0! shadow-none! [&_button:not([data-theme-swatch],.is-active,[aria-expanded=true],[aria-pressed=true])]:bg-[color-mix(in_srgb,var(--surface)_35%,transparent)]! [&_button:not([data-theme-swatch],.is-active,[aria-expanded=true],[aria-pressed=true])]:hover:bg-[color-mix(in_srgb,var(--surface)_72%,transparent)]! in-data-[theme=light]:[&_button:not([data-theme-swatch],.is-active,[aria-expanded=true],[aria-pressed=true])]:hover:bg-[color-mix(in_srgb,var(--selected)_68%,var(--surface))]! [&_button>svg]:size-[26px] [&_button:not([data-theme-swatch])]:h-[57px]! [&_button:not([data-theme-swatch])]:min-h-[57px]! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:[&_button>svg]:size-[26px] [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@min-[60.01px]:[&_button:not([data-theme-swatch])]:rounded-xl! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@min-[60.01px]:[&_button:not([data-theme-swatch])]:[corner-shape:round]! [:root:not([data-sidebar-state=collapsed])_.courses-app:not(.courses-app--collapsed)_&]:[&_button:not([data-theme-swatch])]:rounded-xl! [&_button:not([data-theme-swatch])]:hover:border-transparent! mt-2! gap-2! [&_[data-appearance-mode-toggle]>svg]:text-(--dock-appearance-icon-color)! [&_[data-reading-mode-trigger]>svg]:text-(--dock-reading-mode-icon-color)! [&_button>svg]:[filter:drop-shadow(0_2px_6px_color-mix(in_srgb,currentColor_38%,transparent))]!";
+  "[&.sidebar-appearance--vertical_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:w-full! [&.sidebar-appearance--vertical_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:basis-auto! [&.sidebar-appearance--vertical_.sidebar-palette-wrap]:w-full! [&.sidebar-appearance--vertical_.sidebar-palette-wrap]:h-auto! [&.sidebar-appearance--vertical_.sidebar-palette-wrap]:basis-auto! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@max-[60px]:[&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:rounded-[50%]! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@max-[60px]:[&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:[corner-shape:squircle]! bg-transparent! p-0! shadow-none! [&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*,.is-active,[aria-expanded=true],[aria-pressed=true])]:bg-[color-mix(in_srgb,var(--surface)_35%,transparent)]! [&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*,.is-active,[aria-expanded=true],[aria-pressed=true])]:hover:bg-[color-mix(in_srgb,var(--surface)_72%,transparent)]! in-data-[theme=light]:[&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*,.is-active,[aria-expanded=true],[aria-pressed=true])]:hover:bg-[color-mix(in_srgb,var(--selected)_68%,var(--surface))]! [&_button:not([data-palette-menu]_*,[data-reading-mode-menu]_*)>svg]:size-[26px] [&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:h-[57px]! [&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:min-h-[57px]! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:[&_button:not([data-palette-menu]_*,[data-reading-mode-menu]_*)>svg]:size-[26px] [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@min-[60.01px]:[&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:rounded-xl! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@min-[60.01px]:[&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:[corner-shape:round]! [:root:not([data-sidebar-state=collapsed])_.courses-app:not(.courses-app--collapsed)_&]:[&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:rounded-xl! [&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:hover:border-transparent! mt-2! gap-2! [&_[data-appearance-mode-toggle]>svg]:text-(--dock-appearance-icon-color)! [&_[data-reading-mode-trigger]>svg]:text-(--dock-reading-mode-icon-color)! [&_button:not([data-palette-menu]_*,[data-reading-mode-menu]_*)>svg]:[filter:drop-shadow(0_2px_6px_color-mix(in_srgb,currentColor_38%,transparent))]!";
 
 // While the sidebar is animating or being dragged between its two states it
 // still counts as collapsed but is no longer narrow. In that in-between
@@ -2630,7 +2629,7 @@ export function CoursesPage({
         document.querySelectorAll<HTMLButtonElement>(
           kind === "palette"
             ? "[data-theme-swatch]"
-            : "[data-appearance-mode-toggle]",
+            : "[data-appearance-mode-toggle], [data-appearance-mode-option]",
         ),
       ).find((button) => {
         const rect = button.getBoundingClientRect();
@@ -2686,7 +2685,10 @@ export function CoursesPage({
     const getTransitionControlKey = (
       button: HTMLButtonElement,
       kind: "palette" | "mode",
-    ) => (kind === "palette" ? (button.dataset.themeSwatch ?? null) : "mode");
+    ) =>
+      kind === "palette"
+        ? (button.dataset.themeSwatch ?? null)
+        : (button.dataset.appearanceModeOption ?? "mode");
     const syncTransitionControlCursor = (x: number, y: number) => {
       const kind = getThemeTransitionKind();
       const overTransitionControl =
@@ -3568,15 +3570,21 @@ export function CoursesPage({
     else setPaletteMenu(false);
   };
   toggleAppearanceRef.current = toggleAppearance;
+  // The light/dark switch in the colour theme menu leaves the menu open.
+  const changeAppearanceMode = (
+    mode: "light" | "dark",
+    origin?: ThemeRevealOrigin,
+  ) => {
+    if (mode === resolvedTheme) return;
+    themeRevealOriginRef.current = origin ?? null;
+    setTheme(mode);
+  };
   const updateReadingMode = (preferences: Partial<ReadingModePreferences>) => {
     const next = persistReadingModePreferences({
       ...readReadingModePreferences(),
       ...preferences,
     });
     setReadingModePreferences(next);
-  };
-  const toggleReadingMode = () => {
-    updateReadingMode({ enabled: !readingModePreferences.enabled });
   };
   const showReadingModeMenu = (mobile = false) => {
     revertPalettePreviewRef.current?.();
@@ -5995,14 +6003,20 @@ export function CoursesPage({
                           paletteMenu && paletteMenuSource === "appearance"
                         }
                         aria-controls="desktop-theme-menu"
-                        aria-label={`${resolvedTheme === "dark" ? "Dark" : "Light"} mode active. Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
-                        title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode (Shift+D)`}
-                        aria-keyshortcuts="Shift+D"
+                        aria-label="Choose color theme and light or dark mode"
+                        title="Color theme and mode"
                         onClick={(event) => {
                           if (consumeAppearanceGestureClick(event)) return;
-                          themeRevealOriginRef.current =
-                            themeRevealOriginFromClick(event);
-                          toggleAppearance();
+                          if (paletteMenu && paletteMenuSource === "appearance")
+                            cancelDesktopPalettePreview(
+                              themeRevealOriginFromClick(event) ?? undefined,
+                            );
+                          else
+                            activateAppearanceOption(
+                              "theme",
+                              false,
+                              "appearance",
+                            );
                         }}
                         onContextMenu={openAppearanceThemeMenu}
                         onPointerDown={(event) =>
@@ -6018,21 +6032,7 @@ export function CoursesPage({
                         onPointerUp={finishDockLongPress}
                         onPointerCancel={finishDockLongPress}
                       >
-                        {resolvedTheme === "dark" ? (
-                          <Moon
-                            size={19}
-                            weight="fill"
-                            className="appearance-mode-icon"
-                            data-appearance-mode-icon
-                          />
-                        ) : (
-                          <Sun
-                            size={19}
-                            weight="fill"
-                            className="appearance-mode-icon"
-                            data-appearance-mode-icon
-                          />
-                        )}
+                        <Palette size={19} weight="fill" />
                       </button>
                     );
                   }
@@ -6099,15 +6099,18 @@ export function CoursesPage({
                         data-reading-mode-trigger
                         type="button"
                         className={`sidebar-appearance__reading-mode${readingModeEnabled ? " is-active" : ""}`}
-                        aria-label={`${readingModeEnabled ? "Reading mode active. Turn reading mode off" : "Turn reading mode on"}`}
+                        aria-label={`Reading mode settings. Reading mode is ${readingModeEnabled ? "on" : "off"}`}
                         title={`Reading mode - ${readingModeEnabled ? "on" : "off"}`}
-                        aria-pressed={readingModeEnabled}
                         aria-haspopup="dialog"
                         aria-expanded={readingModeMenu === "desktop"}
                         aria-controls="desktop-reading-mode-quick-settings"
+                        // A click opens the reading-mode menu; its own switch
+                        // turns reading mode on and off.
                         onClick={(event) => {
                           if (consumeAppearanceGestureClick(event)) return;
-                          toggleReadingMode();
+                          if (readingModeMenu === "desktop")
+                            setReadingModeMenu(null);
+                          else showReadingModeMenu(false);
                         }}
                         onContextMenu={openReadingModeMenu}
                         onPointerDown={(event) =>
@@ -6232,6 +6235,8 @@ export function CoursesPage({
                     onPreview={previewAcademyTheme}
                     onConfirm={confirmDesktopPaletteTheme}
                     onCancel={cancelDesktopPalettePreview}
+                    appearanceMode={resolvedTheme}
+                    onAppearanceModeChange={changeAppearanceMode}
                   />
                 )}
               </div>
@@ -6550,6 +6555,8 @@ export function CoursesPage({
                       onPreview={previewAcademyTheme}
                       onConfirm={confirmMobilePaletteTheme}
                       onCancel={cancelMobilePalettePreview}
+                      appearanceMode={resolvedTheme}
+                      onAppearanceModeChange={changeAppearanceMode}
                     />
                   )}
                   {settingsQuickMenuLoaded && (
@@ -6726,14 +6733,23 @@ export function CoursesPage({
                             paletteMenuSource === "appearance"
                           }
                           aria-controls="mobile-theme-menu"
-                          aria-label={`${resolvedTheme === "dark" ? "Dark" : "Light"} mode active. Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
-                          title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode (Shift+D)`}
-                          aria-keyshortcuts="Shift+D"
+                          aria-label="Choose color theme and light or dark mode"
+                          title="Color theme and mode"
                           onClick={(event) => {
                             if (consumeAppearanceGestureClick(event)) return;
-                            themeRevealOriginRef.current =
-                              themeRevealOriginFromClick(event);
-                            toggleAppearance(true);
+                            if (
+                              mobilePaletteMenu &&
+                              paletteMenuSource === "appearance"
+                            )
+                              cancelMobilePalettePreview(
+                                themeRevealOriginFromClick(event) ?? undefined,
+                              );
+                            else
+                              activateAppearanceOption(
+                                "theme",
+                                true,
+                                "appearance",
+                              );
                           }}
                           onContextMenu={(event) =>
                             openAppearanceThemeMenu(event, true)
@@ -6751,21 +6767,7 @@ export function CoursesPage({
                           onPointerUp={finishDockLongPress}
                           onPointerCancel={finishDockLongPress}
                         >
-                          {resolvedTheme === "dark" ? (
-                            <Moon
-                              size={20}
-                              weight="fill"
-                              className="appearance-mode-icon"
-                              data-appearance-mode-icon
-                            />
-                          ) : (
-                            <Sun
-                              size={20}
-                              weight="fill"
-                              className="appearance-mode-icon"
-                              data-appearance-mode-icon
-                            />
-                          )}
+                          <Palette size={20} weight="fill" />
                         </button>
                       );
                     }
@@ -6826,15 +6828,16 @@ export function CoursesPage({
                           data-reading-mode-trigger
                           type="button"
                           className={`sidebar-appearance__reading-mode${readingModeEnabled ? " is-active" : ""}`}
-                          aria-label={`${readingModeEnabled ? "Reading mode active. Turn reading mode off" : "Turn reading mode on"}`}
+                          aria-label={`Reading mode settings. Reading mode is ${readingModeEnabled ? "on" : "off"}`}
                           title={`Reading mode - ${readingModeEnabled ? "on" : "off"}`}
-                          aria-pressed={readingModeEnabled}
                           aria-haspopup="dialog"
                           aria-expanded={readingModeMenu === "mobile"}
                           aria-controls="mobile-reading-mode-quick-settings"
                           onClick={(event) => {
                             if (consumeAppearanceGestureClick(event)) return;
-                            toggleReadingMode();
+                            if (readingModeMenu === "mobile")
+                              setReadingModeMenu(null);
+                            else showReadingModeMenu(true);
                           }}
                           onContextMenu={(event) =>
                             openReadingModeMenu(event, true)

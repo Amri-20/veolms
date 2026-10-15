@@ -80,6 +80,11 @@ import { CourseLoadError } from "./overview/CourseLoadError";
 import { CourseManagerBar } from "./overview/CourseManagerBar";
 import { CourseViewerBandPlaceholder } from "./overview/CourseViewerBandPlaceholder";
 import {
+  coursePurchaseCheckoutNote,
+  coursePurchaseGuarantee,
+  getCoursePurchasePerks,
+} from "./overview/coursePurchasePerks";
+import {
   presumedGuestOnlyClasses,
   sessionExpectedOnlyClasses,
   type CourseViewerState,
@@ -97,7 +102,10 @@ import {
   bandTitleClasses,
   overviewCardClasses,
   overviewCardPaddingClasses,
+  overviewBandColumnClasses,
   overviewColumnUnderHeroClasses,
+  overviewPageContainerClasses,
+  overviewTwoColumnClasses,
 } from "./overview/overviewStyles";
 import {
   CourseSupportAmountPicker,
@@ -572,11 +580,15 @@ function CoursePurchaseSection({
       total: displayPrice,
     };
   })();
-  const perksList = inclusions ?? [
-    "Full lifetime access",
-    "Access on mobile & desktop",
-    "Certificate of completion",
-  ];
+  const perksList = getCoursePurchasePerks({
+    duration: course.duration,
+    lessons: course.lectures,
+    sections: course.sections,
+    courseIncludes: inclusions,
+  });
+  // The payment line and the money-back promise only where something is
+  // paid for.
+  const isPaidPurchase = !isFree && !isInvitationOnly && !isCreatorNormal;
   const priceSizeVariant = getPriceSizeVariant(displayPrice);
 
   const applyCouponCode = async (rawCode: string) => {
@@ -1184,6 +1196,8 @@ function CoursePurchaseSection({
       error={paymentError}
       onDismissError={() => setPaymentError(null)}
       perks={perksList}
+      checkoutNote={isPaidPurchase ? coursePurchaseCheckoutNote : undefined}
+      guarantee={isPaidPurchase ? coursePurchaseGuarantee : undefined}
     >
       {SUPPORT_AMOUNTS_OFFERED &&
       !isCreatorNormal &&
@@ -2078,7 +2092,7 @@ function CourseOverviewContent({
       className={`flex w-full flex-col text-(--text) ${
         isReadOnlyPreview
           ? "gap-4 p-[36px_24px_48px] max-[900px]:p-[24px_16px_48px] max-[640px]:p-[16px_14px_40px]"
-          : ""
+          : overviewPageContainerClasses
       }`}
     >
       {/* 1. Title and course facts over the thumbnail */}
@@ -2086,7 +2100,9 @@ function CourseOverviewContent({
 
       <div
         className={`${overviewColumnClasses} ${
-          isReadOnlyPreview ? "" : overviewColumnUnderHeroClasses
+          isReadOnlyPreview
+            ? ""
+            : `${overviewColumnUnderHeroClasses} ${overviewTwoColumnClasses}`
         }`}
         data-fixed-radius
       >
@@ -2103,8 +2119,13 @@ function CourseOverviewContent({
             The band is always in the one box, and in the same place in it
             whether the visitor is known or only presumed a guest, so that
             learning which it is does not start the band over (an open
-            coupon field would lose what was typed in it). */}
-        <div>
+            coupon field would lose what was typed in it).
+
+            On a wide page it is the right column, beside the curriculum,
+            and stays in view while the page scrolls. */}
+        <div
+          className={isReadOnlyPreview ? undefined : overviewBandColumnClasses}
+        >
           {viewer === "pending" ? (
             <CourseViewerBandPlaceholder />
           ) : (

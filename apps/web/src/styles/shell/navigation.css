@@ -509,10 +509,12 @@
 
 .sidebar-appearance
   > .sidebar-palette-menu--dock-attached:not(.sidebar-palette-menu--collapsed) {
-  right: auto;
-  bottom: calc(100% + 2px);
-  left: 5px;
-  width: 216px;
+  /* Spans the profile button's edges (the dock shares them) and covers it:
+     the dock's 8px top margin puts both bottoms on the same line. */
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: auto;
 }
 
 .sidebar-palette-trigger {

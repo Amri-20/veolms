@@ -1064,7 +1064,8 @@
 
 .settings-profile__verification-dialog::backdrop {
   background: color-mix(in srgb, var(--canvas) 76%, transparent);
-  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
 
 .settings-profile__verification-dialog-header {
@@ -1339,8 +1340,9 @@
   box-sizing: border-box;
   padding: 20px;
   background: rgb(0 0 0 / 72%);
-  backdrop-filter: blur(10px);
   animation: settings-profile-verification-fade-in 180ms ease-out;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
 
 .settings-profile__verification-dialog-card {
@@ -1774,7 +1776,8 @@ html:has(.settings-profile__verification-dialog-overlay) {
 
 .settings-profile__privacy-dialog::backdrop {
   background: color-mix(in srgb, var(--canvas) 72%, transparent);
-  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
 
 .settings-profile__privacy-dialog-close {

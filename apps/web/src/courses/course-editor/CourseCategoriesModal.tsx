@@ -49,7 +49,7 @@ export function CourseCategoriesModal({
   // prettier-ignore
   return (
     <div
-      className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/65 backdrop-blur-sm p-4 [animation:deleteModalFadeIn_0.18s_ease-out]"
+      className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/65 backdrop-blur-xs p-4 [animation:deleteModalFadeIn_0.18s_ease-out]"
       onClick={handleCloseAddCategoryModal}
       role="dialog"
       aria-modal="true"

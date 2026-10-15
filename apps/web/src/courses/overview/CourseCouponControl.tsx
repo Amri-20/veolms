@@ -84,7 +84,7 @@ export function CourseCouponControl({
       <div
         className={`relative flex h-11 w-full max-w-full min-w-0 animate-in items-center rounded-[0.6875rem] bg-[color-mix(in_srgb,var(--success,#10b981)_13%,transparent)] text-(--text) duration-150 fade-in zoom-in-95 motion-reduce:animate-none @md/price:h-10 @md/price:w-fit ${
           stackedOnWide
-            ? "@2xl/price:h-11 @2xl/price:w-full"
+            ? "@2xl/price:h-full @2xl/price:min-h-11 @2xl/price:w-full"
             : besideButtonClasses
         }`}
       >
@@ -95,11 +95,11 @@ export function CourseCouponControl({
             stackedOnWide ? "@2xl/price:flex-1 @2xl/price:justify-between" : ""
           }`}
         >
-          <span className="truncate text-[0.86rem] leading-none font-bold tracking-wider uppercase">
+          <span className="truncate text-[0.95rem] leading-none font-bold tracking-wider uppercase">
             {applied.code}
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1 text-[0.74rem] leading-none font-semibold text-[color-mix(in_srgb,var(--success,#10b981)_72%,var(--text))]">
-            <Check size={12} weight="bold" aria-hidden="true" />
+          <span className="inline-flex shrink-0 items-center gap-1 text-[0.82rem] leading-none font-semibold text-[color-mix(in_srgb,var(--success,#10b981)_72%,var(--text))]">
+            <Check size={13} weight="bold" aria-hidden="true" />
             <span className="@md/price:hidden">Coupon applied</span>
             <span className="hidden @md/price:inline">
               <span className="sr-only">Coupon </span>
@@ -252,8 +252,8 @@ export function CourseCouponControl({
       // radius from `--control-radius-action`, hence the mark and the
       // variable (see `priceBarActionClasses`).
       //
-      // It is a quiet second action: no fill at rest, only the thin edge
-      // the field has, and a faint tint of the accent under the pointer,
+      // It is a quiet second action: no fill at rest, only a thin dashed
+      // edge (the app's dashed border, as on its empty states), and a faint tint of the accent under the pointer,
       // stronger when pressed (no fill at rest since 2026-10-15).
       //
       // On a phone it is centred over the button, across the bar, and as
@@ -264,7 +264,7 @@ export function CourseCouponControl({
       // put the ticket there while it had no tint at rest, until
       // 2026-10-15.)
       data-control-radius-action
-      className={`group/coupon flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-[0.6875rem] border border-[color-mix(in_srgb,var(--text)_14%,transparent)] bg-transparent px-2 text-[0.9rem] font-semibold whitespace-nowrap text-(--accent-ink,var(--accent)) transition-colors duration-140 [--control-radius-action:0.6875rem] hover:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) active:bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] @md/price:h-14 @md/price:w-fit @md/price:px-4 ${
+      className={`group/coupon flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-[0.6875rem] border border-dashed border-[color-mix(in_srgb,var(--text)_22%,transparent)] bg-transparent px-2 text-[0.9rem] font-semibold whitespace-nowrap text-(--accent-ink,var(--accent)) transition-colors duration-140 [--control-radius-action:0.6875rem] hover:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) active:bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] @md/price:h-14 @md/price:w-fit @md/price:px-4 ${
         stackedOnWide
           ? "@2xl/price:h-11 @2xl/price:w-full"
           : besideButtonClasses

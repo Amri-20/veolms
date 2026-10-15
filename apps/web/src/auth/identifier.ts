@@ -612,7 +612,9 @@ export function formatNationalPhoneNumber(
 }
 
 function invalidMobileMessage(country: CountryOption): string {
-  return `Please enter a valid ${country.nationalDigits}-digit mobile number for ${country.name}.`;
+  // Short enough for one line beside the field's label; the country is in
+  // the picker next to the field.
+  return `Enter a valid ${country.nationalDigits}-digit number.`;
 }
 
 export function validateMobile(
