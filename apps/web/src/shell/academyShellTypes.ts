@@ -70,3 +70,8 @@ export interface SidebarTooltip {
   focusVisible: boolean;
   preferenceControlled: boolean;
 }
+
+export interface CoursesPageRenderContext {
+  mobileBottomNavigation: boolean;
+  mobileBottomNavigationHidden: boolean;
+}

@@ -344,7 +344,9 @@ import type {
   PointerPositionEvent,
   SidebarScreenSwipeStartEvent,
   SidebarTooltip,
+  CoursesPageRenderContext,
 } from "./shell/academyShellTypes";
+export type { CoursesPageRenderContext } from "./shell/academyShellTypes";
 import { ShortcutKeys } from "./shell/ShortcutKeys";
 import { SidebarTooltipSurface } from "./shell/SidebarTooltipSurface";
 import {
@@ -405,11 +407,6 @@ interface CoursesPageProps {
   learningOriginSection?: string | null;
   learningMotionStageRef?: Ref<HTMLDivElement>;
   renderMain?: ((context: CoursesPageRenderContext) => ReactNode) | null;
-}
-
-export interface CoursesPageRenderContext {
-  mobileBottomNavigation: boolean;
-  mobileBottomNavigationHidden: boolean;
 }
 
 export function CoursesPage({
