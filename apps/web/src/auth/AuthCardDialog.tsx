@@ -64,7 +64,7 @@ export function AuthCardDialog({
         pressBeganOnBackdropRef.current = false;
         if (event.target === event.currentTarget && beganOnBackdrop) onClose();
       }}
-      className="fixed inset-0 z-150 m-auto max-h-[calc(100dvh-2rem)] w-[min(92vw,420px)] max-w-none overflow-y-auto border-0 bg-transparent p-0 text-(--text) backdrop:bg-black/65 backdrop:backdrop-blur-sm sm:w-[min(92vw,460px)]"
+      className="fixed inset-0 z-150 m-auto max-h-[calc(100dvh-2rem)] w-[min(92vw,420px)] max-w-none overflow-y-auto border-0 bg-transparent p-0 text-(--text) backdrop:bg-black/65 backdrop:backdrop-blur-xs sm:w-[min(92vw,460px)]"
     >
       <div className="auth-page min-h-0! bg-transparent! p-0! before:hidden!">
         <div className={`auth-page__container ${loginCardFrameClasses}`}>

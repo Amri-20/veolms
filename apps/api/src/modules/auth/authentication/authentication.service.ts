@@ -614,7 +614,7 @@ export function createAuthService({
       throw new AppError(
         409,
         "PHONE_TAKEN",
-        "That phone number is already linked to another account.",
+        "Already linked to another account.",
       );
     }
 
@@ -748,7 +748,7 @@ export function createAuthService({
       throw new AppError(
         409,
         "PHONE_TAKEN",
-        "That phone number is already linked to another account.",
+        "Already linked to another account.",
       );
     }
 

@@ -34,7 +34,7 @@ export function QuizSubmitDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-xs p-4"
       role="presentation"
       onClick={(event) => {
         if (event.target === event.currentTarget) onCancel();
