@@ -1,5 +1,4 @@
 import {
-  Fragment,
   Suspense,
   useCallback,
   useEffect,
@@ -34,20 +33,11 @@ import {
   rememberSettingsTab,
   type SettingsTab,
 } from "./routing/tabSessionState";
-import { CaretDownIcon as CaretDown } from "@phosphor-icons/react/CaretDown";
 import { CircleNotchIcon as CircleNotch } from "@phosphor-icons/react/CircleNotch";
-import { deepGroundClasses } from "./components/ElevatedCard";
 import { CenteredLoadingSpinner } from "./components/LoadingSpinner";
-import { LongScrollElasticScroller } from "./components/elastic-scroller";
-import { CornersInIcon as CornersIn } from "@phosphor-icons/react/CornersIn";
-import { CornersOutIcon as CornersOut } from "@phosphor-icons/react/CornersOut";
-import { EyeIcon as Eye } from "@phosphor-icons/react/Eye";
-import { GearSixIcon as GearSix } from "@phosphor-icons/react/GearSix";
-import { PaletteIcon as Palette } from "@phosphor-icons/react/Palette";
 import { ShieldCheckIcon as ShieldCheck } from "@phosphor-icons/react/ShieldCheck";
 import { StudentIcon as Student } from "@phosphor-icons/react/Student";
 import { ToastNotification, type ToastMessage } from "./ToastNotification";
-import { GuestProfileIcon } from "./icons/GuestProfileIcon";
 import { UsersIcon as Users } from "@phosphor-icons/react/Users";
 import type { LearningCourse } from "./StudentPages";
 import {
@@ -66,7 +56,6 @@ import {
   isStudentCatalogueFilterSubpath,
 } from "./courses/catalogueRoutes";
 import { useToggleWishlistCourse, useWishlistIds } from "./wishlist";
-import { CourseCatalogueLoadingSkeleton } from "./courses/CourseCatalogueSkeleton";
 import type {
   Course,
   CourseEnrollmentFilter,
@@ -78,17 +67,13 @@ import type {
 import { AcademyPaletteMenu } from "./shell/AcademyPaletteMenu";
 import { AcademyRouteSkeleton } from "./routing/AcademyRouteSkeleton";
 import { CreatorDashboardSkeleton } from "./home/creator/CreatorDashboardSkeleton";
+import { LearnerHomeContent } from "./shell/LearnerHomeContent";
 import { readPinnedHomeCourseId } from "./home/learner/pinnedHomeCourse";
-import { LearnerHomeShell } from "./home/learner/LearnerHomeSkeleton";
 import { FloatingScrollbar } from "./shell/FloatingScrollbar";
 import { useScrollingMark } from "./shell/useScrollingMark";
 import { useMobileProfileDrawerSize } from "./shell/useMobileProfileDrawerSize";
-import { ShellProfileAvatar } from "./shell/ShellProfileAvatar";
-import { ProfileButtonPlaceholder } from "./shell/ProfileButtonPlaceholder";
 import { FrameEdge } from "./shell/FrameEdge";
 import { ShellDragSurface } from "./shell/ShellDragSurface";
-import { SidebarResizeReadout } from "./shell/SidebarResizeReadout";
-import { SidebarToggleIcon } from "./shell/SidebarToggleIcon";
 import { useCurrentUser, useSignOut } from "./services/auth";
 import {
   COURSE_CATALOGUE_SEARCH_SESSION_KEY,
@@ -117,11 +102,7 @@ import {
   adaptCourseSummaryToCatalogueCourse,
   adaptDeletedCourseToCatalogueCourse,
 } from "./courses/courseAdapter";
-import {
-  CATALOGUE_CHUNK_URL_PLACEHOLDER,
-  COURSE_OVERVIEW_CHUNK_URL_PLACEHOLDER,
-  GUEST_HOME_CHUNK_URL_PLACEHOLDER,
-} from "./routing/routeChunkPreloads";
+import { COURSE_OVERVIEW_CHUNK_URL_PLACEHOLDER } from "./routing/routeChunkPreloads";
 import { ChunkStylesheets } from "./routing/ChunkStylesheets";
 import {
   creatorDashboardBody,
@@ -129,13 +110,11 @@ import {
   settingsPageBody,
   workspacePageBody,
 } from "./routing/prerenderedBodies";
-import { guestHeroImage } from "./home/guest/guestHeroImage";
 import {
   getMobileOverflowNavigation,
   getMobilePrimaryNavigation,
   getRoleNavigationItems,
   getNavigationDestination,
-  getNavigationIconColor,
 } from "./shell/navigation";
 import type { NavigationItemWithMetadata } from "./shell/navigation";
 import {
@@ -194,7 +173,6 @@ import {
 } from "./themes";
 import type {
   PageTabColors,
-  SidebarDockItem,
   SidebarMode,
 } from "./settings/settingsPreferences";
 import {
@@ -232,7 +210,6 @@ import {
   isStoredString,
   useSessionStorageState,
 } from "./learning/useSessionStorageState";
-import { LearningBackgroundSurface } from "./learning/LearningBackgroundSurface";
 import { getCatalogueCardProgressPercent } from "./learning/catalogueCardProgress";
 import { hasStartedCourse } from "@veolms/contracts/learner-home-plan";
 import { readLearningProgress } from "./learning/learningProgressStorage";
@@ -246,19 +223,12 @@ import type { ReadingModePreferences } from "./reading-mode/readingModePreferenc
 import type { DrawerDismissThen } from "@/components/ui/drawer";
 import type { ProfilePreferences } from "./settings/profileTypes";
 import {
-  GUEST_HOME_CSS_URLS,
-  CATALOGUE_CSS_URLS,
-  GUEST_HOME_JS_URLS,
-  CATALOGUE_JS_URLS,
   COURSE_OVERVIEW_CSS_URLS,
   COURSE_OVERVIEW_JS_URLS,
 } from "./shell/academyRouteChunkUrls";
 import {
   loadCourseCatalogueModule,
-  CourseCatalogue,
   loadProfileMenuModule,
-  ProfileMenu,
-  ProfileMenuIdentity,
   LogoutConfirmModal,
   loadMobileMenuDrawerModule,
   Drawer,
@@ -275,7 +245,6 @@ import {
   loadCourseCreatePage,
   CourseCreatePage,
   SettingsPage,
-  AuthenticatedHomeBoundary,
   GuestHome,
   PlaceholderPage,
   WorkspacePage,
@@ -300,7 +269,6 @@ import {
 } from "./shell/academyPageFallbacks";
 import {
   SETTINGS_ENTRY_SELECTOR,
-  procodrrLogoSvg,
   SIDEBAR_COLLAPSED_WIDTH,
   SIDEBAR_CONTENT_REVEAL_DISTANCE,
   SIDEBAR_GESTURE_ACTIVATION_DISTANCE,
@@ -323,16 +291,6 @@ import {
   SIDEBAR_BRAND_DOUBLE_TAP_MS,
   SIDEBAR_BRAND_DOUBLE_TAP_DISTANCE,
 } from "./shell/academyShellConstants";
-import {
-  guestHomePreviewClasses,
-  learnerHomePendingClasses,
-  dashboardHomePendingClasses,
-  SIDEBAR_PROFILE_BUTTON_CLASS,
-  SIDEBAR_NAV_ITEM_SQUIRCLE_CLASS,
-  SIDEBAR_DOCK_CLASS,
-  SIDEBAR_BRAND_CLASS,
-  SIDEBAR_COLLAPSE_BUTTON_CLASS,
-} from "./shell/academyShellClasses";
 import type {
   ThemePreference,
   AppearanceOption,
@@ -347,7 +305,6 @@ import type {
   CoursesPageRenderContext,
 } from "./shell/academyShellTypes";
 export type { CoursesPageRenderContext } from "./shell/academyShellTypes";
-import { ShortcutKeys } from "./shell/ShortcutKeys";
 import { SidebarTooltipSurface } from "./shell/SidebarTooltipSurface";
 import {
   getLearningMobileMenuSnapPoint,
@@ -357,7 +314,18 @@ import {
   subscribeToNothing,
   getSurfacePageKey,
 } from "./shell/academyShellGeometry";
-import { LoginProfileButton } from "./shell/LoginProfileButton";
+import { SidebarResizeHandle } from "./shell/SidebarResizeHandle";
+import { SidebarBrand } from "./shell/SidebarBrand";
+import { SidebarNavigation } from "./shell/SidebarNavigation";
+import { SidebarProfileMenuLayer } from "./shell/SidebarProfileMenuLayer";
+import { SidebarProfileButton } from "./shell/SidebarProfileButton";
+import { SidebarAppearanceDock } from "./shell/SidebarAppearanceDock";
+import { ShellMainFrame } from "./shell/ShellMainFrame";
+import { MobileBottomNavigation } from "./shell/MobileBottomNavigation";
+import { MobileSheetProfile } from "./shell/MobileSheetProfile";
+import { MobileSheetProfileMenu } from "./shell/MobileSheetProfileMenu";
+import { MobileSheetAppearance } from "./shell/MobileSheetAppearance";
+import { CourseCatalogueContent } from "./shell/CourseCatalogueContent";
 interface CoursesPageProps {
   initialPublishedCoursePage?: CourseListResponse;
   initialPublishedCoursePageNeedsRefresh?: boolean;
@@ -924,7 +892,7 @@ export function CoursesPage({
       }
       setCreatorEnrollmentFilter(filter);
     },
-    [isStudentCatalogueRoute, onNavigatePage],
+    [isStudentCatalogueRoute, onNavigatePage, setCreatorEnrollmentFilter],
   );
   const deleteCourseMutation = useDeleteCourse();
   const restoreCourseMutation = useRestoreCourse();
@@ -995,7 +963,7 @@ export function CoursesPage({
   const openLogoutConfirm = useCallback(() => {
     setProfileMenu(false);
     setLogoutConfirmOpen(true);
-  }, [setLogoutConfirmOpen]);
+  }, [setLogoutConfirmOpen, setProfileMenu]);
   const dismissProfileMenuThen = useBackDismiss({
     open: profileMenu,
     onDismiss: () => setProfileMenu(false),
@@ -4110,7 +4078,7 @@ export function CoursesPage({
     setSidebarMode("hidden");
     setPaletteMenu(false);
     setEdgeSidebarOpen(true);
-  }, []);
+  }, [setPaletteMenu]);
 
   const sidebarToggleGesture = useSecondPressHold<HTMLButtonElement>({
     onPress: toggleSidebarWidth,
@@ -4468,109 +4436,20 @@ export function CoursesPage({
       // hydration instead of after the auth check. One link per art-directed
       // source, matching the hero's <picture>.
       return (
-        <Suspense fallback={<AcademyPageFallback />}>
-          {/* Having the lazy guest-home chunk preloaded by the document
-              keeps React from discarding the prerendered markup (and
-              flashing the fallback) when a state update lands before the
-              chunk would otherwise have downloaded. Its feature stylesheets
-              are linked too: the prerendered guest-home markup must not
-              paint before the CSS that styles it. */}
-          <link rel="modulepreload" href={GUEST_HOME_CHUNK_URL_PLACEHOLDER} />
-          {GUEST_HOME_JS_URLS.map((href) => (
-            <link key={href} rel="modulepreload" href={href} />
-          ))}
-          <ChunkStylesheets hrefs={GUEST_HOME_CSS_URLS} />
-          {[guestHeroImage.phone, guestHeroImage.wide].map((source) => (
-            <link
-              key={source.media}
-              rel="preload"
-              as="image"
-              media={source.media}
-              href={source.src}
-              imageSrcSet={source.srcSet}
-              imageSizes={source.sizes}
-              fetchPriority="high"
-            />
-          ))}
-          {showGuestHomePreview ? (
-            // Paint the seeded guest home while the session check runs so
-            // the prerendered document carries real content (and the LCP
-            // image) instead of a blank fallback. This is also the
-            // prerendered markup, so a browser that was signed in last
-            // time hides it from the first paint (data-session-hint, set
-            // by the head bootstrap) and shows the learner's home with
-            // its placeholders instead.
-            // A guest keeps this exact element once the check answers:
-            // rendering it from a different place in the tree would make
-            // React rebuild the whole page that is already on screen.
-            <>
-              <div
-                className={
-                  // Once the session check is in, this is a visitor's
-                  // page and is shown whatever the browser remembered. A
-                  // check that failed (the API not answering) leaves the
-                  // remembered session in place, and the page was blank.
-                  isAuthReady
-                    ? "guest-home-preview contents"
-                    : guestHomePreviewClasses
-                }
-              >
-                <GuestHome
-                  onNavigatePage={onNavigatePage}
-                  courseCardActions={guestHomeCourseCardActions}
-                  initialPage={initialGuestHomePage}
-                  initialCopy={initialGuestHomeCopy}
-                />
-              </div>
-              {isAuthReady ? null : (
-                <>
-                  <div className={learnerHomePendingClasses}>
-                    <LearnerHomeShell />
-                  </div>
-                  <div className={dashboardHomePendingClasses}>
-                    <CreatorDashboardSkeleton />
-                  </div>
-                </>
-              )}
-            </>
-          ) : !isAuthReady && showGuestHomeWhilePending ? (
-            // Nothing says whose home this is yet, and there is no guest
-            // home to show meanwhile.
-            <AcademyPageFallback />
-          ) : (
-            // Signed in, or signed in last time and waiting for the session
-            // check: the learner's home either way, from the same place in
-            // the tree, so it is put up once and filled in as the answers
-            // come. Its picture and everything that is the same for every
-            // learner are there from the start.
-            <Suspense
-              fallback={
-                // While the home's own code loads. A learner who had no
-                // courses last time gets their home here already.
-                learnerWasNotEnrolled
-                  ? newLearnerHome
-                  : (justSignedInHome ?? (
-                      <LearnerHomeShell
-                        learnerName={shellProfileKnownName ?? ""}
-                      />
-                    ))
-              }
-            >
-              <AuthenticatedHomeBoundary
-                onOpenCourse={onOpenCourse}
-                onNavigatePage={onNavigatePage}
-                // The name this tab remembers stands in until the session
-                // answers, so the greeting is its full width from the start
-                // (the quote under it wraps to that width).
-                learnerName={shellProfileKnownName?.trim() ?? ""}
-                courseCardActions={guestHomeCourseCardActions}
-                sessionPending={!isAuthReady}
-                notEnrolledContent={newLearnerHome}
-                pendingContent={justSignedInHome}
-              />
-            </Suspense>
-          )}
-        </Suspense>
+        <LearnerHomeContent
+          showGuestHomePreview={showGuestHomePreview}
+          isAuthReady={isAuthReady}
+          onNavigatePage={onNavigatePage}
+          guestHomeCourseCardActions={guestHomeCourseCardActions}
+          initialGuestHomePage={initialGuestHomePage}
+          initialGuestHomeCopy={initialGuestHomeCopy}
+          showGuestHomeWhilePending={showGuestHomeWhilePending}
+          learnerWasNotEnrolled={learnerWasNotEnrolled}
+          newLearnerHome={newLearnerHome}
+          justSignedInHome={justSignedInHome}
+          shellProfileKnownName={shellProfileKnownName}
+          onOpenCourse={onOpenCourse}
+        />
       );
     }
     if (surfacePage === "settings") {
@@ -4873,66 +4752,44 @@ export function CoursesPage({
       );
     }
     return (
-      <Suspense
-        fallback={<CourseCatalogueLoadingSkeleton role={effectiveRole} />}
-      >
-        {/* See the guest-home modulepreload note: without this, an early
-            state update makes React drop the prerendered catalogue for the
-            skeleton fallback — a full-viewport layout shift. The chunk's
-            stylesheets are linked so prerendered markup paints styled. */}
-        <link rel="modulepreload" href={CATALOGUE_CHUNK_URL_PLACEHOLDER} />
-        {CATALOGUE_JS_URLS.map((href) => (
-          <link key={href} rel="modulepreload" href={href} />
-        ))}
-        <ChunkStylesheets hrefs={CATALOGUE_CSS_URLS} />
-        <CourseCatalogue
-          activeSection={surfaceActiveSection}
-          role={effectiveRole}
-          isAdmin={isAdmin}
-          currentUserId={activeUser?.id}
-          signedOut={authUserFetched && !activeUser}
-          isLoading={isLoadingCourses}
-          hasLoadError={isCourseCatalogueLoadError}
-          onRetryLoad={() => {
-            if (effectiveRole === "student") {
-              void (needsCompleteCourseList
-                ? completeCourseQuery.refetch()
-                : pagedCourseQuery.refetch());
-            } else if (enrollmentFilter === "bin") {
-              void deletedCoursesQuery.refetch();
-            } else {
-              void myCoursesQuery.refetch();
-            }
-          }}
-          preloadFirstCourseImage={Boolean(initialPublishedCoursePage)}
-          wishlisted={wishlisted}
-          quickFilterCounts={quickFilterCounts}
-          enrollmentFilter={enrollmentFilter}
-          onEnrollmentFilterChange={handleEnrollmentFilterChange}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
-          search={search}
-          onSearchChange={setSearch}
-          sort={sort}
-          onSortChange={setSort}
-          visibleCourses={visibleCourses}
-          totalCoursesCount={totalCoursesCount}
-          hasNextPage={!needsCompleteCourseList && pagedCourseQuery.hasNextPage}
-          isFetchingNextPage={pagedCourseQuery.isFetchingNextPage}
-          onLoadMore={() => void pagedCourseQuery.fetchNextPage()}
-          onWishlist={toggleWishlist}
-          onOpenCourse={onOpenCourse}
-          onEditIntent={prepareCourseEditorEdit}
-          courseMenu={courseMenu}
-          setCourseMenu={setCourseMenu}
-          setNotice={setNotice}
-          onNavigatePage={onNavigatePage}
-          onResetCatalogue={resetCatalogue}
-          onDeleteCourse={handleDeleteCourse}
-          onRestoreCourse={handleRestoreCourse}
-          deletingCourseIds={deletingCourseIds}
-        />
-      </Suspense>
+      <CourseCatalogueContent
+        effectiveRole={effectiveRole}
+        surfaceActiveSection={surfaceActiveSection}
+        isAdmin={isAdmin}
+        activeUser={activeUser}
+        authUserFetched={authUserFetched}
+        isLoadingCourses={isLoadingCourses}
+        isCourseCatalogueLoadError={isCourseCatalogueLoadError}
+        needsCompleteCourseList={needsCompleteCourseList}
+        completeCourseQuery={completeCourseQuery}
+        pagedCourseQuery={pagedCourseQuery}
+        enrollmentFilter={enrollmentFilter}
+        deletedCoursesQuery={deletedCoursesQuery}
+        myCoursesQuery={myCoursesQuery}
+        initialPublishedCoursePage={initialPublishedCoursePage}
+        wishlisted={wishlisted}
+        quickFilterCounts={quickFilterCounts}
+        handleEnrollmentFilterChange={handleEnrollmentFilterChange}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        search={search}
+        setSearch={setSearch}
+        sort={sort}
+        setSort={setSort}
+        visibleCourses={visibleCourses}
+        totalCoursesCount={totalCoursesCount}
+        toggleWishlist={toggleWishlist}
+        onOpenCourse={onOpenCourse}
+        prepareCourseEditorEdit={prepareCourseEditorEdit}
+        courseMenu={courseMenu}
+        setCourseMenu={setCourseMenu}
+        setNotice={setNotice}
+        onNavigatePage={onNavigatePage}
+        resetCatalogue={resetCatalogue}
+        handleDeleteCourse={handleDeleteCourse}
+        handleRestoreCourse={handleRestoreCourse}
+        deletingCourseIds={deletingCourseIds}
+      />
     );
   };
 
@@ -5001,56 +4858,28 @@ export function CoursesPage({
             <span className="courses-sidebar__bokeh" aria-hidden="true">
               <span />
             </span>
-            {((!compactNavigation && !sidebarPresentedAsOverlay) ||
-              (sidebarPresentedAsOverlay && edgeSidebarOpen)) && (
-              <div
-                key={sidebarControlKey}
-                className="sidebar-resize-handle"
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Resize sidebar"
-                aria-keyshortcuts={`${primaryShortcutModifier}+B`}
-                title={
-                  showKeyboardShortcuts
-                    ? `Resize sidebar | ${sidebarShortcutTitle}`
-                    : "Resize sidebar"
-                }
-                aria-valuemin={
-                  sidebarPresentedAsOverlay
-                    ? SIDEBAR_MIN_WIDTH
-                    : SIDEBAR_COLLAPSED_WIDTH
-                }
-                aria-valuemax={sidebarMaxWidth}
-                aria-valuenow={Math.round(
-                  sidebarResizePreviewWidth ??
-                    (sidebarPresentedAsOverlay
-                      ? renderedSidebarWidth
-                      : sidebarCollapsed
-                        ? SIDEBAR_COLLAPSED_WIDTH
-                        : renderedSidebarWidth),
-                )}
-                aria-valuetext={
-                  sidebarPresentedAsOverlay
-                    ? `${Math.round(sidebarResizePreviewWidth ?? renderedSidebarWidth)} pixel temporary sidebar`
-                    : sidebarCollapsed
-                      ? "Collapsed sidebar"
-                      : `${Math.round(renderedSidebarWidth)} pixels wide`
-                }
-                tabIndex={0}
-                onKeyDown={handleSidebarResizeKeyDown}
-                onDoubleClick={toggleSidebarWidth}
-                onPointerEnter={dismissSidebarTooltipImmediately}
-                onPointerDown={startSidebarResize}
-                onPointerMove={moveSidebarResize}
-                onPointerUp={endSidebarResize}
-                onPointerCancel={(event) => endSidebarResize(event, true)}
-                onLostPointerCapture={(event) => {
-                  if (sidebarResizeRef.current?.pointerId === event.pointerId) {
-                    endSidebarResize(event, true);
-                  }
-                }}
-              />
-            )}
+            <SidebarResizeHandle
+              compactNavigation={compactNavigation}
+              sidebarPresentedAsOverlay={sidebarPresentedAsOverlay}
+              edgeSidebarOpen={edgeSidebarOpen}
+              sidebarControlKey={sidebarControlKey}
+              primaryShortcutModifier={primaryShortcutModifier}
+              showKeyboardShortcuts={showKeyboardShortcuts}
+              sidebarShortcutTitle={sidebarShortcutTitle}
+              sidebarMaxWidth={sidebarMaxWidth}
+              sidebarResizePreviewWidth={sidebarResizePreviewWidth}
+              renderedSidebarWidth={renderedSidebarWidth}
+              sidebarCollapsed={sidebarCollapsed}
+              handleSidebarResizeKeyDown={handleSidebarResizeKeyDown}
+              toggleSidebarWidth={toggleSidebarWidth}
+              dismissSidebarTooltipImmediately={
+                dismissSidebarTooltipImmediately
+              }
+              startSidebarResize={startSidebarResize}
+              moveSidebarResize={moveSidebarResize}
+              endSidebarResize={endSidebarResize}
+              sidebarResizeRef={sidebarResizeRef}
+            />
             {/* The band the brand stands in, behind everything else in the
                 sidebar: a press beside, above or just under the logo counts
                 as one on it. */}
@@ -5062,559 +4891,142 @@ export function CoursesPage({
               onMouseDown={preventSidebarBrandTextSelection}
               onPointerUp={handleSidebarBrandPress}
             />
-            <div
-              className={SIDEBAR_BRAND_CLASS}
-              title={sidebarBrandTitle}
-              data-double-tap-ignore
-              onMouseDown={preventSidebarBrandTextSelection}
-              onPointerUp={handleSidebarBrandPress}
-            >
-              <span
-                className="courses-logo-clip"
-                role="img"
-                aria-label="ProCodrr"
-                title="Click, then hold to float sidebar"
-                data-second-press-holding={
-                  sidebarLogoGesture.isSecondPressHolding || undefined
-                }
-                {...sidebarLogoGesture.handlers}
-                dangerouslySetInnerHTML={{ __html: procodrrLogoSvg }}
-              />
-              <button
-                key={sidebarControlKey}
-                type="button"
-                className={SIDEBAR_COLLAPSE_BUTTON_CLASS}
-                aria-label={sidebarControlAction}
-                aria-pressed={compactNavigation ? undefined : sidebarCollapsed}
-                aria-keyshortcuts={`${primaryShortcutModifier}+B`}
-                title={sidebarControlTitle}
-                data-second-press-holding={
-                  sidebarToggleGesture.isSecondPressHolding || undefined
-                }
-                {...sidebarToggleGesture.handlers}
-              >
-                <span className="sidebar-collapse__asset" aria-hidden="true">
-                  <SidebarToggleIcon
-                    direction={
-                      compactNavigation
-                        ? "left"
-                        : sidebarVisuallyCollapsed ||
-                            sidebarPresentedAsOverlay ||
-                            sidebarDraggedToCollapsedWidth
-                          ? "right"
-                          : "left"
-                    }
-                  />
-                </span>
-              </button>
-            </div>
+            <SidebarBrand
+              sidebarBrandTitle={sidebarBrandTitle}
+              preventSidebarBrandTextSelection={
+                preventSidebarBrandTextSelection
+              }
+              handleSidebarBrandPress={handleSidebarBrandPress}
+              sidebarLogoGesture={sidebarLogoGesture}
+              sidebarControlKey={sidebarControlKey}
+              sidebarControlAction={sidebarControlAction}
+              compactNavigation={compactNavigation}
+              sidebarCollapsed={sidebarCollapsed}
+              primaryShortcutModifier={primaryShortcutModifier}
+              sidebarControlTitle={sidebarControlTitle}
+              sidebarToggleGesture={sidebarToggleGesture}
+              sidebarVisuallyCollapsed={sidebarVisuallyCollapsed}
+              sidebarPresentedAsOverlay={sidebarPresentedAsOverlay}
+              sidebarDraggedToCollapsedWidth={sidebarDraggedToCollapsedWidth}
+            />
 
-            <nav
-              id="courses-sidebar-nav-scrollport"
-              className={[
-                // A size container, so menu items can tell when the rail
-                // has finished narrowing. The side padding lines the menu
-                // items up with the profile button's left and right edges.
-                // The top padding is 6px more than the stylesheet's in both
-                // states, which keeps the first item on the same row in each.
-                // It is padding rather than margin because the list clips at
-                // its own edge: the room has to be inside it, or the first
-                // item's shadow is cut off at the top.
-                "courses-nav @container gap-2! px-[9.5px]! pt-[11px]! [.courses-app--collapsed_&]:pt-[22px]!",
-                // The list scrolls, and a browser decides how a finger may pan
-                // from the scroll area itself, not from the sidebar around
-                // it. Without this it claims sideways swipes on the menu
-                // (and sends none to the page), so the swipe that resizes
-                // the sidebar never began here on a real touch screen.
-                "touch-pan-y touch-pinch-zoom",
-                navigationScrollFade.top ? "has-scroll-top" : "",
-                navigationScrollFade.bottom ? "has-scroll-bottom" : "",
-                navigationScrollFade.overflow ? "has-overflow" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              ref={navigationRef}
-              onScroll={() => {
-                setSidebarTooltip(null);
-                updateNavigationScrollFade();
-              }}
-            >
-              {navigation.map((item, navigationIndex) => {
-                const [label, Icon] = item;
-                const active = isNavigationItemActive(item);
-                const navigationShortcutIndex = navigationIndex + 1;
-                const displayLabel = label;
-                const accessibleLabel = displayLabel;
-                return (
-                  <Fragment key={label}>
-                    <button
-                      type="button"
-                      className={`${active ? "is-active " : ""}${SIDEBAR_NAV_ITEM_SQUIRCLE_CLASS}`}
-                      style={
-                        {
-                          "--nav-icon-color": getNavigationIconColor(
-                            label,
-                            sidebarPreferences,
-                          ),
-                        } as CSSProperties
-                      }
-                      aria-label={accessibleLabel}
-                      aria-current={active ? "page" : undefined}
-                      aria-keyshortcuts={
-                        label === "Settings"
-                          ? `${navigationIndex + 1} ${primaryShortcutModifier}+Comma`
-                          : String(navigationIndex + 1)
-                      }
-                      onClick={() => selectNavigation(label, item)}
-                      onContextMenu={(event) => {
-                        if (navigationUsesCompactInteraction)
-                          event.preventDefault();
-                      }}
-                      onMouseEnter={(event) =>
-                        showSidebarTooltip(event, displayLabel, active)
-                      }
-                      onMouseLeave={hideCollapsedNavigationTooltip}
-                      onFocus={(event) =>
-                        showSidebarTooltip(event, displayLabel, active)
-                      }
-                      onBlur={hideCollapsedNavigationTooltip}
-                    >
-                      <Icon size={26} weight={active ? "fill" : "regular"} />
-                      <span className="courses-nav__text">{displayLabel}</span>
-                      {showKeyboardShortcuts && (
-                        <ShortcutKeys
-                          className="courses-nav__shortcut"
-                          keys={
-                            label === "Settings"
-                              ? settingsShortcutKeys
-                              : [String(navigationShortcutIndex)]
-                          }
-                        />
-                      )}
-                    </button>
-                  </Fragment>
-                );
-              })}
-              {/* Blank room the height of two menu items, shown only when
-                  the list scrolls, so the last items can be brought up
-                  clear of the profile button (see navigation.css). */}
-              <div
-                className="courses-nav__end-space"
-                data-nav-end-space=""
-                aria-hidden="true"
-              />
-              {sidebarResizing &&
-              sidebarPreferences.showResizeDimensions === true ? (
-                <SidebarResizeReadout
-                  sidebarWidth={
-                    sidebarResizePreviewWidth ?? renderedSidebarWidth
-                  }
-                />
-              ) : null}
-            </nav>
+            <SidebarNavigation
+              navigationScrollFade={navigationScrollFade}
+              navigationRef={navigationRef}
+              setSidebarTooltip={setSidebarTooltip}
+              updateNavigationScrollFade={updateNavigationScrollFade}
+              navigation={navigation}
+              isNavigationItemActive={isNavigationItemActive}
+              sidebarPreferences={sidebarPreferences}
+              primaryShortcutModifier={primaryShortcutModifier}
+              selectNavigation={selectNavigation}
+              navigationUsesCompactInteraction={
+                navigationUsesCompactInteraction
+              }
+              showSidebarTooltip={showSidebarTooltip}
+              hideCollapsedNavigationTooltip={hideCollapsedNavigationTooltip}
+              showKeyboardShortcuts={showKeyboardShortcuts}
+              settingsShortcutKeys={settingsShortcutKeys}
+              sidebarResizing={sidebarResizing}
+              sidebarResizePreviewWidth={sidebarResizePreviewWidth}
+              renderedSidebarWidth={renderedSidebarWidth}
+            />
 
             <div className="courses-profile" ref={profileRef}>
-              {isAuthenticated && profileMenuSurfaceMounted && (
-                <Suspense fallback={null}>
-                  <ProfileMenu
-                    id="desktop-profile-menu"
-                    className="profile-menu--animated"
-                    isOpen={profileMenu}
-                    role={effectiveRole}
-                    allowedRoles={allowedWorkspaceRoles}
-                    userRoles={userRoles}
-                    identity={
-                      activeUser?.username
-                        ? {
-                            displayName: shellProfileDisplayName,
-                            username: activeUser.username,
-                            avatarUrl: shellProfileAvatarUrl,
-                            avatarSrcSet: shellProfileAvatarSrcSet,
-                          }
-                        : undefined
-                    }
-                    unreadNotificationCount={
-                      isAuthenticated ? unreadNotificationCount : 0
-                    }
-                    sidebarHidden={sidebarPresentedAsOverlay}
-                    includeSidebarControl={!compactNavigation}
-                    onClose={() => setProfileMenu(false)}
-                    onRoleChange={setRole}
-                    onNavigate={(path) => {
-                      setEdgeSidebarOpen(false);
-                      dismissProfileMenuThen(() => {
-                        dismissMobileMenuThen(() => onNavigatePage(path));
-                      });
-                    }}
-                    onToggleSidebar={() => {
-                      setSidebarMode(sidebarHidden ? "expanded" : "hidden");
-                      setEdgeSidebarOpen(false);
-                    }}
-                    onLogout={openLogoutConfirm}
-                  />
-                </Suspense>
-              )}
-              {isAuthenticated ? (
-                <button
-                  type="button"
-                  className={SIDEBAR_PROFILE_BUTTON_CLASS}
-                  aria-label={`${shellProfileDisplayName}, ${shellProfileSubtitle}. Open profile menu`}
-                  aria-expanded={profileMenu}
-                  aria-controls="desktop-profile-menu"
-                  onClick={() => {
-                    if (!profileMenuSurfaceMounted) {
-                      // Mount the lazy menu closed first; the pending-open
-                      // effect opens it a frame later so this click cannot
-                      // race the menu's dismiss listeners.
-                      setProfileMenuSurfaceMounted(true);
-                      setPendingProfileMenuOpen(true);
-                      return;
-                    }
-                    setProfileMenu((current) => !current);
-                  }}
-                >
-                  <span className="courses-profile__avatar-wrap">
-                    <ShellProfileAvatar
-                      avatarUrl={shellProfileAvatarUrl}
-                      avatarSrcSet={shellProfileAvatarSrcSet}
-                    />
-                    {unreadNotificationCount > 0 ? (
-                      <i
-                        className="courses-profile__presence"
-                        aria-label={`${unreadNotificationCount} unread notifications`}
-                      />
-                    ) : null}
-                  </span>
-                  <span>
-                    {/* A box of its own, as wide as the room there is: a
-                        name too long for it ends in an ellipsis. Left as
-                        inline text it was cut off mid-letter by the box
-                        around it. */}
-                    <strong className="block truncate">
-                      {shellProfileDisplayName}
-                    </strong>
-                    {/* A role label sits slightly lower than a username. */}
-                    <small
-                      className={
-                        shellProfileSubtitle.startsWith("@")
-                          ? undefined
-                          : "mt-0.5!"
-                      }
-                    >
-                      {shellProfileSubtitle}
-                      {canSwitchWorkspace ? (
-                        <ProfileSubtitleIcon
-                          className={`courses-profile__role-icon courses-profile__role-icon--${effectiveRole === "student" ? "student" : hasAdminRole(userRoles) ? "admin" : "creator"}`}
-                          size={15}
-                          weight="duotone"
-                          aria-hidden="true"
-                        />
-                      ) : null}
-                    </small>
-                  </span>
-                  <CaretDown
-                    size={19}
-                    aria-hidden="true"
-                    className={
-                      profileMenu
-                        ? "courses-profile__caret is-open"
-                        : "courses-profile__caret"
-                    }
-                  />
-                </button>
-              ) : accountStatusUnknown ? (
-                <ProfileButtonPlaceholder
-                  className={SIDEBAR_PROFILE_BUTTON_CLASS}
-                />
-              ) : (
-                <LoginProfileButton
-                  className={SIDEBAR_PROFILE_BUTTON_CLASS}
-                  arrowSize={16}
-                  remembered={authUserFetched ? null : authIdentityHint}
-                  onLogin={() => onNavigatePage("/login")}
-                />
-              )}
-              <div
-                ref={appearanceControlsRef}
-                className={`sidebar-appearance sidebar-appearance--mobile-dock sidebar-appearance--${appearanceControlsHorizontal ? "horizontal" : "vertical"} ${SIDEBAR_DOCK_CLASS}`}
-                role="group"
-                aria-label="Appearance controls"
-                data-control-radius-surface
-                style={
-                  {
-                    "--dock-appearance-icon-color": getNavigationIconColor(
-                      "Appearance",
-                      sidebarPreferences,
-                    ),
-                    "--dock-reading-mode-icon-color": getNavigationIconColor(
-                      "Reading mode",
-                      sidebarPreferences,
-                    ),
-                    "--reading-mode-dock-index": Math.max(
-                      0,
-                      readingModeDockIndex,
-                    ),
-                    "--palette-menu-dock-index": Math.max(
-                      0,
-                      paletteMenuDockIndex,
-                    ),
-                    "--sidebar-dock-count": sidebarDockItems.length,
-                  } as CSSProperties
-                }
-              >
-                {sidebarDockItems.map((item: SidebarDockItem) => {
-                  if (item === "appearance") {
-                    return (
-                      <button
-                        key={item}
-                        ref={appearanceModeTriggerRef}
-                        data-dock-item={item}
-                        data-appearance-mode-toggle
-                        data-palette-trigger
-                        type="button"
-                        className="is-active"
-                        aria-haspopup="menu"
-                        aria-expanded={
-                          paletteMenu && paletteMenuSource === "appearance"
-                        }
-                        aria-controls="desktop-theme-menu"
-                        aria-label="Choose color theme and light or dark mode"
-                        title="Color theme and mode"
-                        onClick={(event) => {
-                          if (consumeAppearanceGestureClick(event)) return;
-                          if (paletteMenu && paletteMenuSource === "appearance")
-                            cancelDesktopPalettePreview(
-                              themeRevealOriginFromClick(event) ?? undefined,
-                            );
-                          else
-                            activateAppearanceOption(
-                              "theme",
-                              false,
-                              "appearance",
-                            );
-                        }}
-                        onContextMenu={openAppearanceThemeMenu}
-                        onPointerDown={(event) =>
-                          startDockLongPress(event, () =>
-                            activateAppearanceOption(
-                              "theme",
-                              false,
-                              "appearance",
-                            ),
-                          )
-                        }
-                        onPointerMove={moveDockLongPress}
-                        onPointerUp={finishDockLongPress}
-                        onPointerCancel={finishDockLongPress}
-                      >
-                        <Palette size={19} weight="fill" />
-                      </button>
-                    );
-                  }
-
-                  if (item === "theme") {
-                    return (
-                      <div
-                        className="sidebar-palette-wrap"
-                        data-dock-item={item}
-                        key={item}
-                      >
-                        <button
-                          ref={paletteTriggerRef}
-                          data-palette-trigger
-                          type="button"
-                          className="sidebar-palette-trigger"
-                          aria-label="Choose color theme"
-                          title="Choose color theme"
-                          aria-haspopup="menu"
-                          aria-expanded={
-                            paletteMenu && paletteMenuSource === "theme"
-                          }
-                          aria-controls="desktop-theme-menu"
-                          aria-pressed={
-                            paletteMenu && paletteMenuSource === "theme"
-                          }
-                          onClick={(event) => {
-                            if (consumeAppearanceGestureClick(event)) return;
-                            setReadingModeMenu(null);
-                            setPaletteMenuSource("theme");
-                            if (paletteMenu)
-                              cancelDesktopPalettePreview(
-                                themeRevealOriginFromClick(event) ?? undefined,
-                              );
-                            else setPaletteMenu(true);
-                          }}
-                          onPointerDown={(event) =>
-                            startAppearanceSwipe(event, "theme")
-                          }
-                          onPointerUp={(event) =>
-                            finishAppearanceSwipe(event, "theme")
-                          }
-                          onPointerCancel={cancelAppearanceSwipe}
-                        >
-                          <Palette size={19} />
-                          <i
-                            style={{
-                              background: academyThemes.find(
-                                (themeOption) =>
-                                  themeOption.id === displayedAcademyTheme,
-                              )?.preview,
-                            }}
-                          />
-                        </button>
-                      </div>
-                    );
-                  }
-
-                  if (item === "reading-mode") {
-                    return (
-                      <button
-                        key={item}
-                        data-dock-item={item}
-                        data-reading-mode-trigger
-                        type="button"
-                        className={`sidebar-appearance__reading-mode${readingModeEnabled ? " is-active" : ""}`}
-                        aria-label={`Reading mode settings. Reading mode is ${readingModeEnabled ? "on" : "off"}`}
-                        title={`Reading mode - ${readingModeEnabled ? "on" : "off"}`}
-                        aria-haspopup="dialog"
-                        aria-expanded={readingModeMenu === "desktop"}
-                        aria-controls="desktop-reading-mode-quick-settings"
-                        // A click opens the reading-mode menu; its own switch
-                        // turns reading mode on and off.
-                        onClick={(event) => {
-                          if (consumeAppearanceGestureClick(event)) return;
-                          if (readingModeMenu === "desktop")
-                            setReadingModeMenu(null);
-                          else showReadingModeMenu(false);
-                        }}
-                        onContextMenu={openReadingModeMenu}
-                        onPointerDown={(event) =>
-                          startDockLongPress(event, () =>
-                            showReadingModeMenu(false),
-                          )
-                        }
-                        onPointerMove={moveDockLongPress}
-                        onPointerUp={finishDockLongPress}
-                        onPointerCancel={finishDockLongPress}
-                      >
-                        <Eye
-                          aria-hidden="true"
-                          data-reading-mode-icon="off"
-                          size={20}
-                          weight="regular"
-                        />
-                        <Eye
-                          aria-hidden="true"
-                          data-reading-mode-icon="on"
-                          size={20}
-                          weight="fill"
-                        />
-                      </button>
-                    );
-                  }
-
-                  if (item === "settings") {
-                    const settingsActive =
-                      page === "settings" || learningOriginPage === "settings";
-                    return (
-                      <button
-                        key={item}
-                        data-dock-item={item}
-                        type="button"
-                        className={`sidebar-appearance__settings${settingsActive ? " is-active" : ""}`}
-                        style={
-                          {
-                            "--nav-icon-color": getNavigationIconColor(
-                              "Settings",
-                              sidebarPreferences,
-                            ),
-                          } as CSSProperties
-                        }
-                        aria-label="Open settings"
-                        title={settingsControlTitle}
-                        aria-current={settingsActive ? "page" : undefined}
-                        aria-keyshortcuts={`${primaryShortcutModifier}+Comma`}
-                        aria-haspopup="menu"
-                        aria-expanded={settingsQuickMenu === "desktop"}
-                        aria-controls="desktop-settings-quick-menu"
-                        data-settings-quick-trigger
-                        onClick={(event) => {
-                          if (consumeAppearanceGestureClick(event)) return;
-                          toggleSettingsNavigation();
-                        }}
-                        onContextMenu={(event) =>
-                          openSettingsQuickMenu(event, false)
-                        }
-                        onPointerDown={(event) =>
-                          startDockLongPress(
-                            event,
-                            () => showSettingsQuickMenu(false),
-                            true,
-                          )
-                        }
-                        onPointerMove={moveDockLongPress}
-                        onPointerUp={finishDockLongPress}
-                        onPointerCancel={finishDockLongPress}
-                      >
-                        <GearSix
-                          size={20}
-                          weight={settingsActive ? "fill" : "regular"}
-                        />
-                      </button>
-                    );
-                  }
-
-                  return (
-                    <button
-                      key={item}
-                      data-dock-item={item}
-                      type="button"
-                      // Not shown when the app runs installed: it fills the screen as
-                      // it is, and fullscreen would hide the status bar.
-                      className={`sidebar-appearance__fullscreen [@media(display-mode:standalone)]:hidden!${isFullscreen ? " is-active" : ""}`}
-                      aria-label={fullscreenActionLabel}
-                      title={fullscreenActionLabel}
-                      aria-pressed={isFullscreen}
-                      aria-keyshortcuts="F11"
-                      onClick={() => void toggleFullscreen()}
-                    >
-                      {isFullscreen ? (
-                        <CornersIn size={20} weight="bold" />
-                      ) : (
-                        <CornersOut size={20} weight="bold" />
-                      )}
-                    </button>
-                  );
-                })}
-                {readingModeMenu === "desktop" && (
-                  <Suspense fallback={null}>
-                    <ReadingModeQuickMenu
-                      id="desktop-reading-mode-quick-settings"
-                      className={
-                        sidebarCollapsed
-                          ? "reading-mode-quick-menu--collapsed"
-                          : ""
-                      }
-                      preferences={readingModePreferences}
-                      onChange={updateReadingMode}
-                    />
-                  </Suspense>
-                )}
-                {paletteMenu && (
-                  <AcademyPaletteMenu
-                    themes={academyThemes}
-                    selectedTheme={displayedAcademyTheme}
-                    id="desktop-theme-menu"
-                    className={`sidebar-palette-menu sidebar-palette-menu--dock-attached${sidebarCollapsed ? " sidebar-palette-menu--collapsed" : ""}`}
-                    onSelect={changePalette}
-                    onPreview={previewAcademyTheme}
-                    onConfirm={confirmDesktopPaletteTheme}
-                    onCancel={cancelDesktopPalettePreview}
-                    appearanceMode={resolvedTheme}
-                    onAppearanceModeChange={changeAppearanceMode}
-                  />
-                )}
-              </div>
+              <SidebarProfileMenuLayer
+                isAuthenticated={isAuthenticated}
+                profileMenuSurfaceMounted={profileMenuSurfaceMounted}
+                profileMenu={profileMenu}
+                effectiveRole={effectiveRole}
+                allowedWorkspaceRoles={allowedWorkspaceRoles}
+                userRoles={userRoles}
+                activeUser={activeUser}
+                shellProfileDisplayName={shellProfileDisplayName}
+                shellProfileAvatarUrl={shellProfileAvatarUrl}
+                shellProfileAvatarSrcSet={shellProfileAvatarSrcSet}
+                unreadNotificationCount={unreadNotificationCount}
+                sidebarPresentedAsOverlay={sidebarPresentedAsOverlay}
+                compactNavigation={compactNavigation}
+                setProfileMenu={setProfileMenu}
+                setRole={setRole}
+                setEdgeSidebarOpen={setEdgeSidebarOpen}
+                dismissProfileMenuThen={dismissProfileMenuThen}
+                dismissMobileMenuThen={dismissMobileMenuThen}
+                onNavigatePage={onNavigatePage}
+                setSidebarMode={setSidebarMode}
+                sidebarHidden={sidebarHidden}
+                openLogoutConfirm={openLogoutConfirm}
+              />
+              <SidebarProfileButton
+                isAuthenticated={isAuthenticated}
+                shellProfileDisplayName={shellProfileDisplayName}
+                shellProfileSubtitle={shellProfileSubtitle}
+                profileMenu={profileMenu}
+                profileMenuSurfaceMounted={profileMenuSurfaceMounted}
+                setProfileMenuSurfaceMounted={setProfileMenuSurfaceMounted}
+                setPendingProfileMenuOpen={setPendingProfileMenuOpen}
+                setProfileMenu={setProfileMenu}
+                shellProfileAvatarUrl={shellProfileAvatarUrl}
+                shellProfileAvatarSrcSet={shellProfileAvatarSrcSet}
+                unreadNotificationCount={unreadNotificationCount}
+                canSwitchWorkspace={canSwitchWorkspace}
+                ProfileSubtitleIcon={ProfileSubtitleIcon}
+                effectiveRole={effectiveRole}
+                userRoles={userRoles}
+                accountStatusUnknown={accountStatusUnknown}
+                authUserFetched={authUserFetched}
+                authIdentityHint={authIdentityHint}
+                onNavigatePage={onNavigatePage}
+              />
+              <SidebarAppearanceDock
+                appearanceControlsRef={appearanceControlsRef}
+                appearanceControlsHorizontal={appearanceControlsHorizontal}
+                sidebarPreferences={sidebarPreferences}
+                readingModeDockIndex={readingModeDockIndex}
+                paletteMenuDockIndex={paletteMenuDockIndex}
+                sidebarDockItems={sidebarDockItems}
+                appearanceModeTriggerRef={appearanceModeTriggerRef}
+                paletteMenu={paletteMenu}
+                paletteMenuSource={paletteMenuSource}
+                consumeAppearanceGestureClick={consumeAppearanceGestureClick}
+                cancelDesktopPalettePreview={cancelDesktopPalettePreview}
+                activateAppearanceOption={activateAppearanceOption}
+                openAppearanceThemeMenu={openAppearanceThemeMenu}
+                startDockLongPress={startDockLongPress}
+                moveDockLongPress={moveDockLongPress}
+                finishDockLongPress={finishDockLongPress}
+                paletteTriggerRef={paletteTriggerRef}
+                setReadingModeMenu={setReadingModeMenu}
+                setPaletteMenuSource={setPaletteMenuSource}
+                setPaletteMenu={setPaletteMenu}
+                startAppearanceSwipe={startAppearanceSwipe}
+                finishAppearanceSwipe={finishAppearanceSwipe}
+                cancelAppearanceSwipe={cancelAppearanceSwipe}
+                displayedAcademyTheme={displayedAcademyTheme}
+                readingModeEnabled={readingModeEnabled}
+                readingModeMenu={readingModeMenu}
+                showReadingModeMenu={showReadingModeMenu}
+                openReadingModeMenu={openReadingModeMenu}
+                page={page}
+                learningOriginPage={learningOriginPage}
+                settingsControlTitle={settingsControlTitle}
+                primaryShortcutModifier={primaryShortcutModifier}
+                settingsQuickMenu={settingsQuickMenu}
+                toggleSettingsNavigation={toggleSettingsNavigation}
+                openSettingsQuickMenu={openSettingsQuickMenu}
+                showSettingsQuickMenu={showSettingsQuickMenu}
+                isFullscreen={isFullscreen}
+                fullscreenActionLabel={fullscreenActionLabel}
+                toggleFullscreen={toggleFullscreen}
+                sidebarCollapsed={sidebarCollapsed}
+                readingModePreferences={readingModePreferences}
+                updateReadingMode={updateReadingMode}
+                changePalette={changePalette}
+                previewAcademyTheme={previewAcademyTheme}
+                confirmDesktopPaletteTheme={confirmDesktopPaletteTheme}
+                resolvedTheme={resolvedTheme}
+                changeAppearanceMode={changeAppearanceMode}
+              />
               {settingsQuickMenuLoaded && (
                 <Suspense fallback={null}>
                   <SettingsQuickMenu
@@ -5656,150 +5068,24 @@ export function CoursesPage({
       )}
 
       <ShellDragSurface />
-      <div className="courses-main-frame">
-        <main
-          id="courses-main-scrollport"
-          ref={mainScrollportRef}
-          // Tells a page's cards which ground they lie on (see
-          // `ElevatedCard`).
-          data-deep-ground={onDeepGround ? "" : undefined}
-          className={[
-            "courses-main",
-            // While the page is being scrolled nothing in it answers the
-            // pointer, so nothing changes its hover look as it passes under
-            // a resting pointer (see useScrollingMark).
-            "data-scrolling:**:pointer-events-none!",
-            // The frame's own colour, painted by the scroller as well. On a
-            // screen scaled under 150% the browser only slides a scroller's
-            // content when the scroller has a solid ground of its own to
-            // draw text on; over a see-through one it redrew the page at
-            // every step of a scroll. The frame behind is this same colour,
-            // so nothing looks different. Not on a lesson's page, whose
-            // scroller lies over the shell's own surfaces.
-            renderMain
-              ? ""
-              : onDeepGround
-                ? // These pages lie on a deeper ground than the others, so
-                  // that their cards stand out from it the way the pinned
-                  // course stands out from the home page's picture.
-                  // The ground is kept in `--card-ground`, which the boxes
-                  // read to set themselves one fixed step lighter (see
-                  // `ElevatedCard`), and is solid, as the note above
-                  // requires. By night it is the frame's colour taken part
-                  // of the way to the shell's. By day the frame is already
-                  // close to white, with no room above it for a lighter
-                  // box, so the ground is the frame's colour made a fixed
-                  // step darker instead; the plain mix is what a browser
-                  // without relative colours falls back to.
-                  deepGroundClasses
-                : "in-data-[content-layout=framed]:bg-(--main-surface)!",
-            renderMain
-              ? "courses-main--learning overflow-x-clip!"
-              : page !== "courses"
-                ? "student-surface-main"
-                : "",
-            !renderMain && page === "courses" ? "max-[640px]:px-0!" : "",
-            !renderMain && page === "settings" ? "courses-main--settings" : "",
-            mobileSidebarNavigationActive
-              ? renderMain
-                ? "max-[640px]:pb-0!"
-                : "max-[640px]:pb-4!"
-              : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        >
-          {/* Long pages only (lists of students, orders, discussions, a
-              lesson's comments): a page that scrolls a little gets none.
-              A lesson's page counts as long sooner, since its video stays
-              in view and leaves less room to read in. */}
-          <LongScrollElasticScroller
-            scrollportRef={mainScrollportRef}
-            ariaControls="courses-main-scrollport"
-            scrollAreaLabel="Page"
-            contentRevision={`${page}:${cataloguePathname}`}
-            // Above the lesson video, which stays in view over this page:
-            // the control stretches up over it while it is dragged.
-            className="z-45!"
-            // The lesson page says where it goes (it depends on how much of
-            // the video is showing); see LearningWorkspace. Every other page
-            // puts it about where the lesson page has it with the video at
-            // full height: between the description and the comments, some
-            // 200px up from the bottom, and lower on a short window.
-            bottomClearance={
-              renderMain
-                ? "var(--learning-elastic-scroller-clearance, 268px)"
-                : "clamp(96px, 28dvh, 200px)"
-            }
-            minScrollScreens={renderMain ? 1 : 2}
-          />
-          <div
-            ref={learningMotionStageRef}
-            className={
-              renderMain || keepLessonPageBoxes
-                ? "grid min-h-full [&>*]:col-start-1 [&>*]:row-start-1"
-                : "contents"
-            }
-            data-learning-motion-stage={renderMain ? "" : undefined}
-          >
-            {renderMain ? (
-              routeContentBlocked ? (
-                <AcademyRouteSkeleton
-                  page={page}
-                  role={effectiveRole}
-                  quizId={quizId}
-                />
-              ) : learningBackground ? (
-                <LearningBackgroundSurface
-                  behindLesson
-                  className={
-                    learningBackground.page === "courses"
-                      ? "max-[640px]:px-0!"
-                      : learningBackground.page === "settings"
-                        ? "student-surface-main courses-main--settings"
-                        : "student-surface-main"
-                  }
-                  scrollLeft={learningBackground.scrollLeft}
-                  scrollTop={learningBackground.scrollTop}
-                >
-                  {renderPageContent({
-                    surfaceCourseSlug: learningBackground.courseSlug,
-                    surfaceDiscussionTab: learningBackground.discussionTab,
-                    surfacePage: learningBackground.page,
-                    surfaceSection: learningBackground.section,
-                    surfaceSettingsTab: learningBackground.settingsTab,
-                  })}
-                </LearningBackgroundSurface>
-              ) : null
-            ) : routeContentHeld ? (
-              <AcademyRouteSkeleton
-                page={page}
-                role={effectiveRole}
-                quizId={quizId}
-              />
-            ) : (
-              // The same element as the page behind the lesson above, so a
-              // minimize that lands on this page keeps it as it is.
-              <LearningBackgroundSurface
-                behindLesson={false}
-                keepBox={keepLessonPageBoxes}
-              >
-                {renderPageContent()}
-              </LearningBackgroundSurface>
-            )}
-            {renderMain && !routeContentBlocked ? (
-              <div className="relative min-h-full">
-                {renderMain({
-                  mobileBottomNavigation:
-                    compactNavigation && !mobileSidebarNavigationActive,
-                  mobileBottomNavigationHidden: mobileBottomNavHidden,
-                })}
-              </div>
-            ) : null}
-          </div>
-        </main>
-        <FrameEdge surface="lesson" />
-      </div>
+      <ShellMainFrame
+        mainScrollportRef={mainScrollportRef}
+        onDeepGround={onDeepGround}
+        renderMain={renderMain}
+        page={page}
+        mobileSidebarNavigationActive={mobileSidebarNavigationActive}
+        cataloguePathname={cataloguePathname}
+        learningMotionStageRef={learningMotionStageRef}
+        keepLessonPageBoxes={keepLessonPageBoxes}
+        routeContentBlocked={routeContentBlocked}
+        effectiveRole={effectiveRole}
+        quizId={quizId}
+        learningBackground={learningBackground}
+        renderPageContent={renderPageContent}
+        routeContentHeld={routeContentHeld}
+        compactNavigation={compactNavigation}
+        mobileBottomNavHidden={mobileBottomNavHidden}
+      />
 
       <FloatingScrollbar
         scrollportRef={mainScrollportRef}
@@ -5811,82 +5097,24 @@ export function CoursesPage({
       />
 
       {compactNavigation && !mobileSidebarNavigationActive && (
-        <nav
-          ref={mobileBottomNavRef}
-          // By day the Discussions icon's green is taken a third of the way
-          // to black: it all but vanished on a light bar. The other tones
-          // read well as they are. When it is the active page its label,
-          // which is the icon's colour, darkens with it. Both are marked
-          // important: the bar's own stylesheet is not in a layer.
-          className={`mobile-bottom-nav [:root[data-theme=light]_&>button[aria-label=Discussions].is-active]:text-[color-mix(in_srgb,var(--nav-icon-color)_66%,black)]! [:root[data-theme=light]_&>button[aria-label=Discussions]_svg]:text-[color-mix(in_srgb,var(--nav-icon-color)_66%,black)]! ${mobileBottomNavHidden ? "is-scroll-hidden" : ""}`}
-          aria-label={`${effectiveRole === "creator" ? "Creator" : "Student"} mobile navigation`}
-          onFocusCapture={() => setMobileBottomNavHidden(false)}
-        >
-          {mobileNavigation.map((item) => {
-            const [label, Icon] = item;
-            const active = isNavigationItemActive(item);
-            const displayLabel = label;
-            return (
-              <Fragment key={label}>
-                <button
-                  type="button"
-                  className={active ? "is-active" : ""}
-                  style={
-                    {
-                      "--nav-icon-color": getNavigationIconColor(
-                        label,
-                        sidebarPreferences,
-                      ),
-                    } as CSSProperties
-                  }
-                  aria-current={active ? "page" : undefined}
-                  data-sidebar-swipe-ignore
-                  aria-label={displayLabel}
-                  onClick={() => selectNavigation(label, item)}
-                >
-                  <span>
-                    <Icon size={23} weight={active ? "fill" : "regular"} />
-                  </span>
-                  <small>{displayLabel}</small>
-                </button>
-              </Fragment>
-            );
-          })}
-          <button
-            id="mobile-navigation-trigger"
-            ref={mobileMoreRef}
-            type="button"
-            className={mobileMoreActive || mobileMenuOpen ? "is-active" : ""}
-            // Starts with the word on the button ("You"), so the spoken
-            // name contains the visible one.
-            aria-label="You: open navigation and appearance menu"
-            aria-expanded={mobileMenuOpen}
-            aria-controls="mobile-navigation-sheet"
-            onClick={openMobileNavigationMenu}
-          >
-            <span>
-              <span className="mobile-bottom-nav__profile-avatar">
-                {shellProfileAvatarUrl ? (
-                  <ShellProfileAvatar
-                    avatarUrl={shellProfileAvatarUrl}
-                    avatarSrcSet={shellProfileAvatarSrcSet}
-                  />
-                ) : (
-                  <GuestProfileIcon
-                    size={24}
-                    ringWidth={16}
-                    className="!text-(--accent)"
-                    aria-hidden="true"
-                  />
-                )}
-                {isAuthenticated && unreadNotificationCount > 0 ? (
-                  <i className="courses-profile__presence" aria-hidden="true" />
-                ) : null}
-              </span>
-            </span>
-            <small>You</small>
-          </button>
-        </nav>
+        <MobileBottomNavigation
+          mobileBottomNavRef={mobileBottomNavRef}
+          mobileBottomNavHidden={mobileBottomNavHidden}
+          effectiveRole={effectiveRole}
+          setMobileBottomNavHidden={setMobileBottomNavHidden}
+          mobileNavigation={mobileNavigation}
+          isNavigationItemActive={isNavigationItemActive}
+          sidebarPreferences={sidebarPreferences}
+          selectNavigation={selectNavigation}
+          mobileMoreRef={mobileMoreRef}
+          mobileMoreActive={mobileMoreActive}
+          mobileMenuOpen={mobileMenuOpen}
+          openMobileNavigationMenu={openMobileNavigationMenu}
+          shellProfileAvatarUrl={shellProfileAvatarUrl}
+          shellProfileAvatarSrcSet={shellProfileAvatarSrcSet}
+          isAuthenticated={isAuthenticated}
+          unreadNotificationCount={unreadNotificationCount}
+        />
       )}
 
       {mobileNavigationSheetMounted ? (
@@ -5987,336 +5215,81 @@ export function CoursesPage({
                   Profile actions, additional navigation, and appearance
                   controls
                 </DrawerDescription>
-                <div
-                  className="mobile-menu-sheet__profile-wrap mt-2"
-                  data-profile-surface
-                >
-                  {isAuthenticated && activeUser?.username ? (
-                    <Suspense fallback={null}>
-                      <ProfileMenuIdentity
-                        variant="mobile"
-                        displayName={shellProfileDisplayName}
-                        username={activeUser.username}
-                        avatarUrl={shellProfileAvatarUrl}
-                        avatarSrcSet={shellProfileAvatarSrcSet}
-                        unreadNotificationCount={unreadNotificationCount}
-                        onClose={() => setProfileMenu(false)}
-                        onNavigate={(path) => {
-                          setEdgeSidebarOpen(false);
-                          dismissProfileMenuThen(() => {
-                            dismissMobileMenuThen(() => onNavigatePage(path));
-                          });
-                        }}
-                      />
-                    </Suspense>
-                  ) : accountStatusUnknown ? (
-                    <ProfileButtonPlaceholder className="mobile-menu-sheet__profile courses-profile__button profile-menu__identity rounded-2xl! p-0! ps-2! pe-3! bg-[color-mix(in_srgb,var(--surface-strong)_94%,white_6%)]!" />
-                  ) : (
-                    <LoginProfileButton
-                      className="mobile-menu-sheet__profile courses-profile__button profile-menu__identity rounded-2xl! p-0! ps-2! pe-3! bg-[color-mix(in_srgb,var(--surface-strong)_94%,white_6%)]! hover:bg-[color-mix(in_srgb,var(--surface-strong)_90%,white_10%)]!"
-                      arrowSize={17}
-                      remembered={authUserFetched ? null : authIdentityHint}
-                      onLogin={() => onNavigatePage("/login")}
-                    />
-                  )}
-                </div>
-                <div className="mobile-menu-sheet__scroll overflow-x-hidden pb-11">
-                  {isAuthenticated && (
-                    <Suspense fallback={null}>
-                      <ProfileMenu
-                        id="mobile-profile-menu"
-                        className="mobile-menu-sheet__profile-menu"
-                        role={effectiveRole}
-                        allowedRoles={allowedWorkspaceRoles}
-                        userRoles={userRoles}
-                        unreadNotificationCount={unreadNotificationCount}
-                        includeSidebarControl={false}
-                        beforeAccountContent={
-                          <div
-                            className="mobile-menu-sheet__list mobile-menu-sheet__profile-navigation"
-                            role="group"
-                            aria-label="Additional navigation"
-                          >
-                            {mobileMoreNavigation.map((item) => {
-                              const [label, Icon] = item;
-                              const active = isNavigationItemActive(item);
-                              return (
-                                <button
-                                  type="button"
-                                  key={label}
-                                  className={active ? "is-active" : ""}
-                                  style={
-                                    {
-                                      "--nav-icon-color":
-                                        getNavigationIconColor(
-                                          label,
-                                          sidebarPreferences,
-                                        ),
-                                    } as CSSProperties
-                                  }
-                                  role="menuitem"
-                                  aria-current={active ? "page" : undefined}
-                                  data-sidebar-swipe-ignore
-                                  aria-label={label}
-                                  onClick={() => selectNavigation(label, item)}
-                                >
-                                  <Icon
-                                    size={23}
-                                    weight={active ? "fill" : "regular"}
-                                  />
-                                  <span>{label}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        }
-                        onClose={() => setProfileMenu(false)}
-                        onRoleChange={setRole}
-                        onNavigate={(path) => {
-                          setEdgeSidebarOpen(false);
-                          dismissProfileMenuThen(() => {
-                            dismissMobileMenuThen(() => onNavigatePage(path));
-                          });
-                        }}
-                        onLogout={() => {
-                          closeMobileMenu();
-                          setLogoutConfirmOpen(true);
-                        }}
-                      />
-                    </Suspense>
-                  )}
-                </div>
-                <div
-                  className={`mobile-menu-sheet__appearance sidebar-appearance--mobile-dock${mobilePaletteMenu ? " mobile-menu-sheet__appearance--palette-open" : ""}`}
-                  role="group"
-                  aria-label="Appearance controls"
-                >
-                  {sidebarDockItems.map((item) => {
-                    if (item === "appearance") {
-                      return (
-                        <button
-                          key={item}
-                          ref={mobileAppearanceModeTriggerRef}
-                          data-dock-item={item}
-                          data-appearance-mode-toggle
-                          data-mobile-palette-trigger
-                          type="button"
-                          className="is-active"
-                          aria-haspopup="menu"
-                          aria-expanded={
-                            mobilePaletteMenu &&
-                            paletteMenuSource === "appearance"
-                          }
-                          aria-controls="mobile-theme-menu"
-                          aria-label="Choose color theme and light or dark mode"
-                          title="Color theme and mode"
-                          onClick={(event) => {
-                            if (consumeAppearanceGestureClick(event)) return;
-                            if (
-                              mobilePaletteMenu &&
-                              paletteMenuSource === "appearance"
-                            )
-                              cancelMobilePalettePreview(
-                                themeRevealOriginFromClick(event) ?? undefined,
-                              );
-                            else
-                              activateAppearanceOption(
-                                "theme",
-                                true,
-                                "appearance",
-                              );
-                          }}
-                          onContextMenu={(event) =>
-                            openAppearanceThemeMenu(event, true)
-                          }
-                          onPointerDown={(event) =>
-                            startDockLongPress(event, () =>
-                              activateAppearanceOption(
-                                "theme",
-                                true,
-                                "appearance",
-                              ),
-                            )
-                          }
-                          onPointerMove={moveDockLongPress}
-                          onPointerUp={finishDockLongPress}
-                          onPointerCancel={finishDockLongPress}
-                        >
-                          <Palette size={20} weight="fill" />
-                        </button>
-                      );
-                    }
-
-                    if (item === "theme") {
-                      return (
-                        <button
-                          key={item}
-                          data-dock-item={item}
-                          ref={mobilePaletteTriggerRef}
-                          data-palette-trigger
-                          data-mobile-palette-trigger
-                          type="button"
-                          className={mobilePaletteMenu ? "is-active" : ""}
-                          aria-haspopup="menu"
-                          aria-expanded={
-                            mobilePaletteMenu && paletteMenuSource === "theme"
-                          }
-                          aria-controls="mobile-theme-menu"
-                          aria-label={`Choose color theme. Current theme: ${academyThemes[currentAcademyThemeIndex]?.name}`}
-                          title={`Choose color theme - ${academyThemes[currentAcademyThemeIndex]?.name}`}
-                          onClick={(event) => {
-                            if (consumeAppearanceGestureClick(event)) return;
-                            setReadingModeMenu(null);
-                            setPaletteMenuSource("theme");
-                            if (mobilePaletteMenu)
-                              cancelMobilePalettePreview(
-                                themeRevealOriginFromClick(event) ?? undefined,
-                              );
-                            else setMobilePaletteMenu(true);
-                          }}
-                          onPointerDown={(event) =>
-                            startAppearanceSwipe(event, "theme")
-                          }
-                          onPointerUp={(event) =>
-                            finishAppearanceSwipe(event, "theme", true)
-                          }
-                          onPointerCancel={cancelAppearanceSwipe}
-                        >
-                          <Palette size={20} />
-                          <i
-                            style={{
-                              background: academyThemes.find(
-                                (themeOption) =>
-                                  themeOption.id === displayedAcademyTheme,
-                              )?.preview,
-                            }}
-                          />
-                        </button>
-                      );
-                    }
-
-                    if (item === "reading-mode") {
-                      return (
-                        <button
-                          key={item}
-                          data-dock-item={item}
-                          data-reading-mode-trigger
-                          type="button"
-                          className={`sidebar-appearance__reading-mode${readingModeEnabled ? " is-active" : ""}`}
-                          aria-label={`Reading mode settings. Reading mode is ${readingModeEnabled ? "on" : "off"}`}
-                          title={`Reading mode - ${readingModeEnabled ? "on" : "off"}`}
-                          aria-haspopup="dialog"
-                          aria-expanded={readingModeMenu === "mobile"}
-                          aria-controls="mobile-reading-mode-quick-settings"
-                          onClick={(event) => {
-                            if (consumeAppearanceGestureClick(event)) return;
-                            if (readingModeMenu === "mobile")
-                              setReadingModeMenu(null);
-                            else showReadingModeMenu(true);
-                          }}
-                          onContextMenu={(event) =>
-                            openReadingModeMenu(event, true)
-                          }
-                          onPointerDown={(event) =>
-                            startDockLongPress(event, () =>
-                              showReadingModeMenu(true),
-                            )
-                          }
-                          onPointerMove={moveDockLongPress}
-                          onPointerUp={finishDockLongPress}
-                          onPointerCancel={finishDockLongPress}
-                        >
-                          <Eye
-                            aria-hidden="true"
-                            data-reading-mode-icon="off"
-                            size={20}
-                            weight="regular"
-                          />
-                          <Eye
-                            aria-hidden="true"
-                            data-reading-mode-icon="on"
-                            size={20}
-                            weight="fill"
-                          />
-                        </button>
-                      );
-                    }
-
-                    if (item === "settings") {
-                      const settingsActive =
-                        page === "settings" ||
-                        learningOriginPage === "settings";
-                      return (
-                        <button
-                          key={item}
-                          data-dock-item={item}
-                          type="button"
-                          className={settingsActive ? "is-active" : ""}
-                          style={
-                            {
-                              "--nav-icon-color": getNavigationIconColor(
-                                "Settings",
-                                sidebarPreferences,
-                              ),
-                            } as CSSProperties
-                          }
-                          aria-label="Open settings"
-                          title={settingsControlTitle}
-                          aria-current={settingsActive ? "page" : undefined}
-                          aria-keyshortcuts={`${primaryShortcutModifier}+Comma`}
-                          aria-haspopup="menu"
-                          aria-expanded={settingsQuickMenu === "mobile"}
-                          aria-controls="mobile-settings-quick-menu"
-                          data-settings-quick-trigger
-                          onClick={(event) => {
-                            if (consumeAppearanceGestureClick(event)) return;
-                            toggleSettingsNavigation();
-                          }}
-                          onContextMenu={(event) =>
-                            openSettingsQuickMenu(event, true)
-                          }
-                          onPointerDown={(event) =>
-                            startDockLongPress(
-                              event,
-                              () => showSettingsQuickMenu(true),
-                              true,
-                            )
-                          }
-                          onPointerMove={moveDockLongPress}
-                          onPointerUp={finishDockLongPress}
-                          onPointerCancel={finishDockLongPress}
-                        >
-                          <GearSix
-                            size={21}
-                            weight={settingsActive ? "fill" : "regular"}
-                          />
-                        </button>
-                      );
-                    }
-
-                    return (
-                      <button
-                        key={item}
-                        data-dock-item={item}
-                        type="button"
-                        // Not shown when the app runs installed: it fills the screen as
-                        // it is, and fullscreen would hide the status bar.
-                        className={`sidebar-appearance__fullscreen [@media(display-mode:standalone)]:hidden!${isFullscreen ? " is-active" : ""}`}
-                        aria-label={fullscreenActionLabel}
-                        title={fullscreenActionLabel}
-                        aria-pressed={isFullscreen}
-                        aria-keyshortcuts="F11"
-                        onClick={() => void toggleFullscreen()}
-                      >
-                        {isFullscreen ? (
-                          <CornersIn size={21} weight="bold" />
-                        ) : (
-                          <CornersOut size={21} weight="bold" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                <MobileSheetProfile
+                  isAuthenticated={isAuthenticated}
+                  activeUser={activeUser}
+                  shellProfileDisplayName={shellProfileDisplayName}
+                  shellProfileAvatarUrl={shellProfileAvatarUrl}
+                  shellProfileAvatarSrcSet={shellProfileAvatarSrcSet}
+                  unreadNotificationCount={unreadNotificationCount}
+                  setProfileMenu={setProfileMenu}
+                  setEdgeSidebarOpen={setEdgeSidebarOpen}
+                  dismissProfileMenuThen={dismissProfileMenuThen}
+                  dismissMobileMenuThen={dismissMobileMenuThen}
+                  onNavigatePage={onNavigatePage}
+                  accountStatusUnknown={accountStatusUnknown}
+                  authUserFetched={authUserFetched}
+                  authIdentityHint={authIdentityHint}
+                />
+                <MobileSheetProfileMenu
+                  isAuthenticated={isAuthenticated}
+                  effectiveRole={effectiveRole}
+                  allowedWorkspaceRoles={allowedWorkspaceRoles}
+                  userRoles={userRoles}
+                  unreadNotificationCount={unreadNotificationCount}
+                  mobileMoreNavigation={mobileMoreNavigation}
+                  isNavigationItemActive={isNavigationItemActive}
+                  sidebarPreferences={sidebarPreferences}
+                  selectNavigation={selectNavigation}
+                  setProfileMenu={setProfileMenu}
+                  setRole={setRole}
+                  setEdgeSidebarOpen={setEdgeSidebarOpen}
+                  dismissProfileMenuThen={dismissProfileMenuThen}
+                  dismissMobileMenuThen={dismissMobileMenuThen}
+                  onNavigatePage={onNavigatePage}
+                  closeMobileMenu={closeMobileMenu}
+                  setLogoutConfirmOpen={setLogoutConfirmOpen}
+                />
+                <MobileSheetAppearance
+                  mobilePaletteMenu={mobilePaletteMenu}
+                  sidebarDockItems={sidebarDockItems}
+                  mobileAppearanceModeTriggerRef={
+                    mobileAppearanceModeTriggerRef
+                  }
+                  paletteMenuSource={paletteMenuSource}
+                  consumeAppearanceGestureClick={consumeAppearanceGestureClick}
+                  cancelMobilePalettePreview={cancelMobilePalettePreview}
+                  activateAppearanceOption={activateAppearanceOption}
+                  openAppearanceThemeMenu={openAppearanceThemeMenu}
+                  startDockLongPress={startDockLongPress}
+                  moveDockLongPress={moveDockLongPress}
+                  finishDockLongPress={finishDockLongPress}
+                  mobilePaletteTriggerRef={mobilePaletteTriggerRef}
+                  currentAcademyThemeIndex={currentAcademyThemeIndex}
+                  setReadingModeMenu={setReadingModeMenu}
+                  setPaletteMenuSource={setPaletteMenuSource}
+                  setMobilePaletteMenu={setMobilePaletteMenu}
+                  startAppearanceSwipe={startAppearanceSwipe}
+                  finishAppearanceSwipe={finishAppearanceSwipe}
+                  cancelAppearanceSwipe={cancelAppearanceSwipe}
+                  displayedAcademyTheme={displayedAcademyTheme}
+                  readingModeEnabled={readingModeEnabled}
+                  readingModeMenu={readingModeMenu}
+                  showReadingModeMenu={showReadingModeMenu}
+                  openReadingModeMenu={openReadingModeMenu}
+                  page={page}
+                  learningOriginPage={learningOriginPage}
+                  sidebarPreferences={sidebarPreferences}
+                  settingsControlTitle={settingsControlTitle}
+                  primaryShortcutModifier={primaryShortcutModifier}
+                  settingsQuickMenu={settingsQuickMenu}
+                  toggleSettingsNavigation={toggleSettingsNavigation}
+                  openSettingsQuickMenu={openSettingsQuickMenu}
+                  showSettingsQuickMenu={showSettingsQuickMenu}
+                  isFullscreen={isFullscreen}
+                  fullscreenActionLabel={fullscreenActionLabel}
+                  toggleFullscreen={toggleFullscreen}
+                />
               </div>
             </DrawerContent>
           </Drawer>
