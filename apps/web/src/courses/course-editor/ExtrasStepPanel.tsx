@@ -12,11 +12,7 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import type { ReorderCourseIncludesRequest } from "@veolms/contracts";
 import { ExtrasControlStatusIndicator } from "./statusIndicators";
 import type { ApiError } from "../../lib/api-error";
-import type {
-  CertificateIssuanceType,
-  ExtrasInclusionItem,
-  ExtrasState,
-} from "./editorLocalTypes";
+import type { ExtrasState } from "./editorLocalTypes";
 
 export interface ExtrasStepPanelProps {
   getExtrasControlDisplayStatus: (

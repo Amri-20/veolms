@@ -20,67 +20,6 @@ export const isExtrasEqual = (
   return a.enableCertificate === b.enableCertificate;
 };
 
-export interface AutoIncludeItem {
-  id: string;
-  text: string;
-  source: string;
-}
-
-export function deriveAutoIncludes(params: {
-  durationMode?: string;
-  fixedDurationValue?: number;
-  fixedDurationUnit?: string;
-  enableCertificate?: boolean;
-  enableDownloads?: boolean;
-  hasPreviewLessons?: boolean;
-}): AutoIncludeItem[] {
-  const items: AutoIncludeItem[] = [];
-
-  if (params.durationMode === "lifetime") {
-    items.push({
-      id: "auto-lifetime",
-      text: "Full lifetime access",
-      source: "Access Rules",
-    });
-  } else if (
-    params.durationMode === "fixed" &&
-    params.fixedDurationValue &&
-    params.fixedDurationValue > 0
-  ) {
-    items.push({
-      id: "auto-fixed-duration",
-      text: `${params.fixedDurationValue} ${String(params.fixedDurationUnit || "Days").toLowerCase()} access`,
-      source: "Access Rules",
-    });
-  }
-
-  if (params.enableCertificate) {
-    items.push({
-      id: "auto-cert",
-      text: "Certificate of completion",
-      source: "Certificate",
-    });
-  }
-
-  if (params.enableDownloads) {
-    items.push({
-      id: "auto-downloads",
-      text: "Downloadable resources",
-      source: "Access Rules",
-    });
-  }
-
-  if (params.hasPreviewLessons) {
-    items.push({
-      id: "auto-preview",
-      text: "Free preview lessons",
-      source: "Curriculum",
-    });
-  }
-
-  return items;
-}
-
 export function deriveSuggestedInclusions(params: {
   durationMode?: string;
   fixedDurationValue?: number;
