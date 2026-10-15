@@ -12,11 +12,7 @@ import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { ThemedSelect } from "../../ThemedSelect";
 import type { CourseValidationArea } from "@veolms/contracts";
 import type { ChecklistState } from "./basicsState";
-import type {
-  CourseVisibility,
-  PublishState,
-  ScheduleOption,
-} from "./editorLocalTypes";
+import type { CourseVisibility, PublishState } from "./editorLocalTypes";
 
 export interface PublishStepPanelProps {
   isPublished: boolean;

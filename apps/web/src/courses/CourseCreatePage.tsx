@@ -6,32 +6,17 @@ import {
   useRef,
   useMemo,
   useCallback,
-  Fragment,
 } from "react";
 import "../styles/features/course-wizard.css";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { createPortal } from "react-dom";
-import { Checkbox } from "../components/Checkbox";
 import { CenteredLoadingSpinner } from "../components/LoadingSpinner";
-import { createDiscussionDraft } from "../learning/discussion-editor/types";
-import { CourseQuizPricingCard } from "./CourseQuizPricingCard";
 import { CourseStaticPageRefreshNotice } from "./CourseStaticPageRefreshNotice";
 import {
-  LessonResourceManager,
   toLessonResourceItem,
   type LessonResourceItem,
 } from "./lesson-resources/LessonResourceManager";
-import {
-  CourseDescriptionEditor,
-  LessonDescriptionEditor,
-} from "./CourseDescriptionEditor";
-import {
-  LessonContentTypeIcon,
-  LessonStudioEditor,
-  type LessonEditorDraft,
-  type StudioLessonContentType,
-} from "./curriculum";
-import { VirtualizedLessonList } from "./curriculum/VirtualizedLessonList";
+import { type LessonEditorDraft } from "./curriculum";
 
 const DiscussionMarkdown = lazy(() =>
   import("../learning/discussion-editor/DiscussionMarkdown").then((module) => ({
@@ -50,42 +35,13 @@ const QuizAuthoringPanel = lazy(() =>
 );
 import { ToastNotification } from "../ToastNotification";
 import { ArrowLeftIcon as ArrowLeft } from "@phosphor-icons/react/ArrowLeft";
-import { ArrowUpRightIcon as ArrowUpRight } from "@phosphor-icons/react/ArrowUpRight";
-import { CaretDownIcon as CaretDown } from "@phosphor-icons/react/CaretDown";
-import { CaretLeftIcon as CaretLeft } from "@phosphor-icons/react/CaretLeft";
-import { CaretRightIcon as CaretRight } from "@phosphor-icons/react/CaretRight";
 import { CertificateIcon as Certificate } from "@phosphor-icons/react/Certificate";
-import { ChartBarIcon as ChartBar } from "@phosphor-icons/react/ChartBar";
-import { ChatCircleTextIcon as ChatCircleText } from "@phosphor-icons/react/ChatCircleText";
 import { CheckCircleIcon as CheckCircle } from "@phosphor-icons/react/CheckCircle";
-import { CircleNotchIcon as CircleNotch } from "@phosphor-icons/react/CircleNotch";
 import { ClockIcon as Clock } from "@phosphor-icons/react/Clock";
-import { DotsSixVerticalIcon as DotsSixVertical } from "@phosphor-icons/react/DotsSixVertical";
 import { DownloadSimpleIcon as DownloadSimple } from "@phosphor-icons/react/DownloadSimple";
-import { EyeIcon as Eye } from "@phosphor-icons/react/Eye";
-import { EyeSlashIcon as EyeSlash } from "@phosphor-icons/react/EyeSlash";
-import { FileTextIcon as FileText } from "@phosphor-icons/react/FileText";
-import { ImageIcon } from "@phosphor-icons/react/Image";
-import { InfoIcon as Info } from "@phosphor-icons/react/Info";
-import { LightningIcon as Lightning } from "@phosphor-icons/react/Lightning";
-import { NotePencilIcon as NotePencil } from "@phosphor-icons/react/NotePencil";
-import { PencilSimpleIcon as PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { PlayCircleIcon as PlayCircle } from "@phosphor-icons/react/PlayCircle";
-import { PlusIcon as Plus } from "@phosphor-icons/react/Plus";
-import { PuzzlePieceIcon as PuzzlePiece } from "@phosphor-icons/react/PuzzlePiece";
-import { QuestionIcon as Question } from "@phosphor-icons/react/Question";
-import { TagIcon as Tag } from "@phosphor-icons/react/Tag";
-import { TrashIcon as Trash } from "@phosphor-icons/react/Trash";
-import { UploadSimpleIcon as UploadSimple } from "@phosphor-icons/react/UploadSimple";
-import { UserPlusIcon as UserPlus } from "@phosphor-icons/react/UserPlus";
-import { VideoIcon as Video } from "@phosphor-icons/react/Video";
 import { WarningCircleIcon as WarningCircle } from "@phosphor-icons/react/WarningCircle";
-import { XIcon as X } from "@phosphor-icons/react/X";
-import { XCircleIcon as XCircle } from "@phosphor-icons/react/XCircle";
-import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import ISO6391 from "iso-639-1";
-import { ThemedSelect } from "../ThemedSelect";
-import { SettingsToggle } from "../settings/SettingsControls";
 import type { NavigateTo } from "../routing/navigation";
 import { getCourseEditorPath } from "./courseEditorRouting";
 import {
@@ -93,7 +49,6 @@ import {
   draftCategoryAfterReload,
 } from "./basicsCategoryDraft";
 import { basicsChangeToSend, draftValueAfterReload } from "./basicsDraftChange";
-import { handleRovingTabKeyDown } from "../accessibility/rovingTabFocus";
 import {
   getNumberShortcutIndex,
   isEditingShortcutTarget,
@@ -143,15 +98,7 @@ import type {
   LessonResource,
 } from "@veolms/contracts";
 import { MEDIA_MAX_SIZES } from "@veolms/contracts";
-import {
-  CourseOverviewPage,
-  CourseOverviewSkeleton,
-} from "./CourseOverviewPage";
-import type {
-  CourseInclude,
-  CourseOverviewPricingProps,
-} from "./CourseOverviewPage";
-import type { Course, CourseLevel, CourseCategory } from "./catalogue";
+import type { CourseInclude } from "./CourseOverviewPage";
 import { formatDuration, resolveCourseDurationSeconds } from "./courseAdapter";
 import { mediaService } from "../services/media";
 import { clearVideoPlaybackBootstrapCache } from "../learning/videoPlaybackBootstrap";
@@ -167,20 +114,12 @@ import {
   isBasicsEqual,
 } from "./course-editor/basicsState";
 import {
-  type StoredLessonEditorDraft,
   readLessonEditorDraft,
   writeLessonEditorDraft,
   clearLessonEditorDraft,
 } from "./course-editor/lessonEditorDraft";
 import {
-  LessonDescriptionPreview,
-  LessonDropIndicator,
-  MemoizedLessonCard,
-} from "./course-editor/MemoizedLessonCard";
-import {
   type CurriculumLessonItem,
-  getLessonMediaInfo,
-  getCourseWideLessonNumber,
   type CurriculumSectionItem,
   type DraggedLessonState,
   type LessonDropTarget,
@@ -197,13 +136,8 @@ import {
 } from "./course-editor/wizardSteps";
 import {
   type BasicsFieldKey,
-  BasicsFieldStatusIndicator,
   type AccessRulesControlKey,
-  AccessRulesControlStatusIndicator,
   type PricingControlKey,
-  PricingControlStatusIndicator,
-  ExtrasControlStatusIndicator,
-  CurriculumItemStatusIndicator,
 } from "./course-editor/statusIndicators";
 import {
   type AccessType,
@@ -246,7 +180,6 @@ import { PricingStepPanel } from "./course-editor/PricingStepPanel";
 import { AccessRulesStepPanel } from "./course-editor/AccessRulesStepPanel";
 import { PublishStepPanel } from "./course-editor/PublishStepPanel";
 import type {
-  CertificateIssuanceType,
   ExtrasState,
   PersistLessonOptions,
   PublishState,
@@ -254,78 +187,13 @@ import type {
 import { ExtrasStepPanel } from "./course-editor/ExtrasStepPanel";
 import { BasicsStepPanel } from "./course-editor/BasicsStepPanel";
 import { CurriculumStepPanel } from "./course-editor/CurriculumStepPanel";
-export {
-  type BasicsFormState,
-  initialBasicsState,
-  normalizeBasicsState,
-  isBasicsMetaEqual,
-  isBasicsSettingsEqual,
-  isBasicsEqual,
-} from "./course-editor/basicsState";
-export {
-  type CourseWizardStepId,
-  type WizardStepDefinition,
-  WIZARD_STEPS,
-  WIZARD_STEP_IDS,
-  parseWizardTab,
-} from "./course-editor/wizardSteps";
-export {
-  type BasicsFieldKey,
-  BasicsFieldStatusIndicator,
-  type AccessRulesControlKey,
-  AccessRulesControlStatusIndicator,
-  type PricingControlKey,
-  PricingControlStatusIndicator,
-  type ExtrasControlKey,
-  ExtrasControlStatusIndicator,
-  type CurriculumItemKey,
-  CurriculumItemStatusIndicator,
-  type PublishControlKey,
-  PublishControlStatusIndicator,
-} from "./course-editor/statusIndicators";
-export {
-  formatIsoToDatetimeLocal,
-  formatDatetimeLocalToIso,
-  type AccessType,
-  type AccessDurationMode,
-  type DurationUnit,
-  type AccessRulesFormState,
-  initialAccessRulesState,
-  normalizeAccessRulesState,
-  isAccessRuleConfigEqual,
-  isAccessSettingsEqual,
-  isAccessRulesEqual,
-} from "./course-editor/accessRulesState";
-export {
-  type PricingType,
-  type PricingFormState,
-  type PricingState,
-  initialPricingState,
-  derivePricingType,
-  normalizePricingState,
-  hasDiscountBadge,
-  isPricingEqual,
-  getCurrencyOptions,
-  getCurrencySymbol,
-  validatePricing,
-  buildPricingPayload,
-} from "./course-editor/pricingState";
-export {
-  type ExtrasFormState,
-  initialExtrasState,
-  normalizeExtrasState,
-  isExtrasEqual,
-  type AutoIncludeItem,
-  deriveAutoIncludes,
-  deriveSuggestedInclusions,
-  isManualIncludesEqual,
-} from "./course-editor/extrasState";
-export { checkIsCurriculumDirty } from "./course-editor/curriculumDirty";
-export {
-  type BuildLocalPreviewParams,
-  buildLocalPreviewData,
-} from "./course-editor/localPreview";
-export { CourseWizardSkeleton } from "./course-editor/CourseWizardSkeleton";
+import { CourseEditorHeader } from "./course-editor/CourseEditorHeader";
+import { CourseEditorStepsNav } from "./course-editor/CourseEditorStepsNav";
+import { CourseEditorFooter } from "./course-editor/CourseEditorFooter";
+import { CourseEditorMobileStepStatus } from "./course-editor/CourseEditorMobileStepStatus";
+import { CourseEditorMobileActionBar } from "./course-editor/CourseEditorMobileActionBar";
+import { CoursePreviewModal } from "./course-editor/CoursePreviewModal";
+import { CourseCategoriesModal } from "./course-editor/CourseCategoriesModal";
 
 const getCurriculumLessonKey = (lesson: CurriculumLessonItem) => lesson.id;
 
@@ -1382,12 +1250,6 @@ export function CourseCreatePage({
   const selectedCategoryName = useMemo(() => {
     return serverCategories.find((c) => c.id === categoryId)?.name || "";
   }, [serverCategories, categoryId]);
-
-  const handleOpenAddCategoryModal = () => {
-    setNewCategoryName("");
-    setAddCategoryError("");
-    setIsAddCategoryModalOpen(true);
-  };
 
   const handleCloseAddCategoryModal = () => {
     if (createCategoryMutation.isPending || deleteCategoryMutation.isPending)
@@ -3299,19 +3161,6 @@ export function CourseCreatePage({
     setExtras((prev) => ({ ...prev, certificateTemplate: template }));
   };
 
-  const handleIssuanceTypeChange = (type: CertificateIssuanceType) => {
-    setExtras((prev) => ({ ...prev, issuanceType: type }));
-  };
-
-  const handleMinPercentageChange = (val: number) => {
-    const clamped = Math.min(100, Math.max(1, isNaN(val) ? 1 : val));
-    setExtras((prev) => ({ ...prev, minCompletionPercentage: clamped }));
-  };
-
-  const handleCustomRuleTextChange = (text: string) => {
-    setExtras((prev) => ({ ...prev, customRuleText: text }));
-  };
-
   const handleToggleAutoEmailCertificate = () => {
     setExtras((prev) => ({
       ...prev,
@@ -3819,79 +3668,6 @@ export function CourseCreatePage({
       );
       if (inFlightAccessControlsRef.current.enableComments === 0) {
         markAccessControlSaving("enableComments", false);
-      }
-    }
-  };
-
-  const handleToggleDownloads = async () => {
-    clearAccessControlStatus("enableDownloads");
-    const previousValue = accessRulesDraftRef.current.enableDownloads;
-    const nextValue = !previousValue;
-    const version = ++accessControlVersionsRef.current.enableDownloads;
-
-    // 1. Optimistic update
-    accessRulesDraftRef.current = {
-      ...accessRulesDraftRef.current,
-      enableDownloads: nextValue,
-    };
-    setAccessRules((prev) => ({ ...prev, enableDownloads: nextValue }));
-    inFlightAccessControlsRef.current.enableDownloads =
-      (inFlightAccessControlsRef.current.enableDownloads || 0) + 1;
-    markAccessControlSaving("enableDownloads", true);
-
-    try {
-      const targetCourseId = await ensureCourseDraftForAccessRules();
-
-      const res = await upsertSettingsMutation.mutateAsync({
-        courseId: targetCourseId,
-        payload: {
-          allowDownloads: nextValue,
-        },
-      });
-
-      if (accessControlVersionsRef.current.enableDownloads === version) {
-        const confirmedDownloads =
-          res.allowDownloads !== undefined
-            ? Boolean(res.allowDownloads)
-            : nextValue;
-
-        accessRulesDraftRef.current = {
-          ...accessRulesDraftRef.current,
-          enableDownloads: confirmedDownloads,
-        };
-        setServerAccessRules((prev) => ({
-          ...prev,
-          enableDownloads: confirmedDownloads,
-        }));
-        setAccessRules((prev) => ({
-          ...prev,
-          enableDownloads: confirmedDownloads,
-        }));
-        markAccessControlSaved("enableDownloads");
-      }
-    } catch (err: unknown) {
-      if (accessControlVersionsRef.current.enableDownloads === version) {
-        markAccessControlFailed("enableDownloads");
-        accessRulesDraftRef.current = {
-          ...accessRulesDraftRef.current,
-          enableDownloads: previousValue,
-        };
-        setAccessRules((prev) => ({
-          ...prev,
-          enableDownloads: previousValue,
-        }));
-        const errorMsg =
-          (err as { message?: string })?.message ||
-          "Failed to update downloads setting.";
-        setToastMessage(errorMsg);
-      }
-    } finally {
-      inFlightAccessControlsRef.current.enableDownloads = Math.max(
-        0,
-        (inFlightAccessControlsRef.current.enableDownloads || 1) - 1,
-      );
-      if (inFlightAccessControlsRef.current.enableDownloads === 0) {
-        markAccessControlSaving("enableDownloads", false);
       }
     }
   };
@@ -5374,26 +5150,6 @@ export function CourseCreatePage({
   );
   const computedDuration = formatDuration(courseDurationSeconds);
 
-  // Student-facing Preview Object Adapter
-  const previewCourse: Course = {
-    id: currentCourseId || "preview-course",
-    title: courseTitle.trim() || "Course Title",
-    description:
-      courseDescription.trim() || "This is a short description of your course.",
-    level: (difficultyLevel
-      ? difficultyLevel.charAt(0).toUpperCase() + difficultyLevel.slice(1)
-      : "Beginner") as CourseLevel,
-    category: (selectedCategoryName || "Development") as CourseCategory,
-    sections: totalSections,
-    lectures: totalLessons,
-    progress: null,
-    enrolled: false,
-    duration: computedDuration,
-    students: 0,
-    thumbnail: thumbnail || "/static/instructor-poster.jpg",
-    lifecycleStatus: isPublished ? "published" : "draft",
-  };
-
   const previewInclusions: string[] = useMemo(() => {
     return manualIncludesDraft
       .map((m) => m.text.trim())
@@ -5703,47 +5459,6 @@ export function CourseCreatePage({
   };
 
   const currencySymbol = getCurrencySymbol(pricing.currency || "INR");
-  const previewCurrency = pricing.currency || "INR";
-  const previewSellingAmount = pricing.sellingPrice.trim()
-    ? parseFloat(pricing.sellingPrice.replace(/,/g, ""))
-    : 0;
-  const previewOriginalAmount = pricing.originalPrice.trim()
-    ? parseFloat(pricing.originalPrice.replace(/,/g, ""))
-    : 0;
-
-  const previewPricing: CourseOverviewPricingProps =
-    pricing.pricingType === "free"
-      ? previewOriginalAmount > 0
-        ? {
-            price: `${currencySymbol}0`,
-            originalPrice: `${currencySymbol}${pricing.originalPrice.trim()}`,
-            discount: "Free",
-            amount: 0,
-            currency: previewCurrency,
-          }
-        : { price: "Free", amount: 0, currency: previewCurrency }
-      : {
-          price: pricing.sellingPrice.trim()
-            ? `${currencySymbol}${pricing.sellingPrice.trim()}`
-            : `${currencySymbol}1,999`,
-          originalPrice: pricing.originalPrice.trim()
-            ? `${currencySymbol}${pricing.originalPrice.trim()}`
-            : undefined,
-          discount:
-            pricing.originalPrice.trim() &&
-            pricing.sellingPrice.trim() &&
-            previewOriginalAmount > previewSellingAmount
-              ? `${Math.round(
-                  ((previewOriginalAmount - previewSellingAmount) /
-                    previewOriginalAmount) *
-                    100,
-                )}% OFF`
-              : undefined,
-          amount: Number.isFinite(previewSellingAmount)
-            ? previewSellingAmount
-            : 0,
-          currency: previewCurrency,
-        };
 
   const editorCourseSlug = editorData?.course?.slug;
   const editorCourseStatus = editorData?.course?.status;
@@ -6415,7 +6130,6 @@ export function CourseCreatePage({
 
   const flushBasicsPersistence = async (): Promise<boolean> => {
     const currentDraft = basicsDraftRef.current;
-    const baseline = serverBasicsRef.current;
 
     let targetCourseId = currentCourseIdRef.current || currentCourseId;
     if (!targetCourseId) {
@@ -7231,141 +6945,30 @@ export function CourseCreatePage({
     >
       <CourseStaticPageRefreshNotice courseId={currentCourseId} />
       {/* Wizard Header */}
-      <header className="relative shrink-0 mb-2 max-[768px]:mb-1.5 max-[768px]:w-full max-[768px]:max-w-full max-[768px]:min-w-0 max-[768px]:box-border">
-        <div className="flex items-start justify-between gap-4 mb-1 max-[768px]:flex-col max-[768px]:gap-2 max-[768px]:mb-1.5">
-          <div className="flex items-start gap-3 min-w-0">
-            <button
-              type="button"
-              className="flex w-9 h-9 shrink-0 items-center justify-center border border-[color-mix(in_srgb,var(--text)_12%,transparent)] rounded-lg text-(--text-secondary) bg-[color-mix(in_srgb,var(--text)_4%,transparent)] cursor-pointer transition-[border-color,background-color,color] duration-150 ease-out hover:border-[color-mix(in_srgb,var(--text)_24%,transparent)] hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)] hover:text-(--text)"
-              onClick={handleBack}
-              aria-label="Go back to courses"
-            >
-              <ArrowLeft size={17} weight="bold" />
-            </button>
-            <div className="pt-0.5 min-w-0">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="m-0 text-(--text) text-[clamp(1.2rem,1.8vw,1.55rem)] font-bold tracking-[-0.015em] leading-[1.2]">
-                  {isEditing ? "Edit Course" : "Create New Course"}
-                </h1>
-                <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[0.72rem] font-medium tracking-[0.02em] ${
-                    isPublished
-                      ? "is-published border border-green-500/35 text-green-400 bg-green-500/12"
-                      : "border border-[color-mix(in_srgb,var(--text)_14%,transparent)] text-(--muted) bg-[color-mix(in_srgb,var(--text)_5%,transparent)]"
-                  }`}
-                >
-                  {isPublished ? "Published" : "Draft"}
-                </span>
-              </div>
-              <p className="m-0 mt-0.5 text-(--muted) text-[0.82rem] max-w-155 leading-[1.35]">
-                {activeStep === "curriculum"
-                  ? isEditing
-                    ? "Manage and organize your course sections, lessons, and resources."
-                    : "Build your course structure by adding sections and lessons."
-                  : activeStep === "access-rules"
-                    ? isEditing
-                      ? "Update who can access this course and how long their access lasts."
-                      : "Control who can access this course and how long their access lasts."
-                    : activeStep === "pricing"
-                      ? isEditing
-                        ? "Update pricing, currency, and sale discounts for this course."
-                        : "Set how learners will purchase this course."
-                      : activeStep === "extras"
-                        ? isEditing
-                          ? "Update extra course settings, inclusions, and completion certificate."
-                          : "Add extra information and settings to enhance your course."
-                        : activeStep === "publish"
-                          ? isPublished
-                            ? "Review your changes and update the published course."
-                            : isEditing
-                              ? "Review your course checklist and publish when ready."
-                              : "Review your course and publish it when you're ready."
-                          : isEditing
-                            ? "Update the essential details of your course."
-                            : "Add the essential details of your course. You can always edit these later."}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Publish validation error toast if any */}
-        {publishValidationError && activeStep === "publish" && (
-          <div className="flex items-center gap-2.5 mb-3 border border-red-400/35 rounded-[10px] px-4 py-2 text-red-400 bg-red-500/12 backdrop-blur-md shadow-[0_4px_16px_rgba(239,68,68,0.15)] text-[0.84rem] font-semibold animate-[bannerSlideUp_0.3s_cubic-bezier(0.16,1,0.3,1)]">
-            <Info size={16} weight="bold" />
-            <span>{publishValidationError}</span>
-          </div>
-        )}
-      </header>
+      <CourseEditorHeader
+        handleBack={handleBack}
+        isEditing={isEditing}
+        isPublished={isPublished}
+        activeStep={activeStep}
+        publishValidationError={publishValidationError}
+      />
 
       {/* Wizard Steps Navigation */}
-      <nav
-        ref={stepsNavRef}
-        className="course-wizard-steps-nav settings-tabs page-tabs border-b border-[color-mix(in_srgb,var(--text)_12%,transparent)] [&::after]:hidden!"
-        aria-label={
-          isEditing ? "Course editing steps" : "Course creation steps"
-        }
-        role="tablist"
-        onMouseDown={handleNavMouseDown}
-        onMouseLeave={handleNavMouseLeave}
-        onMouseUp={handleNavMouseUp}
-        onMouseMove={handleNavMouseMove}
-      >
-        {/* Standard page-tabs indicator - driven by --page-tab-indicator-* CSS vars */}
-        <span className="page-tabs__indicator" aria-hidden="true" />
-        {WIZARD_STEPS.map((step, idx) => {
-          const Icon = step.Icon;
-          const isActive = activeStep === step.id;
-          const isDirty = isStepDirty(step.id);
-          return (
-            <button
-              key={step.id}
-              id={`course-wizard-tab-${step.id}`}
-              ref={(el) => {
-                tabRefs.current[step.id] = el;
-              }}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              aria-controls="course-wizard-tab-panel"
-              aria-keyshortcuts={`Alt+${idx + 1}`}
-              tabIndex={isActive ? 0 : -1}
-              data-page-tab-tone={step.tone}
-              data-swipe-tab-id={step.id}
-              title={
-                !isDownstreamUnlocked && step.id !== "basics"
-                  ? "Add a course title to continue."
-                  : undefined
-              }
-              disabled={
-                actionLoading !== null ||
-                (!isDownstreamUnlocked && step.id !== "basics")
-              }
-              className={`inline-flex flex-row items-center gap-2 !border-b-transparent shrink-0 whitespace-nowrap disabled:!opacity-50 disabled:!cursor-not-allowed ${isActive ? "is-active" : ""}`}
-              onClick={() => {
-                if (isInitialLoadingCourse) return;
-                void navigateToStep(step.id);
-              }}
-              onKeyDown={handleRovingTabKeyDown}
-            >
-              <Icon
-                size={17}
-                weight={isActive ? "fill" : "regular"}
-                className="shrink-0"
-              />
-              <span className="inline-flex items-center gap-1.5">
-                <span>{step.label}</span>
-                {isDirty && (
-                  <span
-                    className="inline-block w-1.5 h-1.5 rounded-full bg-(--accent) shrink-0"
-                    title="Unsaved changes"
-                    aria-label="Unsaved changes"
-                  />
-                )}
-              </span>
-            </button>
-          );
-        })}
-      </nav>
+      <CourseEditorStepsNav
+        stepsNavRef={stepsNavRef}
+        isEditing={isEditing}
+        handleNavMouseDown={handleNavMouseDown}
+        handleNavMouseLeave={handleNavMouseLeave}
+        handleNavMouseUp={handleNavMouseUp}
+        handleNavMouseMove={handleNavMouseMove}
+        activeStep={activeStep}
+        isStepDirty={isStepDirty}
+        tabRefs={tabRefs}
+        isDownstreamUnlocked={isDownstreamUnlocked}
+        actionLoading={actionLoading}
+        isInitialLoadingCourse={isInitialLoadingCourse}
+        navigateToStep={navigateToStep}
+      />
 
       {/* Wizard Step Panels using SwipeableTabPanel */}
       {isInitialLoadingCourse ? (
@@ -7633,1035 +7236,64 @@ export function CourseCreatePage({
       )}
 
       {/* Sticky Bottom Action Bar (Desktop / Tablet) */}
-      <div
-        className="course-wizard-sticky-bottom-bar"
-        data-testid="course-wizard-sticky-bottom-bar"
-      >
-        <div className="relative flex items-center justify-between gap-2.5 sm:gap-3 w-full max-w-[1400px] mx-auto">
-          {/* Left: Preview Button */}
-          <div className="flex items-center gap-2.5 shrink-0">
-            {!(activeStep === "publish" && isPublished) && (
-              <button
-                type="button"
-                style={{
-                  fontSize: "0.80rem",
-                  fontWeight: 700,
-                  height: "34px",
-                  borderRadius: "8px",
-                  gap: "6px",
-                  paddingLeft: "14px",
-                  paddingRight: "14px",
-                }}
-                className={`inline-flex items-center border border-[color-mix(in_srgb,var(--text)_14%,transparent)] text-(--text-secondary) bg-transparent transition-all duration-150 ${
-                  isAnyApiInProgress || isPreviewLoading
-                    ? "!opacity-40 !cursor-not-allowed !pointer-events-none hover:!bg-transparent hover:!text-(--text-secondary)"
-                    : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--text)_6%,transparent)] hover:text-(--text)"
-                }`}
-                onClick={handlePreviewAction}
-                disabled={isAnyApiInProgress || isPreviewLoading}
-              >
-                {isPreviewLoading ? (
-                  <>
-                    <CircleNotch
-                      size={14}
-                      className="animate-spin text-(--accent)"
-                    />
-                    <span>Opening...</span>
-                  </>
-                ) : (
-                  <>
-                    <Eye size={15} />
-                    <span>Preview</span>
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-
-          {/* Center: True horizontal center save status */}
-          {activeStep === "basics" && basicsOverallStatus && (
-            <div
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center z-10 select-none transition-all duration-200"
-              data-testid="basics-overall-save-status"
-              aria-live="polite"
-            >
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[0.78rem] font-medium bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] border border-[color-mix(in_srgb,var(--border)_70%,transparent)] shadow-xs backdrop-blur-xs select-none">
-                {basicsOverallStatus === "saving" && (
-                  <>
-                    <CircleNotch
-                      size={14}
-                      className="animate-spin text-(--accent)"
-                    />
-                    <span className="text-(--text-secondary)">
-                      Saving changes...
-                    </span>
-                  </>
-                )}
-                {basicsOverallStatus === "failed" && (
-                  <>
-                    <WarningCircle
-                      size={14}
-                      weight="fill"
-                      className="text-rose-500 shrink-0"
-                    />
-                    <span className="text-rose-500">Save failed</span>
-                  </>
-                )}
-                {basicsOverallStatus === "saved" && (
-                  <>
-                    <CheckCircle
-                      size={14}
-                      weight="fill"
-                      className="text-emerald-500 shrink-0"
-                    />
-                    <span className="text-emerald-500">All changes saved</span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Center: True horizontal center save status for Curriculum */}
-          {activeStep === "curriculum" && curriculumOverallStatus && (
-            <div
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center z-10 select-none transition-all duration-200"
-              data-testid="curriculum-overall-save-status"
-              aria-live="polite"
-            >
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[0.78rem] font-medium bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] border border-[color-mix(in_srgb,var(--border)_70%,transparent)] shadow-xs backdrop-blur-xs select-none">
-                {curriculumOverallStatus === "saving" && (
-                  <>
-                    <CircleNotch
-                      size={14}
-                      className="animate-spin text-(--accent)"
-                    />
-                    <span className="text-(--text-secondary)">
-                      Saving changes...
-                    </span>
-                  </>
-                )}
-                {curriculumOverallStatus === "failed" && (
-                  <>
-                    <WarningCircle
-                      size={14}
-                      weight="fill"
-                      className="text-rose-500 shrink-0"
-                    />
-                    <span className="text-rose-500">Save failed</span>
-                  </>
-                )}
-                {curriculumOverallStatus === "saved" && (
-                  <>
-                    <CheckCircle
-                      size={14}
-                      weight="fill"
-                      className="text-emerald-500 shrink-0"
-                    />
-                    <span className="text-emerald-500">All changes saved</span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Center: True horizontal center save status for Access Rules */}
-          {activeStep === "access-rules" && accessRulesOverallStatus && (
-            <div
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center z-10 select-none transition-all duration-200"
-              data-testid="access-rules-overall-save-status"
-              aria-live="polite"
-            >
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[0.78rem] font-medium bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] border border-[color-mix(in_srgb,var(--border)_70%,transparent)] shadow-xs backdrop-blur-xs select-none">
-                {accessRulesOverallStatus === "saving" && (
-                  <>
-                    <CircleNotch
-                      size={14}
-                      className="animate-spin text-(--accent)"
-                    />
-                    <span className="text-(--text-secondary)">
-                      Saving changes...
-                    </span>
-                  </>
-                )}
-                {accessRulesOverallStatus === "failed" && (
-                  <>
-                    <WarningCircle
-                      size={14}
-                      weight="fill"
-                      className="text-rose-500 shrink-0"
-                    />
-                    <span className="text-rose-500">Save failed</span>
-                  </>
-                )}
-                {accessRulesOverallStatus === "saved" && (
-                  <>
-                    <CheckCircle
-                      size={14}
-                      weight="fill"
-                      className="text-emerald-500 shrink-0"
-                    />
-                    <span className="text-emerald-500">All changes saved</span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Center: True horizontal center save status for Pricing */}
-          {activeStep === "pricing" && pricingOverallStatus && (
-            <div
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center z-10 select-none transition-all duration-200"
-              data-testid="pricing-overall-save-status"
-              aria-live="polite"
-            >
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[0.78rem] font-medium bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] border border-[color-mix(in_srgb,var(--border)_70%,transparent)] shadow-xs backdrop-blur-xs select-none">
-                {pricingOverallStatus === "saving" && (
-                  <>
-                    <CircleNotch
-                      size={14}
-                      className="animate-spin text-(--accent)"
-                    />
-                    <span className="text-(--text-secondary)">
-                      Saving changes...
-                    </span>
-                  </>
-                )}
-                {pricingOverallStatus === "failed" && (
-                  <>
-                    <WarningCircle
-                      size={14}
-                      weight="fill"
-                      className="text-rose-500 shrink-0"
-                    />
-                    <span className="text-rose-500">Save failed</span>
-                  </>
-                )}
-                {pricingOverallStatus === "saved" && (
-                  <>
-                    <CheckCircle
-                      size={14}
-                      weight="fill"
-                      className="text-emerald-500 shrink-0"
-                    />
-                    <span className="text-emerald-500">All changes saved</span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Center: True horizontal center save status for Extras */}
-          {activeStep === "extras" && extrasOverallStatus && (
-            <div
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center z-10 select-none transition-all duration-200"
-              data-testid="extras-overall-save-status"
-              aria-live="polite"
-            >
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[0.78rem] font-medium bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] border border-[color-mix(in_srgb,var(--border)_70%,transparent)] shadow-xs backdrop-blur-xs select-none">
-                {extrasOverallStatus === "saving" && (
-                  <>
-                    <CircleNotch
-                      size={14}
-                      className="animate-spin text-(--accent)"
-                    />
-                    <span className="text-(--text-secondary)">
-                      Saving changes...
-                    </span>
-                  </>
-                )}
-                {extrasOverallStatus === "failed" && (
-                  <>
-                    <WarningCircle
-                      size={14}
-                      weight="fill"
-                      className="text-rose-500 shrink-0"
-                    />
-                    <span className="text-rose-500">Save failed</span>
-                  </>
-                )}
-                {extrasOverallStatus === "saved" && (
-                  <>
-                    <CheckCircle
-                      size={14}
-                      weight="fill"
-                      className="text-emerald-500 shrink-0"
-                    />
-                    <span className="text-emerald-500">All changes saved</span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Center: True horizontal center save status for Publish */}
-          {activeStep === "publish" && publishOverallStatus && (
-            <div
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center z-10 select-none transition-all duration-200"
-              data-testid="publish-overall-save-status"
-              aria-live="polite"
-            >
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[0.78rem] font-medium bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] border border-[color-mix(in_srgb,var(--border)_70%,transparent)] shadow-xs backdrop-blur-xs select-none">
-                {publishOverallStatus === "saving" && (
-                  <>
-                    <CircleNotch
-                      size={14}
-                      className="animate-spin text-(--accent)"
-                    />
-                    <span className="text-(--text-secondary)">
-                      Saving changes...
-                    </span>
-                  </>
-                )}
-                {publishOverallStatus === "failed" && (
-                  <>
-                    <WarningCircle
-                      size={14}
-                      weight="fill"
-                      className="text-rose-500 shrink-0"
-                    />
-                    <span className="text-rose-500">Save failed</span>
-                  </>
-                )}
-                {publishOverallStatus === "saved" && (
-                  <>
-                    <CheckCircle
-                      size={14}
-                      weight="fill"
-                      className="text-emerald-500 shrink-0"
-                    />
-                    <span className="text-emerald-500">All changes saved</span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Right: Previous & Next / Validate / Publish Actions */}
-          <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap justify-end">
-            {/* Previous Button */}
-            {!(activeStep === "publish" && isPublished) && (
-              <button
-                type="button"
-                style={{
-                  fontSize: "0.80rem",
-                  fontWeight: 700,
-                  height: "34px",
-                  borderRadius: "8px",
-                  gap: "6px",
-                  paddingLeft: "14px",
-                  paddingRight: "14px",
-                }}
-                className={`inline-flex items-center border border-[color-mix(in_srgb,var(--text)_14%,transparent)] text-(--text-secondary) bg-transparent transition-all duration-150 ${
-                  activeStep === "basics" || actionLoading !== null
-                    ? "!opacity-40 !cursor-not-allowed !pointer-events-none hover:!bg-transparent hover:!text-(--text-secondary)"
-                    : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--text)_6%,transparent)] hover:text-(--text)"
-                }`}
-                onClick={() => {
-                  if (previousStepId) void navigateToStep(previousStepId);
-                }}
-                disabled={activeStep === "basics" || actionLoading !== null}
-                aria-label="Previous Step"
-              >
-                <CaretLeft size={15} />
-                <span>Previous</span>
-              </button>
-            )}
-
-            {/* Next Button / Validate on Publish */}
-            {activeStep === "publish" ? (
-              <button
-                type="button"
-                style={{
-                  fontSize: "0.80rem",
-                  fontWeight: 700,
-                  height: "34px",
-                  borderRadius: "8px",
-                  gap: "6px",
-                  paddingLeft: "16px",
-                  paddingRight: "16px",
-                }}
-                className="inline-flex items-center border border-[color-mix(in_srgb,var(--accent)_35%,transparent)] text-(--accent) bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] cursor-pointer transition-all duration-150 hover:bg-[color-mix(in_srgb,var(--accent)_16%,var(--surface))] disabled:opacity-60 disabled:cursor-not-allowed"
-                onClick={handleValidateCourseAction}
-                disabled={actionLoading !== null || isValidating}
-              >
-                {actionLoading === "validate" || isValidating ? (
-                  <>
-                    <CircleNotch
-                      size={14}
-                      className="animate-spin text-(--accent)"
-                    />
-                    <span>Validating...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle size={15} weight="bold" />
-                    <span>Validate</span>
-                  </>
-                )}
-              </button>
-            ) : (
-              <button
-                type="button"
-                style={{
-                  fontSize: "0.80rem",
-                  fontWeight: 700,
-                  height: "34px",
-                  borderRadius: "8px",
-                  gap: "6px",
-                  paddingLeft: "16px",
-                  paddingRight: "16px",
-                }}
-                className={`inline-flex items-center justify-center border-none text-(--on-accent,#ffffff) bg-(--accent) shadow-[0_3px_10px_var(--accent-shadow)] transition-all duration-150 ease-out ${
-                  actionLoading !== null ||
-                  (!isDownstreamUnlocked && activeStep === "basics")
-                    ? "!opacity-40 !cursor-not-allowed !shadow-none"
-                    : "cursor-pointer hover:bg-(--accent-hover,var(--accent)) hover:shadow-[0_4px_14px_var(--accent-shadow)] active:scale-[0.98]"
-                }`}
-                onClick={() => {
-                  if (nextStepId) void navigateToStep(nextStepId);
-                }}
-                title={
-                  !isDownstreamUnlocked && activeStep === "basics"
-                    ? "Add a course title to continue."
-                    : undefined
-                }
-                disabled={
-                  actionLoading !== null ||
-                  (!isDownstreamUnlocked && activeStep === "basics")
-                }
-                aria-label="Next Step"
-              >
-                {actionLoading === "save" ? (
-                  <>
-                    <CircleNotch
-                      size={14}
-                      className="animate-spin text-white"
-                    />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Next</span>
-                    <CaretRight size={15} weight="bold" />
-                  </>
-                )}
-              </button>
-            )}
-
-            {/* Publish CTA Button only when on publish step */}
-            {activeStep === "publish" && (
-              <>
-                {isPublished && (
-                  <button
-                    type="button"
-                    style={{
-                      fontSize: "0.80rem",
-                      fontWeight: 700,
-                      height: "34px",
-                      borderRadius: "8px",
-                      gap: "6px",
-                      paddingLeft: "14px",
-                      paddingRight: "14px",
-                    }}
-                    className="inline-flex items-center justify-center border border-red-500/30 text-red-400 bg-red-500/10 cursor-pointer transition-all duration-150 hover:bg-red-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={actionLoading !== null}
-                    onClick={() => setIsUnpublishModalOpen(true)}
-                    title="Unpublish this course and return it to draft state"
-                  >
-                    {actionLoading === "unpublish" ? (
-                      <>
-                        <CircleNotch
-                          size={14}
-                          className="animate-spin text-red-400"
-                        />
-                        <span>Unpublishing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <XCircle size={15} weight="bold" />
-                        <span>Unpublish</span>
-                      </>
-                    )}
-                  </button>
-                )}
-
-                {!isPublished && (
-                  <button
-                    type="button"
-                    style={{
-                      fontSize: "0.80rem",
-                      fontWeight: 700,
-                      height: "34px",
-                      borderRadius: "8px",
-                      gap: "6px",
-                      paddingLeft: "18px",
-                      paddingRight: "18px",
-                    }}
-                    className={`inline-flex items-center justify-center border-none text-(--on-accent,#ffffff) bg-(--accent) shadow-[0_3px_10px_var(--accent-shadow)] transition-all duration-150 ease-out ${
-                      !isCourseReadyToPublish
-                        ? "!opacity-40 !cursor-not-allowed filter blur-[0.4px] pointer-events-none select-none !shadow-none"
-                        : "cursor-pointer hover:bg-(--accent-hover,var(--accent)) hover:shadow-[0_4px_14px_var(--accent-shadow)] active:scale-[0.98]"
-                    }`}
-                    disabled={actionLoading !== null || !isCourseReadyToPublish}
-                    onClick={handleFinalPublishCourse}
-                    title={
-                      !isCourseReadyToPublish
-                        ? "Please resolve incomplete sections before publishing."
-                        : undefined
-                    }
-                  >
-                    {actionLoading === "publish" ? (
-                      <>
-                        <CircleNotch
-                          size={15}
-                          className="animate-spin text-white"
-                        />
-                        <span>Publishing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Lightning size={15} weight="bold" />
-                        <span>Publish</span>
-                      </>
-                    )}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+      <CourseEditorFooter
+        activeStep={activeStep}
+        isPublished={isPublished}
+        isAnyApiInProgress={isAnyApiInProgress}
+        isPreviewLoading={isPreviewLoading}
+        handlePreviewAction={handlePreviewAction}
+        basicsOverallStatus={basicsOverallStatus}
+        curriculumOverallStatus={curriculumOverallStatus}
+        accessRulesOverallStatus={accessRulesOverallStatus}
+        pricingOverallStatus={pricingOverallStatus}
+        extrasOverallStatus={extrasOverallStatus}
+        publishOverallStatus={publishOverallStatus}
+        actionLoading={actionLoading}
+        previousStepId={previousStepId}
+        navigateToStep={navigateToStep}
+        handleValidateCourseAction={handleValidateCourseAction}
+        isValidating={isValidating}
+        isDownstreamUnlocked={isDownstreamUnlocked}
+        nextStepId={nextStepId}
+        setIsUnpublishModalOpen={setIsUnpublishModalOpen}
+        isCourseReadyToPublish={isCourseReadyToPublish}
+        handleFinalPublishCourse={handleFinalPublishCourse}
+      />
 
       {/* Mobile Sticky / Fixed Bottom Save Status Pill (Basics only, above mobile bar) */}
-      {activeStep === "basics" && basicsOverallStatus && (
-        <div
-          className={`fixed left-1/2 -translate-x-1/2 z-[136] pointer-events-none min-[641px]:hidden transition-all duration-200 select-none ${
-            bottomNavHidden
-              ? "opacity-0 translate-y-3 pointer-events-none"
-              : "opacity-100 translate-y-0"
-          }`}
-          style={{
-            bottom:
-              "calc(58px + var(--app-viewport-safe-area-bottom, 0px) + 72px)",
-          }}
-          data-testid="basics-overall-save-status-mobile"
-          aria-live="polite"
-        >
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[0.75rem] font-medium bg-[color-mix(in_srgb,var(--surface-strong)_95%,transparent)] border border-[color-mix(in_srgb,var(--border)_80%,transparent)] shadow-md backdrop-blur-sm">
-            {basicsOverallStatus === "saving" && (
-              <>
-                <CircleNotch
-                  size={13}
-                  className="animate-spin text-(--accent)"
-                />
-                <span className="text-(--text-secondary)">
-                  Saving changes...
-                </span>
-              </>
-            )}
-            {basicsOverallStatus === "failed" && (
-              <>
-                <WarningCircle
-                  size={13}
-                  weight="fill"
-                  className="text-rose-500 shrink-0"
-                />
-                <span className="text-rose-500">Save failed</span>
-              </>
-            )}
-            {basicsOverallStatus === "saved" && (
-              <>
-                <CheckCircle
-                  size={13}
-                  weight="fill"
-                  className="text-emerald-500 shrink-0"
-                />
-                <span className="text-emerald-500">All changes saved</span>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Mobile Sticky / Fixed Bottom Save Status Pill (Curriculum only, above mobile bar) */}
-      {activeStep === "curriculum" && curriculumOverallStatus && (
-        <div
-          className={`fixed left-1/2 -translate-x-1/2 z-[136] pointer-events-none min-[641px]:hidden transition-all duration-200 select-none ${
-            bottomNavHidden
-              ? "opacity-0 translate-y-3 pointer-events-none"
-              : "opacity-100 translate-y-0"
-          }`}
-          style={{
-            bottom:
-              "calc(58px + var(--app-viewport-safe-area-bottom, 0px) + 72px)",
-          }}
-          data-testid="curriculum-overall-save-status-mobile"
-          aria-live="polite"
-        >
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[0.75rem] font-medium bg-[color-mix(in_srgb,var(--surface-strong)_95%,transparent)] border border-[color-mix(in_srgb,var(--border)_80%,transparent)] shadow-md backdrop-blur-sm">
-            {curriculumOverallStatus === "saving" && (
-              <>
-                <CircleNotch
-                  size={13}
-                  className="animate-spin text-(--accent)"
-                />
-                <span className="text-(--text-secondary)">
-                  Saving changes...
-                </span>
-              </>
-            )}
-            {curriculumOverallStatus === "failed" && (
-              <>
-                <WarningCircle
-                  size={13}
-                  weight="fill"
-                  className="text-rose-500 shrink-0"
-                />
-                <span className="text-rose-500">Save failed</span>
-              </>
-            )}
-            {curriculumOverallStatus === "saved" && (
-              <>
-                <CheckCircle
-                  size={13}
-                  weight="fill"
-                  className="text-emerald-500 shrink-0"
-                />
-                <span className="text-emerald-500">All changes saved</span>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Mobile Sticky / Fixed Bottom Save Status Pill (Access Rules only, above mobile bar) */}
-      {activeStep === "access-rules" && accessRulesOverallStatus && (
-        <div
-          className={`fixed left-1/2 -translate-x-1/2 z-[136] pointer-events-none min-[641px]:hidden transition-all duration-200 select-none ${
-            bottomNavHidden
-              ? "opacity-0 translate-y-3 pointer-events-none"
-              : "opacity-100 translate-y-0"
-          }`}
-          style={{
-            bottom:
-              "calc(58px + var(--app-viewport-safe-area-bottom, 0px) + 72px)",
-          }}
-          data-testid="access-rules-overall-save-status-mobile"
-          aria-live="polite"
-        >
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[0.75rem] font-medium bg-[color-mix(in_srgb,var(--surface-strong)_95%,transparent)] border border-[color-mix(in_srgb,var(--border)_80%,transparent)] shadow-md backdrop-blur-sm">
-            {accessRulesOverallStatus === "saving" && (
-              <>
-                <CircleNotch
-                  size={13}
-                  className="animate-spin text-(--accent)"
-                />
-                <span className="text-(--text-secondary)">
-                  Saving changes...
-                </span>
-              </>
-            )}
-            {accessRulesOverallStatus === "failed" && (
-              <>
-                <WarningCircle
-                  size={13}
-                  weight="fill"
-                  className="text-rose-500 shrink-0"
-                />
-                <span className="text-rose-500">Save failed</span>
-              </>
-            )}
-            {accessRulesOverallStatus === "saved" && (
-              <>
-                <CheckCircle
-                  size={13}
-                  weight="fill"
-                  className="text-emerald-500 shrink-0"
-                />
-                <span className="text-emerald-500">All changes saved</span>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Mobile Sticky / Fixed Bottom Save Status Pill (Pricing only, above mobile bar) */}
-      {activeStep === "pricing" && pricingOverallStatus && (
-        <div
-          className={`fixed left-1/2 -translate-x-1/2 z-[136] pointer-events-none min-[641px]:hidden transition-all duration-200 select-none ${
-            bottomNavHidden
-              ? "opacity-0 translate-y-3 pointer-events-none"
-              : "opacity-100 translate-y-0"
-          }`}
-          style={{
-            bottom:
-              "calc(58px + var(--app-viewport-safe-area-bottom, 0px) + 72px)",
-          }}
-          data-testid="pricing-overall-save-status-mobile"
-          aria-live="polite"
-        >
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[0.75rem] font-medium bg-[color-mix(in_srgb,var(--surface-strong)_95%,transparent)] border border-[color-mix(in_srgb,var(--border)_80%,transparent)] shadow-md backdrop-blur-sm">
-            {pricingOverallStatus === "saving" && (
-              <>
-                <CircleNotch
-                  size={13}
-                  className="animate-spin text-(--accent)"
-                />
-                <span className="text-(--text-secondary)">
-                  Saving changes...
-                </span>
-              </>
-            )}
-            {pricingOverallStatus === "failed" && (
-              <>
-                <WarningCircle
-                  size={13}
-                  weight="fill"
-                  className="text-rose-500 shrink-0"
-                />
-                <span className="text-rose-500">Save failed</span>
-              </>
-            )}
-            {pricingOverallStatus === "saved" && (
-              <>
-                <CheckCircle
-                  size={13}
-                  weight="fill"
-                  className="text-emerald-500 shrink-0"
-                />
-                <span className="text-emerald-500">All changes saved</span>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Mobile Sticky / Fixed Bottom Save Status Pill (Extras only, above mobile bar) */}
-      {activeStep === "extras" && extrasOverallStatus && (
-        <div
-          className={`fixed left-1/2 -translate-x-1/2 z-[136] pointer-events-none min-[641px]:hidden transition-all duration-200 select-none ${
-            bottomNavHidden
-              ? "opacity-0 translate-y-3 pointer-events-none"
-              : "opacity-100 translate-y-0"
-          }`}
-          style={{
-            bottom:
-              "calc(58px + var(--app-viewport-safe-area-bottom, 0px) + 72px)",
-          }}
-          data-testid="extras-overall-save-status-mobile"
-          aria-live="polite"
-        >
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[0.75rem] font-medium bg-[color-mix(in_srgb,var(--surface-strong)_95%,transparent)] border border-[color-mix(in_srgb,var(--border)_80%,transparent)] shadow-md backdrop-blur-sm">
-            {extrasOverallStatus === "saving" && (
-              <>
-                <CircleNotch
-                  size={13}
-                  className="animate-spin text-(--accent)"
-                />
-                <span className="text-(--text-secondary)">
-                  Saving changes...
-                </span>
-              </>
-            )}
-            {extrasOverallStatus === "failed" && (
-              <>
-                <WarningCircle
-                  size={13}
-                  weight="fill"
-                  className="text-rose-500 shrink-0"
-                />
-                <span className="text-rose-500">Save failed</span>
-              </>
-            )}
-            {extrasOverallStatus === "saved" && (
-              <>
-                <CheckCircle
-                  size={13}
-                  weight="fill"
-                  className="text-emerald-500 shrink-0"
-                />
-                <span className="text-emerald-500">All changes saved</span>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Mobile Sticky / Fixed Bottom Save Status Pill (Publish only, above mobile bar) */}
-      {activeStep === "publish" && publishOverallStatus && (
-        <div
-          className={`fixed left-1/2 -translate-x-1/2 z-[136] pointer-events-none min-[641px]:hidden transition-all duration-200 select-none ${
-            bottomNavHidden
-              ? "opacity-0 translate-y-3 pointer-events-none"
-              : "opacity-100 translate-y-0"
-          }`}
-          style={{
-            bottom:
-              "calc(58px + var(--app-viewport-safe-area-bottom, 0px) + 72px)",
-          }}
-          data-testid="publish-overall-save-status-mobile"
-          aria-live="polite"
-        >
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[0.75rem] font-medium bg-[color-mix(in_srgb,var(--surface-strong)_95%,transparent)] border border-[color-mix(in_srgb,var(--border)_80%,transparent)] shadow-md backdrop-blur-sm">
-            {publishOverallStatus === "saving" && (
-              <>
-                <CircleNotch
-                  size={13}
-                  className="animate-spin text-(--accent)"
-                />
-                <span className="text-(--text-secondary)">
-                  Saving changes...
-                </span>
-              </>
-            )}
-            {publishOverallStatus === "failed" && (
-              <>
-                <WarningCircle
-                  size={13}
-                  weight="fill"
-                  className="text-rose-500 shrink-0"
-                />
-                <span className="text-rose-500">Save failed</span>
-              </>
-            )}
-            {publishOverallStatus === "saved" && (
-              <>
-                <CheckCircle
-                  size={13}
-                  weight="fill"
-                  className="text-emerald-500 shrink-0"
-                />
-                <span className="text-emerald-500">All changes saved</span>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      <CourseEditorMobileStepStatus
+        activeStep={activeStep}
+        basicsOverallStatus={basicsOverallStatus}
+        bottomNavHidden={bottomNavHidden}
+        curriculumOverallStatus={curriculumOverallStatus}
+        accessRulesOverallStatus={accessRulesOverallStatus}
+        pricingOverallStatus={pricingOverallStatus}
+        extrasOverallStatus={extrasOverallStatus}
+        publishOverallStatus={publishOverallStatus}
+      />
 
       {/* Mobile Sticky / Fixed Bottom Action Bar */}
-      <div
-        className={`course-wizard-mobile-action-bar${
-          bottomNavHidden ||
-          isPreviewModalOpen ||
-          isAddCategoryModalOpen ||
-          Boolean(categoryToDelete)
-            ? " is-scroll-hidden"
-            : ""
-        }`}
-      >
-        {/* Preview Button */}
-        {!(activeStep === "publish" && isPublished) && (
-          <button
-            type="button"
-            style={{
-              fontSize: "0.84rem",
-              fontWeight: 500,
-              height: "44px",
-              borderRadius: "12px",
-              gap: "6px",
-            }}
-            className={`flex-1 inline-flex items-center justify-center border border-[color-mix(in_srgb,var(--text)_14%,transparent)] text-(--text-secondary) bg-transparent transition-all active:scale-[0.98] ${
-              isAnyApiInProgress || isPreviewLoading
-                ? "!opacity-40 !cursor-not-allowed !pointer-events-none hover:!bg-transparent hover:!text-(--text-secondary)"
-                : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--text)_6%,transparent)] hover:text-(--text)"
-            }`}
-            onClick={handlePreviewAction}
-            disabled={isAnyApiInProgress || isPreviewLoading}
-          >
-            {isPreviewLoading ? (
-              <>
-                <CircleNotch
-                  size={14}
-                  className="animate-spin text-(--accent)"
-                />
-                <span>Opening...</span>
-              </>
-            ) : (
-              <>
-                <Eye size={14} />
-                <span>Preview</span>
-              </>
-            )}
-          </button>
-        )}
-
-        {/* Previous Button */}
-        {!(activeStep === "publish" && isPublished) && (
-          <button
-            type="button"
-            style={{
-              fontSize: "0.84rem",
-              fontWeight: 500,
-              height: "44px",
-              borderRadius: "12px",
-              gap: "6px",
-            }}
-            className={`flex-1 inline-flex items-center justify-center border border-[color-mix(in_srgb,var(--text)_14%,transparent)] text-(--text-secondary) bg-transparent transition-all active:scale-[0.98] ${
-              activeStep === "basics" || actionLoading !== null
-                ? "!opacity-40 !cursor-not-allowed !pointer-events-none hover:!bg-transparent hover:!text-(--text-secondary)"
-                : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--text)_6%,transparent)] hover:text-(--text)"
-            }`}
-            onClick={() => {
-              if (previousStepId) void navigateToStep(previousStepId);
-            }}
-            disabled={activeStep === "basics" || actionLoading !== null}
-            aria-label="Previous Step"
-          >
-            <CaretLeft size={14} />
-            <span>Previous</span>
-          </button>
-        )}
-
-        {/* Next Button / Validate on Publish */}
-        {activeStep === "publish" ? (
-          <button
-            type="button"
-            style={{
-              fontSize: "0.84rem",
-              fontWeight: 500,
-              height: "44px",
-              borderRadius: "12px",
-              gap: "6px",
-            }}
-            className="flex-1 inline-flex items-center justify-center border border-[color-mix(in_srgb,var(--accent)_35%,transparent)] text-(--accent) bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] cursor-pointer transition-all hover:bg-[color-mix(in_srgb,var(--accent)_16%,var(--surface))] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
-            onClick={handleValidateCourseAction}
-            disabled={actionLoading !== null || isValidating}
-          >
-            {actionLoading === "validate" || isValidating ? (
-              <>
-                <CircleNotch
-                  size={14}
-                  className="animate-spin text-(--accent)"
-                />
-                <span>Validating...</span>
-              </>
-            ) : (
-              <>
-                <CheckCircle size={14} weight="bold" />
-                <span>Validate</span>
-              </>
-            )}
-          </button>
-        ) : (
-          <button
-            type="button"
-            style={{
-              fontSize: "0.84rem",
-              fontWeight: 600,
-              height: "44px",
-              borderRadius: "12px",
-              gap: "6px",
-            }}
-            className={`flex-1 inline-flex items-center justify-center border-none text-(--on-accent,#ffffff) bg-(--accent) shadow-[0_3px_10px_var(--accent-shadow)] transition-all ${
-              actionLoading !== null ||
-              (!isDownstreamUnlocked && activeStep === "basics")
-                ? "!opacity-40 !cursor-not-allowed !shadow-none"
-                : "cursor-pointer hover:bg-(--accent-hover,var(--accent)) active:scale-[0.98]"
-            }`}
-            onClick={() => {
-              if (nextStepId) void navigateToStep(nextStepId);
-            }}
-            title={
-              !isDownstreamUnlocked && activeStep === "basics"
-                ? "Add a course title to continue."
-                : undefined
-            }
-            disabled={
-              actionLoading !== null ||
-              (!isDownstreamUnlocked && activeStep === "basics")
-            }
-            aria-label="Next Step"
-          >
-            {actionLoading === "save" ? (
-              <>
-                <CircleNotch size={14} className="animate-spin text-white" />
-                <span>Saving...</span>
-              </>
-            ) : (
-              <>
-                <span>Next</span>
-                <CaretRight size={14} weight="bold" />
-              </>
-            )}
-          </button>
-        )}
-
-        {/* Publish CTA Button only when on publish step */}
-        {activeStep === "publish" && (
-          <>
-            {isPublished && (
-              <button
-                type="button"
-                style={{
-                  fontSize: "0.84rem",
-                  fontWeight: 600,
-                  height: "44px",
-                  borderRadius: "14px",
-                  gap: "6px",
-                }}
-                className="flex-1 inline-flex items-center justify-center border border-red-500/35 text-red-400 bg-red-500/10 cursor-pointer transition-all hover:bg-red-500/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={actionLoading !== null}
-                onClick={() => setIsUnpublishModalOpen(true)}
-              >
-                {actionLoading === "unpublish" ? (
-                  <>
-                    <CircleNotch
-                      size={14}
-                      className="animate-spin text-red-400"
-                    />
-                    <span>Unpublishing...</span>
-                  </>
-                ) : (
-                  <>
-                    <XCircle size={15} weight="bold" />
-                    <span>Unpublish</span>
-                  </>
-                )}
-              </button>
-            )}
-
-            {!isPublished && (
-              <button
-                type="button"
-                style={{
-                  fontSize: "0.84rem",
-                  fontWeight: 600,
-                  height: "44px",
-                  borderRadius: "14px",
-                  gap: "6px",
-                }}
-                className={`flex-1 inline-flex items-center justify-center border-none text-(--on-accent,#ffffff) bg-(--accent) shadow-[0_3px_10px_var(--accent-shadow)] transition-all ${
-                  !isCourseReadyToPublish
-                    ? "!opacity-40 !cursor-not-allowed filter blur-[0.4px] pointer-events-none select-none !shadow-none"
-                    : "cursor-pointer hover:bg-(--accent-hover,var(--accent)) active:scale-[0.98]"
-                }`}
-                disabled={actionLoading !== null || !isCourseReadyToPublish}
-                onClick={handleFinalPublishCourse}
-                title={
-                  !isCourseReadyToPublish
-                    ? "Please resolve incomplete sections before publishing."
-                    : undefined
-                }
-              >
-                {actionLoading === "publish" ? (
-                  <>
-                    <CircleNotch
-                      size={15}
-                      className="animate-spin text-white"
-                    />
-                    <span>Publishing...</span>
-                  </>
-                ) : (
-                  <>
-                    <Lightning size={15} weight="bold" />
-                    <span>Publish</span>
-                  </>
-                )}
-              </button>
-            )}
-          </>
-        )}
-      </div>
+      <CourseEditorMobileActionBar
+        bottomNavHidden={bottomNavHidden}
+        isPreviewModalOpen={isPreviewModalOpen}
+        isAddCategoryModalOpen={isAddCategoryModalOpen}
+        categoryToDelete={categoryToDelete}
+        activeStep={activeStep}
+        isPublished={isPublished}
+        isAnyApiInProgress={isAnyApiInProgress}
+        isPreviewLoading={isPreviewLoading}
+        handlePreviewAction={handlePreviewAction}
+        actionLoading={actionLoading}
+        previousStepId={previousStepId}
+        navigateToStep={navigateToStep}
+        handleValidateCourseAction={handleValidateCourseAction}
+        isValidating={isValidating}
+        isDownstreamUnlocked={isDownstreamUnlocked}
+        nextStepId={nextStepId}
+        setIsUnpublishModalOpen={setIsUnpublishModalOpen}
+        isCourseReadyToPublish={isCourseReadyToPublish}
+        handleFinalPublishCourse={handleFinalPublishCourse}
+      />
 
       {/* Floating Action Feedback Toast */}
       {toastMessage && (
@@ -8686,144 +7318,16 @@ export function CourseCreatePage({
       {isPreviewModalOpen &&
         typeof document !== "undefined" &&
         createPortal(
-          <div
-            className="fixed inset-0 z-1200 flex flex-col bg-black/80 backdrop-blur-xl animate-[deleteModalFadeIn_0.2s_ease-out] p-4 box-border max-[640px]:p-0"
-            onClick={() => setIsPreviewModalOpen(false)}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Course Overview Preview"
-          >
-            <div
-              className="relative flex flex-col w-full max-w-345 h-full max-h-[94vh] m-auto border border-[color-mix(in_srgb,var(--text)_14%,transparent)] rounded-[20px] bg-[color-mix(in_srgb,var(--surface)_24%,var(--canvas))] shadow-[0_24px_64px_rgba(0,0,0,0.6)] overflow-hidden animate-[deleteModalPopIn_0.22s_cubic-bezier(0.16,1,0.3,1)] max-[640px]:max-h-screen max-[640px]:h-screen max-[640px]:rounded-none max-[640px]:border-none"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Modal Top Bar */}
-              <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-(--surface) shrink-0 max-[640px]:px-3.5 max-[640px]:py-2.5">
-                <div className="flex items-center flex-wrap gap-x-3 gap-y-2 min-w-0 flex-1 max-[640px]:gap-1.5">
-                  <div className="inline-flex items-center gap-2 text-[0.92rem] font-bold text-(--text) tracking-[-0.01em] whitespace-nowrap overflow-hidden text-ellipsis max-[640px]:text-[0.85rem]">
-                    <Eye size={18} weight="bold" />
-                    <span>Student Course Overview Preview</span>
-                  </div>
-                  {hasUnsavedChanges ? (
-                    <span className="inline-flex items-center gap-1.25 px-2.25 py-0.75 rounded-full border border-[color-mix(in_srgb,#f59e0b_35%,transparent)] bg-[color-mix(in_srgb,#f59e0b_15%,transparent)] text-[#d97706] dark:text-[#fbbf24] text-[0.7rem] font-[650] whitespace-nowrap shrink-0 max-[640px]:text-[0.66rem] max-[640px]:px-1.75 max-[640px]:py-0.5">
-                      <Info size={12} weight="bold" />
-                      Last saved version
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.25 px-2.25 py-0.75 rounded-full border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-[color-mix(in_srgb,var(--surface-strong)_40%,transparent)] text-(--muted) text-[0.7rem] font-medium whitespace-nowrap shrink-0 max-[640px]:text-[0.66rem] max-[640px]:px-1.75 max-[640px]:py-0.5">
-                      <CheckCircle
-                        size={12}
-                        weight="fill"
-                        className="text-(--accent)"
-                      />
-                      Previewing saved version
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  className="inline-flex w-7 h-7 items-center justify-center rounded-lg border border-[color-mix(in_srgb,var(--surface-strong)72%,transparent)] text-(--muted) hover:text-(--text) hover:bg-[color-mix(in_srgb,var(--surface)48%,transparent)] transition-all duration-150 bg-transparent cursor-pointer p-0"
-                  onClick={() => setIsPreviewModalOpen(false)}
-                  aria-label="Close Preview"
-                >
-                  <X size={15} />
-                </button>
-              </div>
-
-              {/* Informational banner when unsaved changes exist in editor */}
-              {hasUnsavedChanges && currentCourseId && (
-                <div className="flex items-center gap-2 px-5 py-2 bg-[color-mix(in_srgb,#f59e0b_10%,var(--surface))] border-b border-[color-mix(in_srgb,#f59e0b_22%,transparent)] text-[#d97706] dark:text-[#fbbf24] text-[0.79rem] font-medium shrink-0 max-[640px]:px-3.5 max-[640px]:py-1.75">
-                  <Info
-                    size={15}
-                    className="shrink-0 text-[#f59e0b]"
-                    weight="bold"
-                  />
-                  <span className="leading-snug">
-                    This preview reflects the last saved version on the server.
-                    Save your current changes in the editor to update the
-                    preview.
-                  </span>
-                </div>
-              )}
-
-              {/* Modal Body: Render authentic CourseOverviewPage */}
-              <div className="flex-1 min-h-0 overflow-y-auto p-0 flex flex-col">
-                {!currentCourseId ? (
-                  <div className="flex flex-col items-center justify-center flex-1 min-h-[420px] p-8 text-center text-(--muted) my-auto">
-                    <BookOpen
-                      size={44}
-                      className="mb-3.5 opacity-60 text-(--accent)"
-                    />
-                    <h3 className="text-[1.15rem] font-bold text-(--text) mb-1.5">
-                      No Saved Course Data
-                    </h3>
-                    <p className="text-[0.88rem] max-w-[420px] mb-5 text-(--muted) leading-[1.45]">
-                      Please save the course before opening Preview.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setIsPreviewModalOpen(false)}
-                      style={{
-                        fontSize: "0.80rem",
-                        fontWeight: 700,
-                        height: "34px",
-                        borderRadius: "8px",
-                        gap: "6px",
-                        paddingLeft: "16px",
-                        paddingRight: "16px",
-                      }}
-                      className="inline-flex items-center justify-center border-none text-(--on-accent,#ffffff) bg-(--accent) shadow-[0_3px_10px_var(--accent-shadow)] transition-all duration-150 ease-out cursor-pointer hover:bg-(--accent-hover,var(--accent)) hover:shadow-[0_4px_14px_var(--accent-shadow)] active:scale-[0.98]"
-                    >
-                      <ArrowLeft size={15} weight="bold" />
-                      <span>Back to Editor</span>
-                    </button>
-                  </div>
-                ) : activePreviewData ? (
-                  <CourseOverviewPage
-                    previewData={activePreviewData}
-                    categories={serverCategories}
-                    isReadOnlyPreview={true}
-                    onNavigateCourses={() => setIsPreviewModalOpen(false)}
-                  />
-                ) : isPreviewLoading ? (
-                  <div className="p-6 max-[640px]:p-3 w-full">
-                    <CourseOverviewSkeleton
-                      onNavigateCourses={() => setIsPreviewModalOpen(false)}
-                    />
-                  </div>
-                ) : isPreviewError ? (
-                  <div className="flex flex-col items-center justify-center flex-1 min-h-[420px] p-12 text-center text-(--muted) my-auto">
-                    <div className="w-10 h-10 rounded-full bg-[rgba(239,68,68,0.12)] text-[#ef4444] flex items-center justify-center mb-3">
-                      <X size={20} />
-                    </div>
-                    <h3 className="text-[1.05rem] font-bold text-(--text) mb-1">
-                      Failed to Load Preview
-                    </h3>
-                    <p className="text-[0.86rem] max-w-[400px] mb-4 text-(--muted)">
-                      An error occurred while fetching the course preview from
-                      the server.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => refetchPreview()}
-                      style={{
-                        fontSize: "0.80rem",
-                        fontWeight: 700,
-                        height: "34px",
-                        borderRadius: "8px",
-                        gap: "6px",
-                        paddingLeft: "16px",
-                        paddingRight: "16px",
-                      }}
-                      className="inline-flex items-center justify-center border-none text-(--on-accent,#ffffff) bg-(--accent) shadow-[0_3px_10px_var(--accent-shadow)] transition-all duration-150 ease-out cursor-pointer hover:bg-(--accent-hover,var(--accent)) hover:shadow-[0_4px_14px_var(--accent-shadow)] active:scale-[0.98]"
-                    >
-                      <span>Retry</span>
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>,
+          <CoursePreviewModal
+            setIsPreviewModalOpen={setIsPreviewModalOpen}
+            hasUnsavedChanges={hasUnsavedChanges}
+            currentCourseId={currentCourseId}
+            activePreviewData={activePreviewData}
+            serverCategories={serverCategories}
+            isPreviewLoading={isPreviewLoading}
+            isPreviewError={isPreviewError}
+            refetchPreview={refetchPreview}
+          />,
           document.body,
         )}
 
@@ -8831,181 +7335,19 @@ export function CourseCreatePage({
       {isAddCategoryModalOpen &&
         typeof document !== "undefined" &&
         createPortal(
-          <div
-            className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/65 backdrop-blur-sm p-4 [animation:deleteModalFadeIn_0.18s_ease-out]"
-            onClick={handleCloseAddCategoryModal}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="add-category-modal-title"
-          >
-            <div
-              className="relative w-full max-w-[460px] rounded-[16px] border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-(--surface) p-6 shadow-[0_20px_48px_rgba(0,0,0,0.45)] [animation:deleteModalPopIn_0.22s_cubic-bezier(0.16,1,0.3,1)]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between gap-3 mb-4">
-                <div>
-                  <h3
-                    id="add-category-modal-title"
-                    className="m-0 text-(--text) text-[1.1rem] font-bold tracking-tight"
-                  >
-                    Manage Categories
-                  </h3>
-                  <p className="m-0 mt-0.5 text-(--muted) text-[0.78rem]">
-                    Create new categories or remove existing ones.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="inline-flex w-7 h-7 items-center justify-center rounded-[8px] border border-[color-mix(in_srgb,var(--text)_10%,transparent)] text-(--muted) hover:text-(--text) hover:bg-[color-mix(in_srgb,var(--text)_6%,transparent)] transition-colors duration-150 bg-transparent cursor-pointer p-0 shrink-0"
-                  onClick={handleCloseAddCategoryModal}
-                  aria-label="Close modal"
-                >
-                  <X size={15} />
-                </button>
-              </div>
-
-              {/* Add New Category Form */}
-              <form
-                onSubmit={handleCreateCategory}
-                className="flex flex-col gap-3 pb-4 border-b border-[color-mix(in_srgb,var(--text)_10%,transparent)]"
-              >
-                <div className="flex flex-col gap-1.5">
-                  <label
-                    htmlFor="new-category-name-input"
-                    className="text-(--text-secondary) text-[0.82rem] font-semibold"
-                  >
-                    Add New Category{" "}
-                    <span className="text-[#ff5252] ml-0.5">*</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      id="new-category-name-input"
-                      type="text"
-                      autoFocus
-                      value={newCategoryName}
-                      onChange={(e) => {
-                        setNewCategoryName(e.target.value);
-                        if (addCategoryError) setAddCategoryError("");
-                      }}
-                      placeholder="e.g. Mobile Development"
-                      maxLength={100}
-                      className="flex-1 h-10 px-3 rounded-[9px] border border-[color-mix(in_srgb,var(--text)_14%,transparent)] bg-[color-mix(in_srgb,var(--canvas)_60%,var(--surface))] text-(--text) text-[0.88rem] focus:outline-none focus:border-(--accent) transition-colors placeholder:text-(--muted)"
-                    />
-                    <button
-                      type="submit"
-                      disabled={
-                        !newCategoryName.trim() ||
-                        createCategoryMutation.isPending
-                      }
-                      style={{
-                        fontSize: "0.80rem",
-                        fontWeight: 700,
-                        height: "40px",
-                        borderRadius: "9px",
-                        gap: "6px",
-                        paddingLeft: "16px",
-                        paddingRight: "16px",
-                      }}
-                      className="inline-flex items-center justify-center border-none text-(--on-accent,#ffffff) bg-(--accent) cursor-pointer shadow-[0_3px_10px_var(--accent-shadow)] transition-all duration-150 ease-out hover:bg-(--accent-hover,var(--accent)) hover:shadow-[0_4px_14px_var(--accent-shadow)] disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
-                    >
-                      {createCategoryMutation.isPending ? (
-                        <>
-                          <CircleNotch size={14} className="animate-spin" />
-                          <span>Adding...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Plus size={14} weight="bold" />
-                          <span>Add</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  {addCategoryError && (
-                    <p className="m-0 text-[0.78rem] text-[#ff5252] font-medium">
-                      {addCategoryError}
-                    </p>
-                  )}
-                </div>
-              </form>
-
-              {/* Existing Categories List */}
-              <div className="pt-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-(--text-secondary) text-[0.80rem] font-semibold">
-                    Existing Categories ({serverCategories.length})
-                  </span>
-                  {isLoadingCategories && (
-                    <CircleNotch
-                      size={13}
-                      className="animate-spin text-(--muted)"
-                    />
-                  )}
-                </div>
-
-                <div className="max-h-[220px] overflow-y-auto flex flex-col gap-1.5 pr-1">
-                  {serverCategories.length === 0 ? (
-                    <div className="py-6 text-center text-(--muted) text-[0.82rem] italic">
-                      No categories found. Add your first category above.
-                    </div>
-                  ) : (
-                    serverCategories.map((cat) => (
-                      <div
-                        key={cat.id}
-                        className="flex items-center justify-between gap-3 px-3 py-2 rounded-[8px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--canvas)_40%,var(--surface))] hover:border-[color-mix(in_srgb,var(--text)_16%,transparent)] transition-all duration-150"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Tag
-                            size={15}
-                            className="text-(--accent) shrink-0"
-                            weight="duotone"
-                          />
-                          <span className="text-(--text) text-[0.86rem] font-medium truncate">
-                            {cat.name}
-                          </span>
-                          <span className="text-(--muted) text-[0.72rem] px-1.5 py-0.5 rounded-[4px] bg-[color-mix(in_srgb,var(--text)_6%,transparent)] shrink-0">
-                            {cat.slug}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCategoryToDelete({ id: cat.id, name: cat.name })
-                          }
-                          disabled={deleteCategoryMutation.isPending}
-                          title={`Delete category ${cat.name}`}
-                          aria-label={`Delete category ${cat.name}`}
-                          className="inline-flex w-7 h-7 items-center justify-center rounded-[6px] text-(--muted) hover:text-red-500 hover:bg-red-500/10 border-none bg-transparent cursor-pointer transition-colors duration-150 p-0 shrink-0"
-                        >
-                          <Trash size={14} />
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="flex items-center justify-end pt-4 mt-2 border-t border-[color-mix(in_srgb,var(--text)_8%,transparent)]">
-                <button
-                  type="button"
-                  onClick={handleCloseAddCategoryModal}
-                  style={{
-                    fontSize: "0.80rem",
-                    fontWeight: 700,
-                    height: "34px",
-                    borderRadius: "8px",
-                    paddingLeft: "16px",
-                    paddingRight: "16px",
-                  }}
-                  className="inline-flex items-center justify-center border border-[color-mix(in_srgb,var(--text)_14%,transparent)] text-(--text-secondary) bg-transparent cursor-pointer transition-all duration-150 hover:bg-[color-mix(in_srgb,var(--text)_6%,transparent)] hover:text-(--text)"
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          </div>,
+          <CourseCategoriesModal
+            handleCloseAddCategoryModal={handleCloseAddCategoryModal}
+            handleCreateCategory={handleCreateCategory}
+            newCategoryName={newCategoryName}
+            setNewCategoryName={setNewCategoryName}
+            addCategoryError={addCategoryError}
+            setAddCategoryError={setAddCategoryError}
+            createCategoryMutation={createCategoryMutation}
+            serverCategories={serverCategories}
+            isLoadingCategories={isLoadingCategories}
+            setCategoryToDelete={setCategoryToDelete}
+            deleteCategoryMutation={deleteCategoryMutation}
+          />,
           document.body,
         )}
 
