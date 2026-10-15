@@ -112,6 +112,17 @@ export function LearnerHome({
     [enrolledCourses, pinnedCourseId],
   );
   const heroCourse = plan?.heroCourse;
+  // A pinned course already leads the page, so "My Courses" leaves it out
+  // rather than showing it twice; it comes back there once it is unpinned.
+  const listedCourses = useMemo(
+    () =>
+      plan?.heroPinned
+        ? plan.courses.filter(
+            (course) => course.courseId !== plan.heroCourse.courseId,
+          )
+        : (plan?.courses ?? []),
+    [plan],
+  );
   const heroCourseKey = heroCourse ? getEnrolledCourseKey(heroCourse) : "";
 
   const resumeQuery = useLearningProgressResumeContext(heroCourseKey, {
@@ -263,19 +274,21 @@ export function LearnerHome({
       />
 
       <div className={learnerHomeBodyClasses}>
-        <LearnerCoursesSection
-          courses={plan.courses}
-          subtitle={<LearnerCoursesSubtitle started={!nothingStarted} />}
-          courseMenu={courseCardActions.courseMenu}
-          setCourseMenu={courseCardActions.setCourseMenu}
-          getCourseHref={getCoursePlayerHref}
-          onOpenCourse={openCourse}
-          pinnedCourseId={plan.heroPinned ? heroCourse.courseId : null}
-          onPinCourse={pinCourse}
-          onUnpinCourse={unpinAndSay}
-          onUnenrollCourse={isAdmin ? setPendingUnenroll : undefined}
-          onNavigatePage={onNavigatePage}
-        />
+        {listedCourses.length > 0 ? (
+          <LearnerCoursesSection
+            courses={listedCourses}
+            subtitle={<LearnerCoursesSubtitle started={!nothingStarted} />}
+            courseMenu={courseCardActions.courseMenu}
+            setCourseMenu={courseCardActions.setCourseMenu}
+            getCourseHref={getCoursePlayerHref}
+            onOpenCourse={openCourse}
+            pinnedCourseId={plan.heroPinned ? heroCourse.courseId : null}
+            onPinCourse={pinCourse}
+            onUnpinCourse={unpinAndSay}
+            onUnenrollCourse={isAdmin ? setPendingUnenroll : undefined}
+            onNavigatePage={onNavigatePage}
+          />
+        ) : null}
 
         {showExplore &&
         (publishedQuery.isLoading ||

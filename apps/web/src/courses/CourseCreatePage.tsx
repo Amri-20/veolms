@@ -8689,7 +8689,7 @@ export function CourseCreatePage({
         typeof document !== "undefined" &&
         createPortal(
           <div
-            className="fixed inset-0 z-1200 flex flex-col bg-black/80 backdrop-blur-xl animate-[deleteModalFadeIn_0.2s_ease-out] p-4 box-border max-[640px]:p-0"
+            className="fixed inset-0 z-1200 flex flex-col bg-black/80 backdrop-blur-xs animate-[deleteModalFadeIn_0.2s_ease-out] p-4 box-border max-[640px]:p-0"
             onClick={() => setIsPreviewModalOpen(false)}
             role="dialog"
             aria-modal="true"
@@ -8834,7 +8834,7 @@ export function CourseCreatePage({
         typeof document !== "undefined" &&
         createPortal(
           <div
-            className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/65 backdrop-blur-sm p-4 [animation:deleteModalFadeIn_0.18s_ease-out]"
+            className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/65 backdrop-blur-xs p-4 [animation:deleteModalFadeIn_0.18s_ease-out]"
             onClick={handleCloseAddCategoryModal}
             role="dialog"
             aria-modal="true"

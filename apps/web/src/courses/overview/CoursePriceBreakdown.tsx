@@ -20,8 +20,9 @@ const discountClasses =
  * its own and changes the total; nothing else in the bar moves or changes
  * its look. It is the same receipt at every width: on a wide bar it is the
  * left of two columns, with the coupon and the button on the right (see
- * `CoursePriceBar`). (A green "You saved" strip under the total was taken
- * out at the user's request on 2026-10-15.)
+ * `CoursePriceBar`), and stops at 26rem there so the total stays near its
+ * label on a wide screen. (A green "You saved" strip under the total was
+ * taken out at the user's request on 2026-10-15.)
  */
 export function CoursePriceBreakdown({
   breakdown,
@@ -32,7 +33,7 @@ export function CoursePriceBreakdown({
   const hasLines = Boolean(sale || coupon);
 
   return (
-    <div className="flex min-w-0 flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-3 @2xl/price:max-w-104">
       {hasLines ? (
         <dl className="m-0 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2 text-[0.9rem] leading-tight">
           <dt className="text-(--muted)">Price</dt>

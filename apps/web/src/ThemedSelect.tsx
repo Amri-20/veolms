@@ -127,6 +127,14 @@ export function ThemedSelect<Value extends string>({
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [position, setPosition] = useState<MenuPosition | null>(null);
+  // A select inside an open modal dialog (the phone pop-up, say) puts its
+  // list in that dialog: everything outside a modal dialog is inert and is
+  // drawn under it, so a list portalled into <body> showed behind the
+  // pop-up and could not be clicked. There the list is also a manual
+  // popover, so it is drawn in the top layer above the dialog's own
+  // contents and not clipped by its scrolling; the top layer places it by
+  // the viewport, as the fixed position below expects.
+  const [dialogHost, setDialogHost] = useState<HTMLDialogElement | null>(null);
   const debouncedSearchQuery = useDebounce(searchQuery, searchDebounceMs);
   // Emptying or reopening the menu must reveal the complete option set
   // immediately; only active typing should wait for the debounce window.
@@ -253,7 +261,15 @@ export function ThemedSelect<Value extends string>({
     // The menu ends where the control ends: a list wider than its control
     // grows towards the start, and one near the start edge of the window
     // is kept on screen.
-    const left = Math.max(viewportPadding, rect.right - width);
+    // In a pop-up the list starts where the control starts instead, so it
+    // stays over the pop-up rather than hanging off its side.
+    const inDialog = Boolean(trigger.closest("dialog[open]"));
+    const left = inDialog
+      ? Math.max(
+          viewportPadding,
+          Math.min(rect.left, window.innerWidth - viewportPadding - width),
+        )
+      : Math.max(viewportPadding, rect.right - width);
     return {
       left,
       top: useAbove ? undefined : rect.bottom + gap,
@@ -278,6 +294,9 @@ export function ThemedSelect<Value extends string>({
     setSearchQuery("");
     const pos = calculatePosition();
     setPosition(pos);
+    setDialogHost(
+      triggerRef.current?.closest<HTMLDialogElement>("dialog[open]") ?? null,
+    );
     setOpen(true);
     requestAnimationFrame(() => {
       if (searchable && searchInputRef.current) {
@@ -312,6 +331,12 @@ export function ThemedSelect<Value extends string>({
       if (pos) setPosition(pos);
     }
   }, [open, calculatePosition]);
+
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    if (!open || !dialogHost || !content?.isConnected) return;
+    if (!content.matches(":popover-open")) content.showPopover();
+  }, [dialogHost, open, position]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -553,6 +578,7 @@ export function ThemedSelect<Value extends string>({
             role="listbox"
             aria-label={ariaLabel}
             data-side={position.side}
+            popover={dialogHost ? "manual" : undefined}
             className={joinClasses("themed-select__content", contentClassName)}
             onKeyDown={handleMenuKeyDown}
             style={
@@ -565,6 +591,17 @@ export function ThemedSelect<Value extends string>({
                 boxSizing: "border-box",
                 maxHeight: position.maxHeight,
                 overflowY: "auto",
+                // A popover's own defaults (centred, a margin, padding and
+                // all four edges at 0) would undo the placement.
+                ...(dialogHost
+                  ? {
+                      margin: 0,
+                      padding: 0,
+                      right: "auto",
+                      bottom: position.bottom ?? "auto",
+                      top: position.top ?? "auto",
+                    }
+                  : null),
               } as CSSProperties
             }
           >
@@ -668,7 +705,7 @@ export function ThemedSelect<Value extends string>({
               </div>
             )}
           </div>,
-          document.body,
+          dialogHost ?? document.body,
         )}
     </>
   );
