@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type ReactNode,
 } from "react";
 import "./learning-feature.css";
 import "./learning-split-layout.css";
@@ -50,10 +49,7 @@ import type {
 } from "./player";
 import type { LearningMiniPlayerRequest } from "./player/learningMiniPlayerTypes";
 import { syncMobileNavigationWithMinimizeGesture } from "./player/mobileNavigationFollow";
-import {
-  isDesktopLearningMinimizeViewport,
-  LEARNING_DESKTOP_MINIMIZE_MEDIA_QUERY,
-} from "./player/learningPlayerMotion";
+import { isDesktopLearningMinimizeViewport } from "./player/learningPlayerMotion";
 import {
   LESSON_PLAYER_COMPACT_HEIGHT,
   LESSON_PLAYER_GROWTH_PROPERTY,
@@ -146,7 +142,6 @@ import {
 import {
   getPhoneLessonDrawerCollapsedSnapPoint,
   getSideLessonDrawerBounds,
-  LESSON_DRAWER_DEFAULT_FLOATING_WIDTH,
   LESSON_DRAWER_MAX_FLOATING_WIDTH,
   LESSON_DRAWER_MIN_FLOATING_WIDTH,
   useLessonDrawerHeroControl,
@@ -159,123 +154,46 @@ import {
   DrawerDescription,
   DrawerTitle,
 } from "@/components/ui/drawer";
-
-const CURRICULUM_SNAP_WIDTH = CURRICULUM_MIN_WIDTH / 2;
-const FLOATING_LESSON_DRAWER_SNAP_WIDTH = LESSON_DRAWER_MIN_FLOATING_WIDTH / 2;
-const LESSON_DRAWER_FALLBACK_SNAP_POINT = 0.72;
-const CURRICULUM_SWIPE_ACTIVATION_DISTANCE = 12;
-const CURRICULUM_SWIPE_DIRECTION_RATIO = 1.2;
-const CURRICULUM_SWIPE_COMMIT_DISTANCE = 72;
-const CURRICULUM_SWIPE_FLING_DISTANCE = 24;
-const CURRICULUM_SWIPE_FLING_VELOCITY = 0.3;
-const LESSON_PROGRESS_COMPLETE_THRESHOLD = 99.5;
-const COURSE_CONTENT_DRAWER_QUERY = "(max-width: 1080px)";
-const PHONE_LESSON_DRAWER_QUERY = "(max-width: 640px)";
-const FLOATING_LESSON_DRAWER_WIDTH_KEY = "veolms-floating-curriculum-width";
-const IDLE_PLAYER_MINIMIZE_GESTURE: LessonPlayerMinimizeGestureState = {
-  offsetY: 0,
-  phase: "idle",
-  progress: 0,
-};
-
-const subscribeToCourseContentDrawerViewport = (onStoreChange: () => void) => {
-  const media = window.matchMedia(COURSE_CONTENT_DRAWER_QUERY);
-  media.addEventListener("change", onStoreChange);
-  return () => media.removeEventListener("change", onStoreChange);
-};
-
-const getCourseContentDrawerViewportSnapshot = () =>
-  window.matchMedia(COURSE_CONTENT_DRAWER_QUERY).matches;
-
-const getCourseContentDrawerViewportServerSnapshot = () => false;
-
-const subscribeToPhoneLessonDrawerViewport = (onStoreChange: () => void) => {
-  const media = window.matchMedia(PHONE_LESSON_DRAWER_QUERY);
-  media.addEventListener("change", onStoreChange);
-  return () => media.removeEventListener("change", onStoreChange);
-};
-
-const getPhoneLessonDrawerViewportSnapshot = () =>
-  window.matchMedia(PHONE_LESSON_DRAWER_QUERY).matches;
-
-const getPhoneLessonDrawerViewportServerSnapshot = () => false;
-
-const subscribeToDesktopLearningMinimizeViewport = (
-  onStoreChange: () => void,
-) => {
-  const media = window.matchMedia(LEARNING_DESKTOP_MINIMIZE_MEDIA_QUERY);
-  media.addEventListener("change", onStoreChange);
-  return () => media.removeEventListener("change", onStoreChange);
-};
-
-const getDesktopLearningMinimizeViewportSnapshot = () =>
-  window.matchMedia(LEARNING_DESKTOP_MINIMIZE_MEDIA_QUERY).matches;
-
-const getDesktopLearningMinimizeViewportServerSnapshot = () => false;
-
-const CURRICULUM_SWIPE_EXCLUSION_SELECTOR = [
-  ".learning-curriculum__resize-rail",
-  "input",
-  "textarea",
-  "select",
-  '[contenteditable="true"]',
-  '[role="slider"]',
-  "[data-player-control]",
-  "[data-player-menu]",
-  "[data-sidebar-swipe-ignore]",
-  "[data-learning-swipe-ignore]",
-].join(",");
-
-const LESSON_DRAWER_REVEAL_EXCLUSION_SELECTOR = [
-  ".learning-curriculum__resize-rail",
-  ".elastic-scroller",
-  "input",
-  "textarea",
-  "select",
-  '[contenteditable="true"]',
-  '[role="slider"]',
-  "[data-player-control]",
-  "[data-player-menu]",
-].join(",");
-
-const safeResumeVideo = (video: HTMLVideoElement | null) => {
-  if (!video || !video.paused) return;
-  try {
-    const playResult = video.play?.();
-    if (playResult && typeof playResult.catch === "function") {
-      playResult.catch(() => undefined);
-    }
-  } catch {
-    // Ignore environments where play() is unsupported (e.g. JSDOM) or rejected by browser policies
-  }
-};
-
-const isCurriculumSwipeExcludedTarget = (
-  target: EventTarget | null,
-  selector = CURRICULUM_SWIPE_EXCLUSION_SELECTOR,
-) => target instanceof Element && Boolean(target.closest(selector));
-
-const getInitialFloatingLessonDrawerWidth = () => {
-  if (typeof window === "undefined")
-    return LESSON_DRAWER_DEFAULT_FLOATING_WIDTH;
-
-  try {
-    const storedWidth = window.localStorage.getItem(
-      FLOATING_LESSON_DRAWER_WIDTH_KEY,
-    );
-    if (storedWidth === null) return LESSON_DRAWER_DEFAULT_FLOATING_WIDTH;
-
-    const savedWidth = Number(storedWidth);
-    return Number.isFinite(savedWidth)
-      ? Math.min(
-          LESSON_DRAWER_MAX_FLOATING_WIDTH,
-          Math.max(LESSON_DRAWER_MIN_FLOATING_WIDTH, savedWidth),
-        )
-      : LESSON_DRAWER_DEFAULT_FLOATING_WIDTH;
-  } catch {
-    return LESSON_DRAWER_DEFAULT_FLOATING_WIDTH;
-  }
-};
+import {
+  CURRICULUM_SNAP_WIDTH,
+  FLOATING_LESSON_DRAWER_SNAP_WIDTH,
+  LESSON_DRAWER_FALLBACK_SNAP_POINT,
+  CURRICULUM_SWIPE_ACTIVATION_DISTANCE,
+  CURRICULUM_SWIPE_DIRECTION_RATIO,
+  CURRICULUM_SWIPE_COMMIT_DISTANCE,
+  CURRICULUM_SWIPE_FLING_DISTANCE,
+  CURRICULUM_SWIPE_FLING_VELOCITY,
+  LESSON_PROGRESS_COMPLETE_THRESHOLD,
+  COURSE_CONTENT_DRAWER_QUERY,
+  FLOATING_LESSON_DRAWER_WIDTH_KEY,
+  IDLE_PLAYER_MINIMIZE_GESTURE,
+  CURRICULUM_SWIPE_EXCLUSION_SELECTOR,
+  LESSON_DRAWER_REVEAL_EXCLUSION_SELECTOR,
+  CURRICULUM_RESIZE_STATE_SYNC_MS,
+} from "./workspace/workspaceConstants";
+import {
+  subscribeToCourseContentDrawerViewport,
+  getCourseContentDrawerViewportSnapshot,
+  getCourseContentDrawerViewportServerSnapshot,
+  subscribeToPhoneLessonDrawerViewport,
+  getPhoneLessonDrawerViewportSnapshot,
+  getPhoneLessonDrawerViewportServerSnapshot,
+  subscribeToDesktopLearningMinimizeViewport,
+  getDesktopLearningMinimizeViewportSnapshot,
+  getDesktopLearningMinimizeViewportServerSnapshot,
+} from "./workspace/workspaceViewports";
+import {
+  safeResumeVideo,
+  isCurriculumSwipeExcludedTarget,
+  getInitialFloatingLessonDrawerWidth,
+} from "./workspace/workspaceDom";
+import type {
+  CurriculumResize,
+  CurriculumPointerEvent,
+  FloatingLessonDrawerResize,
+  CurriculumScreenSwipe,
+  CurriculumScreenSwipeStartEvent,
+} from "./workspace/workspaceGestureTypes";
 
 interface LearningWorkspaceProps {
   courseSlug: string | undefined;
@@ -303,69 +221,6 @@ interface LearningWorkspaceProps {
   quizAssignment?: MyQuizAssignment | null;
   quizAssignments?: readonly MyQuizAssignment[] | null;
   quizAssignmentLoading?: boolean;
-}
-
-interface CurriculumResize {
-  pointerId: number;
-  startX: number;
-  startWidth: number;
-  expandedWidthAtStart: number;
-  collapsedAtStart: boolean;
-  collapsed: boolean;
-  previewWidth: number;
-  /** The width its content is laid out at: the last one at or over the minimum. */
-  expandedWidth: number;
-  handle: HTMLElement;
-}
-
-/**
- * How long the pointer rests in a drag of the course content before React is
- * told the width the drag has reached (see moveCurriculumResize).
- */
-const CURRICULUM_RESIZE_STATE_SYNC_MS = 140;
-
-interface CurriculumPointerEvent {
-  pointerId: number;
-  clientX: number;
-}
-
-interface FloatingLessonDrawerResize {
-  pointerId: number;
-  startX: number;
-  startWidth: number;
-  originalWidth: number;
-  previewWidth: number;
-  dismissOnEnd: boolean;
-  handle: HTMLElement;
-}
-
-interface CurriculumScreenSwipe {
-  pointerId: number;
-  active: boolean;
-  startedAt: number;
-  startX: number;
-  startY: number;
-  lastX: number;
-  lastTimestamp: number;
-  velocityX: number;
-  closedAtStart: boolean;
-  expandedWidthAtStart: number;
-  target: "curriculum" | "lesson-drawer";
-  /** The touch began on the course content panel itself. */
-  startedOnPanel: boolean;
-  handle: HTMLDivElement;
-}
-
-interface CurriculumScreenSwipeStartEvent {
-  pointerId: number;
-  pointerType: string;
-  isPrimary: boolean;
-  clientX: number;
-  clientY: number;
-  timeStamp: number;
-  target: EventTarget | null;
-  handle: HTMLDivElement;
-  splitX?: number;
 }
 
 export function LearningWorkspace({
