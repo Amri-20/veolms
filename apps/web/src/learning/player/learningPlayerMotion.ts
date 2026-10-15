@@ -3,7 +3,10 @@ import {
   getMobileNavigationRestingTop,
   isMobileNavigationUnderMiniPlayer,
 } from "./mobileNavigationFollow";
-import { readMiniPlayerWidthPreference } from "./lessonPlayerPersistence";
+import {
+  readMiniPlayerSidePreference,
+  readMiniPlayerWidthPreference,
+} from "./lessonPlayerPersistence";
 
 export const LEARNING_PLAYER_MOTION_DURATION_MS = 500;
 export const LEARNING_PLAYER_MOTION_EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
@@ -681,9 +684,10 @@ export const getPreferredLearningMiniPlayerWidth = (viewportWidth: number) => {
 
 /**
  * Where along the bottom the mini player should appear, when a swipe that
- * minimized the video asked for somewhere other than the right hand corner
- * (see useLessonPlayerMinimizeGesture: it lands under the finger). Null
- * means the usual corner.
+ * minimized the video asked for somewhere other than its usual corner (see
+ * useLessonPlayerMinimizeGesture: it lands under the finger). Null means the
+ * usual corner: the bottom one on the side the mini player last rested on in
+ * this tab, the right one until it has rested anywhere.
  */
 let preferredMiniPlayerLeft: number | null = null;
 
@@ -705,10 +709,14 @@ export const getDefaultLearningMiniPlayerLayout = (
   const height = getLearningMiniPlayerHeight(width);
   const cornerLeft =
     viewport.left + viewport.width - LEARNING_MINI_PLAYER_MARGIN - width;
+  const usualLeft =
+    readMiniPlayerSidePreference() === "left"
+      ? Math.min(viewport.left + LEARNING_MINI_PLAYER_MARGIN, cornerLeft)
+      : cornerLeft;
   return {
     left:
       preferredMiniPlayerLeft === null
-        ? cornerLeft
+        ? usualLeft
         : clampLearningPlayerValue(
             preferredMiniPlayerLeft,
             viewport.left + LEARNING_MINI_PLAYER_MARGIN,

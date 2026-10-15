@@ -5,6 +5,10 @@ const PLAYER_PLAYBACK_RATE_STORAGE_KEY = "veolms-player-playback-rate";
 const PLAYER_VOLUME_STORAGE_KEY = "veolms-player-volume";
 const PLAYER_MINI_RESTORE_STORAGE_KEY = "veolms-player-mini-restore";
 const PLAYER_MINI_WIDTH_STORAGE_KEY = "veolms-player-mini-width";
+const PLAYER_MINI_SIDE_STORAGE_KEY = "veolms-player-mini-side";
+
+/** Which side of the screen the mini player last came to rest on. */
+export type MiniPlayerSide = "left" | "right";
 
 interface StorageReader {
   getItem(key: string): string | null;
@@ -60,6 +64,34 @@ export function readMiniPlayerWidthPreference(
     return Number.isFinite(width) && width > 0 ? width : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * The side the mini player last came to rest on in this browser tab, which a
+ * flick that minimizes the video goes back to. Kept for the tab only: a new
+ * tab starts on the right again.
+ */
+export function readMiniPlayerSidePreference(
+  storage: StorageReader | null = getSessionStorage(),
+): MiniPlayerSide | null {
+  if (!storage) return null;
+  try {
+    const side = storage.getItem(PLAYER_MINI_SIDE_STORAGE_KEY);
+    return side === "left" || side === "right" ? side : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeMiniPlayerSidePreference(
+  side: MiniPlayerSide,
+  storage: StorageWriter | null = getSessionStorage(),
+): void {
+  try {
+    storage?.setItem(PLAYER_MINI_SIDE_STORAGE_KEY, side);
+  } catch {
+    // A flick then minimizes to the right, as in a new tab.
   }
 }
 

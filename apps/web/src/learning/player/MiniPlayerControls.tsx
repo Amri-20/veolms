@@ -23,7 +23,7 @@ import {
 } from "./learningPlayerShortcuts";
 import { AppIcon } from "../../icons/AppIcon";
 import { cn } from "../../lib/utils";
-import { readLearningPreferences } from "../../settings/settingsPreferences";
+import { useLearningSeekInterval } from "./useLearningSeekInterval";
 
 /**
  * The disc behind each mini player control: faint at rest, so the icon has
@@ -220,9 +220,7 @@ export function MiniPlayerControls({
   // the controls up and another puts them away, as in the phone player.
   // While the lesson plays they leave by themselves.
   const [tappedOpen, setTappedOpen] = useState(false);
-  const [seekIntervalSeconds] = useState(
-    () => readLearningPreferences().seekIntervalSeconds,
-  );
+  const seekIntervalSeconds = useLearningSeekInterval();
 
   useEffect(() => {
     if (!tappedOpen || paused) return undefined;

@@ -62,17 +62,21 @@ const pressableClasses =
 
 export function GoogleSignInButton({
   busyLabel,
+  describedBy,
   disabled,
   onClick,
 }: {
   /** Shown in place of the wording while a sign-in is under way. */
   busyLabel: string | null;
+  /** The id of the message under the button, when one is shown. */
+  describedBy?: string;
   disabled: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       aria-busy={busyLabel !== null}
+      aria-describedby={describedBy}
       aria-label={busyLabel ? "Verifying Google sign-in" : undefined}
       className={cn(
         googleSurfaceClasses,
@@ -132,6 +136,7 @@ export function GoogleAccountButton({
   account,
   lastUsed,
   busyLabel,
+  describedBy,
   disabled,
   onContinue,
   onChooseAccount,
@@ -139,6 +144,7 @@ export function GoogleAccountButton({
   account: LastGoogleAccount;
   lastUsed: boolean;
   busyLabel: string | null;
+  describedBy?: string;
   disabled: boolean;
   onContinue: () => void;
   onChooseAccount: () => void;
@@ -173,6 +179,7 @@ export function GoogleAccountButton({
       ) : null}
       <button
         aria-busy={busyLabel !== null}
+        aria-describedby={describedBy}
         aria-label={`Continue as ${account.name} (${account.email}) with Google`}
         className={cn(
           pressableClasses,

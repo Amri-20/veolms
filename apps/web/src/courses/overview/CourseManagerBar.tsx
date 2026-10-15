@@ -1,56 +1,62 @@
-import { ArrowSquareOut } from "@phosphor-icons/react/ArrowSquareOut";
-import { ListBullets } from "@phosphor-icons/react/ListBullets";
+import { ArrowUp } from "@phosphor-icons/react/ArrowUp";
 import { PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { Button } from "../../components/Button";
 import type { NavigateTo } from "../../routing/navigation";
-import { getCourseRouteKey, type Course } from "../catalogue";
+import type { Course } from "../catalogue";
 import { getCourseEditorPath } from "../courseEditorRouting";
 import {
+  CoursePriceDisplay,
+  type CoursePriceDisplayPrice,
   priceBarActionClasses,
   priceBarPaddingClasses,
   priceBarSurfaceClasses,
 } from "./CoursePriceBar";
+import { CourseStatusTag } from "./CourseStatusTag";
 import { HoverFillIcon } from "./HoverFillIcon";
-import { quietButtonClasses } from "./overviewStyles";
 
 interface CourseManagerBarProps {
   course: Course;
-  /** What the course sells for, as the catalogue words it; "Free" when free. */
-  priceLabel: string;
+  price: CoursePriceDisplayPrice;
   onNavigatePage?: NavigateTo;
 }
 
-const statusLabels: Record<Course["lifecycleStatus"], string> = {
-  published: "Published",
-  draft: "Draft",
-  archived: "Archived",
-};
+/**
+ * The two buttons share a height: 3rem on a phone, where they share a row,
+ * and beside the price the 3.5rem of the learner's button, so the bar is as
+ * tall as the one a learner sees.
+ */
+const managerActionHeight = "h-12! @2xl/price:h-14!";
 
 /**
- * The status dot's colour: green for a course learners can see, the accent
- * for one still being written, grey for one put away.
+ * The bar's main button with the shared height taken out: both heights are
+ * `!important`, and the shared `h-14!` would win over `managerActionHeight`.
  */
-const statusDotClasses: Record<Course["lifecycleStatus"], string> = {
-  published: "bg-emerald-500",
-  draft: "bg-(--accent)",
-  archived: "bg-(--muted)",
-};
+const editButtonClasses = priceBarActionClasses.replace("h-14! ", "");
+
+const publishButtonClasses = `inline-flex ${managerActionHeight} min-w-0 cursor-pointer items-center justify-center gap-2 rounded-[0.6875rem] border border-[color-mix(in_srgb,var(--text)_18%,transparent)] bg-transparent px-5 text-[1rem] font-bold whitespace-nowrap text-(--text) transition-colors duration-140 hover:border-[color-mix(in_srgb,var(--text)_30%,transparent)] hover:bg-(--hover) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)`;
 
 /**
  * What someone who manages the course gets where a learner gets their
- * progress and a visitor the price: the course's state at a glance, and the
- * ways into the editor. The About and Curriculum boxes under it carry their
- * own "Edit" links to the matching editor tab.
+ * progress and a visitor the price: the price as a learner sees it, and the ways
+ * into the editor (its Publish step while the course is a draft, and its
+ * first step). The course's status is a tag after the price, and the
+ * way into the course itself is the hero's "Open course" pill; the About
+ * and Curriculum boxes under it carry their own "Edit" links to the
+ * matching editor tab.
+ *
+ * Wide, it is one row: the price, and the buttons at the far end. On a
+ * phone the buttons take the row under the price.
  */
 export function CourseManagerBar({
   course,
-  priceLabel,
+  price,
   onNavigatePage,
 }: CourseManagerBarProps) {
-  const status = course.lifecycleStatus;
-  const go = (path: string) => () => onNavigatePage?.(path);
-  const editorPath = (step: "basics" | "curriculum") =>
-    getCourseEditorPath({ mode: "edit", courseId: course.id, step });
+  const canPublish = course.lifecycleStatus === "draft";
+  const openEditor = (step: "basics" | "publish") => () =>
+    onNavigatePage?.(
+      getCourseEditorPath({ mode: "edit", courseId: course.id, step }),
+    );
 
   return (
     <section
@@ -59,55 +65,44 @@ export function CourseManagerBar({
       data-fixed-radius
     >
       <div
-        className={`${priceBarPaddingClasses} flex flex-col gap-4 @2xl/price:flex-row @2xl/price:items-center @2xl/price:justify-between @2xl/price:gap-6`}
+        className={`${priceBarPaddingClasses} flex flex-col gap-5 @2xl/price:flex-row @2xl/price:items-center @2xl/price:gap-8`}
       >
-        {/* The course's state: whether learners can see it and what it
-            sells for. (The overview carries no enrolment count.) */}
-        <dl className="m-0 flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2 text-[0.9rem] text-(--text)">
-          <div className="flex items-center gap-2">
-            <dt className="sr-only">Status</dt>
-            <dd className="m-0 inline-flex items-center gap-2 font-semibold">
-              <span
-                aria-hidden="true"
-                className={`size-2 rounded-full ${statusDotClasses[status]}`}
-              />
-              {statusLabels[status]}
-            </dd>
-          </div>
-          <div className="flex items-center gap-2">
-            <dt className="text-(--muted)">Price</dt>
-            <dd className="m-0 font-semibold">{priceLabel}</dd>
-          </div>
-        </dl>
+        {/* The price exactly as a learner sees it, before any coupon, and
+            after its saving whether learners can see the course, a tag of
+            the same shape, on the same baseline. */}
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-2 @2xl/price:flex-1">
+          <CoursePriceDisplay price={price} />
+          <CourseStatusTag status={course.lifecycleStatus} />
+        </div>
 
-        {/* On a phone the two quiet buttons share a row and the primary
-            one takes the next; wider, all three sit on one line. */}
-        <div className="grid grid-cols-2 gap-2.5 @md/price:flex @md/price:items-center @md/price:justify-end">
-          <button
-            type="button"
-            className={quietButtonClasses}
-            onClick={go(
-              `/learn/${encodeURIComponent(getCourseRouteKey(course))}`,
-            )}
-          >
-            <ArrowSquareOut size={17} weight="bold" aria-hidden="true" />
-            <span>Open course</span>
-          </button>
-          <button
-            type="button"
-            className={quietButtonClasses}
-            onClick={go(editorPath("curriculum"))}
-          >
-            <ListBullets size={17} weight="bold" aria-hidden="true" />
-            <span>Edit curriculum</span>
-          </button>
+        {/* Publish beside Edit while the course is a draft: sharing the row
+            on a phone, as wide as their words beside the price. */}
+        <div
+          className={`grid gap-3 @2xl/price:flex @2xl/price:shrink-0 @2xl/price:items-center ${
+            canPublish ? "grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]" : ""
+          }`}
+        >
+          {canPublish ? (
+            <button
+              type="button"
+              className={publishButtonClasses}
+              onClick={openEditor("publish")}
+            >
+              <ArrowUp size={18} weight="bold" aria-hidden="true" />
+              <span>Publish</span>
+            </button>
+          ) : null}
           <Button
             motion="static"
-            className={`${priceBarActionClasses} col-span-2 @md/price:col-span-1 @md/price:min-w-44`}
-            onClick={go(editorPath("basics"))}
+            className={`${editButtonClasses} ${managerActionHeight} w-full px-6! @2xl/price:w-auto`}
+            onClick={openEditor("basics")}
+            aria-label="Edit course"
           >
             <HoverFillIcon icon={PencilSimple} />
-            <span>Edit course</span>
+            {/* "Edit" on a phone, where it shares the row with Publish. */}
+            <span>
+              Edit<span className="hidden @2xl/price:inline"> course</span>
+            </span>
           </Button>
         </div>
       </div>

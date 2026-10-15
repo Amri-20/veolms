@@ -242,6 +242,9 @@ function getFallbackNavigationPath(
  * the new frame does not simply appear, its surface is faded in step with the
  * page shown behind the video: told here how far that page has been
  * revealed, and over how long to get there (see learning-split-layout.css).
+ * When the page settles in for good (a timed reveal to the whole of it) the
+ * frame also takes back its drop shadow, faded in over the same time, so that
+ * it is already there when the page takes over from the stand-in.
  */
 const setLearningFrameReveal = (
   stage: HTMLElement,
@@ -253,12 +256,17 @@ const setLearningFrameReveal = (
   frame.dataset.learningFrameReveal = "";
   frame.style.setProperty("--learning-frame-reveal", reveal);
   frame.style.setProperty("--learning-frame-reveal-duration", duration);
+  frame.toggleAttribute(
+    "data-learning-frame-revealed",
+    reveal === "1" && duration !== "0ms",
+  );
 };
 
 const clearLearningPlayerMotionProperties = (element: HTMLElement) => {
   const frame = element.closest<HTMLElement>(".courses-main-frame");
   if (frame) {
     delete frame.dataset.learningFrameReveal;
+    delete frame.dataset.learningFrameRevealed;
     frame.style.removeProperty("--learning-frame-reveal");
     frame.style.removeProperty("--learning-frame-reveal-duration");
   }
@@ -1441,7 +1449,11 @@ export default function AcademyLayout() {
       // the same way and is gone before the video is home.
       const swipedOnWideScreen =
         dragProgress !== undefined && isDesktopLearningMinimizeViewport();
-      if (forceMount || motion.shouldMount || swipedOnWideScreen) {
+      // On a phone too the page behind is prepared from the start of a
+      // swipe, although it is revealed by where the video is. Prepared only
+      // once the video was well down, it was often not ready in time for a
+      // quick flick and came in at once after the mini player had landed.
+      if (forceMount || motion.shouldMount || dragProgress !== undefined) {
         mountLearningBackground();
       }
       const backgroundReveal = swipedOnWideScreen

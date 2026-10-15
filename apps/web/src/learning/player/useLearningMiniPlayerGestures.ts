@@ -30,6 +30,7 @@ import {
 import { observeMobileNavigationShown } from "./mobileNavigationFollow";
 import {
   readMiniPlayerWidthPreference,
+  writeMiniPlayerSidePreference,
   writeMiniPlayerWidthPreference,
 } from "./lessonPlayerPersistence";
 
@@ -43,6 +44,19 @@ const DISMISS_DURATION = 200;
 type MiniPlayerDismissDirection = "down" | "left" | "right" | "up";
 /** How long it takes to come to rest once let go: an unhurried glide. */
 const SETTLE_DURATION = 560;
+
+/**
+ * Remembers which side the mini player has come to rest on, for the next
+ * flick that minimizes a video (see useLessonPlayerMinimizeGesture).
+ */
+const rememberRestingSide = (layout: MiniPlayerLayout) => {
+  const viewport = getViewportBounds();
+  writeMiniPlayerSidePreference(
+    layout.left + layout.width / 2 < viewport.left + viewport.width / 2
+      ? "left"
+      : "right",
+  );
+};
 /**
  * On a wide screen a flick carries it on by this many milliseconds of the
  * speed it was let go at: a gentle one a short way, a hard one all the way
@@ -396,6 +410,7 @@ export function useLearningMiniPlayerGestures(
         : getNearestCornerLayout(nextLayout, undefined, isExpanded);
       layoutRef.current = targetLayout;
       setLayout(targetLayout);
+      rememberRestingSide(targetLayout);
       return targetLayout;
     },
     [isExpanded],
@@ -424,6 +439,7 @@ export function useLearningMiniPlayerGestures(
         settleTimerRef.current = null;
       }
       showLiveLayout(settledLayout);
+      rememberRestingSide(settledLayout);
       needsSettleRef.current = false;
       settleCandidateRef.current = null;
 
@@ -453,12 +469,18 @@ export function useLearningMiniPlayerGestures(
       clearLearningPlayerMinimizeMotionStyles(container);
     }
     const rect = container?.getBoundingClientRect();
-    return commitLayout(
+    const measuredLayout =
       rect && rect.width > 0
         ? { left: rect.left, top: rect.top, width: rect.width }
-        : fallback,
-    );
-  }, [commitLayout, containerRef, getInitialLayout]);
+        : fallback;
+    // On a phone a swipe can let the video go anywhere along the bottom,
+    // under the finger, and the mini player rests in a corner. It glides
+    // there from where it was let go (the read above has just fixed that
+    // place as the one to start from) instead of appearing there at once.
+    return isDesktopLearningMinimizeViewport()
+      ? commitLayout(measuredLayout)
+      : settleLayout(measuredLayout);
+  }, [commitLayout, containerRef, getInitialLayout, settleLayout]);
 
   useLayoutEffect(() => {
     if (enabled) {

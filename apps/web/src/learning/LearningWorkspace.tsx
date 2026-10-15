@@ -150,6 +150,7 @@ import {
   useLessonDrawerHeroControl,
 } from "./useLessonDrawerHeroControl";
 import type { LessonDrawerViewportBounds } from "./useLessonDrawerHeroControl";
+import { useStuckSectionHeaderSheetDrag } from "./useStuckSectionHeaderSheetDrag";
 import {
   Drawer,
   DrawerContent,
@@ -2165,6 +2166,10 @@ export function LearningWorkspace({
     onCollapse: () => setLessonDrawerSnapPoint(lessonDrawerCollapsedSnapPoint),
     onClose: closeLessonDrawer,
   });
+  const handleLessonDrawerTouchStartCapture = useStuckSectionHeaderSheetDrag(
+    lessonDrawerScrollportRef,
+    phoneLessonDrawer,
+  );
 
   useEffect(() => {
     if (!lessonDrawer) return undefined;
@@ -3751,7 +3756,10 @@ export function LearningWorkspace({
           <DrawerDescription className="sr-only">
             Browse sections and choose a lesson.
           </DrawerDescription>
-          <div className="min-h-0 flex-1 overflow-hidden">
+          <div
+            className="min-h-0 flex-1 overflow-hidden"
+            onTouchStartCapture={handleLessonDrawerTouchStartCapture}
+          >
             <Curriculum
               sections={curriculumSections}
               lessonsById={curriculumLessonsById}

@@ -86,7 +86,10 @@ import {
 import { HoverFillIcon } from "./overview/HoverFillIcon";
 import { PayCardIcon } from "./overview/PayCardIcon";
 import "../services/payments/razorpay-checkout.css";
-import { CoursePriceBar } from "./overview/CoursePriceBar";
+import {
+  CoursePriceBar,
+  type CoursePriceDisplayPrice,
+} from "./overview/CoursePriceBar";
 import {
   bandHeaderClasses,
   bandLinkClasses,
@@ -1169,9 +1172,24 @@ interface CourseAboutCardProps {
   isReadOnlyPreview?: boolean;
 }
 
-/** Line height × clamp lines = collapsed max-height in px. */
-const CLAMP_LINES = 5;
+/**
+ * Line height × clamp lines = collapsed max-height in px. Seven: about
+ * three lines whole (the paragraphs' spacing takes some of it) and two
+ * fading out under them (it was five, which left room for half a line to
+ * fade, until 2026-10-15).
+ */
+const CLAMP_LINES = 7;
 const LINE_HEIGHT_PX = 0.92 * 16 * 1.65; // font-size × line-height ≈ 24.3 px
+
+/**
+ * The cut description's fade: whole until 4.5rem above the cut, then easing
+ * out across the two lines over "See more", dimmer and then fainter, and
+ * gone 0.875rem above the cut, in the space before the next paragraph, so
+ * nothing shows beside "See more" (which rises over the text: its
+ * `-mt-7`).
+ */
+const aboutFadeClasses =
+  "[mask-image:linear-gradient(to_bottom,#000_calc(100%_-_4.5rem),rgb(0_0_0/0.75)_calc(100%_-_3.625rem),rgb(0_0_0/0.5)_calc(100%_-_2.75rem),rgb(0_0_0/0.32)_calc(100%_-_1.875rem),rgb(0_0_0/0.15)_calc(100%_-_1.25rem),transparent_calc(100%_-_0.875rem))]";
 
 function CourseAboutCard({ description, onEdit }: CourseAboutCardProps) {
   const hasDescription = Boolean(description && description.trim());
@@ -1191,7 +1209,10 @@ function CourseAboutCard({ description, onEdit }: CourseAboutCardProps) {
   const collapsedMaxHeight = `${Math.round(LINE_HEIGHT_PX * CLAMP_LINES)}px`;
 
   // A box, the page's last: heading, the description, and "See more" once
-  // it is cut, with a fade over the cut in the box's own colour.
+  // it is cut. Cut, the text itself fades out over its last four lines or
+  // so, slowly at first and then faster, so no line stops short at full
+  // strength (it was a 3rem overlay in the box's colour until 2026-10-15,
+  // which faded only the last line).
   return (
     <section
       className={`${overviewCardClasses} ${overviewCardPaddingClasses}`}
@@ -1215,7 +1236,9 @@ function CourseAboutCard({ description, onEdit }: CourseAboutCardProps) {
           <div className="relative">
             <div
               ref={contentRef}
-              className="cov-prose overflow-hidden text-[0.92rem] leading-[1.65] text-(--text-secondary) transition-[max-height] duration-300 ease-in-out"
+              className={`cov-prose overflow-hidden text-[0.92rem] leading-[1.65] text-(--text-secondary) transition-[max-height] duration-300 ease-in-out ${
+                needsClamp && !expanded ? aboutFadeClasses : ""
+              }`}
               style={{
                 maxHeight:
                   needsClamp && !expanded ? collapsedMaxHeight : "9999px",
@@ -1234,13 +1257,6 @@ function CourseAboutCard({ description, onEdit }: CourseAboutCardProps) {
                 className="max-w-none [&_p]:my-2.5 [&>:first-child]:mt-0"
               />
             </div>
-
-            {needsClamp && !expanded && (
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-(--elevated-card) to-transparent"
-              />
-            )}
           </div>
 
           {needsClamp && (
@@ -1248,7 +1264,11 @@ function CourseAboutCard({ description, onEdit }: CourseAboutCardProps) {
               type="button"
               data-testid="description-toggle"
               onClick={() => setExpanded((prev) => !prev)}
-              className={`${bandLinkClasses} self-start`}
+              // While the text is cut, it rises over the faint end of the
+              // fade, so it sits just under the line that is fading out.
+              className={`${bandLinkClasses} relative self-start ${
+                expanded ? "" : "-mt-7"
+              }`}
             >
               {expanded ? "See less" : "See more"}
               <CaretDown
@@ -1884,13 +1904,25 @@ function CourseOverviewContent({
     onNavigatePage?.(
       getCourseEditorPath({ mode: "edit", courseId: course.id, step }),
     );
-  // What the course sells for, as the manager's bar words it.
-  const managerPriceLabel = isFreeCoursePricing(activePricing)
-    ? "Free"
-    : (activePricing?.price ??
-      (typeof activePricing?.amount === "number"
-        ? formatPriceWithCurrency(activePricing.amount, activePricing.currency)
-        : "Paid"));
+  // The price as a learner sees it before any coupon, by the purchase
+  // bar's own rules: a free course that names a marked price shows that
+  // price struck through beside a price of zero and the "Free" tag.
+  const managerPriceIsFree = isFreeCoursePricing(activePricing);
+  const managerPriceLabel = managerPriceIsFree
+    ? activePricing?.originalPrice
+      ? (activePricing?.price ?? "Free")
+      : "Free"
+    : (activePricing?.price ?? "Free");
+  const managerPrice: CoursePriceDisplayPrice = {
+    label: managerPriceLabel,
+    sizeClassName: priceTextClasses[getPriceSizeVariant(managerPriceLabel)],
+    struckThrough: activePricing?.originalPrice,
+    badge:
+      (managerPriceIsFree ? activePricing?.originalPrice : true) &&
+      activePricing?.discount
+        ? activePricing.discount
+        : undefined,
+  };
   const isEnrolled = Boolean(user && course.enrolled);
   // What a visitor can watch before buying: the lessons a paid course marks
   // as free previews (the ones the curriculum labels "Free").
@@ -1918,6 +1950,11 @@ function CourseOverviewContent({
         ? `/learn/${encodeURIComponent(courseKey)}`
         : getCoursePlayerPath(courseKey, firstFreeLessonNumber),
     );
+  };
+
+  const openCourse = () => {
+    if (isReadOnlyPreview || !onNavigatePage) return;
+    onNavigatePage(`/learn/${encodeURIComponent(getCourseRouteKey(course))}`);
   };
 
   // On the course page the hero touches the frame; in the course editor's
@@ -1955,10 +1992,15 @@ function CourseOverviewContent({
               onToggle: toggleWishlist,
             }
       }
+      // Someone who manages the course gets the same pill, into the course
+      // itself, in place of the preview (the bar under the hero no longer
+      // carries an "Open course" button).
       preview={
-        canPreview
-          ? { onOpen: openPreview, disabled: isReadOnlyPreview }
-          : undefined
+        managesCourse && viewer === "known"
+          ? { onOpen: openCourse, disabled: isReadOnlyPreview, kind: "open" }
+          : canPreview
+            ? { onOpen: openPreview, disabled: isReadOnlyPreview }
+            : undefined
       }
       viewerPlaceholders={
         viewer === "known"
@@ -2021,7 +2063,7 @@ function CourseOverviewContent({
                 {managesCourse ? (
                   <CourseManagerBar
                     course={course}
-                    priceLabel={managerPriceLabel}
+                    price={managerPrice}
                     onNavigatePage={onNavigatePage}
                   />
                 ) : isEnrolled ? (

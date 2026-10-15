@@ -9,6 +9,8 @@ interface CourseHeroArtworkProps {
   /** Opens the course's preview. Without it there is no play button. */
   onPreview?: () => void;
   previewDisabled?: boolean;
+  /** The play button's name; "Open course" for someone who manages it. */
+  previewLabel?: string;
   /** More classes for the play button (the hero hides it for some viewers). */
   previewClassName?: string;
   /**
@@ -56,6 +58,7 @@ export function CourseHeroArtwork({
   thumbnailSrcSet,
   onPreview,
   previewDisabled = false,
+  previewLabel = "Preview course",
   previewClassName = "",
   footRoom = false,
 }: CourseHeroArtworkProps) {
@@ -119,8 +122,8 @@ export function CourseHeroArtwork({
               className={`absolute top-[44%] left-1/2 z-20 inline-flex size-15 -translate-1/2 cursor-pointer items-center justify-center rounded-full border-0 bg-black/40 text-white shadow-[0_8px_30px_rgb(0_0_0/0.3)] backdrop-blur-md transition-colors duration-160 ease-out hover:bg-black/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-default disabled:hover:bg-black/40 motion-reduce:transition-none @3xl/hero:hidden ${previewClassName}`}
               onClick={onPreview}
               disabled={previewDisabled}
-              aria-label="Preview course"
-              title="Preview course"
+              aria-label={previewLabel}
+              title={previewLabel}
             >
               <Play size={24} weight="fill" aria-hidden="true" />
             </button>

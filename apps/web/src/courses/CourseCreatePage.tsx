@@ -36,6 +36,7 @@ import {
   type AttachedMediaInfo,
 } from "./curriculum";
 import { VirtualizedLessonList } from "./curriculum/VirtualizedLessonList";
+import { usePageBeforeEditor } from "./usePageBeforeEditor";
 
 const DiscussionMarkdown = lazy(() =>
   import("../learning/discussion-editor/DiscussionMarkdown").then((module) => ({
@@ -3913,13 +3914,14 @@ export function CourseCreatePage({
 
   const currencyOptions = useMemo(() => getCurrencyOptions(), []);
 
-  const handleBack = () => {
+  const handleBackToCourses = useCallback(() => {
     if (onNavigatePage) {
       onNavigatePage("courses");
     } else if (typeof window !== "undefined") {
       window.history.back();
     }
-  };
+  }, [onNavigatePage]);
+  const handleBack = usePageBeforeEditor(handleBackToCourses);
 
   // Curriculum Step state
   const [sections, setSections] = useState<CurriculumSectionItem[]>([]);
@@ -9661,7 +9663,7 @@ export function CourseCreatePage({
                 type="button"
                 className="flex w-9 h-9 shrink-0 items-center justify-center border border-[color-mix(in_srgb,var(--text)_12%,transparent)] rounded-lg text-(--text-secondary) bg-[color-mix(in_srgb,var(--text)_4%,transparent)] cursor-pointer transition-[border-color,background-color,color] duration-150 ease-out hover:border-[color-mix(in_srgb,var(--text)_24%,transparent)] hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)] hover:text-(--text)"
                 onClick={handleBack}
-                aria-label="Go back to courses"
+                aria-label="Go back"
               >
                 <ArrowLeft size={17} weight="bold" />
               </button>
@@ -9692,7 +9694,7 @@ export function CourseCreatePage({
             <button
               type="button"
               className="inline-flex h-9 items-center justify-center rounded-lg border border-[color-mix(in_srgb,var(--text)_14%,transparent)] bg-[color-mix(in_srgb,var(--text)_5%,transparent)] px-4 text-[0.82rem] font-semibold text-(--text) cursor-pointer transition-colors hover:bg-[color-mix(in_srgb,var(--text)_10%,transparent)] hover:text-(--text)"
-              onClick={handleBack}
+              onClick={handleBackToCourses}
             >
               Back to Courses
             </button>
@@ -9723,7 +9725,7 @@ export function CourseCreatePage({
               type="button"
               className="flex w-9 h-9 shrink-0 items-center justify-center border border-[color-mix(in_srgb,var(--text)_12%,transparent)] rounded-lg text-(--text-secondary) bg-[color-mix(in_srgb,var(--text)_4%,transparent)] cursor-pointer transition-[border-color,background-color,color] duration-150 ease-out hover:border-[color-mix(in_srgb,var(--text)_24%,transparent)] hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)] hover:text-(--text)"
               onClick={handleBack}
-              aria-label="Go back to courses"
+              aria-label="Go back"
             >
               <ArrowLeft size={17} weight="bold" />
             </button>

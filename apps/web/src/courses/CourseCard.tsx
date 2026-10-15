@@ -31,6 +31,7 @@ import {
   resolveCourseCardLearnerAction,
 } from "./courseCardAction";
 import { CourseCardThumbnail } from "./CourseCardThumbnail";
+import { PinToHomeMenuAction } from "./PinToHomeMenuAction";
 import { CourseThumbnailPlaceholder } from "./CourseThumbnailPlaceholder";
 export {
   courseThumbnailSizes,
@@ -476,7 +477,6 @@ export function CourseCard({
                     label="Course Overview"
                     onClick={() => closeThen(() => onExplore(course))}
                   />
-                  <MenuDivider />
                   <MenuAction
                     Icon={PaperPlaneTilt}
                     label="Open Discussions"
@@ -486,7 +486,12 @@ export function CourseCard({
                       )
                     }
                   />
-                  <MenuDivider />
+                  <PinToHomeMenuAction
+                    courseId={course.id}
+                    courseTitle={course.title}
+                    onDone={closeThen}
+                    setNotice={setNotice}
+                  />
                   <MenuAction
                     Icon={ShareNetwork}
                     label="Share Course"
@@ -497,7 +502,6 @@ export function CourseCard({
                     label="Copy Course Link"
                     onClick={() => closeThen(() => void copyCourseLink())}
                   />
-                  <MenuDivider />
                   {course.certificateAvailable && progress >= 100 && (
                     <MenuAction
                       Icon={Certificate}
@@ -524,17 +528,14 @@ export function CourseCard({
                   />
                   {onUnenrollRequested &&
                   (course.pricing?.free || canUnenrollFromAnyCourse) ? (
-                    <>
-                      <MenuDivider />
-                      <MenuAction
-                        Icon={SignOut}
-                        label="Unenroll"
-                        destructive
-                        onClick={() =>
-                          closeThen(() => onUnenrollRequested(course))
-                        }
-                      />
-                    </>
+                    <MenuAction
+                      Icon={SignOut}
+                      label="Unenroll"
+                      destructive
+                      onClick={() =>
+                        closeThen(() => onUnenrollRequested(course))
+                      }
+                    />
                   ) : null}
                 </>
               ) : (

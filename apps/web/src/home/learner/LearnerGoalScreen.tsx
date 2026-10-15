@@ -9,7 +9,7 @@ import { TargetIcon as Target } from "@phosphor-icons/react/Target";
 import type { LearningSummaryResponse } from "@veolms/contracts";
 import { DEFAULT_DAILY_GOAL_MINUTES } from "@veolms/contracts/learning-goal-defaults";
 import {
-  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -59,16 +59,30 @@ const screenClasses = [
   "supports-[color:oklch(from_white_l_c_h)]:[--goal-ink:oklch(from_var(--goal-accent)_max(l,0.92)_min(c,0.11)_h)]",
 ].join(" ");
 
+/** A wallpaper that loads within this long of being put up was held already. */
+const HELD_WALLPAPER_LOAD_MS = 150;
+
 /**
  * The wallpaper. It fades in once it has arrived rather than appearing in
- * strips, and the screen's own dark ground shows until then.
+ * strips, and the screen's own dark ground shows until then. One the browser
+ * already holds is shown as soon as it is there, without the fade: the fade
+ * gave the picture a layer of its own for its length, and when it ended and
+ * the picture went back into the laptop's screen, a phone drew the screen
+ * without it for a frame (seen each time a lesson was minimized over the
+ * home page, which draws the page anew behind the shrinking video).
  */
 function LaptopWallpaper({ src }: { src: string }) {
   const imageRef = useRef<HTMLImageElement>(null);
+  const shownAtRef = useRef(0);
   const [loadedSrc, setLoadedSrc] = useState<string>();
+  const [heldSrc, setHeldSrc] = useState<string>();
   // A picture the browser already holds has loaded before this can listen.
-  useEffect(() => {
-    if (imageRef.current?.complete) setLoadedSrc(src);
+  // Read before the first paint, so it is shown at once.
+  useLayoutEffect(() => {
+    shownAtRef.current = performance.now();
+    if (!imageRef.current?.complete) return;
+    setHeldSrc(src);
+    setLoadedSrc(src);
   }, [src]);
   return (
     <img
@@ -78,12 +92,19 @@ function LaptopWallpaper({ src }: { src: string }) {
       alt=""
       decoding="async"
       draggable={false}
-      onLoad={() => setLoadedSrc(src)}
+      onLoad={() => {
+        if (performance.now() - shownAtRef.current < HELD_WALLPAPER_LOAD_MS) {
+          setHeldSrc(src);
+        }
+        setLoadedSrc(src);
+      }}
       // Lifted a little: the laptop's screen is dimmed to sit in the
       // picture (see `HeroLaptopScreen`), which dulls a wallpaper.
-      className={`absolute inset-0 size-full object-cover brightness-115 saturate-125 transition-opacity duration-500 motion-reduce:transition-none ${
-        loadedSrc === src ? "opacity-100" : "opacity-0"
-      }`}
+      className={`absolute inset-0 size-full object-cover brightness-115 saturate-125 ${
+        heldSrc === src
+          ? ""
+          : "transition-opacity duration-500 motion-reduce:transition-none"
+      } ${loadedSrc === src ? "opacity-100" : "opacity-0"}`}
     />
   );
 }

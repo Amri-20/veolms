@@ -52,7 +52,7 @@ export interface CoursePriceBarProps {
 
 /** A saving beside the price: the sale's, and a coupon's after it. */
 const savingBadgeClasses =
-  "inline-flex items-center rounded-lg bg-[color-mix(in_srgb,var(--success)_14%,transparent)] px-2.5 py-1.5 text-[0.8rem] leading-none font-bold whitespace-nowrap text-[color-mix(in_srgb,var(--success)_72%,var(--text))]";
+  "inline-flex items-baseline rounded-lg bg-[color-mix(in_srgb,var(--success)_14%,transparent)] px-2.5 py-1.5 text-[0.8rem] leading-none font-bold whitespace-nowrap text-[color-mix(in_srgb,var(--success)_72%,var(--text))]";
 
 /** The bar is a box on the page; it measures itself for its own layout. */
 export const priceBarSurfaceClasses = `@container/price ${overviewCardClasses}`;
@@ -143,6 +143,119 @@ const controlsReserveClasses = {
   button: "@2xl/price:flex-[1_1_12.5rem]",
 };
 
+/** The price as the bar shows it; see `CoursePriceBarProps.price`. */
+export type CoursePriceDisplayPrice = NonNullable<CoursePriceBarProps["price"]>;
+
+/**
+ * The price row of the bar: what is paid, the marked price struck through,
+ * and the savings. Shared with the bar someone who manages the course sees,
+ * so the price reads there exactly as a learner sees it.
+ */
+export function CoursePriceDisplay({
+  price,
+}: {
+  price: CoursePriceDisplayPrice;
+}) {
+  return (
+    // What is paid, in large type, comes first; then the marked
+    // price struck through, then the saving in green (the user tried the
+    // accent and went back). All of it stands on the large price's
+    // baseline, the tags' words too (it was centred on the price's digits
+    // until 2026-10-15).
+    // With a coupon on top of the saving there is one tag more: on a
+    // narrow card the prices come down a little, in step with the
+    // card's width, and the two tags become one (below), so the row
+    // stays on one line.
+    <div
+      className={`flex min-w-0 flex-wrap items-baseline gap-y-1.5 @2xl/price:shrink-0 @2xl/price:flex-nowrap ${
+        price.couponBadge ? "gap-x-3 @max-[30rem]/price:gap-x-2" : "gap-x-3"
+      }`}
+    >
+      <span
+        className={`leading-none font-[850] whitespace-nowrap text-(--text) ${price.sizeClassName} ${
+          price.couponBadge
+            ? "@max-[30rem]/price:text-[clamp(1.45rem,7.4cqi,1.8rem)]!"
+            : ""
+        }`}
+      >
+        {price.label}
+      </span>
+      {price.struckThrough && (
+        <span
+          className={`text-[1.1rem] leading-none font-medium whitespace-nowrap text-(--muted) line-through ${
+            price.couponBadge
+              ? "@max-[30rem]/price:text-[clamp(0.85rem,4.2cqi,1rem)]"
+              : ""
+          }`}
+        >
+          {price.struckThrough}
+        </span>
+      )}
+      {price.badge && (
+        <span
+          className={`${savingBadgeClasses} ${price.badgeIsCoupon ? "gap-1.5" : ""} ${
+            price.couponBadge ? "@max-[30rem]/price:hidden" : ""
+          }`}
+        >
+          {price.badgeIsCoupon && (
+            <>
+              <Ticket
+                size={14}
+                weight="fill"
+                className="-my-1 self-center"
+                aria-hidden="true"
+              />
+              <span className="sr-only">With the coupon, </span>
+            </>
+          )}
+          {price.badge}
+        </span>
+      )}
+      {price.couponBadge && price.badge && (
+        // On a narrow card: the saving and the coupon's in one tag,
+        // "50% + [coupon] 20% OFF", with "OFF" said once.
+        <span
+          className={`${savingBadgeClasses} hidden! gap-1 @max-[30rem]/price:inline-flex!`}
+        >
+          <span className="sr-only">
+            {price.badge}, plus, with the coupon, {price.couponBadge}
+          </span>
+          <span aria-hidden="true" className="inline-flex items-baseline gap-1">
+            {price.badge.replace(/\s*off$/i, "")}
+            <span className="text-(--muted)">+</span>
+            <Ticket size={13} weight="fill" className="-my-1 self-center" />
+            {price.couponBadge}
+          </span>
+        </span>
+      )}
+      {price.couponBadge && (
+        <span
+          className={`-ml-1 inline-flex items-baseline gap-2 ${
+            price.badge ? "@max-[30rem]/price:hidden" : ""
+          }`}
+        >
+          <span
+            aria-hidden="true"
+            className="text-[0.95rem] leading-none font-bold text-(--muted)"
+          >
+            +
+          </span>
+          <span className={`${savingBadgeClasses} gap-1.5`}>
+            <Ticket
+              size={14}
+              weight="fill"
+              className="-my-1 self-center"
+              aria-hidden="true"
+            />
+            <span className="sr-only">plus, with the coupon, </span>
+            {price.couponBadge}
+          </span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 /**
  * The course's price, the coupon and the button that buys or opens it, in one
  * row where the bar has room for all of it with the coupon field open. With
@@ -164,16 +277,6 @@ export function CoursePriceBar({
   const couponFieldOpen = Boolean(
     coupon && coupon.isOpen && !coupon.applied && !closedMessage,
   );
-  // The struck price and the badges are centred on the large price's
-  // digits (measured: within half a pixel). A large price with a comma in
-  // it still looks lower than they do, because the comma hangs 5px under
-  // its baseline and pulls the figure's weight down; beside it the smaller
-  // things read as riding high. They are set a touch lower then, and left
-  // on the digits' centre for a price with no comma ("₹699", "Free").
-  const besidePriceNudge = price?.label.includes(",")
-    ? "relative top-[1.5px]"
-    : "";
-
   return (
     <section
       className={priceBarSurfaceClasses}
@@ -185,98 +288,7 @@ export function CoursePriceBar({
           coupon and the button ask for (`controlsReserveClasses`); if not,
           those two take the next line, whatever the coupon's state. */}
         <div className="flex flex-col gap-x-6 gap-y-3.5 @2xl/price:flex-row @2xl/price:flex-wrap @2xl/price:items-center @2xl/price:justify-between">
-          {price ? (
-            // What is paid, in large type, comes first; then the marked
-            // price struck through, then the saving in green (the user tried the accent and went back). The three
-            // share one centre line, the coupon link's and the button's too
-            // (but see `besidePriceNudge`).
-            // With a coupon on top of the saving there is one tag more: on a
-            // narrow card the prices come down a little, in step with the
-            // card's width, and the two tags become one (below), so the row
-            // stays on one line.
-            <div
-              className={`flex min-w-0 flex-wrap items-center gap-y-1.5 @2xl/price:shrink-0 @2xl/price:flex-nowrap ${
-                price.couponBadge
-                  ? "gap-x-3 @max-[30rem]/price:gap-x-2"
-                  : "gap-x-3"
-              }`}
-            >
-              <span
-                className={`leading-none font-[850] whitespace-nowrap text-(--text) ${price.sizeClassName} ${
-                  price.couponBadge
-                    ? "@max-[30rem]/price:text-[clamp(1.45rem,7.4cqi,1.8rem)]!"
-                    : ""
-                }`}
-              >
-                {price.label}
-              </span>
-              {price.struckThrough && (
-                <span
-                  className={`text-[1.1rem] leading-none font-medium whitespace-nowrap text-(--muted) line-through ${besidePriceNudge} ${
-                    price.couponBadge
-                      ? "@max-[30rem]/price:text-[clamp(0.85rem,4.2cqi,1rem)]"
-                      : ""
-                  }`}
-                >
-                  {price.struckThrough}
-                </span>
-              )}
-              {price.badge && (
-                <span
-                  className={`${savingBadgeClasses} ${price.badgeIsCoupon ? "gap-1.5" : ""} ${besidePriceNudge} ${
-                    price.couponBadge ? "@max-[30rem]/price:hidden" : ""
-                  }`}
-                >
-                  {price.badgeIsCoupon && (
-                    <>
-                      <Ticket size={14} weight="fill" aria-hidden="true" />
-                      <span className="sr-only">With the coupon, </span>
-                    </>
-                  )}
-                  {price.badge}
-                </span>
-              )}
-              {price.couponBadge && price.badge && (
-                // On a narrow card: the saving and the coupon's in one tag,
-                // "50% + [coupon] 20% OFF", with "OFF" said once.
-                <span
-                  className={`${savingBadgeClasses} hidden! gap-1 ${besidePriceNudge} @max-[30rem]/price:inline-flex!`}
-                >
-                  <span className="sr-only">
-                    {price.badge}, plus, with the coupon, {price.couponBadge}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="inline-flex items-center gap-1"
-                  >
-                    {price.badge.replace(/\s*off$/i, "")}
-                    <span className="text-(--muted)">+</span>
-                    <Ticket size={13} weight="fill" />
-                    {price.couponBadge}
-                  </span>
-                </span>
-              )}
-              {price.couponBadge && (
-                <span
-                  className={`-ml-1 inline-flex items-center gap-2 ${besidePriceNudge} ${
-                    price.badge ? "@max-[30rem]/price:hidden" : ""
-                  }`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="text-[0.95rem] leading-none font-bold text-(--muted)"
-                  >
-                    +
-                  </span>
-                  <span className={`${savingBadgeClasses} gap-1.5`}>
-                    <Ticket size={14} weight="fill" aria-hidden="true" />
-                    <span className="sr-only">plus, with the coupon, </span>
-                    {price.couponBadge}
-                  </span>
-                </span>
-              )}
-            </div>
-          ) : null}
+          {price ? <CoursePriceDisplay price={price} /> : null}
 
           {closedMessage ? (
             <p className="m-0 text-[0.88rem] leading-snug font-medium text-(--text-secondary)">
