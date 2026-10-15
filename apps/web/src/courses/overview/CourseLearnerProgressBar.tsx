@@ -3,6 +3,10 @@ import { Play } from "@phosphor-icons/react/Play";
 import { Button } from "../../components/Button";
 import { getCoursePlayerPath } from "../../learning/coursePlayerNavigation";
 import type { NavigateTo } from "../../routing/navigation";
+import {
+  formatCourseProgress,
+  roundCourseProgress,
+} from "../../learning/courseProgressFormat";
 import { useLearningProgressResumeContext } from "../../services/learning-progress";
 import {
   priceBarActionClasses,
@@ -14,8 +18,13 @@ interface CourseLearnerProgressBarProps {
   /** The course's slug, or its id when it has none. */
   courseKey: string;
   courseTitle: string;
-  /** How much of the course is done, 0 to 100. */
+  /** How much of the course is done, 0 to 100, with up to two decimals. */
   progress: number;
+  /**
+   * The learner has watched some of it, which a long course can show as
+   * 0.00% for a while (see `hasStartedCourse`).
+   */
+  started?: boolean;
   totalLessons: number;
   onNavigatePage?: NavigateTo;
 }
@@ -36,21 +45,25 @@ export function CourseLearnerProgressBar({
   courseKey,
   courseTitle,
   progress,
+  started = false,
   totalLessons,
   onNavigatePage,
 }: CourseLearnerProgressBarProps) {
   const resume = useLearningProgressResumeContext(courseKey);
   const place = resume.data;
-  const percent = Math.min(100, Math.max(0, Math.round(progress)));
+  const percent = roundCourseProgress(progress);
   const lessonCount = place?.totalLessons ?? totalLessons;
   const isComplete = percent >= 100;
   const lesson = isComplete ? null : (place?.resumeLesson ?? null);
-  // Started once the course shows progress or a lesson is finished: what
-  // the band says beside the button ("0% complete, 0 of 678 lessons"), and
-  // the rule the home and the course cards go by. A first lesson opened
-  // and left after a few seconds used to count, and the button said
-  // "Continue Learning" on a course the band itself called not begun.
-  const hasStarted = percent > 0 || (place?.completedLessons ?? 0) > 0;
+  // Started once anything of the course has been watched, a few seconds
+  // included: the band then shows the bar (a sliver at 0.00%) and the
+  // button says "Continue Learning", by the rule the home and the course
+  // cards go by.
+  const hasStarted =
+    started ||
+    percent > 0 ||
+    (place?.completedLessons ?? 0) > 0 ||
+    (place?.resumeLesson?.progressPercent ?? 0) > 0;
 
   const actionLabel = isComplete
     ? "Review Course"
@@ -89,7 +102,9 @@ export function CourseLearnerProgressBar({
                   aria-hidden="true"
                 />
               ) : null}
-              <span className="text-[1.7rem] tabular-nums">{percent}%</span>
+              <span className="text-[1.7rem] tabular-nums">
+                {formatCourseProgress(percent)}
+              </span>
               <span className="text-[1.3rem]">complete</span>
             </span>
             {place ? (
@@ -119,7 +134,7 @@ export function CourseLearnerProgressBar({
           >
             <span
               className={`block h-full rounded-full bg-linear-to-r transition-[width] duration-700 ease-out motion-reduce:transition-none ${
-                percent > 0 ? "min-w-2.5" : ""
+                hasStarted ? "min-w-2.5" : ""
               } ${
                 isComplete
                   ? "from-emerald-500 to-emerald-400"

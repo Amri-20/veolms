@@ -121,16 +121,17 @@ export function GuestHome({
   const showFreeCourses =
     free.visible && (isLoading || isError || free.courses.length > 0);
   const showCourses = popular.visible || showFreeCourses;
-  // Until it is played the laptop shows that lesson's course. The page says
-  // which picture that is; an API that does not yet leaves it to the rows,
-  // when one happens to list the course, and the screen stays dark behind
-  // the button otherwise.
+  // Until it is played the laptop shows the video's course (or a frame of an
+  // uploaded video). The page says which picture that is, null for none; an
+  // API that does not yet leaves it to the rows, when one happens to list
+  // the default lesson's course, and the screen stays dark behind the
+  // button otherwise.
   const heroLaptopPoster =
-    copy?.heroLessonPosterUrl ??
-    [...popular.courses, ...free.courses].find(
-      (course) => course.slug === HOME_PAGE_HERO_LESSON.courseSlug,
-    )?.thumbnailUrl ??
-    undefined;
+    copy?.heroLessonPosterUrl !== undefined
+      ? (copy.heroLessonPosterUrl ?? undefined)
+      : ([...popular.courses, ...free.courses].find(
+          (course) => course.slug === HOME_PAGE_HERO_LESSON.courseSlug,
+        )?.thumbnailUrl ?? undefined);
   const showBody = showCourses || highlights.visible || discussions.visible;
 
   return (
@@ -149,12 +150,7 @@ export function GuestHome({
         freeCoursesSectionId={
           showFreeCourses ? FREE_COURSES_SECTION_ID : undefined
         }
-        laptopScreen={
-          <HeroLaptopVideo
-            lesson={HOME_PAGE_HERO_LESSON}
-            poster={heroLaptopPoster}
-          />
-        }
+        laptopScreen={<HeroLaptopVideo poster={heroLaptopPoster} />}
       />
       {showBody ? (
         <div

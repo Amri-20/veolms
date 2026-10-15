@@ -7,6 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { LESSON_READING_SCROLL_ATTRIBUTE } from "./useLessonPlayerMinimizeGesture";
 
 const STORAGE_KEY = "veolms:learning-player-height";
 /**
@@ -42,6 +43,25 @@ export const LESSON_PLAYER_TINY_HEIGHT = 100;
 
 /** The custom property the player slot reads its height limit from. */
 export const LESSON_PLAYER_MAX_HEIGHT_PROPERTY = "--learning-player-max-height";
+
+/**
+ * How much taller than 16:9 a reading has been pulled (a video never is):
+ * the slot adds it under its 16:9 box.
+ */
+export const LESSON_PLAYER_GROWTH_PROPERTY = "--learning-player-growth";
+
+/** A reading pulled taller still leaves this much of the screen under it. */
+const GROWN_SCREEN_CLEARANCE = 96;
+
+/**
+ * A reading can be pulled taller than a video's 16:9 as well as shorter.
+ * Its extra height (`null` for none) and where a change of it goes; absent
+ * for a video, which stops at its full height.
+ */
+export interface LessonPlayerGrowth {
+  growth: number | null;
+  onGrowthChange: (growth: number | null) => void;
+}
 
 /**
  * The height the video was last dragged to, kept only while the page stays
@@ -118,18 +138,78 @@ const applyHeight = (slot: HTMLElement, next: number | null) => {
   }
 };
 
+const applyGrowth = (slot: HTMLElement, growth: number | null) => {
+  if (growth === null) {
+    slot.style.removeProperty(LESSON_PLAYER_GROWTH_PROPERTY);
+    delete slot.dataset.learningPlayerGrown;
+  } else {
+    slot.style.setProperty(LESSON_PLAYER_GROWTH_PROPERTY, `${growth}px`);
+    slot.dataset.learningPlayerGrown = "";
+  }
+};
+
+interface PlayerSize {
+  height: number | null;
+  growth: number | null;
+}
+
+/** How long the 16:9 line stays lit after a resize snaps to it. */
+const SNAP_FLASH_MS = 450;
+
+/** Whether the slot was at its 16:9 height at the last step of a resize. */
+const atFullHeight = new WeakMap<HTMLElement, boolean>();
+const snapFlashTimers = new WeakMap<HTMLElement, number>();
+
+/**
+ * The line at the 16:9 height (`ReadingFullHeightGuide`) lights up the
+ * moment a resize that was away from that height snaps to it, stays lit for
+ * a moment while the resize holds there, then fades. A move out of the snap,
+ * up or down, puts it out at once (the mark is removed, and the line has no
+ * fade without it), so it never trails over the text.
+ */
+const flashOnSnap = (slot: HTMLElement, size: PlayerSize) => {
+  const full = size.height === null && size.growth === null;
+  const wasFull = atFullHeight.get(slot);
+  atFullHeight.set(slot, full);
+  if (full === wasFull) return;
+  window.clearTimeout(snapFlashTimers.get(slot));
+  if (!full) {
+    delete slot.dataset.learningPlayerSnapFlash;
+    return;
+  }
+  // The first step of a resize that begins at 16:9 is not a snap.
+  if (wasFull === undefined) return;
+  slot.dataset.learningPlayerSnapFlash = "on";
+  snapFlashTimers.set(
+    slot,
+    window.setTimeout(() => {
+      slot.dataset.learningPlayerSnapFlash = "fading";
+    }, SNAP_FLASH_MS),
+  );
+};
+
+const applySize = (slot: HTMLElement, size: PlayerSize) => {
+  applyHeight(slot, size.height);
+  applyGrowth(slot, size.growth);
+  if (slot.dataset.learningPlayerResizing !== undefined) {
+    flashOnSnap(slot, size);
+  }
+};
+
 /** Marks the slot while it is being resized; the player hides its controls. */
 const markResizing = (slot: HTMLElement | null, resizing: boolean) => {
   if (!slot) return;
   if (resizing) slot.dataset.learningPlayerResizing = "";
   else delete slot.dataset.learningPlayerResizing;
+  // The next resize starts afresh: its first step is not a snap.
+  atFullHeight.delete(slot);
 };
 
 /**
  * Says whether a mouse (not a finger) is over the grip's strip.
  * Kept on the grip's strip, where its styles read it.
  */
-const GRIP_STRIP_SELECTOR = '[role="separator"][aria-label="Resize video"]';
+const GRIP_STRIP_SELECTOR = "[data-learning-player-height-grip]";
 
 const markMouseHover = (hovered: boolean) => {
   document
@@ -156,6 +236,44 @@ const showGripHint = () => {
 const resolveHeight = (wanted: number, fullHeight: number) =>
   wanted >= fullHeight - FULL_HEIGHT_SNAP ? null : Math.max(0, wanted);
 
+/**
+ * How tall the reading is with all of its text showing: it grows no further
+ * than that. (It is never taller than its text, so the scroll height is the
+ * text's, not the box's, while it is resized.)
+ */
+const readingContentHeight = () => {
+  const reading = document.querySelector<HTMLElement>(
+    `[${LESSON_READING_SCROLL_ATTRIBUTE}]`,
+  );
+  // Its bottom border is outside the scrolled area.
+  return reading
+    ? reading.scrollHeight + reading.offsetHeight - reading.clientHeight
+    : Number.POSITIVE_INFINITY;
+};
+
+/**
+ * The size a drag to `wanted` pixels asks for: shorter than full, full, or
+ * (a reading only) taller, up to most of the screen.
+ */
+const resolveSize = (
+  wanted: number,
+  fullHeight: number,
+  canGrow: boolean,
+): PlayerSize => {
+  if (canGrow && wanted > fullHeight + FULL_HEIGHT_SNAP) {
+    const tallest = Math.max(
+      fullHeight,
+      Math.min(
+        window.innerHeight - GROWN_SCREEN_CLEARANCE,
+        readingContentHeight(),
+      ),
+    );
+    const growth = Math.round(Math.min(wanted, tallest) - fullHeight);
+    return { height: null, growth: growth > 0 ? growth : null };
+  }
+  return { height: resolveHeight(wanted, fullHeight), growth: null };
+};
+
 /** Where a drag that was let go at `height` settles. */
 const settleHeight = (height: number | null) =>
   height !== null && height < HIDDEN_HEIGHT_SNAP ? 0 : height;
@@ -166,6 +284,9 @@ interface HeightDrag {
   startHeight: number;
   fullHeight: number;
   height: number | null;
+  /** Set while a reading is pulled taller than 16:9. */
+  growth: number | null;
+  canGrow: boolean;
 }
 
 /**
@@ -181,10 +302,18 @@ interface HeightDrag {
 export function LessonPlayerHeightHandle({
   height,
   onChange,
+  growable,
 }: {
   height: number | null;
   onChange: (height: number | null) => void;
+  /** A reading, which is also dragged taller than 16:9. */
+  growable?: LessonPlayerGrowth;
 }) {
+  const commit = (size: PlayerSize) => {
+    onChange(size.height);
+    growable?.onGrowthChange(size.growth);
+  };
+
   const dragRef = useRef<HeightDrag | null>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -202,6 +331,8 @@ export function LessonPlayerHeightHandle({
       startHeight: slot.getBoundingClientRect().height,
       fullHeight: (slot.getBoundingClientRect().width * 9) / 16,
       height,
+      growth: growable?.growth ?? null,
+      canGrow: Boolean(growable),
     };
     markResizing(slot, true);
     setDragging(true);
@@ -219,7 +350,7 @@ export function LessonPlayerHeightHandle({
     markResizing(slot, false);
     const settled = settleHeight(drag.height);
     if (slot && settled !== drag.height) applyHeight(slot, settled);
-    onChange(settled);
+    commit({ height: settled, growth: drag.growth });
   };
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -231,11 +362,14 @@ export function LessonPlayerHeightHandle({
       endDrag(event);
       return;
     }
-    drag.height = resolveHeight(
+    const size = resolveSize(
       drag.startHeight + event.clientY - drag.startY,
       drag.fullHeight,
+      drag.canGrow,
     );
-    applyHeight(slot, drag.height);
+    drag.height = size.height;
+    drag.growth = size.growth;
+    applySize(slot, size);
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -244,21 +378,28 @@ export function LessonPlayerHeightHandle({
     if (!slot) return;
     event.preventDefault();
     const bounds = slot.getBoundingClientRect();
-    const next = resolveHeight(
+    const next = resolveSize(
       bounds.height +
         (event.key === "ArrowUp" ? -KEYBOARD_STEP : KEYBOARD_STEP),
       (bounds.width * 9) / 16,
+      Boolean(growable),
     );
-    applyHeight(slot, next);
-    onChange(next);
+    applySize(slot, next);
+    commit(next);
   };
 
   return (
     <div
       role="separator"
       aria-orientation="horizontal"
-      aria-label="Resize video"
-      title="Drag to resize the video (Alt+V hides or shows it)"
+      data-learning-player-height-grip=""
+      // A reading has no video: the words name what it resizes.
+      aria-label={growable ? "Resize reading area" : "Resize video"}
+      title={
+        growable
+          ? "Drag to resize the reading area (Alt+V hides or shows it)"
+          : "Drag to resize the video (Alt+V hides or shows it)"
+      }
       aria-keyshortcuts="Alt+V"
       tabIndex={0}
       // A short video on a wider screen has its timeline on that edge too.
@@ -287,11 +428,15 @@ export function LessonPlayerHeightHandle({
       onLostPointerCapture={endDrag}
       // Double click: a shortened or hidden video goes back to full height;
       // one already at full height is put away at the top.
+      // A reading pulled taller goes back to full height too.
       onDoubleClick={(event) => {
-        const next = height === null ? 0 : null;
+        const next: PlayerSize = {
+          height: height === null && !growable?.growth ? 0 : null,
+          growth: null,
+        };
         const slot = findSlot(event.currentTarget);
-        if (slot) applyHeight(slot, next);
-        onChange(next);
+        if (slot) applySize(slot, next);
+        commit(next);
       }}
       onKeyDown={handleKeyDown}
     >
@@ -306,8 +451,27 @@ export function LessonPlayerHeightHandle({
         className="pointer-events-none invisible absolute top-full left-1/2 mt-3 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-(--accent) px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-(--on-accent) opacity-0 shadow-[0_8px_20px_rgb(0_0_0/0.35)] transition-[opacity,visibility] duration-200 group-data-pull-hint/player-height:visible group-data-pull-hint/player-height:opacity-100 group-data-dragging/player-height:invisible max-[640px]:hidden motion-reduce:transition-none"
       >
         <ArrowsOutLineVertical size={14} weight="bold" />
-        Drag this handle down to enlarge the video
+        {growable
+          ? "Drag this handle down to enlarge the reading area"
+          : "Drag this handle down to enlarge the video"}
       </span>
+    </div>
+  );
+}
+
+/**
+ * The line across a reading at a video's 16:9 height, the size a resize
+ * snaps back to. It lights up as a resize snaps there (the slot's mark is
+ * "on"), fades after a moment ("fading"), and vanishes at once, with no
+ * fade, when the resize moves out of the snap (no mark). See `flashOnSnap`.
+ */
+export function ReadingFullHeightGuide() {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-x-0 top-0 z-41 aspect-video opacity-0 motion-reduce:transition-none! [:where(.learning-workspace\_\_player-wrap):has([data-learning-player-snap-flash=on])_&]:opacity-100 [:where(.learning-workspace\_\_player-wrap):has([data-learning-player-snap-flash=on])_&]:transition-opacity [:where(.learning-workspace\_\_player-wrap):has([data-learning-player-snap-flash=on])_&]:duration-100 [:where(.learning-workspace\_\_player-wrap):has([data-learning-player-snap-flash=fading])_&]:transition-opacity [:where(.learning-workspace\_\_player-wrap):has([data-learning-player-snap-flash=fading])_&]:duration-300 [:where(.learning-workspace\_\_player-wrap):has([data-learning-player-snap-flash=fading])_&]:ease-out"
+    >
+      <span className="absolute inset-x-0 bottom-0 h-0.5 translate-y-1/2 bg-(--accent)" />
     </div>
   );
 }
@@ -411,6 +575,8 @@ function settleSlotWithMotion(
 export function useLessonTitleHeightSwipe(
   height: number | null,
   onChange: (height: number | null) => void,
+  /** A reading, which is also pulled down taller than 16:9. */
+  growable?: LessonPlayerGrowth,
 ) {
   const swipeRef = useRef<TitleSwipe | null>(null);
   const swallowClickRef = useRef(false);
@@ -423,7 +589,15 @@ export function useLessonTitleHeightSwipe(
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    releaseTouchResize(swipe.slot, swipe.samples, swipe.height, onChange);
+    if (swipe.growth !== null) {
+      // A reading pulled taller stays where it is let go.
+      markResizing(swipe.slot, false);
+      onChange(null);
+      growable?.onGrowthChange(swipe.growth);
+    } else {
+      growable?.onGrowthChange(null);
+      releaseTouchResize(swipe.slot, swipe.samples, swipe.height, onChange);
+    }
     // The release that ends a swipe is not a tap on the title.
     swallowClickRef.current = true;
     window.setTimeout(() => {
@@ -463,6 +637,8 @@ export function useLessonTitleHeightSwipe(
         active: false,
         fullHeight: (bounds.width * 9) / 16,
         height,
+        growth: growable?.growth ?? null,
+        canGrow: Boolean(growable),
         pointerId: event.pointerId,
         samples: [],
         slot,
@@ -479,9 +655,12 @@ export function useLessonTitleHeightSwipe(
         const deltaY = Math.abs(event.clientY - swipe.startY);
         if (Math.max(deltaX, deltaY) < TITLE_SWIPE_START_DISTANCE) return;
         // A video already at full height has nowhere to go on a downward
-        // swipe: that one is left to the browser (pull to refresh).
+        // swipe: that one is left to the browser (pull to refresh). A
+        // reading is pulled taller.
         const pullsDownAtFullHeight =
-          swipe.height === null && event.clientY > swipe.startY;
+          !swipe.canGrow &&
+          swipe.height === null &&
+          event.clientY > swipe.startY;
         if (deltaX > deltaY || pullsDownAtFullHeight) {
           swipeRef.current = null;
           return;
@@ -493,11 +672,14 @@ export function useLessonTitleHeightSwipe(
       }
       swipe.samples.push({ time: event.timeStamp, y: event.clientY });
       if (swipe.samples.length > 8) swipe.samples.shift();
-      swipe.height = resolveHeight(
+      const size = resolveSize(
         swipe.startHeight + event.clientY - swipe.startY,
         swipe.fullHeight,
+        swipe.canGrow,
       );
-      applyHeight(swipe.slot, swipe.height);
+      swipe.height = size.height;
+      swipe.growth = size.growth;
+      applySize(swipe.slot, size);
     },
     onPointerUp: end,
     onPointerCancel: end,

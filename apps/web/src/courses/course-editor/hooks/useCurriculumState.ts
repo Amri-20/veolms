@@ -10,6 +10,7 @@ import {
 } from "react";
 import ISO6391 from "iso-639-1";
 import type { NavigateTo } from "../../../routing/navigation";
+import { usePageBeforeEditor } from "../../usePageBeforeEditor";
 import type {
   CurriculumLessonItem,
   CurriculumSectionItem,
@@ -40,6 +41,7 @@ export interface UseCurriculumStateResult {
     string,
     ({ searchKeywords?: string } | undefined)?,
   ])[];
+  handleBackToCourses: () => void;
   handleBack: () => void;
   sections: CurriculumSectionItem[];
   setSections: Dispatch<SetStateAction<CurriculumSectionItem[]>>;
@@ -107,13 +109,14 @@ export function useCurriculumState({
 
   const currencyOptions = useMemo(() => getCurrencyOptions(), []);
 
-  const handleBack = () => {
+  const handleBackToCourses = useCallback(() => {
     if (onNavigatePage) {
       onNavigatePage("courses");
     } else if (typeof window !== "undefined") {
       window.history.back();
     }
-  };
+  }, [onNavigatePage]);
+  const handleBack = usePageBeforeEditor(handleBackToCourses);
 
   // Curriculum Step state
   const [sections, setSections] = useState<CurriculumSectionItem[]>([]);
@@ -417,6 +420,7 @@ export function useCurriculumState({
   ]);
   return {
     currencyOptions,
+    handleBackToCourses,
     handleBack,
     sections,
     setSections,

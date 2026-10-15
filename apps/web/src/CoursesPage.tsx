@@ -266,6 +266,7 @@ import {
 } from "./learning/useSessionStorageState";
 import { LearningBackgroundSurface } from "./learning/LearningBackgroundSurface";
 import { getCatalogueCardProgressPercent } from "./learning/catalogueCardProgress";
+import { hasStartedCourse } from "@veolms/contracts/learner-home-plan";
 import { readLearningProgress } from "./learning/learningProgressStorage";
 import {
   persistReadingModePreferences,
@@ -532,6 +533,7 @@ interface CoursesPageProps {
     courseSlug?: string;
     discussionTab?: string;
     page: string;
+    pathname?: string;
     scrollLeft: number;
     scrollTop: number;
     section?: string;
@@ -1028,6 +1030,10 @@ function LoginProfileButton({
 }
 
 const subscribeToNothing = () => () => {};
+
+/** Names a page shown in the shell by what it is and where. */
+const getSurfacePageKey = (surfacePage: string, pathname = "") =>
+  `${surfacePage}:${pathname.replace(/(.)\/+$/, "$1")}`;
 
 export function CoursesPage({
   initialPublishedCoursePage,
@@ -1664,6 +1670,35 @@ export function CoursesPage({
     [mobileMenuCollapsedSnapPoint],
   );
   const isLearningSurface = Boolean(renderMain);
+  // A page that a minimized lesson hands over to keeps the two boxes it was
+  // drawn in behind the player (the grid it shared with the lesson, and its
+  // own box in that grid), only without what made it a still picture behind
+  // the lesson. Turned into the plain `display: contents` boxes a page
+  // otherwise has, the browser rebuilt the whole page, and a phone then drew
+  // the home page's picture, its laptop screen and the copy over them as
+  // blanks for a frame. It keeps them until another page is shown.
+  const routePageKey = getSurfacePageKey(page, cataloguePathname);
+  const lessonBackgroundPageKey =
+    renderMain && learningBackground
+      ? getSurfacePageKey(learningBackground.page, learningBackground.pathname)
+      : null;
+  const [pageKeptFromLesson, setPageKeptFromLesson] = useState<string | null>(
+    null,
+  );
+  if (
+    lessonBackgroundPageKey !== null &&
+    pageKeptFromLesson !== lessonBackgroundPageKey
+  ) {
+    setPageKeptFromLesson(lessonBackgroundPageKey);
+  } else if (
+    !renderMain &&
+    pageKeptFromLesson !== null &&
+    pageKeptFromLesson !== routePageKey
+  ) {
+    setPageKeptFromLesson(null);
+  }
+  const keepLessonPageBoxes =
+    !renderMain && pageKeptFromLesson === routePageKey;
   // Every page's cards are the shared `ElevatedCard`, a lighter pane on a
   // ground deeper than the frame's. A lesson's page is the exception: its
   // scroller lies over the shell's own surfaces and its panels keep theirs.
@@ -3103,11 +3138,18 @@ export function CoursesPage({
   const allCourses = useMemo(() => {
     if (effectiveRole !== "creator") {
       const enrolledSet = new Set<string>();
+      // Courses the learner has watched any of, even while they still show
+      // 0.00% (see `hasStartedCourse`).
+      const startedSet = new Set<string>();
       const progressMap = new Map<string, number | null>();
       if (enrolledCoursesData?.courses) {
         for (const ec of enrolledCoursesData.courses) {
           enrolledSet.add(ec.courseId);
           if (ec.courseSlug) enrolledSet.add(ec.courseSlug);
+          if (hasStartedCourse(ec)) {
+            startedSet.add(ec.courseId);
+            if (ec.courseSlug) startedSet.add(ec.courseSlug);
+          }
           progressMap.set(ec.courseId, ec.progress);
           if (ec.courseSlug) progressMap.set(ec.courseSlug, ec.progress);
         }
@@ -3133,11 +3175,26 @@ export function CoursesPage({
             progressMap.set(ec.courseId, nextProgress);
             if (ec.courseSlug) progressMap.set(ec.courseSlug, nextProgress);
           }
+          // Watched here and not sent yet still counts as begun.
+          if (nextProgress != null && nextProgress > 0) {
+            startedSet.add(ec.courseId);
+            if (ec.courseSlug) startedSet.add(ec.courseSlug);
+          }
         }
       }
-      return publishedCourses.map((summary) =>
-        adaptCourseSummaryToCatalogueCourse(summary, enrolledSet, progressMap),
-      );
+      return publishedCourses.map((summary) => {
+        const course = adaptCourseSummaryToCatalogueCourse(
+          summary,
+          enrolledSet,
+          progressMap,
+        );
+        return {
+          ...course,
+          started:
+            startedSet.has(course.id) ||
+            (course.slug ? startedSet.has(course.slug) : false),
+        };
+      });
     }
     if (enrollmentFilter === "bin") {
       return (deletedCoursesData?.courses || []).map(
@@ -6299,7 +6356,7 @@ export function CoursesPage({
           <div
             ref={learningMotionStageRef}
             className={
-              renderMain
+              renderMain || keepLessonPageBoxes
                 ? "grid min-h-full [&>*]:col-start-1 [&>*]:row-start-1"
                 : "contents"
             }
@@ -6314,6 +6371,7 @@ export function CoursesPage({
                 />
               ) : learningBackground ? (
                 <LearningBackgroundSurface
+                  behindLesson
                   className={
                     learningBackground.page === "courses"
                       ? "max-[640px]:px-0!"
@@ -6340,7 +6398,14 @@ export function CoursesPage({
                 quizId={quizId}
               />
             ) : (
-              <div className="contents">{renderPageContent()}</div>
+              // The same element as the page behind the lesson above, so a
+              // minimize that lands on this page keeps it as it is.
+              <LearningBackgroundSurface
+                behindLesson={false}
+                keepBox={keepLessonPageBoxes}
+              >
+                {renderPageContent()}
+              </LearningBackgroundSurface>
             )}
             {renderMain && !routeContentBlocked ? (
               <div className="relative min-h-full">
@@ -6368,7 +6433,12 @@ export function CoursesPage({
       {compactNavigation && !mobileSidebarNavigationActive && (
         <nav
           ref={mobileBottomNavRef}
-          className={`mobile-bottom-nav${mobileBottomNavHidden ? " is-scroll-hidden" : ""}`}
+          // By day the Discussions icon's green is taken a third of the way
+          // to black: it all but vanished on a light bar. The other tones
+          // read well as they are. When it is the active page its label,
+          // which is the icon's colour, darkens with it. Both are marked
+          // important: the bar's own stylesheet is not in a layer.
+          className={`mobile-bottom-nav [:root[data-theme=light]_&>button[aria-label=Discussions].is-active]:text-[color-mix(in_srgb,var(--nav-icon-color)_66%,black)]! [:root[data-theme=light]_&>button[aria-label=Discussions]_svg]:text-[color-mix(in_srgb,var(--nav-icon-color)_66%,black)]! ${mobileBottomNavHidden ? "is-scroll-hidden" : ""}`}
           aria-label={`${effectiveRole === "creator" ? "Creator" : "Student"} mobile navigation`}
           onFocusCapture={() => setMobileBottomNavHidden(false)}
         >

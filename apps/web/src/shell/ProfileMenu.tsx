@@ -1,4 +1,5 @@
 import { BellIcon as Bell } from "@phosphor-icons/react/Bell";
+import { ChartLineUpIcon as ChartLineUp } from "@phosphor-icons/react/ChartLineUp";
 import { CheckIcon as Check } from "@phosphor-icons/react/Check";
 import { EyeSlashIcon as EyeSlash } from "@phosphor-icons/react/EyeSlash";
 import { PencilSimpleIcon as PencilSimple } from "@phosphor-icons/react/PencilSimple";
@@ -327,6 +328,18 @@ export function ProfileMenu({
               )}
             </span>
           ) : null}
+        </a>
+        <a
+          className="profile-menu__item"
+          role="menuitem"
+          href="/progress"
+          onClick={(event) => openDestination(event, "/progress")}
+        >
+          <ChartLineUp
+            className="profile-menu__item-icon text-[#fb923c]"
+            size={21}
+          />
+          <span>Progress</span>
         </a>
         {role === "student" ? (
           <a

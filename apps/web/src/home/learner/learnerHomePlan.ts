@@ -6,6 +6,7 @@ import { getEnrolledCourseKey } from "@veolms/contracts/learner-home-plan";
 // (see services/home), so both sides have to pick the same course.
 export {
   getEnrolledCourseKey,
+  hasStartedCourse,
   planLearnerHome,
   type LearnerHeroIntent,
   type LearnerHomePlan,

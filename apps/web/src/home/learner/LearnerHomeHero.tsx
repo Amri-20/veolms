@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { useDailyQuote } from "../../services/quotes";
 import { HeroDesk } from "../guest/HeroDesk";
 import { LearnerHeroClock } from "./LearnerHeroClock";
+import { LearnerPhoneBackdrop } from "./LearnerPhoneBackdrop";
 import {
   copyOnDeskClasses,
   heroClockClasses,
@@ -99,12 +100,19 @@ function useAuthorBesideQuote(text: string) {
  *
  * Narrower pages (a tablet held upright, a phone) stack them: the same
  * copy, and the picture in a band of its own below it.
+ *
+ * A phone has no band and no laptop. The picture is a glow behind the copy
+ * (see `LearnerPhoneBackdrop`), and the goals have a card of their own
+ * between the quote and the course (`goalCard`). The lamp is not to be
+ * seen there: the hero's top right corner is its switch instead, and the
+ * corner's glow is its light.
  */
 export function LearnerHomeHero({
   timeGreeting,
   firstName,
   namePending,
   resumeRow,
+  goalCard,
   laptopScreen,
 }: {
   /** "Good evening", by the hour. */
@@ -118,6 +126,8 @@ export function LearnerHomeHero({
    * for it until the learner's courses are known.
    */
   resumeRow: ReactNode;
+  /** Today's goal as a card, for a phone (see `LearnerGoalCard`). */
+  goalCard: ReactNode;
   /** What the laptop in the picture shows (see `HeroDesk`). */
   laptopScreen: ReactNode;
 }) {
@@ -133,12 +143,14 @@ export function LearnerHomeHero({
     <HeroDesk
       labelledBy="learner-home-hero-title"
       className={heroSizeClasses}
+      lampCornerOnPhone
       fadeClassName={heroFadeClasses}
       picturePosition={picturePlacementClasses}
       laptopScreen={laptopScreen}
     >
       {(pictures) => (
         <div data-learner-home-hero="" className={heroCopyBoxClasses}>
+          <LearnerPhoneBackdrop />
           {/* Like the box around it, this one takes no pointer itself. */}
           <div
             className={`pointer-events-none! *:pointer-events-auto ${copyOnDeskClasses}`}
@@ -177,7 +189,7 @@ export function LearnerHomeHero({
                   </blockquote>
                   <figcaption
                     ref={captionRef}
-                    className="mt-1.5 flex items-center justify-end gap-2.5 text-[0.8125rem] leading-4 text-slate-400 [:root[data-theme=light]_&]:text-slate-600"
+                    className="mt-1.5 flex items-center justify-end gap-2.5 text-[0.8125rem] leading-4 text-slate-400 max-sm:text-(--muted)! [:root[data-theme=light]_&]:text-slate-600"
                   >
                     <span
                       aria-hidden="true"
@@ -189,6 +201,7 @@ export function LearnerHomeHero({
               )}
             </div>
 
+            {goalCard}
             {resumeRow}
           </div>
 

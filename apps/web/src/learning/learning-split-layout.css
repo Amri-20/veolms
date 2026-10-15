@@ -96,12 +96,33 @@
       transparent
     );
     /* The outline of the wide frame would give its shape away at once. Its
-       drop shadow is left off for the length of the motion, and its edge
-       highlight (drawn by ::after with a mouse, by FrameEdge's strips on a
-       touch screen) fades in with the surface. */
-    box-shadow: none;
+       drop shadow is left off until the page settles in for good (the timed
+       settle to the mini player, `data-learning-frame-revealed`) and then
+       fades in with the surface; put back only when the page took over, it
+       darkened everything around the frame in one frame. Its edge highlight
+       (drawn by ::after with a mouse, by FrameEdge's strips on a touch
+       screen) fades in with the surface. */
     transition: background-color var(--learning-frame-reveal-duration, 0ms)
       cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  :root[data-content-layout="framed"]
+    .courses-main-frame[data-learning-frame-reveal]:not(
+      [data-learning-frame-revealed]
+    ) {
+    box-shadow: none;
+  }
+
+  :root[data-content-layout="framed"]
+    .courses-main-frame[data-learning-frame-reveal][data-learning-frame-revealed] {
+    animation: learning-frame-shadow-in
+      var(--learning-frame-reveal-duration, 0ms) cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes learning-frame-shadow-in {
+    from {
+      box-shadow: none;
+    }
   }
 
   /* The lesson's own frame (the card the video and its page sit in) is not

@@ -400,17 +400,34 @@ function DiscussionInner({
   useEffect(() => {
     unifiedRemoteBaseRef.current.clear();
   }, [courseId, currentUser?.id, lessonId]);
+  // A list that failed and is being asked for again still counts as failed
+  // until the new attempt is over. Asked for again with nothing loaded, the
+  // query goes back to pending and forgets its error, and the page swapped
+  // the error for the loading placeholders: a shorter block, which pulled
+  // the list's scroll up and brought the phone's bottom menu back.
+  const [retryingAfterError, setRetryingAfterError] = useState(false);
+  const wasFetchingRef = useRef(false);
+  useEffect(() => {
+    if (wasFetchingRef.current && !unifiedDiscussions.isFetching) {
+      setRetryingAfterError(false);
+    }
+    wasFetchingRef.current = unifiedDiscussions.isFetching;
+  }, [unifiedDiscussions.isFetching]);
+  const listFailed = unifiedDiscussions.isError || retryingAfterError;
   const isNotesLoading =
     unifiedDiscussions.isLoading &&
     (entryFilter === "all" || entryFilter === "note");
   const isThreadsLoading =
     unifiedDiscussions.isLoading && entryFilter !== "note";
   const isNotesError =
-    unifiedDiscussions.isError &&
-    (entryFilter === "all" || entryFilter === "note");
-  const isThreadsError = unifiedDiscussions.isError && entryFilter !== "note";
-  const refetchNotes = unifiedDiscussions.refetch;
-  const refetchThreads = unifiedDiscussions.refetch;
+    listFailed && (entryFilter === "all" || entryFilter === "note");
+  const isThreadsError = listFailed && entryFilter !== "note";
+  const retryDiscussions = () => {
+    setRetryingAfterError(true);
+    return unifiedDiscussions.refetch();
+  };
+  const refetchNotes = retryDiscussions;
+  const refetchThreads = retryDiscussions;
 
   const createNoteMutation = useCreateNote();
   const updateNoteMutation = useUpdateNote();
@@ -1090,6 +1107,7 @@ function DiscussionInner({
   const isAllInitialLoading = Boolean(
     isBackendMode &&
     entryFilter === "all" &&
+    !retryingAfterError &&
     ((isAllNotesSourceEnabled && isNotesLoading) ||
       (isAllThreadsSourceEnabled && isThreadsLoading)),
   );

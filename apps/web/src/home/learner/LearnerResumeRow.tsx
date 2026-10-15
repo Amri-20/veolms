@@ -11,6 +11,7 @@ import {
   lampLightLayerClasses,
   primaryActionClasses,
 } from "../guest/heroActionClasses";
+import { formatCourseProgress } from "../../learning/courseProgressFormat";
 import { playEnterKeySound } from "./enterKeySound";
 import { LearnerCourseThumbnail } from "./LearnerCourseThumbnail";
 import {
@@ -34,6 +35,12 @@ export interface LearnerResume {
   isLoading: boolean;
 }
 
+/**
+ * How long after a tap the key's release is heard. A tap is only known to be
+ * one when it ends, so both strokes are played then, this far apart.
+ */
+const TAP_KEY_RELEASE_MS = 70;
+
 /** What the row is for, said before where the learner is in the course. */
 const leadLabels: Record<LearnerHeroIntent, string> = {
   start: "Start",
@@ -46,9 +53,11 @@ const leadLabels: Record<LearnerHeroIntent, string> = {
  * The lamp's light on the pane, while the lamp is on. Beside the picture
  * the lamp hangs above the pane and to its right, and lights its top right
  * corner. Stacked, the lamp is in the picture under the pane, so the light
- * comes up from its bottom right corner instead.
+ * comes up from its bottom right corner instead. A phone shows no lamp, so
+ * there is no lamp light on it: the pane and its key keep their own colours,
+ * with only the hero's background glow behind them.
  */
-const paneLampLightClasses = `${lampLightLayerClasses} @max-[50rem]/home:bg-[radial-gradient(118%_130%_at_100%_100%,color-mix(in_srgb,var(--lamp-frost)_22%,transparent),color-mix(in_srgb,var(--lamp-frost)_11%,transparent)_26%,color-mix(in_srgb,var(--lamp-frost)_4%,transparent)_52%,transparent_78%)]`;
+const paneLampLightClasses = `${lampLightLayerClasses} max-sm:hidden @max-[50rem]/home:bg-[radial-gradient(118%_130%_at_100%_100%,color-mix(in_srgb,var(--lamp-frost)_22%,transparent),color-mix(in_srgb,var(--lamp-frost)_11%,transparent)_26%,color-mix(in_srgb,var(--lamp-frost)_4%,transparent)_52%,transparent_78%)]`;
 
 /**
  * The action is drawn as the Enter key of a keyboard, in the accent's
@@ -57,8 +66,7 @@ const paneLampLightClasses = `${lampLightLayerClasses} @max-[50rem]/home:bg-[rad
  * (see `useEnterKeyAction`), with the sound of a mechanical keyboard's
  * (see `enterKeySound`). It is named for the key, "Enter", whatever the
  * learner is to do in the course; the line beside it says that. The key's
- * own sign follows its name where there is likely to be a keyboard; a
- * touch screen has no Enter to press.
+ * own sign follows its name on every screen, touch screens included.
  */
 const enterKeyClasses = [
   "[--key-side:color-mix(in_srgb,var(--accent)_56%,black)]",
@@ -118,6 +126,8 @@ export function LearnerResumeRow({
   // A course not started yet has no progress to speak of.
   const showProgress = intent === "continue" || intent === "review";
   const actionRef = useRef<HTMLAnchorElement>(null);
+  /** The key's current press is a finger's (or a pen's), not a mouse's. */
+  const touchPressRef = useRef(false);
   const enterPressed = useEnterKeyAction(actionRef, onOpen);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const titleCutOff = useIsCutOff(titleRef, course.courseTitle);
@@ -209,14 +219,15 @@ export function LearnerResumeRow({
                   />
                 </span>
                 <span className="text-xs leading-4 text-(--muted)">
-                  {progress}%
+                  {formatCourseProgress(progress)}
                 </span>
               </div>
             ) : null}
           </div>
 
           {/* The shared action is taller, and wider at its sides, than the
-              row has room for. */}
+              row has room for. A phone has no key: the whole card is the
+              link there, and a tap anywhere on it opens the lesson. */}
           <GuestHomeLink
             ref={actionRef}
             href={href}
@@ -225,21 +236,39 @@ export function LearnerResumeRow({
             data-pressed={enterPressed ? "" : undefined}
             aria-keyshortcuts="Enter"
             aria-label={`Enter ${course.courseTitle}`}
-            // The key sounds under the pointer as it does under the Enter key.
+            // The key sounds under the pointer as it does under the Enter
+            // key: a mouse sounds it as the button goes down and up. A
+            // finger only sounds it once the touch has turned out to be a
+            // tap: one that lands on the key while the page is being
+            // scrolled is not a press, and must not sound like one.
             onPointerDown={(event) => {
-              if (event.button === 0) playEnterKeySound("down");
+              touchPressRef.current = event.pointerType !== "mouse";
+              if (event.button === 0 && !touchPressRef.current) {
+                playEnterKeySound("down");
+              }
             }}
             onPointerUp={(event) => {
-              if (event.button === 0) playEnterKeySound("up");
+              if (event.button === 0 && event.pointerType === "mouse") {
+                playEnterKeySound("up");
+              }
             }}
-            className={`${primaryActionClasses} ${enterKeyClasses} pointer-events-auto min-h-11! w-full shrink-0 px-5! text-[0.9375rem]! @[28rem]/resume:w-auto @[50rem]/home:w-auto`}
+            onClick={() => {
+              if (!touchPressRef.current) return;
+              touchPressRef.current = false;
+              playEnterKeySound("down");
+              window.setTimeout(
+                () => playEnterKeySound("up"),
+                TAP_KEY_RELEASE_MS,
+              );
+            }}
+            className={`${primaryActionClasses} ${enterKeyClasses} pointer-events-auto max-sm:hidden min-h-11! w-full shrink-0 px-5! text-[0.9375rem]! @[28rem]/resume:w-auto @[50rem]/home:w-auto`}
           >
             Enter
             <ArrowElbowDownLeft
               size={17}
               weight="bold"
               aria-hidden="true"
-              className="hidden opacity-75 [@media(hover:hover)_and_(pointer:fine)]:block"
+              className="opacity-75"
             />
           </GuestHomeLink>
         </div>

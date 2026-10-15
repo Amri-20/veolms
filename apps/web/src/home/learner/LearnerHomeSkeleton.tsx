@@ -14,7 +14,9 @@ import {
 } from "../guest/HeroPicture";
 import { getHomeTimeGreeting } from "../homeGreeting";
 import { LearnerCoursesSubtitle } from "./learnerCoursesSubtitle";
+import { LearnerGoalCardSkeleton } from "./LearnerGoalCard";
 import { LearnerHeroClock } from "./LearnerHeroClock";
+import { LearnerPhoneBackdrop } from "./LearnerPhoneBackdrop";
 import {
   copyOnDeskClasses,
   heroClockClasses,
@@ -130,7 +132,7 @@ export function LearnerResumeRowSkeleton() {
             <span className={`${onHero} mt-2.5 block h-4 w-full max-w-52`} />
           </div>
           <span
-            className={`${onHero} mb-1 block h-11 w-full shrink-0 rounded-[0.625rem] @[28rem]/resume:w-24 @[50rem]/home:w-24`}
+            className={`${onHero} mb-1 block h-11 w-full shrink-0 rounded-[0.625rem] max-sm:hidden @[28rem]/resume:w-24 @[50rem]/home:w-24`}
           />
         </div>
       </div>
@@ -242,6 +244,7 @@ export function LearnerHomeShell({
           className={`pointer-events-none absolute inset-0 -z-10 ${heroFadeClasses}`}
         />
         <div className={heroCopyBoxClasses}>
+          <LearnerPhoneBackdrop />
           <div
             className={`${copyOnDeskClasses} ${learnerHeroCopyWhenComplete}`}
             aria-hidden="true"
@@ -267,6 +270,7 @@ export function LearnerHomeShell({
               </div>
               <LearnerQuoteSkeleton />
             </div>
+            <LearnerGoalCardSkeleton />
             <LearnerResumeRowSkeleton />
             <HeroCopyEnd />
           </div>

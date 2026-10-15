@@ -42,7 +42,10 @@ export function percentOfGoal(todaySeconds: number, goalMinutes: number) {
 
 // Where today stands against the goal. The rule is shared with the
 // Progress page, so a day reads the same on both.
-export { goalStanding, type GoalStanding } from "../../services/learning-goals";
+import { goalStanding } from "../../services/learning-goals";
+
+export { goalStanding };
+export type { GoalStanding } from "../../services/learning-goals";
 
 /**
  * The time learned past today's goal, rounded down to the minute, in the
@@ -105,4 +108,27 @@ export function formatDayCount(days: number) {
 export function shareOf(part: number, whole: number) {
   if (!(whole > 0)) return 0;
   return Math.min(100, Math.max(0, (part / whole) * 100));
+}
+
+/**
+ * Today against the daily goal, worked out once for whatever draws it (the
+ * laptop's screen, the phone's goal card).
+ */
+export function describeGoalDay(todaySeconds: number, goalMinutes: number) {
+  const percent = percentOfGoal(todaySeconds, goalMinutes);
+  const standing = goalStanding(todaySeconds, goalMinutes);
+  const beyond = standing === "beyond";
+  return {
+    today: todayAgainstGoalParts(todaySeconds, goalMinutes),
+    percent,
+    standing,
+    // The length of the bar's first part. Short of the goal that is the
+    // share done, with a little showing as soon as anything is. Past the
+    // goal it is the goal's share of the day, and the extra takes the rest.
+    barShare: beyond
+      ? goalShareOfDay(todaySeconds, goalMinutes)
+      : percent > 0
+        ? Math.min(100, Math.max(percent, 4))
+        : 0,
+  };
 }

@@ -28,8 +28,17 @@ export interface CourseOverviewHeroProps {
     disabled: boolean;
     onToggle: (event: MouseEvent<HTMLButtonElement>) => void;
   };
-  /** Left out when the course has nothing a visitor can watch yet. */
-  preview?: { onOpen: () => void; disabled: boolean };
+  /**
+   * Left out when the course has nothing a visitor can watch yet. For
+   * someone who manages the course it is `kind: "open"`, into the course
+   * itself: a round play button in the corner (an "Open course" pill under
+   * the text when there is no picture).
+   */
+  preview?: {
+    onOpen: () => void;
+    disabled: boolean;
+    kind?: "preview" | "open";
+  };
   /**
    * Which of the corner's two controls depend on who is looking, while that
    * is not known yet (see `courseViewerState`).
@@ -149,12 +158,20 @@ const previewPillClasses = `${heroControlClasses} h-12 gap-2.5 rounded-full px-5
 const controlPlaceholderClasses =
   "shrink-0 animate-pulse rounded-full border border-white/10 bg-slate-950/55 motion-reduce:animate-none";
 
-const previewPillContent = (
-  <>
-    <Play size={17} weight="bold" aria-hidden="true" />
-    <span>Preview Course</span>
-  </>
-);
+const previewPillContent = {
+  preview: (
+    <>
+      <Play size={17} weight="bold" aria-hidden="true" />
+      <span>Preview Course</span>
+    </>
+  ),
+  open: (
+    <>
+      <Play size={17} weight="bold" aria-hidden="true" />
+      <span>Open course</span>
+    </>
+  ),
+};
 
 // Left out while the row is too narrow to hold all three facts on one line:
 // a dot must not end up alone at the end of a line.
@@ -236,6 +253,7 @@ export function CourseOverviewHero({
         thumbnailSrcSet={thumbnailSrcSet}
         onPreview={preview?.onOpen}
         previewDisabled={preview?.disabled}
+        previewLabel={preview?.kind === "open" ? "Open course" : undefined}
         previewClassName={previewGuestOnly}
       />
 
@@ -350,27 +368,42 @@ export function CourseOverviewHero({
             onClick={preview.onOpen}
             disabled={preview.disabled}
           >
-            {previewPillContent}
+            {previewPillContent[preview.kind ?? "preview"]}
           </button>
         ) : null}
       </div>
 
-      {/* The hero's bottom right corner: the preview button, beside the text
-          only (stacked, the play button on the picture is the way in), and
-          the heart. Stacked, the text runs the hero's full width, so the
-          corner used is the picture's: just above where the title begins. */}
+      {/* The hero's bottom right corner: for someone who manages the course
+          a round play button into it, beside the text only; for anyone else
+          the preview button, beside the text only (stacked, the
+          play button on the picture is the way in), and the heart. Stacked,
+          the text runs the hero's full width, so the corner used is the
+          picture's: just above where the title begins. */}
       <div
         className={`absolute ${placed.pill} ${stackedCorner} z-20 flex items-center gap-2.5 @3xl/hero:top-auto @3xl/hero:bottom-6`}
       >
         {preview && thumbnail ? (
-          <button
-            type="button"
-            className={`${previewPillClasses} hidden @3xl/hero:inline-flex ${previewGuestOnly}`}
-            onClick={preview.onOpen}
-            disabled={preview.disabled}
-          >
-            {previewPillContent}
-          </button>
+          preview.kind === "open" ? (
+            <button
+              type="button"
+              className={`${heroControlClasses} hidden size-12 rounded-full @3xl/hero:inline-flex`}
+              onClick={preview.onOpen}
+              disabled={preview.disabled}
+              aria-label="Open course"
+              title="Open course"
+            >
+              <Play size={19} weight="fill" aria-hidden="true" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={`${previewPillClasses} hidden @3xl/hero:inline-flex ${previewGuestOnly}`}
+              onClick={preview.onOpen}
+              disabled={preview.disabled}
+            >
+              {previewPillContent[preview.kind ?? "preview"]}
+            </button>
+          )
         ) : null}
         {/* The places of the two controls while the viewer is not known:
             the preview button's beside the text only, as the button's own

@@ -17,6 +17,7 @@ import {
 import { AcademyBrandSection } from "./AcademyBrandSection";
 import { CourseSectionEditor } from "./CourseSectionEditor";
 import { DiscussionsEditor } from "./DiscussionsEditor";
+import { HeroVideoEditor } from "./HeroVideoEditor";
 import {
   SettingsSection,
   TextField,
@@ -159,6 +160,15 @@ function HomePageSettingsForm({
           />
         </div>
       </SettingsSection>
+
+      <HeroVideoEditor
+        // Starts again on the saved choice after a reset or a discard.
+        key={draft.heroVideo.source}
+        heroVideo={draft.heroVideo}
+        onChange={(heroVideo) => update("heroVideo", heroVideo)}
+        courses={courses}
+        optionsLoading={optionsQuery.isLoading}
+      />
 
       <SettingsSection
         id="home-page-highlights-heading"

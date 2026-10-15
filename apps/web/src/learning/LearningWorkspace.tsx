@@ -56,11 +56,13 @@ import {
 } from "./player/learningPlayerMotion";
 import {
   LESSON_PLAYER_COMPACT_HEIGHT,
+  LESSON_PLAYER_GROWTH_PROPERTY,
   LESSON_PLAYER_MAX_HEIGHT_PROPERTY,
   LESSON_PLAYER_SEEK_TIME_ONLY_HEIGHT,
   LESSON_PLAYER_SHORT_HEIGHT,
   LESSON_PLAYER_TINY_HEIGHT,
   LessonPlayerHeightHandle,
+  ReadingFullHeightGuide,
   useLessonHiddenVideoPullDown,
   useLessonPlayerHeight,
   useLessonTitleHeightSwipe,
@@ -150,6 +152,7 @@ import {
   useLessonDrawerHeroControl,
 } from "./useLessonDrawerHeroControl";
 import type { LessonDrawerViewportBounds } from "./useLessonDrawerHeroControl";
+import { useStuckSectionHeaderSheetDrag } from "./useStuckSectionHeaderSheetDrag";
 import {
   Drawer,
   DrawerContent,
@@ -1618,6 +1621,17 @@ export function LearningWorkspace({
   // The viewer can drag the video area shorter to see more of the page.
   const [playerHeight, setPlayerHeight] = useLessonPlayerHeight();
   const appliedPlayerHeight = theaterMode ? null : playerHeight;
+  // A reading can also be pulled taller than a video's 16:9 (the title, or
+  // the grip). Taller, it scrolls away with the page as a video at its full
+  // height does; only a shortened one stays at the top.
+  const [readingGrowth, setReadingGrowth] = useState<number | null>(null);
+  const lessonIsReading = getLessonReading(stageLesson ?? null) !== null;
+  const readingGrowable =
+    lessonIsReading && stickyPlayer
+      ? { growth: readingGrowth, onGrowthChange: setReadingGrowth }
+      : undefined;
+  const appliedReadingGrowth =
+    readingGrowable && appliedPlayerHeight === null ? readingGrowth : null;
   const shortPlayer =
     appliedPlayerHeight !== null &&
     appliedPlayerHeight <= LESSON_PLAYER_SHORT_HEIGHT;
@@ -1632,7 +1646,7 @@ export function LearningWorkspace({
   );
   // Touch: swiping the lesson title up or down resizes the video too.
   const { onHeaderPointerMove, onHeaderPointerLeave, ...titleSwipeHandlers } =
-    useLessonTitleHeightSwipe(playerHeight, setPlayerHeight);
+    useLessonTitleHeightSwipe(playerHeight, setPlayerHeight, readingGrowable);
   // Where the page's elastic scroller sits. With the video showing, it goes
   // a little below the middle of the space left under the video. With the
   // video put away, it sits where the course content's own scroller does.
@@ -1711,6 +1725,7 @@ export function LearningWorkspace({
       }
       event.preventDefault();
       setPlayerHeight(playerHeight === null ? 0 : null);
+      setReadingGrowth(null);
     };
     window.addEventListener("keydown", handleToggleVideoShortcut);
     return () =>
@@ -2165,6 +2180,10 @@ export function LearningWorkspace({
     onCollapse: () => setLessonDrawerSnapPoint(lessonDrawerCollapsedSnapPoint),
     onClose: closeLessonDrawer,
   });
+  const handleLessonDrawerTouchStartCapture = useStuckSectionHeaderSheetDrag(
+    lessonDrawerScrollportRef,
+    phoneLessonDrawer,
+  );
 
   useEffect(() => {
     if (!lessonDrawer) return undefined;
@@ -3229,7 +3248,7 @@ export function LearningWorkspace({
         id="learning-course-content-trigger"
         ref={lessonTriggerRef}
         type="button"
-        className={`learning-workspace__lesson-heading ${appliedPlayerHeight === null ? "touch-pan-up" : "touch-none"}`}
+        className={`learning-workspace__lesson-heading ${appliedPlayerHeight === null && !readingGrowable ? "touch-pan-up" : "touch-none"}`}
         {...(stickyPlayer ? titleSwipeHandlers : undefined)}
         style={
           contained
@@ -3290,20 +3309,23 @@ export function LearningWorkspace({
         inert={lessonDrawer ? true : undefined}
         aria-hidden={lessonDrawer || undefined}
       >
-        <section className="learning-workspace__lesson-column">
+        {/* On a phone the page itself stays put and this column is what
+            scrolls: the video, title, description and comments go up
+            together. (The window does not move, which the minimize and
+            expand motions rely on.) Its content is never squeezed to fit. */}
+        <section className="learning-workspace__lesson-column max-[640px]:overflow-x-hidden max-[640px]:overflow-y-auto max-[640px]:[&>.learning-workspace\_\_lesson-content-clip]:flex-[1_0_auto]!">
           <div
             ref={playerWrapRef}
-            // Above phone width a video at its full height scrolls away with
-            // the page. Once the viewer has resized it (the grip, or the
-            // title on a touch screen) it stays at the top while the title
-            // and description scroll away beneath it. (On a phone the page
-            // does not scroll; the area under the video does.) The grip marks
-            // the slot inside while it is dragged, before the new height is
-            // saved, so the rule reads that mark. The player itself is
-            // positioned on this slot, so it follows. The slot sits above the
-            // page that scrolls behind it, so the strip that resizes the
-            // video is never covered.
-            className={`learning-workspace__player-wrap ${stickyPlayer ? "min-[641px]:z-40 min-[641px]:has-[[data-learning-player-shortened]]:sticky! min-[641px]:has-[[data-learning-player-shortened]]:top-0" : ""}`}
+            // A video at its full height scrolls away with the page. Once
+            // the viewer has resized it (the grip, or the title on a touch
+            // screen) it stays at the top while the title and description
+            // scroll away beneath it. The grip marks the slot inside while
+            // it is dragged, before the new height is saved, so the rule
+            // reads that mark. The player itself is positioned on this slot,
+            // so it follows. The slot sits above the page that scrolls
+            // behind it, so the strip that resizes the video is never
+            // covered.
+            className={`learning-workspace__player-wrap ${stickyPlayer ? "z-40 has-[[data-learning-player-shortened]]:sticky! has-[[data-learning-player-shortened]]:top-0" : ""}`}
             data-learning-player-motion-target=""
           >
             {showingQuiz ? (
@@ -3382,9 +3404,15 @@ export function LearningWorkspace({
               </div>
             ) : registerPersistentPlayer ? (
               <div
-                className="pointer-events-none relative z-10 aspect-video w-full overflow-visible bg-black max-h-(--learning-player-max-height)"
+                // A reading pulled taller keeps its 16:9 box and adds the
+                // extra height under it (content-box, so the padding is
+                // added to the ratio's height, not taken from it).
+                className="pointer-events-none relative z-10 aspect-video w-full overflow-visible bg-black max-h-(--learning-player-max-height) data-learning-player-grown:box-content! data-learning-player-grown:pb-(--learning-player-growth)"
                 aria-hidden="true"
                 data-learning-player-anchor=""
+                data-learning-player-grown={
+                  appliedReadingGrowth === null ? undefined : ""
+                }
                 data-learning-player-shortened={
                   appliedPlayerHeight === null ? undefined : ""
                 }
@@ -3406,11 +3434,15 @@ export function LearningWorkspace({
                     : undefined
                 }
                 style={
-                  appliedPlayerHeight === null
-                    ? undefined
-                    : ({
+                  appliedPlayerHeight !== null
+                    ? ({
                         [LESSON_PLAYER_MAX_HEIGHT_PROPERTY]: `${appliedPlayerHeight}px`,
                       } as CSSProperties)
+                    : appliedReadingGrowth !== null
+                      ? ({
+                          [LESSON_PLAYER_GROWTH_PROPERTY]: `${appliedReadingGrowth}px`,
+                        } as CSSProperties)
+                      : undefined
                 }
               >
                 {persistentPlayerMounted ? null : (
@@ -3429,7 +3461,11 @@ export function LearningWorkspace({
               <LessonPlayerHeightHandle
                 height={playerHeight}
                 onChange={setPlayerHeight}
+                growable={readingGrowable}
               />
+            ) : null}
+            {readingGrowable && registerPersistentPlayer ? (
+              <ReadingFullHeightGuide />
             ) : null}
           </div>
 
@@ -3751,7 +3787,10 @@ export function LearningWorkspace({
           <DrawerDescription className="sr-only">
             Browse sections and choose a lesson.
           </DrawerDescription>
-          <div className="min-h-0 flex-1 overflow-hidden">
+          <div
+            className="min-h-0 flex-1 overflow-hidden"
+            onTouchStartCapture={handleLessonDrawerTouchStartCapture}
+          >
             <Curriculum
               sections={curriculumSections}
               lessonsById={curriculumLessonsById}

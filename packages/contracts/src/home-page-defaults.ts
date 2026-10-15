@@ -19,7 +19,10 @@ export const HOME_PAGE_DISCUSSIONS_PER_PAGE = 6;
 export const HOME_PAGE_MAX_PINNED_DISCUSSIONS = 5;
 export const HOME_PAGE_MAX_HIDDEN_DISCUSSIONS = 200;
 
-/** The lesson that plays on the laptop in the hero picture. */
+/**
+ * The lesson that plays on the laptop in the hero picture until an admin
+ * chooses another video (`HomePageSettings.heroVideo`).
+ */
 export const HOME_PAGE_HERO_LESSON = {
   courseSlug: "fundamentals-of-backend-and-nodejs",
   lessonNumber: 1,
@@ -63,8 +66,19 @@ export interface HomePageDiscussionSection {
   hiddenThreadIds: string[];
 }
 
+/**
+ * What the laptop in the hero picture plays: the built-in lesson
+ * (`HOME_PAGE_HERO_LESSON`), a lesson video of a published course, or a
+ * video uploaded for the home page alone.
+ */
+export type HomePageHeroVideo =
+  | { source: "default" }
+  | { source: "lesson"; courseId: string; lessonId: string }
+  | { source: "upload"; mediaId: string; fileName: string };
+
 export interface HomePageSettings {
   hero: HomePageHero;
+  heroVideo: HomePageHeroVideo;
   highlights: HomePageHighlights;
   popularCourses: HomePageCourseSection;
   freeCourses: HomePageCourseSection;
@@ -80,6 +94,7 @@ export const DEFAULT_HOME_PAGE_SETTINGS: HomePageSettings = {
     primaryActionLabel: "Explore Courses",
     secondaryActionLabel: "Watch Free Courses",
   },
+  heroVideo: { source: "default" },
   highlights: {
     visible: true,
     items: [

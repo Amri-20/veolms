@@ -17,7 +17,9 @@ export const getDiscussionComposerCollapsedSnapPoint = (
     return DISCUSSION_COMPOSER_FALLBACK_SNAP_POINT;
   }
 
-  return Math.max(2, Math.round(viewportHeight - playerBottom));
+  // On a phone the video scrolls away with the page; once it has gone off
+  // the top, the composer has the whole screen under it.
+  return Math.max(2, Math.round(viewportHeight - Math.max(0, playerBottom)));
 };
 
 export const getDiscussionComposerViewportGeometry = (

@@ -10,7 +10,15 @@ export const enrolledCourseSchema = z.strictObject({
   totalLessons: z.number().int().nonnegative(),
   totalDurationSeconds: z.number().int().nonnegative(),
   enrolledAt: z.string().or(z.date()),
-  progress: z.number().int().min(0).max(100).nullable(),
+  /**
+   * How much of the course has been watched, in percent with up to two
+   * decimals (0.42): the average of its published lessons' watched shares.
+   */
+  progress: z.number().min(0).max(100).nullable(),
+  /**
+   * When the learner last watched any of it. Set from the first few seconds
+   * watched, while `progress` may still round to 0.
+   */
   lastAccessedAt: z.string().or(z.date()).nullable().optional(),
 });
 export type EnrolledCourse = z.infer<typeof enrolledCourseSchema>;

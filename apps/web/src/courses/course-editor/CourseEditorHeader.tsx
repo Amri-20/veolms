@@ -26,7 +26,7 @@ export function CourseEditorHeader({
             type="button"
             className="flex w-9 h-9 shrink-0 items-center justify-center border border-[color-mix(in_srgb,var(--text)_12%,transparent)] rounded-lg text-(--text-secondary) bg-[color-mix(in_srgb,var(--text)_4%,transparent)] cursor-pointer transition-[border-color,background-color,color] duration-150 ease-out hover:border-[color-mix(in_srgb,var(--text)_24%,transparent)] hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)] hover:text-(--text)"
             onClick={handleBack}
-            aria-label="Go back to courses"
+            aria-label="Go back"
           >
             <ArrowLeft size={17} weight="bold" />
           </button>

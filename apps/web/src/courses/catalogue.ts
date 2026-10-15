@@ -46,7 +46,13 @@ export interface Course {
   category: CourseCategory;
   sections: number;
   lectures: number;
+  /** Percent watched, with up to two decimals (0.42). */
   progress: number | null;
+  /**
+   * The learner has watched some of it, which a long course can show as
+   * 0.00% for a while (see `hasStartedCourse`).
+   */
+  started?: boolean;
   enrolled: boolean;
   duration: string;
   students: number;
@@ -144,6 +150,11 @@ function matchesCourseSearch(
   );
 }
 
+/** Whether an enrolled learner has begun the course at all. */
+export function hasBegunCourse(course: Pick<Course, "progress" | "started">) {
+  return Boolean(course.started) || (course.progress ?? 0) > 0;
+}
+
 function matchesCourseStatusFilter(
   course: Course,
   role: CourseRole,
@@ -153,10 +164,13 @@ function matchesCourseStatusFilter(
   const progress = course.progress ?? 0;
   if (
     statusFilter === "in-progress" &&
-    (!course.enrolled || progress <= 0 || progress >= 100)
+    (!course.enrolled || !hasBegunCourse(course) || progress >= 100)
   )
     return false;
-  if (statusFilter === "not-started" && (!course.enrolled || progress !== 0))
+  if (
+    statusFilter === "not-started" &&
+    (!course.enrolled || hasBegunCourse(course))
+  )
     return false;
   if (statusFilter === "completed" && (!course.enrolled || progress < 100))
     return false;
@@ -278,12 +292,12 @@ export function getVisibleCourses(
       const progress = course.progress ?? 0;
       if (
         statusFilter === "in-progress" &&
-        (!course.enrolled || progress <= 0 || progress >= 100)
+        (!course.enrolled || !hasBegunCourse(course) || progress >= 100)
       )
         return false;
       if (
         statusFilter === "not-started" &&
-        (!course.enrolled || progress !== 0)
+        (!course.enrolled || hasBegunCourse(course))
       )
         return false;
       if (statusFilter === "completed" && (!course.enrolled || progress < 100))

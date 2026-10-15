@@ -22,6 +22,7 @@ import {
   LearnerCoursesSubtitle,
   rememberLearnerStarted,
 } from "./learnerCoursesSubtitle";
+import { LearnerGoalCard } from "./LearnerGoalCard";
 import { LearnerGoalScreen } from "./LearnerGoalScreen";
 import { LearnerHeroPinDrop } from "./LearnerHeroPinDrop";
 import { LearnerHomeHero } from "./LearnerHomeHero";
@@ -32,10 +33,12 @@ import {
   learnerHomePageClasses,
 } from "./LearnerHomeSkeleton";
 import { LearnerResumeRow } from "./LearnerResumeRow";
+import { useIsPhone } from "./useIsPhone";
 import { useDraggedPinCourseId } from "./pinCourseDrag";
 import { pinHomeCourse, usePinnedHomeCourseId } from "./pinnedHomeCourse";
 import {
   getEnrolledCourseKey,
+  hasStartedCourse,
   planLearnerHome,
   selectCoursesToExplore,
 } from "./learnerHomePlan";
@@ -144,20 +147,23 @@ export function LearnerHome({
   const firstName = learnerName.trim().split(/\s+/u)[0] ?? "";
 
   const coursesKnown = Boolean(knownCourses);
-  const anythingStarted = enrolledCourses.some(
-    (course) => (course.progress ?? 0) > 0,
-  );
+  const anythingStarted = enrolledCourses.some(hasStartedCourse);
   useEffect(() => {
     if (coursesKnown) rememberLearnerStarted(anythingStarted);
   }, [anythingStarted, coursesKnown]);
 
-  const laptopScreen = (
-    <LearnerGoalScreen
-      summary={summaryQuery.data}
-      isLoading={sessionPending || summaryQuery.isLoading}
-      onEditGoal={() => onNavigatePage("/settings/learning")}
-    />
+  // A phone shows no laptop, and its screen's wallpaper is not loaded
+  // there: the goals are a card of their own instead.
+  const isPhone = useIsPhone();
+  const goalProps = {
+    summary: summaryQuery.data,
+    isLoading: sessionPending || summaryQuery.isLoading,
+    onEditGoal: () => onNavigatePage("/settings/learning"),
+  };
+  const laptopScreen = isPhone ? undefined : (
+    <LearnerGoalScreen {...goalProps} />
   );
+  const goalCard = <LearnerGoalCard {...goalProps} />;
 
   if (!knownCourses) {
     return (
@@ -167,6 +173,7 @@ export function LearnerHome({
           firstName={firstName}
           namePending={sessionPending}
           resumeRow={<LearnerResumeRowSkeleton />}
+          goalCard={goalCard}
           laptopScreen={laptopScreen}
         />
         <div className={learnerHomeBodyClasses}>
@@ -251,6 +258,7 @@ export function LearnerHome({
             }
           />
         }
+        goalCard={goalCard}
         laptopScreen={laptopScreen}
       />
 

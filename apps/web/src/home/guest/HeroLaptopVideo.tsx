@@ -4,13 +4,13 @@ import type { VideoEngine } from "@veolms/video-player";
 import { useEffect, useRef, useState } from "react";
 import { LoadingSpinnerIcon } from "../../components/LoadingSpinner";
 import { isEditingShortcutTarget } from "../../keyboardShortcuts";
-import type { HeroLaptopVideoLesson } from "./heroLaptopVideoEngine";
 
 /** How long the button stays after a playing video is tapped. */
 const BUTTON_VISIBLE_MS = 2500;
 
 /**
- * A lesson's video for the hero's laptop, with one control: a play and pause
+ * The hero's video (the one chosen in the home page settings) for the
+ * laptop, with one control: a play and pause
  * button in the middle of the screen.
  *
  * The button is there when the page loads and goes as soon as the video
@@ -21,10 +21,8 @@ const BUTTON_VISIBLE_MS = 2500;
  * fetched until the visitor first presses play.
  */
 export function HeroLaptopVideo({
-  lesson,
   poster,
 }: {
-  lesson: HeroLaptopVideoLesson;
   /** Shown on the screen until the video is played. */
   poster?: string;
 }) {
@@ -92,7 +90,7 @@ export function HeroLaptopVideo({
     setStatus("loading");
     try {
       const { loadHeroLaptopVideo } = await import("./heroLaptopVideoEngine");
-      const engine = await loadHeroLaptopVideo(video, lesson);
+      const engine = await loadHeroLaptopVideo(video);
       // Left while it was loading.
       if (videoRef.current !== video) {
         void engine.destroy().catch(() => undefined);

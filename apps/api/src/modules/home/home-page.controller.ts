@@ -25,7 +25,29 @@ export function createHomePageController({
     return await service.updateSettings(request.body, request.user?.id ?? null);
   }
 
-  return { getGuestPage, getSettings, getOptions, updateSettings };
+  async function getLessonVideoOptions(
+    request: FastifyRequest<{ Params: { courseId: string } }>,
+  ) {
+    return await service.getLessonVideoOptions(request.params.courseId);
+  }
+
+  async function getHeroVideoPlayback() {
+    return await service.getHeroVideoPlayback();
+  }
+
+  async function getHeroVideoPlaybackToken() {
+    return await service.getHeroVideoPlaybackToken();
+  }
+
+  return {
+    getGuestPage,
+    getSettings,
+    getOptions,
+    updateSettings,
+    getLessonVideoOptions,
+    getHeroVideoPlayback,
+    getHeroVideoPlaybackToken,
+  };
 }
 
 export type HomePageController = ReturnType<typeof createHomePageController>;

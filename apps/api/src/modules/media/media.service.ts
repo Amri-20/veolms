@@ -7,6 +7,7 @@ import type {
   MediaImageVariantManifest,
   PresignMediaRequest,
   VideoPlaybackBootstrap,
+  HeroVideoPlayback,
   VideoPlaybackToken,
   VideoQualityLevel,
 } from "@veolms/contracts";
@@ -219,6 +220,15 @@ const VIDEO_JOB_FAILED_MESSAGE = "Video processing failed. Please try again.";
 
 /** One answer for every webhook authentication failure. */
 const WEBHOOK_UNAUTHORIZED_MESSAGE = "Webhook authentication failed.";
+
+/** A video asset as `getVideoAssetPlayback` needs it. */
+export interface VideoAssetForPlayback {
+  id: string;
+  type: string | null;
+  status: string | null;
+  storageKey: string | null;
+  durationSeconds: number | string | null;
+}
 
 export function createMediaService({
   database,
@@ -1776,6 +1786,73 @@ export function createMediaService({
     return { success: true, status: statusRaw.toLowerCase(), jobId: job.id };
   }
 
+  /**
+   * Playback for a video asset whose viewer the caller has already
+   * authorized (the home page's hero video, which an admin made public).
+   * No course or lesson access rule is applied here.
+   */
+  async function getVideoAssetPlayback(
+    media: VideoAssetForPlayback,
+    details: { mediaKey: string; title?: string | null },
+  ): Promise<HeroVideoPlayback> {
+    const { manifestKey } = await getReadyPlaybackOutput(
+      media.id,
+      {
+        media_type: media.type,
+        media_status: media.status,
+        media_storage_key: media.storageKey,
+      },
+      { verifyManifest: false },
+    );
+    const manifestUrl = services.storage.getCdnObjectUrl(manifestKey);
+    if (!manifestUrl) {
+      throw new AppError(
+        503,
+        "CDN_NOT_CONFIGURED",
+        "Media delivery is not configured.",
+      );
+    }
+    const playbackToken = createPlaybackSegmentToken(manifestKey);
+    return {
+      mediaKey: details.mediaKey,
+      manifestUrl,
+      ...(playbackToken
+        ? {
+            segmentToken: playbackToken.token,
+            segmentTokenExpiresAt: playbackToken.expiresAt,
+          }
+        : {}),
+      ...(media.durationSeconds !== null
+        ? { duration: Number(media.durationSeconds) }
+        : {}),
+      ...(details.title ? { title: details.title } : {}),
+    };
+  }
+
+  /** A fresh segment token for `getVideoAssetPlayback`'s stream. */
+  async function getVideoAssetPlaybackToken(
+    media: VideoAssetForPlayback,
+  ): Promise<VideoPlaybackToken> {
+    const { manifestKey } = await getReadyPlaybackOutput(
+      media.id,
+      {
+        media_type: media.type,
+        media_status: media.status,
+        media_storage_key: media.storageKey,
+      },
+      { verifyManifest: false },
+    );
+    const playbackToken = createPlaybackSegmentToken(manifestKey);
+    if (!playbackToken) {
+      throw new AppError(
+        409,
+        "CDN_TOKEN_NOT_REQUIRED",
+        "This video does not require a protected playback token.",
+      );
+    }
+    return playbackToken;
+  }
+
   return {
     presignMediaUpload,
     confirmUpload,
@@ -1788,6 +1865,8 @@ export function createMediaService({
     getVideoJobProgress,
     getPlaybackBootstrap,
     getPlaybackToken,
+    getVideoAssetPlayback,
+    getVideoAssetPlaybackToken,
     getLessonResourceDownload,
     getMediaDelivery,
     getHlsStream,
