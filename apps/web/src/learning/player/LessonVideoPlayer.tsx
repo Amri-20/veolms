@@ -24,10 +24,7 @@ import type {
   VideoPlaybackToken,
 } from "@veolms/contracts";
 import type { CourseVideo } from "../courseContent";
-import {
-  LEARNING_SEEK_INTERVAL_DEFAULT,
-  readLearningPreferences,
-} from "../../settings/settingsPreferences";
+import { readLearningPreferences } from "../../settings/settingsPreferences";
 import { LessonAmbientProjection } from "./LessonAmbientProjection";
 import { LessonTroubleIllustration } from "./LessonTroubleIllustration";
 import {
@@ -74,6 +71,7 @@ import {
 } from "./lessonPlayerPersistence";
 import { createLearningLessonVideoSource } from "./lessonVideoSource";
 import { useLearningPlayerTheme } from "./useLearningPlayerTheme";
+import { useLearningSeekInterval } from "./useLearningSeekInterval";
 import { MiniPlayerControls } from "./MiniPlayerControls";
 import { LearningMiniPlayerBufferingIndicator } from "./learningMiniPlayerBufferingIndicator";
 import {
@@ -421,9 +419,7 @@ export function LessonVideoPlayer({
   const applyingPlaybackPrefsRef = useRef(false);
   const [muted, setMuted] = useState(initialPlayerPreferences.muted);
   const [ambientEnabled, setAmbientEnabled] = useState(false);
-  const [seekIntervalSeconds, setSeekIntervalSeconds] = useState(
-    LEARNING_SEEK_INTERVAL_DEFAULT,
-  );
+  const seekIntervalSeconds = useLearningSeekInterval();
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [mobileLandscapeFullscreen, setMobileLandscapeFullscreen] =
     useState(false);
@@ -964,7 +960,6 @@ export function LessonVideoPlayer({
 
   useEffect(() => {
     setAmbientEnabled(readAmbientPreference());
-    setSeekIntervalSeconds(readLearningPreferences().seekIntervalSeconds);
     preferencesReadyRef.current = true;
     setPreferencesReady(true);
 

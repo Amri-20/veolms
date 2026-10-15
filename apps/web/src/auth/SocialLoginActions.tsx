@@ -27,6 +27,7 @@ import { resolvePostAuthPath } from "./postAuthNavigation";
 import { useOauthLogin, useOauthUrl } from "../services/auth";
 import { authStore } from "../store/auth.store";
 import { LoadingSpinnerIcon } from "../components/LoadingSpinner";
+import { LoginFieldError } from "./LoginCardParts";
 
 /**
  * How long a press on the Google button waits for the pop-up's own question
@@ -34,6 +35,26 @@ import { LoadingSpinnerIcon } from "../components/LoadingSpinner";
  * yet, before it opens Google's window anyway.
  */
 const SILENT_CHECK_WAIT_MS = 1500;
+
+/** The id of the message under the buttons, which they point to. */
+const SOCIAL_ERROR_ID = "auth-social-error";
+
+/**
+ * What a failed social sign-in says. The API refuses to send the visitor
+ * back to an origin it does not know (a LAN address, say): that one says
+ * what to do instead.
+ */
+function toSocialErrorMessage(
+  providerName: string,
+  err: unknown,
+  fallback: string,
+): string {
+  const errorObj = err as { code?: string; message?: string } | null;
+  if (errorObj?.code === "INVALID_REDIRECT_URI") {
+    return `${providerName} sign-in isn't available on this address. Use your email below, or open the site at its usual address.`;
+  }
+  return errorObj?.message || fallback;
+}
 
 /** GitHub sign-in is hidden for the time being; everything else of it stays. */
 const SHOW_GITHUB_SIGN_IN = false;
@@ -56,12 +77,15 @@ function withGoogleOptions(
 }
 
 interface SocialLoginActionsProps {
-  onError?: (message: string) => void;
+  /** A Google (or other social) sign-in failure, shown under the buttons. */
+  errorMessage?: string | null;
+  onError?: (message: string | null) => void;
   oneTapPending?: boolean;
   returnTo?: string | null;
 }
 
 export function SocialLoginActions({
+  errorMessage,
   onError,
   oneTapPending = false,
   returnTo,
@@ -102,10 +126,19 @@ export function SocialLoginActions({
     setPopupStage(null);
   };
 
-  const fail = (err: unknown, fallback: string) => {
+  const fail = (
+    provider: "google" | "github",
+    err: unknown,
+    fallback: string,
+  ) => {
     reset();
-    const errorObj = err as { message?: string } | null;
-    onError?.(errorObj?.message || fallback);
+    onError?.(
+      toSocialErrorMessage(
+        provider === "google" ? "Google" : "GitHub",
+        err,
+        fallback,
+      ),
+    );
   };
 
   const finishFromPopup = async (
@@ -123,6 +156,7 @@ export function SocialLoginActions({
         return;
       }
       fail(
+        provider,
         null,
         params.get("error_description") ||
           "Authentication was cancelled or failed.",
@@ -143,7 +177,7 @@ export function SocialLoginActions({
       authStore.setUser(response.user);
       navigate(resolvePostAuthPath(response, returnTo), { replace: true });
     } catch (err: unknown) {
-      fail(err, "Authentication failed. Please try again.");
+      fail(provider, err, "Authentication failed. Please try again.");
     }
   };
 
@@ -205,6 +239,7 @@ export function SocialLoginActions({
   ) => {
     if (actionsLocked) return;
     cancelGoogleOneTap();
+    onError?.(null);
     stopListeningRef.current?.();
     stopListeningRef.current = null;
     setLoadingProvider(provider);
@@ -269,7 +304,11 @@ export function SocialLoginActions({
           return;
         }
       } catch (err: unknown) {
-        fail(err, "Unable to initialize social login. Please try again.");
+        fail(
+          provider,
+          err,
+          "Unable to initialize social login. Please try again.",
+        );
         return;
       }
     }
@@ -299,7 +338,11 @@ export function SocialLoginActions({
       );
     } catch (err: unknown) {
       popup?.close();
-      fail(err, "Unable to initialize social login. Please try again.");
+      fail(
+        provider,
+        err,
+        "Unable to initialize social login. Please try again.",
+      );
     }
   };
 
@@ -334,6 +377,7 @@ export function SocialLoginActions({
           <GoogleAccountButton
             account={lastGoogleAccount}
             busyLabel={googleBusyLabel}
+            describedBy={errorMessage ? SOCIAL_ERROR_ID : undefined}
             disabled={actionsLocked}
             lastUsed={googleLastUsed}
             onChooseAccount={() =>
@@ -344,6 +388,7 @@ export function SocialLoginActions({
         ) : (
           <GoogleSignInButton
             busyLabel={googleBusyLabel}
+            describedBy={errorMessage ? SOCIAL_ERROR_ID : undefined}
             disabled={actionsLocked}
             onClick={() => handleOauth("google")}
           />
@@ -354,6 +399,7 @@ export function SocialLoginActions({
         {SHOW_GITHUB_SIGN_IN ? (
           <button
             aria-busy={loadingProvider === "github"}
+            aria-describedby={errorMessage ? SOCIAL_ERROR_ID : undefined}
             aria-label={
               loadingProvider === "github" ? "Connecting to GitHub" : undefined
             }
@@ -369,6 +415,10 @@ export function SocialLoginActions({
               "Continue with GitHub"
             )}
           </button>
+        ) : null}
+
+        {errorMessage ? (
+          <LoginFieldError id={SOCIAL_ERROR_ID}>{errorMessage}</LoginFieldError>
         ) : null}
       </div>
     </div>

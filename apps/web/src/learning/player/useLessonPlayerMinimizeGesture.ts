@@ -32,6 +32,13 @@ const DIRECTION_RATIO = 1.15;
 const COMMIT_PROGRESS = 0.5;
 const FLING_PROGRESS = 0.18;
 const FLING_VELOCITY = 0.85;
+/**
+ * A finger that rested this long before it lifted was not flicking, however
+ * fast it had been moving before.
+ */
+const FLICK_RELEASE_MAX_PAUSE_MS = 100;
+/** A swipe over within this long is a flick, whatever its last move was. */
+const FLICK_MAX_DURATION_MS = 250;
 const SETTLE_FALLBACK_BUFFER_MS = 80;
 
 export type LessonPlayerMinimizeGesturePhase =
@@ -58,6 +65,12 @@ interface ActiveGesture extends GestureGeometry {
   pointerId: number;
   /** The video's left edge and the mini player's width, for following. */
   startLeft: number;
+  /**
+   * How far across the usual corner is (the bottom one on the side the
+   * mini player last rested on), where a flick sends the video.
+   */
+  cornerTargetX: number;
+  startTimestamp: number;
   miniWidth: number;
   startX: number;
   startY: number;
@@ -501,16 +514,19 @@ export function useLessonPlayerMinimizeGesture({
       }
 
       onGestureStartRef.current?.();
+      // A swipe says where the mini player goes; nothing is asked for yet,
+      // so the geometry below is the usual corner's.
+      setLearningMiniPlayerPreferredLeft(null);
       const nextMotionTarget = motionTarget?.() ?? event.currentTarget;
       const nextGeometry = getGeometry(nextMotionTarget);
       const timestamp = event.timeStamp || performance.now();
       motionElementRef.current = nextMotionTarget;
       geometryRef.current = nextGeometry;
       const startBounds = nextMotionTarget.getBoundingClientRect();
-      // A swipe says where the mini player goes; nothing is asked for yet.
-      setLearningMiniPlayerPreferredLeft(null);
       gestureRef.current = {
         ...nextGeometry,
+        cornerTargetX: nextGeometry.targetX,
+        startTimestamp: timestamp,
         startLeft: startBounds.left,
         miniWidth: startBounds.width * nextGeometry.targetScale,
         active: false,
@@ -648,6 +664,25 @@ export function useLessonPlayerMinimizeGesture({
       if (!shouldCommit) {
         settleBack();
         return;
+      }
+
+      // A quick flick down puts the video away in the bottom corner on the
+      // side the mini player last rested on in this tab (the right one if it
+      // has not been minimized yet), whichever way the flick leaned. Only a
+      // finger that kept on dragging takes it somewhere else along the
+      // bottom: where it was let go.
+      const releaseTimestamp = event.timeStamp || performance.now();
+      const flicked =
+        releaseTimestamp - gesture.startTimestamp <= FLICK_MAX_DURATION_MS ||
+        (releaseTimestamp - gesture.lastTimestamp <=
+          FLICK_RELEASE_MAX_PAUSE_MS &&
+          gesture.velocityY >= FLING_VELOCITY);
+      if (flicked) {
+        setLearningMiniPlayerPreferredLeft(null);
+        geometryRef.current = {
+          ...geometryRef.current,
+          targetX: gesture.cornerTargetX,
+        };
       }
 
       settleTo(

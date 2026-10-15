@@ -26,10 +26,10 @@ export interface CourseCouponControlProps {
 
 // The field a code is typed into. It fills the coupon's place in the bar
 // (see `couponSlotClasses` in `CoursePriceBar`): above the buy button on a
-// phone, beside it from a medium width. Beside it, it is the buy button's
-// height (56px) and has its corners (11px); the "Have a coupon?" link is
-// the same shape.
-const slotClasses = "flex h-12 items-center rounded-[0.6875rem] @md/price:h-14";
+// phone, beside it from a medium width. It is the buy button's height
+// (56px) at every width and has its corners (11px); the "Have a coupon?"
+// link is the same shape.
+const slotClasses = "flex h-14 items-center rounded-[0.6875rem]";
 
 // Where the link and the coupon in use stand in the coupon's place, which
 // is wider than either. In a bar of one row the place ends at the buy
@@ -227,13 +227,17 @@ export function CourseCouponControl({
       // radius from `--control-radius-action`, hence the mark and the
       // variable (see `priceBarActionClasses`).
       //
+      // It rests on a faint tint of the accent, a little stronger under the
+      // pointer and stronger again when pressed.
+      //
       // On a phone it is centred over the button, across the bar, and as
-      // tall as the field that takes its place. On a line
-      // it shares with the button only, it starts the line, pulled back by
-      // its own padding so that its ticket stands under the price's first
-      // figure (the tint under the pointer then reaches that far past it).
+      // tall as the field that takes its place. On a line it shares with
+      // the button only, it starts the line, its tinted edge in line with
+      // the price's first figure. (It was pulled back by its own padding to
+      // put the ticket there while it had no tint at rest, until
+      // 2026-10-15.)
       data-control-radius-action
-      className={`group/coupon flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-[0.6875rem] border-0 bg-transparent px-2 text-[0.9rem] font-semibold whitespace-nowrap text-(--accent-ink,var(--accent)) transition-colors duration-140 [--control-radius-action:0.6875rem] hover:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) active:bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] max-[640px]:bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] max-[640px]:hover:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] max-[640px]:active:bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] max-[640px]:ml-0! @md/price:-ml-4 @md/price:h-14 @md/price:w-fit @md/price:px-4 @2xl/price:ml-auto @2xl/price:@min-[20.05rem]/coupon:-ml-4`}
+      className={`group/coupon flex h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-[0.6875rem] border-0 bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] px-2 text-[0.9rem] font-semibold whitespace-nowrap text-(--accent-ink,var(--accent)) transition-colors duration-140 [--control-radius-action:0.6875rem] hover:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) active:bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] @md/price:w-fit @md/price:px-4 @2xl/price:ml-auto @2xl/price:@min-[20.05rem]/coupon:ml-0`}
     >
       {/* The ticket is an outline at rest and filled in under the pointer,
           the keyboard's focus or a press. Both drawings are in the page,

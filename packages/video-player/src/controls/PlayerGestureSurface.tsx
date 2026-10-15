@@ -13,7 +13,6 @@ import { MOBILE_SEEK_IDLE_DELAY_MS } from "./feedbackTiming";
 
 const DOUBLE_TAP_WINDOW_MS = 300;
 const LONG_PRESS_DELAY_MS = 500;
-const TOUCH_COMPLETION_DEDUPE_MS = 75;
 const TOUCH_MOVE_TOLERANCE_PX = 12;
 
 type SeekDirection = -1 | 1;
@@ -98,8 +97,11 @@ export function PlayerGestureSurface({
   const pointerPressRef = useRef<PointerPressGesture | null>(null);
   const pressGeometryRef = useRef({ startX: 0, width: 0 });
   const controlsVisibleBeforePressRef = useRef(true);
-  const lastTouchCompletionAtRef = useRef(Number.NEGATIVE_INFINITY);
-  const touchPointerDownAtRef = useRef(Number.NEGATIVE_INFINITY);
+  // A finger press reaches the surface twice, as pointer events and as touch
+  // events, and both paths can end it. It ends once: whichever comes first.
+  // (A time window is not enough: on a phone the seek run by pointerup can
+  // take longer than the gap to touchend, which then seeked a second time.)
+  const touchPressRef = useRef({ completed: false, pointerDown: false });
   const touchGestureRef = useRef<{
     direction: SeekDirection;
     identifier: number;
@@ -319,16 +321,11 @@ export function PlayerGestureSurface({
   };
 
   const completePress = (direction: SeekDirection, pointerType: string) => {
-    const timestamp = Date.now();
-    if (
-      pointerType === "touch" &&
-      timestamp - lastTouchCompletionAtRef.current < TOUCH_COMPLETION_DEDUPE_MS
-    ) {
-      return;
-    }
     if (pointerType === "touch") {
-      lastTouchCompletionAtRef.current = timestamp;
+      if (touchPressRef.current.completed) return;
+      touchPressRef.current.completed = true;
     }
+    const timestamp = Date.now();
 
     if (endPausedScrub()) {
       clearSingleTapTimer();
@@ -413,7 +410,7 @@ export function PlayerGestureSurface({
       event.clientX,
     );
     if (event.pointerType === "touch") {
-      touchPointerDownAtRef.current = Date.now();
+      touchPressRef.current = { completed: false, pointerDown: true };
     }
     clearLongPressTimer();
     longPressTimerRef.current = setTimeout(beginLongPress, LONG_PRESS_DELAY_MS);
@@ -455,11 +452,10 @@ export function PlayerGestureSurface({
   const handleTouchStart = (event: TouchEvent<HTMLButtonElement>) => {
     const touch = event.changedTouches[0] ?? event.touches[0];
     if (!touch) return;
-    if (
-      Date.now() - touchPointerDownAtRef.current >=
-      TOUCH_COMPLETION_DEDUPE_MS
-    ) {
+    // Without a pointerdown before it, this touch is a press of its own.
+    if (!touchPressRef.current.pointerDown) {
       captureControlsVisibility();
+      touchPressRef.current = { completed: false, pointerDown: false };
     }
     const direction = getSeekDirection(event.currentTarget, touch.clientX);
     capturePressGeometry(event.currentTarget, touch.clientX);
@@ -503,7 +499,7 @@ export function PlayerGestureSurface({
   const handleTouchEnd = (event: TouchEvent<HTMLButtonElement>) => {
     const gesture = touchGestureRef.current;
     touchGestureRef.current = null;
-    touchPointerDownAtRef.current = Number.NEGATIVE_INFINITY;
+    touchPressRef.current.pointerDown = false;
     if (pausedScrubRef.current !== null) {
       const touch = Array.from(event.changedTouches).find(
         (candidate) => candidate.identifier === gesture?.identifier,
@@ -565,7 +561,7 @@ export function PlayerGestureSurface({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={() => {
-        touchPointerDownAtRef.current = Number.NEGATIVE_INFINITY;
+        touchPressRef.current.pointerDown = false;
         cancelCompetingGestures();
       }}
       onContextMenu={(event) => event.preventDefault()}

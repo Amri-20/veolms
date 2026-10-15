@@ -532,6 +532,7 @@ interface CoursesPageProps {
     courseSlug?: string;
     discussionTab?: string;
     page: string;
+    pathname?: string;
     scrollLeft: number;
     scrollTop: number;
     section?: string;
@@ -1028,6 +1029,10 @@ function LoginProfileButton({
 }
 
 const subscribeToNothing = () => () => {};
+
+/** Names a page shown in the shell by what it is and where. */
+const getSurfacePageKey = (surfacePage: string, pathname = "") =>
+  `${surfacePage}:${pathname.replace(/(.)\/+$/, "$1")}`;
 
 export function CoursesPage({
   initialPublishedCoursePage,
@@ -1664,6 +1669,35 @@ export function CoursesPage({
     [mobileMenuCollapsedSnapPoint],
   );
   const isLearningSurface = Boolean(renderMain);
+  // A page that a minimized lesson hands over to keeps the two boxes it was
+  // drawn in behind the player (the grid it shared with the lesson, and its
+  // own box in that grid), only without what made it a still picture behind
+  // the lesson. Turned into the plain `display: contents` boxes a page
+  // otherwise has, the browser rebuilt the whole page, and a phone then drew
+  // the home page's picture, its laptop screen and the copy over them as
+  // blanks for a frame. It keeps them until another page is shown.
+  const routePageKey = getSurfacePageKey(page, cataloguePathname);
+  const lessonBackgroundPageKey =
+    renderMain && learningBackground
+      ? getSurfacePageKey(learningBackground.page, learningBackground.pathname)
+      : null;
+  const [pageKeptFromLesson, setPageKeptFromLesson] = useState<string | null>(
+    null,
+  );
+  if (
+    lessonBackgroundPageKey !== null &&
+    pageKeptFromLesson !== lessonBackgroundPageKey
+  ) {
+    setPageKeptFromLesson(lessonBackgroundPageKey);
+  } else if (
+    !renderMain &&
+    pageKeptFromLesson !== null &&
+    pageKeptFromLesson !== routePageKey
+  ) {
+    setPageKeptFromLesson(null);
+  }
+  const keepLessonPageBoxes =
+    !renderMain && pageKeptFromLesson === routePageKey;
   // Every page's cards are the shared `ElevatedCard`, a lighter pane on a
   // ground deeper than the frame's. A lesson's page is the exception: its
   // scroller lies over the shell's own surfaces and its panels keep theirs.
@@ -6299,7 +6333,7 @@ export function CoursesPage({
           <div
             ref={learningMotionStageRef}
             className={
-              renderMain
+              renderMain || keepLessonPageBoxes
                 ? "grid min-h-full [&>*]:col-start-1 [&>*]:row-start-1"
                 : "contents"
             }
@@ -6314,6 +6348,7 @@ export function CoursesPage({
                 />
               ) : learningBackground ? (
                 <LearningBackgroundSurface
+                  behindLesson
                   className={
                     learningBackground.page === "courses"
                       ? "max-[640px]:px-0!"
@@ -6340,7 +6375,14 @@ export function CoursesPage({
                 quizId={quizId}
               />
             ) : (
-              <div className="contents">{renderPageContent()}</div>
+              // The same element as the page behind the lesson above, so a
+              // minimize that lands on this page keeps it as it is.
+              <LearningBackgroundSurface
+                behindLesson={false}
+                keepBox={keepLessonPageBoxes}
+              >
+                {renderPageContent()}
+              </LearningBackgroundSurface>
             )}
             {renderMain && !routeContentBlocked ? (
               <div className="relative min-h-full">

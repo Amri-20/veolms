@@ -83,6 +83,9 @@ export function LoginView({
 } = {}) {
   const [flow, dispatch] = useReducer(authFlowReducer, initialAuthFlowState);
   const [identifierError, setIdentifierError] = useState<string | null>(null);
+  // A failed Google sign-in (the button or One Tap): shown by the Google
+  // button, so the email field is never marked for it.
+  const [googleError, setGoogleError] = useState<string | null>(null);
   const [otpError, setOtpError] = useState<string | null>(null);
   const [otpNotice, setOtpNotice] = useState<string | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
@@ -156,6 +159,7 @@ export function LoginView({
   const handleSendCode = async (identifier: AuthIdentifier) => {
     if (sendOtpMutation.isPending) return;
     setIdentifierError(null);
+    setGoogleError(null);
     dispatch({ type: "SUBMIT_IDENTIFIER", identifier });
 
     if (hasUsableSentCode(identifier)) {
@@ -557,7 +561,8 @@ export function LoginView({
           />
         </div>
         <SocialLoginActions
-          onError={setIdentifierError}
+          errorMessage={googleError}
+          onError={setGoogleError}
           oneTapPending={oneTapPending}
           returnTo={requestedReturnTo}
         />
@@ -592,7 +597,7 @@ export function LoginView({
           <GoogleOneTap
             onError={(message) => {
               setOneTapPending(false);
-              setIdentifierError(message);
+              setGoogleError(message);
             }}
             onPendingChange={setOneTapPending}
             returnTo={requestedReturnTo}
