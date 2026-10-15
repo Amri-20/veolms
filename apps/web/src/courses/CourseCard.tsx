@@ -22,7 +22,8 @@ import { TrashIcon as Trash } from "@phosphor-icons/react/Trash";
 import { UploadSimpleIcon as UploadSimple } from "@phosphor-icons/react/UploadSimple";
 import { UsersThreeIcon as UsersThree } from "@phosphor-icons/react/UsersThree";
 import { Fragment, type ReactNode } from "react";
-import { getCourseRouteKey } from "./catalogue";
+import { getCourseRouteKey, hasBegunCourse } from "./catalogue";
+import { formatCourseProgress } from "../learning/courseProgressFormat";
 import type { Course, CourseRole } from "./catalogue";
 import { ALT_DRAG_TEXT_SELECT_CLASSES } from "./altDragTextSelect";
 import { CourseActionMenu, MenuAction, MenuDivider } from "./CourseActionMenu";
@@ -149,6 +150,8 @@ export function CourseCard({
       Boolean(course.creatorId) &&
       course.creatorId === currentUserId);
   const progress = course.progress ?? 0;
+  const begun = hasBegunCourse(course);
+  const progressText = formatCourseProgress(progress);
   const overviewPath = courseOverviewPath(course);
   const absoluteCourseUrl =
     typeof window === "undefined"
@@ -201,8 +204,7 @@ export function CourseCard({
 
   // A course the learner holds but has not begun is started, not continued
   // (the home's cards and the course's own page say the same).
-  const enrolledActionLabel =
-    progress > 0 ? "Continue Learning" : "Start Learning";
+  const enrolledActionLabel = begun ? "Continue Learning" : "Start Learning";
   const thumbnailActionLabel = isPublic
     ? isPublicEnrollmentAction
       ? `Enroll in ${course.title}`
@@ -210,7 +212,7 @@ export function CourseCard({
     : role === "creator"
       ? `Play ${course.title}`
       : course.enrolled
-        ? `${progress > 0 && progress < 100 ? "Resume" : progress >= 100 ? "Review" : "Start"} ${course.title}`
+        ? `${begun && progress < 100 ? "Resume" : progress >= 100 ? "Review" : "Start"} ${course.title}`
         : `Preview ${course.title}`;
   const thumbnailActionTooltip = isPublic
     ? isPublicEnrollmentAction
@@ -241,7 +243,7 @@ export function CourseCard({
           ? "border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) opacity-60 pointer-events-none select-none"
           : "border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) shadow-(--card-shadow) hover:bg-(--card-surface-hover,var(--hover)) hover:shadow-(--card-hover-shadow)"
       }`}
-      aria-label={`${course.title}${isDeleting ? ", deleting..." : isPublic ? ", public course" : role === "creator" ? `, ${course.lifecycleStatus}` : course.enrolled ? `, ${progress}% complete` : ", not enrolled"}`}
+      aria-label={`${course.title}${isDeleting ? ", deleting..." : isPublic ? ", public course" : role === "creator" ? `, ${course.lifecycleStatus}` : course.enrolled ? `, ${progressText} complete` : ", not enrolled"}`}
       aria-busy={isDeleting}
       data-course-card
       data-deleting={isDeleting ? "true" : undefined}
@@ -613,20 +615,21 @@ export function CourseCard({
             <div
               className="mb-4 flex items-center justify-between gap-3 text-xs"
               data-course-card-progress-container
-              aria-label={`${progress}% complete`}
+              aria-label={`${progressText} complete`}
             >
               <span
                 className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-(--track)"
                 data-course-card-progress
               >
                 <span
-                  className="block h-full rounded-full bg-(--accent)"
+                  // Begun shows a sliver even while it is still 0.00%.
+                  className={`block h-full rounded-full bg-(--accent) ${begun ? "min-w-1.5" : ""}`}
                   style={{ width: `${progress}%` }}
                   data-course-card-progress-fill
                 />
               </span>
               <strong className="min-w-8 text-right font-semibold text-(--text-secondary)">
-                {progress}%
+                {progressText}
               </strong>
             </div>
           )}

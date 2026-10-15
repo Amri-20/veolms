@@ -45,6 +45,10 @@ import {
   LessonReadingStage,
   lessonReadingShellClasses,
 } from "./LessonReadingStage";
+import {
+  LessonReadingFullscreenControls,
+  useLessonReadingFullscreen,
+} from "./LessonReadingControls";
 import { MiniPlayerWindowControls } from "./MiniPlayerControls";
 import type { LearningMiniPlayerRequest } from "./learningMiniPlayerTypes";
 import {
@@ -896,10 +900,27 @@ export function LessonVideoPlayer({
     minimizeGesture.animateMinimize();
   }, [minimizeGesture, onMinimize]);
 
+  // A reading lesson stands where the video would, on the surface of a
+  // lesson with no video, and goes full screen on its own.
+  const readingSurfaceRef = useRef<HTMLDivElement>(null);
+  const hasReading =
+    presentation === "full" && Boolean(playbackAccessError?.article);
+  const readingFullscreen = useLessonReadingFullscreen(
+    readingSurfaceRef,
+    hasReading,
+  );
+  const exitReadingFullscreen = readingFullscreen.exit;
+  const minimizeReadingFromControl = useCallback(async () => {
+    await exitReadingFullscreen();
+    void minimizePlayerFromControl();
+  }, [exitReadingFullscreen, minimizePlayerFromControl]);
+
   useLearningPlayerMinimizeShortcut({
     enabled: presentation === "full" && Boolean(onMinimize),
     onTrigger: () => {
-      void minimizePlayerFromControl();
+      void (hasReading
+        ? minimizeReadingFromControl()
+        : minimizePlayerFromControl());
     },
   });
 
@@ -1052,6 +1073,8 @@ export function LessonVideoPlayer({
 
   if (playbackBootstrapPending || playbackAccessError) {
     const MinimizeIcon = playerTheme.icons.minimize;
+    const FullscreenEnterIcon = playerTheme.icons.fullscreenEnter;
+    const FullscreenExitIcon = playerTheme.icons.fullscreenExit;
     const isPending = !playbackAccessError;
     // A failure and a plain statement are both words on the bare stage; the
     // lock, the lesson's picture and the prominent action are for a lesson
@@ -1096,6 +1119,7 @@ export function LessonVideoPlayer({
           minimizeGesture.controlsSuppressed && "*:invisible!",
           reading && lessonReadingShellClasses,
         )}
+        ref={reading ? readingSurfaceRef : undefined}
         data-learning-playback-gate={playbackAccessError?.kind ?? "pending"}
         data-learning-player-motion-surface=""
         {...(presentation === "full" ? minimizeGesture.handlers : {})}
@@ -1117,14 +1141,29 @@ export function LessonVideoPlayer({
         {/* A failure with a drawing stands on the lit stage a failed video
             does, not on bare black. */}
         {gateIllustration ? <LessonPictureBackdrop /> : null}
-        {reading ? <LessonReadingStage article={reading} /> : null}
-        {/* A reading has nothing that would go on playing in the small
-            player, so it offers no button to send it there. */}
-        {presentation === "full" && onMinimize && !reading ? (
+        {reading ? (
+          <LessonReadingStage
+            article={reading}
+            clearTop={Boolean(onMinimize)}
+            clearBottom={readingFullscreen.available}
+          />
+        ) : null}
+        {presentation === "full" && onMinimize ? (
           <LessonPlayerMinimizeControl
             icon={<MinimizeIcon size={22} />}
-            onMinimize={minimizePlayerFromControl}
+            onMinimize={
+              reading ? minimizeReadingFromControl : minimizePlayerFromControl
+            }
           />
+        ) : null}
+        {reading ? (
+          <PlayerThemeProvider theme={playerTheme}>
+            <LessonReadingFullscreenControls
+              readingFullscreen={readingFullscreen}
+              enterIcon={<FullscreenEnterIcon size={20} />}
+              exitIcon={<FullscreenExitIcon size={20} />}
+            />
+          </PlayerThemeProvider>
         ) : null}
         {presentation === "mini" ? (
           // The window's own expand and close, as on a playing video. There

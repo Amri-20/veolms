@@ -44,6 +44,25 @@ export const LESSON_PLAYER_TINY_HEIGHT = 100;
 export const LESSON_PLAYER_MAX_HEIGHT_PROPERTY = "--learning-player-max-height";
 
 /**
+ * How much taller than 16:9 a reading has been pulled (a video never is):
+ * the slot adds it under its 16:9 box.
+ */
+export const LESSON_PLAYER_GROWTH_PROPERTY = "--learning-player-growth";
+
+/** A reading pulled taller still leaves this much of the screen under it. */
+const GROWN_SCREEN_CLEARANCE = 96;
+
+/**
+ * A reading can be pulled taller than a video's 16:9 as well as shorter.
+ * Its extra height (`null` for none) and where a change of it goes; absent
+ * for a video, which stops at its full height.
+ */
+export interface LessonPlayerGrowth {
+  growth: number | null;
+  onGrowthChange: (growth: number | null) => void;
+}
+
+/**
  * The height the video was last dragged to, kept only while the page stays
  * open: it carries from one lesson to the next, but a reload (or a new
  * visit) starts with the video at its full height again. (It used to be
@@ -118,6 +137,26 @@ const applyHeight = (slot: HTMLElement, next: number | null) => {
   }
 };
 
+const applyGrowth = (slot: HTMLElement, growth: number | null) => {
+  if (growth === null) {
+    slot.style.removeProperty(LESSON_PLAYER_GROWTH_PROPERTY);
+    delete slot.dataset.learningPlayerGrown;
+  } else {
+    slot.style.setProperty(LESSON_PLAYER_GROWTH_PROPERTY, `${growth}px`);
+    slot.dataset.learningPlayerGrown = "";
+  }
+};
+
+interface PlayerSize {
+  height: number | null;
+  growth: number | null;
+}
+
+const applySize = (slot: HTMLElement, size: PlayerSize) => {
+  applyHeight(slot, size.height);
+  applyGrowth(slot, size.growth);
+};
+
 /** Marks the slot while it is being resized; the player hides its controls. */
 const markResizing = (slot: HTMLElement | null, resizing: boolean) => {
   if (!slot) return;
@@ -156,6 +195,26 @@ const showGripHint = () => {
 const resolveHeight = (wanted: number, fullHeight: number) =>
   wanted >= fullHeight - FULL_HEIGHT_SNAP ? null : Math.max(0, wanted);
 
+/**
+ * The size a drag to `wanted` pixels asks for: shorter than full, full, or
+ * (a reading only) taller, up to most of the screen.
+ */
+const resolveSize = (
+  wanted: number,
+  fullHeight: number,
+  canGrow: boolean,
+): PlayerSize => {
+  if (canGrow && wanted > fullHeight + FULL_HEIGHT_SNAP) {
+    const tallest = Math.max(
+      fullHeight,
+      window.innerHeight - GROWN_SCREEN_CLEARANCE,
+    );
+    const growth = Math.round(Math.min(wanted, tallest) - fullHeight);
+    return { height: null, growth: growth > 0 ? growth : null };
+  }
+  return { height: resolveHeight(wanted, fullHeight), growth: null };
+};
+
 /** Where a drag that was let go at `height` settles. */
 const settleHeight = (height: number | null) =>
   height !== null && height < HIDDEN_HEIGHT_SNAP ? 0 : height;
@@ -166,6 +225,9 @@ interface HeightDrag {
   startHeight: number;
   fullHeight: number;
   height: number | null;
+  /** Set while a reading is pulled taller than 16:9. */
+  growth: number | null;
+  canGrow: boolean;
 }
 
 /**
@@ -181,10 +243,18 @@ interface HeightDrag {
 export function LessonPlayerHeightHandle({
   height,
   onChange,
+  growable,
 }: {
   height: number | null;
   onChange: (height: number | null) => void;
+  /** A reading, which is also dragged taller than 16:9. */
+  growable?: LessonPlayerGrowth;
 }) {
+  const commit = (size: PlayerSize) => {
+    onChange(size.height);
+    growable?.onGrowthChange(size.growth);
+  };
+
   const dragRef = useRef<HeightDrag | null>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -202,6 +272,8 @@ export function LessonPlayerHeightHandle({
       startHeight: slot.getBoundingClientRect().height,
       fullHeight: (slot.getBoundingClientRect().width * 9) / 16,
       height,
+      growth: growable?.growth ?? null,
+      canGrow: Boolean(growable),
     };
     markResizing(slot, true);
     setDragging(true);
@@ -219,7 +291,7 @@ export function LessonPlayerHeightHandle({
     markResizing(slot, false);
     const settled = settleHeight(drag.height);
     if (slot && settled !== drag.height) applyHeight(slot, settled);
-    onChange(settled);
+    commit({ height: settled, growth: drag.growth });
   };
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -231,11 +303,14 @@ export function LessonPlayerHeightHandle({
       endDrag(event);
       return;
     }
-    drag.height = resolveHeight(
+    const size = resolveSize(
       drag.startHeight + event.clientY - drag.startY,
       drag.fullHeight,
+      drag.canGrow,
     );
-    applyHeight(slot, drag.height);
+    drag.height = size.height;
+    drag.growth = size.growth;
+    applySize(slot, size);
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -244,13 +319,14 @@ export function LessonPlayerHeightHandle({
     if (!slot) return;
     event.preventDefault();
     const bounds = slot.getBoundingClientRect();
-    const next = resolveHeight(
+    const next = resolveSize(
       bounds.height +
         (event.key === "ArrowUp" ? -KEYBOARD_STEP : KEYBOARD_STEP),
       (bounds.width * 9) / 16,
+      Boolean(growable),
     );
-    applyHeight(slot, next);
-    onChange(next);
+    applySize(slot, next);
+    commit(next);
   };
 
   return (
@@ -287,11 +363,15 @@ export function LessonPlayerHeightHandle({
       onLostPointerCapture={endDrag}
       // Double click: a shortened or hidden video goes back to full height;
       // one already at full height is put away at the top.
+      // A reading pulled taller goes back to full height too.
       onDoubleClick={(event) => {
-        const next = height === null ? 0 : null;
+        const next: PlayerSize = {
+          height: height === null && !growable?.growth ? 0 : null,
+          growth: null,
+        };
         const slot = findSlot(event.currentTarget);
-        if (slot) applyHeight(slot, next);
-        onChange(next);
+        if (slot) applySize(slot, next);
+        commit(next);
       }}
       onKeyDown={handleKeyDown}
     >
@@ -411,6 +491,8 @@ function settleSlotWithMotion(
 export function useLessonTitleHeightSwipe(
   height: number | null,
   onChange: (height: number | null) => void,
+  /** A reading, which is also pulled down taller than 16:9. */
+  growable?: LessonPlayerGrowth,
 ) {
   const swipeRef = useRef<TitleSwipe | null>(null);
   const swallowClickRef = useRef(false);
@@ -423,7 +505,15 @@ export function useLessonTitleHeightSwipe(
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    releaseTouchResize(swipe.slot, swipe.samples, swipe.height, onChange);
+    if (swipe.growth !== null) {
+      // A reading pulled taller stays where it is let go.
+      markResizing(swipe.slot, false);
+      onChange(null);
+      growable?.onGrowthChange(swipe.growth);
+    } else {
+      growable?.onGrowthChange(null);
+      releaseTouchResize(swipe.slot, swipe.samples, swipe.height, onChange);
+    }
     // The release that ends a swipe is not a tap on the title.
     swallowClickRef.current = true;
     window.setTimeout(() => {
@@ -463,6 +553,8 @@ export function useLessonTitleHeightSwipe(
         active: false,
         fullHeight: (bounds.width * 9) / 16,
         height,
+        growth: growable?.growth ?? null,
+        canGrow: Boolean(growable),
         pointerId: event.pointerId,
         samples: [],
         slot,
@@ -479,9 +571,12 @@ export function useLessonTitleHeightSwipe(
         const deltaY = Math.abs(event.clientY - swipe.startY);
         if (Math.max(deltaX, deltaY) < TITLE_SWIPE_START_DISTANCE) return;
         // A video already at full height has nowhere to go on a downward
-        // swipe: that one is left to the browser (pull to refresh).
+        // swipe: that one is left to the browser (pull to refresh). A
+        // reading is pulled taller.
         const pullsDownAtFullHeight =
-          swipe.height === null && event.clientY > swipe.startY;
+          !swipe.canGrow &&
+          swipe.height === null &&
+          event.clientY > swipe.startY;
         if (deltaX > deltaY || pullsDownAtFullHeight) {
           swipeRef.current = null;
           return;
@@ -493,11 +588,14 @@ export function useLessonTitleHeightSwipe(
       }
       swipe.samples.push({ time: event.timeStamp, y: event.clientY });
       if (swipe.samples.length > 8) swipe.samples.shift();
-      swipe.height = resolveHeight(
+      const size = resolveSize(
         swipe.startHeight + event.clientY - swipe.startY,
         swipe.fullHeight,
+        swipe.canGrow,
       );
-      applyHeight(swipe.slot, swipe.height);
+      swipe.height = size.height;
+      swipe.growth = size.growth;
+      applySize(swipe.slot, size);
     },
     onPointerUp: end,
     onPointerCancel: end,

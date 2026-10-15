@@ -29,6 +29,19 @@ export const videoPlaybackBootstrapSchema = z.strictObject({
   source: z.literal("paid-bootstrap-api"),
 });
 
+/**
+ * What the home page needs to play the video on its hero's laptop, which
+ * may be a lesson's video or one uploaded for the home page alone.
+ */
+export const heroVideoPlaybackSchema = z.strictObject({
+  mediaKey: z.string().min(1),
+  manifestUrl: z.string().min(1),
+  segmentToken: z.string().min(1).optional(),
+  segmentTokenExpiresAt: z.number().int().positive().optional(),
+  duration: z.number().nonnegative().optional(),
+  title: z.string().min(1).optional(),
+});
+
 /** The minimal response used to renew a protected HLS segment token. */
 export const videoPlaybackTokenSchema = z.strictObject({
   token: z.string().min(1),
@@ -40,5 +53,7 @@ export type VideoPlaybackBootstrap = z.infer<
 >;
 
 export type VideoPlaybackToken = z.infer<typeof videoPlaybackTokenSchema>;
+
+export type HeroVideoPlayback = z.infer<typeof heroVideoPlaybackSchema>;
 
 export type VideoPlaybackChapter = z.infer<typeof videoPlaybackChapterSchema>;

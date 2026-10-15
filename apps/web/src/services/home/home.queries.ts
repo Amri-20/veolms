@@ -2,6 +2,7 @@ import { useQuery, type QueryClient } from "@tanstack/react-query";
 import type {
   GuestHomePageResponse,
   HomeDiscoveryResponse,
+  HomePageLessonVideoOptionsResponse,
   HomePageOptionsResponse,
   HomePageSettingsResponse,
   LearnerHomeResponse,
@@ -102,6 +103,16 @@ export function useHomePageSettingsOptions() {
   return useQuery<HomePageOptionsResponse, ApiError>({
     queryKey: homeKeys.pageSettingsOptions(),
     queryFn: () => homeService.getPageSettingsOptions(),
+    staleTime: 60 * 1000,
+  });
+}
+
+/** The lessons of a course that have a video, for the hero video picker. */
+export function useHomePageLessonVideoOptions(courseId: string | null) {
+  return useQuery<HomePageLessonVideoOptionsResponse, ApiError>({
+    queryKey: homeKeys.lessonVideoOptions(courseId ?? ""),
+    queryFn: () => homeService.getLessonVideoOptions(courseId!),
+    enabled: Boolean(courseId),
     staleTime: 60 * 1000,
   });
 }

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { BookOpenText } from "@phosphor-icons/react/BookOpenText";
+import { cn } from "../../lib/utils";
 import { DiscussionMarkdown } from "../discussion-editor/DiscussionMarkdown";
 import { createDiscussionDraft } from "../discussion-editor/types";
 import { LESSON_READING_SCROLL_ATTRIBUTE } from "./useLessonPlayerMinimizeGesture";
@@ -24,12 +25,26 @@ export const lessonReadingShellClasses =
  * sends the wheel to the page behind it, and makes an exception for this
  * box while it has further to scroll (see `PersistentLearningPlayerHost`).
  */
-export function LessonReadingStage({ article }: { article: string }) {
+export function LessonReadingStage({
+  article,
+  clearTop = false,
+  clearBottom = false,
+}: {
+  article: string;
+  /** Leave room for the minimize button in the top corner. */
+  clearTop?: boolean;
+  /** Leave room for the full screen buttons in the bottom corner. */
+  clearBottom?: boolean;
+}) {
   const content = useMemo(() => createDiscussionDraft(article), [article]);
 
   return (
     <div
-      className="absolute inset-0 touch-pan-y overflow-y-auto border-b border-[color-mix(in_srgb,var(--text)_12%,transparent)] px-5 py-6 [scrollbar-width:thin] sm:px-8"
+      className={cn(
+        "absolute inset-0 touch-pan-y overflow-y-auto border-b border-[color-mix(in_srgb,var(--text)_12%,transparent)] px-5 py-6 [scrollbar-width:thin] sm:px-8",
+        clearTop && "pt-13",
+        clearBottom && "pb-14",
+      )}
       {...{ [LESSON_READING_SCROLL_ATTRIBUTE]: "" }}
     >
       <p className="mt-0 mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wider text-(--muted) uppercase">

@@ -1,6 +1,7 @@
 import type {
   MediaImageVariantManifest,
   MediaUploadCompleteResponse,
+  VideoJobProgressResponse,
   PresignMediaRequest,
   PresignMediaResponse,
   VideoTranscodeCancelResponse,
@@ -159,6 +160,10 @@ export const mediaService = {
     return api.post<MediaUploadCompleteResponse>(
       `/media/${mediaAssetId}/upload-complete`,
     );
+  },
+
+  getVideoJobProgress(mediaAssetId: string): Promise<VideoJobProgressResponse> {
+    return api.get<VideoJobProgressResponse>(`/media/${mediaAssetId}/progress`);
   },
 
   createVideoJobProgressEventSource(mediaAssetId: string): EventSource {

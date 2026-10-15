@@ -106,7 +106,7 @@ function DiscussionViewportVirtualFeed({
   viewportRef,
   ...props
 }: DiscussionVirtualFeedProps & {
-  viewportRef: React.RefObject<HTMLDivElement | null>;
+  viewportRef: React.RefObject<HTMLElement | null>;
 }) {
   const rangeExtractor = useDiscussionRangeExtractor(
     props.entries,
@@ -196,7 +196,7 @@ function keepScrollAdjustmentsUntilMeasured<
 
 function useDiscussionPhoneVirtualFeedScrollMargin(
   feedRef: React.RefObject<HTMLDivElement | null>,
-  viewportRef: React.RefObject<HTMLDivElement | null>,
+  viewportRef: React.RefObject<HTMLElement | null>,
   measuredRef: React.RefObject<boolean>,
 ) {
   const [phoneScrollMargin, setPhoneScrollMargin] = useState(0);
@@ -228,6 +228,12 @@ function useDiscussionPhoneVirtualFeedScrollMargin(
 
     const resizeObserver = new ResizeObserver(syncScrollMargin);
     resizeObserver.observe(header);
+    // The video scrolls in the same column above the list, and resizing it
+    // moves the list as much as the header does.
+    const videoSlot = scrollport.querySelector<HTMLElement>(
+      ".learning-workspace__player-wrap",
+    );
+    if (videoSlot) resizeObserver.observe(videoSlot);
     return () => {
       resizeObserver.disconnect();
     };
@@ -384,7 +390,7 @@ export function DiscussionVirtualFeed({
   isPhone,
   ...props
 }: DiscussionVirtualFeedProps & {
-  viewportRef: React.RefObject<HTMLDivElement | null>;
+  viewportRef: React.RefObject<HTMLElement | null>;
   isPhone: boolean;
 }) {
   if (isPhone) {

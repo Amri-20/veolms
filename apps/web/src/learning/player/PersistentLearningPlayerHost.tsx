@@ -97,11 +97,19 @@ function hideLessonContentBehindPlayer(scrollport: HTMLElement | null) {
     slot.getBoundingClientRect().bottom - content.getBoundingClientRect().top;
   if (covered <= 0) return;
   content.style.clipPath = `inset(${covered.toFixed(1)}px 0 0 0)`;
-  scrollport.addEventListener(
-    "scroll",
-    () => content.style.removeProperty("clip-path"),
-    { once: true, passive: true },
-  );
+  // On a phone the lesson column is what scrolls.
+  for (const scroller of [scrollport, slot.parentElement]) {
+    scroller?.addEventListener(
+      "scroll",
+      () => content.style.removeProperty("clip-path"),
+      { once: true, passive: true },
+    );
+  }
+}
+
+/** A shortened video stays at the top of the lesson page as it scrolls. */
+function videoStaysInView(column: HTMLElement | null) {
+  return Boolean(column?.querySelector("[data-learning-player-shortened]"));
 }
 
 export interface PersistentLearningPlayerRegistration {
@@ -351,10 +359,15 @@ export function PersistentLearningPlayerHost({
     // A player that stays in view while the page scrolls has not moved with
     // it, so the scroll distance is added to where its column starts rather
     // than to where the player is now.
-    const columnTop = document
-      .querySelector<HTMLElement>(".learning-workspace__lesson-column")
-      ?.getBoundingClientRect().top;
-    const top = Math.min(rect.top, columnTop ?? rect.top) + scrollTop;
+    const column = document.querySelector<HTMLElement>(
+      ".learning-workspace__lesson-column",
+    );
+    const columnTop = column?.getBoundingClientRect().top;
+    // On a phone the column scrolls itself (the page does not), and a video
+    // at full height has gone up with it. The lesson reopens at its top.
+    const columnScrollTop = column?.scrollTop ?? 0;
+    const top =
+      Math.min(rect.top + columnScrollTop, columnTop ?? rect.top) + scrollTop;
     if (
       rect.width <= 0 ||
       rect.left < 0 ||
@@ -381,7 +394,15 @@ export function PersistentLearningPlayerHost({
       width: rect.width,
       // The column is pinned to the viewport; the content scrolls.
       column: measurePagePart(".learning-workspace__curriculum-column"),
-      content: content ? { ...content, top: content.top + scrollTop } : null,
+      content: content
+        ? {
+            ...content,
+            top:
+              content.top +
+              scrollTop +
+              (videoStaysInView(column) ? 0 : columnScrollTop),
+          }
+        : null,
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
       frameLeft: frame?.left ?? 0,
@@ -748,7 +769,7 @@ export function PersistentLearningPlayerHost({
       className={
         mini
           ? "fixed z-130 m-0 touch-none overflow-hidden rounded-xl border-0 bg-black p-0 shadow-[0_18px_48px_rgba(0,0,0,0.52)] ring-1 ring-white/14 ring-inset select-none flex flex-col group/mini-player-shell data-[mini-player-mode=dragging]:cursor-grabbing data-[mini-player-mode=dismissing]:pointer-events-none data-[mini-player-mode=dismissing]:transition-[transform,opacity] data-[mini-player-mode=dismissing]:duration-200 data-[mini-player-mode=dismissing]:ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-          : "learning-persistent-player--full group/window-motion z-[39] overflow-visible bg-transparent min-[641px]:[.courses-main:has([data-learning-player-very-short])_&]:[&_:is([data-player-control-hit-area='chapters'],[data-learning-player-minimize-layer])]:hidden! min-[641px]:[.courses-main:has([data-learning-player-short])_&]:[&_[data-player-timeline-wrap]]:inset-x-0! min-[641px]:[.courses-main:has([data-learning-player-short])_&]:[&_[data-player-timeline-wrap]]:bottom-0! min-[641px]:[.courses-main:has([data-learning-player-short])_&]:[&_[data-player-timeline-wrap]]:translate-y-1/2! max-[640px]:[&:has([data-player-timeline-wrap]_[role=slider][data-scrubbing=true])]:[&_:is([data-learning-player-minimize-layer],[data-player-control-cluster]:has([aria-label='Autoplay_next_lesson']),[aria-label='Chapters'],[data-mobile-volume-control],[aria-label='Settings'])]:invisible! max-[640px]:[.courses-main:has([data-learning-player-tiny])_&]:[&_:is([data-player-control-hit-area]:has([aria-label*='elapsed']),[data-player-control-hit-area]:has([aria-label='Toggle_fullscreen']),[aria-label*='elapsed'],[aria-label='Toggle_fullscreen'])]:hidden! max-[640px]:[.courses-main:has([data-learning-player-tiny])_&]:[&_[data-player-control-cluster='mobile-play']]:scale-65 max-[640px]:[.courses-main:has([data-learning-player-compact])_&]:[&_:is([data-player-control-cluster]:has([aria-label='Previous_lesson']),[data-player-control-cluster]:has([aria-label='Next_lesson']),[aria-label='Autoplay_next_lesson'],[aria-label='Chapters'],[data-player-control-hit-area='chapters'],[aria-label='Settings'],[data-player-control-hit-area='course-lessons'],[data-learning-player-minimize-layer],[data-mobile-volume-control])]:hidden! [.courses-main:has([data-learning-player-resizing],[data-learning-player-hidden])_&]:[&_[data-video-player-control-layer]]:invisible! [.courses-main:has([data-learning-player-resizing],[data-learning-player-hidden])_&]:[&_[data-player-bottom-corner-controls-layer]]:invisible! [.courses-main:has([data-learning-player-resizing],[data-learning-player-hidden])_&]:[&_[data-player-timeline-wrap]]:invisible! [.courses-main:has([data-learning-player-shortened])_&]:[&_.video-shell]:h-full [.courses-main:has([data-learning-player-shortened])_&]:[&_.youtube-player]:aspect-auto! [.courses-main:has([data-learning-player-shortened])_&]:[&_.youtube-player]:h-full! [.courses-main:has([data-learning-player-shortened])_&]:[&_.video-shell]:bg-black [.courses-main:has([data-learning-player-shortened])_&]:[&_.youtube-player]:bg-transparent! [.courses-main:has([data-learning-player-shortened])_&]:[&_[data-player-zoom-viewport]]:right-auto! [.courses-main:has([data-learning-player-shortened])_&]:[&_[data-player-zoom-viewport]]:left-1/2! [.courses-main:has([data-learning-player-shortened])_&]:[&_[data-player-zoom-viewport]]:aspect-video [.courses-main:has([data-learning-player-shortened])_&]:[&_[data-player-zoom-viewport]]:-translate-x-1/2 [.courses-main:has([data-learning-player-shortened])_&]:[&_[data-player-zoom-viewport]]:overflow-visible! data-[learning-player-window-motion]:flex data-[learning-player-window-motion]:h-[calc(anchor-size(height)+52px*var(--learning-player-window-current-inverse-scale,var(--learning-player-window-inverse-scale,1)))]! data-[learning-player-window-motion]:flex-col [.courses-app--resizing_&]:[&_video]:opacity-[0.999] [.courses-main:has(.is-curriculum-resizing,[data-learning-player-resizing])_&]:[&_video]:opacity-[0.999]"
+          : "learning-persistent-player--full group/window-motion z-[39] overflow-visible bg-transparent min-[641px]:[.courses-main:has([data-learning-player-very-short])_&]:[&_:is([data-player-control-hit-area='chapters'],[data-learning-player-minimize-layer])]:hidden! min-[641px]:[.courses-main:has([data-learning-player-short])_&]:[&_[data-player-timeline-wrap]]:inset-x-0! min-[641px]:[.courses-main:has([data-learning-player-short])_&]:[&_[data-player-timeline-wrap]]:bottom-0! min-[641px]:[.courses-main:has([data-learning-player-short])_&]:[&_[data-player-timeline-wrap]]:translate-y-1/2! max-[640px]:[&:has([data-player-timeline-wrap]_[role=slider][data-scrubbing=true])]:[&_:is([data-learning-player-minimize-layer],[data-player-control-cluster]:has([aria-label='Autoplay_next_lesson']),[aria-label='Chapters'],[data-mobile-volume-control],[aria-label='Settings'])]:invisible! max-[640px]:[.courses-main:has([data-learning-player-tiny])_&]:[&_:is([data-player-control-hit-area]:has([aria-label*='elapsed']),[data-player-control-hit-area]:has([aria-label='Toggle_fullscreen']),[aria-label*='elapsed'],[aria-label='Toggle_fullscreen'])]:hidden! max-[640px]:[.courses-main:has([data-learning-player-tiny])_&]:[&_[data-player-control-cluster='mobile-play']]:scale-65 max-[640px]:[.courses-main:has([data-learning-player-compact])_&]:[&_:is([data-player-control-cluster]:has([aria-label='Previous_lesson']),[data-player-control-cluster]:has([aria-label='Next_lesson']),[aria-label='Autoplay_next_lesson'],[aria-label='Chapters'],[data-player-control-hit-area='chapters'],[aria-label='Settings'],[data-player-control-hit-area='course-lessons'],[data-learning-player-minimize-layer],[data-mobile-volume-control])]:hidden! [.courses-main:has([data-learning-player-resizing],[data-learning-player-hidden])_&]:[&_[data-video-player-control-layer]]:invisible! [.courses-main:has([data-learning-player-resizing],[data-learning-player-hidden])_&]:[&_[data-player-bottom-corner-controls-layer]]:invisible! [.courses-main:has([data-learning-player-resizing],[data-learning-player-hidden])_&]:[&_[data-player-timeline-wrap]]:invisible! [.courses-main:has([data-learning-player-shortened])_&]:[&_.video-shell]:h-full [.courses-main:has([data-learning-player-grown])_&]:[&_.video-shell]:h-full [.courses-main:has([data-learning-player-grown])_&]:[&_.video-shell]:aspect-auto! [.courses-main:has([data-learning-player-shortened])_&]:[&_.youtube-player]:aspect-auto! [.courses-main:has([data-learning-player-shortened])_&]:[&_.youtube-player]:h-full! [.courses-main:has([data-learning-player-shortened])_&]:[&_.video-shell]:bg-black [.courses-main:has([data-learning-player-shortened])_&]:[&_.youtube-player]:bg-transparent! [.courses-main:has([data-learning-player-shortened])_&]:[&_[data-player-zoom-viewport]]:right-auto! [.courses-main:has([data-learning-player-shortened])_&]:[&_[data-player-zoom-viewport]]:left-1/2! [.courses-main:has([data-learning-player-shortened])_&]:[&_[data-player-zoom-viewport]]:aspect-video [.courses-main:has([data-learning-player-shortened])_&]:[&_[data-player-zoom-viewport]]:-translate-x-1/2 [.courses-main:has([data-learning-player-shortened])_&]:[&_[data-player-zoom-viewport]]:overflow-visible! data-[learning-player-window-motion]:flex data-[learning-player-window-motion]:h-[calc(anchor-size(height)+52px*var(--learning-player-window-current-inverse-scale,var(--learning-player-window-inverse-scale,1)))]! data-[learning-player-window-motion]:flex-col [.courses-app--resizing_&]:[&_video]:opacity-[0.999] [.courses-main:has(.is-curriculum-resizing,[data-learning-player-resizing])_&]:[&_video]:opacity-[0.999]"
       }
       style={mini ? miniStyle : undefined}
       aria-label={

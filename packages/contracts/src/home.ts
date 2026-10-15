@@ -8,6 +8,7 @@ import {
   type HomePageCourseSection,
   type HomePageDiscussionSection,
   type HomePageHero,
+  type HomePageHeroVideo,
   type HomePageHighlights,
   type HomePageSettings,
 } from "./home-page-defaults.ts";
@@ -79,8 +80,24 @@ export const homePageDiscussionSectionSchema = z.strictObject({
   hiddenThreadIds: uniqueIds(HOME_PAGE_MAX_HIDDEN_DISCUSSIONS),
 }) satisfies z.ZodType<HomePageDiscussionSection>;
 
+export const homePageHeroVideoSchema = z.discriminatedUnion("source", [
+  z.strictObject({ source: z.literal("default") }),
+  z.strictObject({
+    source: z.literal("lesson"),
+    courseId: z.uuid(),
+    lessonId: z.uuid(),
+  }),
+  z.strictObject({
+    source: z.literal("upload"),
+    mediaId: z.uuid(),
+    fileName: z.string().trim().min(1).max(255),
+  }),
+]) satisfies z.ZodType<HomePageHeroVideo>;
+
 export const homePageSettingsSchema = z.strictObject({
   hero: homePageHeroSchema,
+  // Settings saved before the hero video could be chosen play the default.
+  heroVideo: homePageHeroVideoSchema.default({ source: "default" }),
   highlights: homePageHighlightsSchema,
   popularCourses: homePageCourseSectionSchema,
   freeCourses: homePageCourseSectionSchema,
@@ -114,6 +131,29 @@ export const homePageOptionsResponseSchema = z.strictObject({
 });
 export type HomePageOptionsResponse = z.infer<
   typeof homePageOptionsResponseSchema
+>;
+
+/** A lesson with a video, as the hero video picker lists a course's lessons. */
+export const homePageLessonVideoOptionSchema = z.strictObject({
+  id: z.uuid(),
+  /** Its number in the course, counting published lessons in order. */
+  number: z.number().int().positive(),
+  title: z.string(),
+  sectionTitle: z.string(),
+  isPreview: z.boolean(),
+  durationSeconds: z.number().nonnegative().nullable(),
+  /** False while the video is still being processed (or failed). */
+  isReady: z.boolean(),
+});
+export type HomePageLessonVideoOption = z.infer<
+  typeof homePageLessonVideoOptionSchema
+>;
+
+export const homePageLessonVideoOptionsResponseSchema = z.strictObject({
+  lessons: z.array(homePageLessonVideoOptionSchema),
+});
+export type HomePageLessonVideoOptionsResponse = z.infer<
+  typeof homePageLessonVideoOptionsResponseSchema
 >;
 
 const guestHomeCourseSectionSchema = z.strictObject({
@@ -153,10 +193,11 @@ export interface GuestHomePageResponse {
   version: string;
   hero: HomePageHero;
   /**
-   * The thumbnail of the course whose lesson plays on the hero's laptop
-   * (`HOME_PAGE_HERO_LESSON`), in a size that suits the laptop's screen,
-   * whether or not a row shows that course. Null when the course has none
-   * or is not published; left out by an API that predates it.
+   * The picture the hero's laptop shows until its video is played: the
+   * thumbnail of the course whose lesson plays there (in a size that suits
+   * the laptop's screen, whether or not a row shows that course), or the
+   * frame captured from an uploaded video. Null when there is none; left
+   * out by an API that predates it.
    */
   heroLessonPosterUrl?: string | null;
   highlights: HomePageHighlights;

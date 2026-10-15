@@ -1,9 +1,13 @@
 import {
   guestHomePageResponseSchema,
+  heroVideoPlaybackSchema,
+  homePageLessonVideoOptionsResponseSchema,
   homePageOptionsResponseSchema,
   homePageSettingsResponseSchema,
   updateHomePageSettingsRequestSchema,
+  videoPlaybackTokenSchema,
 } from "@veolms/contracts";
+import { z } from "zod";
 import { errorResponse } from "../../lib/errors.ts";
 import { jsonResponse } from "../../lib/responses.ts";
 import type { RoutePlugin } from "../../lib/route-plugin.ts";
@@ -15,6 +19,8 @@ import {
   createThreadsRepository,
   createThreadsService,
 } from "../learning/discussions/index.ts";
+import { createMediaService } from "../media/index.ts";
+import { createHomeHeroVideoService } from "./home-hero-video.service.ts";
 import { createHomePageController } from "./home-page.controller.ts";
 import { createHomePageService } from "./home-page.service.ts";
 
@@ -39,6 +45,14 @@ const homePageRoutes: RoutePlugin = async (app, options) => {
       createThreadsRepository(),
       createAttachmentsRepository(),
     ),
+    heroVideoService: createHomeHeroVideoService({
+      database: options.database,
+      mediaService: createMediaService({
+        database: options.database,
+        services: options.services,
+      }),
+      storage: options.services.storage,
+    }),
   });
   const controller = createHomePageController({ service });
 
@@ -104,6 +118,71 @@ const homePageRoutes: RoutePlugin = async (app, options) => {
       },
     },
     controller.getOptions,
+  );
+
+  app.get(
+    "/home/page-settings/options/courses/:courseId/lessons",
+    {
+      preHandler: requireAdmin,
+      schema: {
+        operationId: "getHomePageLessonVideoOptions",
+        tags: ["Home"],
+        summary: "List a course's lesson videos for the hero",
+        description:
+          "Returns the published lessons with a video of a published course, numbered as the course player numbers them, for choosing the video on the hero's laptop.",
+        params: z.object({ courseId: z.uuid() }),
+        response: {
+          200: jsonResponse(
+            "The course's lessons that have a video.",
+            homePageLessonVideoOptionsResponseSchema,
+          ),
+          401: errorResponse("Unauthorized"),
+          403: errorResponse("Forbidden"),
+        },
+      },
+    },
+    controller.getLessonVideoOptions,
+  );
+
+  app.get(
+    "/home/hero-video/playback",
+    {
+      schema: {
+        operationId: "getHomeHeroVideoPlayback",
+        tags: ["Home"],
+        summary: "Play the home page's hero video",
+        description:
+          "Returns the stream of the video an admin chose for the hero's laptop (a lesson's video or an upload), or of the default lesson. It is public: choosing it makes it so.",
+        response: {
+          200: jsonResponse(
+            "The hero video's stream.",
+            heroVideoPlaybackSchema,
+          ),
+          404: errorResponse("No video to play"),
+          409: errorResponse("The video is still being processed"),
+          503: errorResponse("CDN delivery is not configured"),
+        },
+      },
+    },
+    controller.getHeroVideoPlayback,
+  );
+
+  app.get(
+    "/home/hero-video/playback-token",
+    {
+      schema: {
+        operationId: "getHomeHeroVideoPlaybackToken",
+        tags: ["Home"],
+        summary: "Renew the hero video's segment token",
+        response: {
+          200: jsonResponse("A fresh segment token.", videoPlaybackTokenSchema),
+          404: errorResponse("No video to play"),
+          409: errorResponse("The video is not ready or needs no token"),
+          503: errorResponse("CDN delivery is not configured"),
+        },
+      },
+    },
+    controller.getHeroVideoPlaybackToken,
   );
 
   app.put(

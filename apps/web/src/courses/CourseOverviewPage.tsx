@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import type { MouseEvent } from "react";
+import { hasStartedCourse } from "@veolms/contracts/learner-home-plan";
 import { useParams } from "react-router";
 import { BookOpen } from "@phosphor-icons/react/BookOpen";
 import { CaretDown } from "@phosphor-icons/react/CaretDown";
@@ -1655,6 +1656,7 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
       ...course,
       enrolled: Boolean(enrolledCourse) || course.enrolled,
       progress: enrolledCourse?.progress ?? course.progress,
+      started: enrolledCourse ? hasStartedCourse(enrolledCourse) : false,
     };
   }, [course, enrolledCourse]);
 
@@ -2071,6 +2073,7 @@ function CourseOverviewContent({
                     courseKey={getCourseRouteKey(course)}
                     courseTitle={title}
                     progress={course.progress ?? 0}
+                    started={Boolean(course.started)}
                     totalLessons={course.lectures}
                     onNavigatePage={onNavigatePage}
                   />

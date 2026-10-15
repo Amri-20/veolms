@@ -21,7 +21,9 @@ export function toEnrolledCourseContract(
   const progress =
     row.progress_percent == null || !Number.isFinite(progressValue)
       ? 0
-      : Math.min(100, Math.max(0, Math.round(progressValue)));
+      : // Two decimals, so a few minutes of a long course show as more
+        // than nothing (0.42%), and a course is only 100 when it is.
+        Math.min(100, Math.max(0, Math.round(progressValue * 100) / 100));
 
   return {
     courseId: row.course_id,

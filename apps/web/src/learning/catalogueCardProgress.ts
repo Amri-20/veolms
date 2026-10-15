@@ -77,6 +77,7 @@ export function getCatalogueCardProgressPercent(input: {
   return Math.max(serverPercent, Math.min(localPercent, withUnsent));
 }
 
+/** Held to two decimals, as course progress is shown (0.42%). */
 function clampPercent(value: number): number {
-  return Math.max(0, Math.min(100, Math.round(value)));
+  return Math.max(0, Math.min(100, Math.round(value * 100) / 100));
 }
