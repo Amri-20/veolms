@@ -1,6 +1,5 @@
 import {
   Fragment,
-  lazy,
   Suspense,
   useCallback,
   useEffect,
@@ -9,7 +8,6 @@ import {
   useRef,
   useState,
   startTransition,
-  use,
   useSyncExternalStore,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -37,7 +35,6 @@ import {
   type SettingsTab,
 } from "./routing/tabSessionState";
 import { CaretDownIcon as CaretDown } from "@phosphor-icons/react/CaretDown";
-import { CaretRightIcon as CaretRight } from "@phosphor-icons/react/CaretRight";
 import { CircleNotchIcon as CircleNotch } from "@phosphor-icons/react/CircleNotch";
 import { deepGroundClasses } from "./components/ElevatedCard";
 import { CenteredLoadingSpinner } from "./components/LoadingSpinner";
@@ -47,13 +44,11 @@ import { CornersOutIcon as CornersOut } from "@phosphor-icons/react/CornersOut";
 import { EyeIcon as Eye } from "@phosphor-icons/react/Eye";
 import { GearSixIcon as GearSix } from "@phosphor-icons/react/GearSix";
 import { PaletteIcon as Palette } from "@phosphor-icons/react/Palette";
-import { QuestionIcon as Question } from "@phosphor-icons/react/Question";
 import { ShieldCheckIcon as ShieldCheck } from "@phosphor-icons/react/ShieldCheck";
 import { StudentIcon as Student } from "@phosphor-icons/react/Student";
 import { ToastNotification, type ToastMessage } from "./ToastNotification";
 import { GuestProfileIcon } from "./icons/GuestProfileIcon";
 import { UsersIcon as Users } from "@phosphor-icons/react/Users";
-import logoDarkSvg from "./assets/procodrr-logo-dark.svg?raw";
 import type { LearningCourse } from "./StudentPages";
 import {
   getLearningPlayerSwipeSplitX,
@@ -104,7 +99,6 @@ import {
   useAuthIdentityHint,
   useSessionPresentAtBoot,
   useAuthStore,
-  type AuthIdentityHint,
 } from "./store/auth.store";
 
 import {
@@ -125,39 +119,17 @@ import {
 } from "./courses/courseAdapter";
 import {
   CATALOGUE_CHUNK_URL_PLACEHOLDER,
-  CATALOGUE_CSS_URLS_PLACEHOLDER,
-  CATALOGUE_JS_URLS_PLACEHOLDER,
   COURSE_OVERVIEW_CHUNK_URL_PLACEHOLDER,
-  COURSE_OVERVIEW_CSS_URLS_PLACEHOLDER,
-  COURSE_OVERVIEW_JS_URLS_PLACEHOLDER,
   GUEST_HOME_CHUNK_URL_PLACEHOLDER,
-  GUEST_HOME_CSS_URLS_PLACEHOLDER,
-  GUEST_HOME_JS_URLS_PLACEHOLDER,
-  splitChunkCssUrls,
 } from "./routing/routeChunkPreloads";
 import { ChunkStylesheets } from "./routing/ChunkStylesheets";
 import {
-  courseCatalogueBody,
-  courseOverviewBody,
   creatorDashboardBody,
   guestHomeBody,
   settingsPageBody,
   workspacePageBody,
 } from "./routing/prerenderedBodies";
 import { guestHeroImage } from "./home/guest/guestHeroImage";
-
-// Resolved at module scope: the placeholders are replaced with literal URL
-// lists at build time, so these arrays are constants.
-const GUEST_HOME_CSS_URLS = splitChunkCssUrls(GUEST_HOME_CSS_URLS_PLACEHOLDER);
-const CATALOGUE_CSS_URLS = splitChunkCssUrls(CATALOGUE_CSS_URLS_PLACEHOLDER);
-const GUEST_HOME_JS_URLS = splitChunkCssUrls(GUEST_HOME_JS_URLS_PLACEHOLDER);
-const CATALOGUE_JS_URLS = splitChunkCssUrls(CATALOGUE_JS_URLS_PLACEHOLDER);
-const COURSE_OVERVIEW_CSS_URLS = splitChunkCssUrls(
-  COURSE_OVERVIEW_CSS_URLS_PLACEHOLDER,
-);
-const COURSE_OVERVIEW_JS_URLS = splitChunkCssUrls(
-  COURSE_OVERVIEW_JS_URLS_PLACEHOLDER,
-);
 import {
   getMobileOverflowNavigation,
   getMobilePrimaryNavigation,
@@ -224,7 +196,6 @@ import type {
   PageTabColors,
   SidebarDockItem,
   SidebarMode,
-  SidebarPreferences,
 } from "./settings/settingsPreferences";
 import {
   applySidebarGlowShapeSize,
@@ -247,7 +218,6 @@ import {
   readHomeHint,
   rememberHomeHint,
 } from "./store/homeHint";
-import type { SettingsPageProps } from "./SettingsPage";
 import { isEditingShortcutTarget } from "./keyboardShortcuts";
 import { useGlobalSearchShortcut } from "./searchShortcut";
 import { DEFAULT_DEBOUNCE_DELAY_MS, useDebounce } from "./hooks/useDebounce";
@@ -275,227 +245,117 @@ import {
 import type { ReadingModePreferences } from "./reading-mode/readingModePreferences";
 import type { DrawerDismissThen } from "@/components/ui/drawer";
 import type { ProfilePreferences } from "./settings/profileTypes";
-// The mobile navigation sheet is the only shell consumer of the Base UI
-// drawer stack (~70KB). Loading it lazily keeps that out of the startup
-// bundle of every page; the sheet is warmed on idle for compact viewports so
-// the first tap still opens instantly. All pieces come from one module, so
-// the compound-component context stays intact.
-// The catalogue is the /courses page body; every other page only pays for
-// it on navigation. Static prerender resolves the lazy module, so the
-// /courses document still ships with catalogue markup, and an idle warm-up
-// keeps client-side navigation instant.
-const loadCourseCatalogueModule = courseCatalogueBody.preload;
-const CourseCatalogue = courseCatalogueBody.Body;
-
-// Profile menu and logout modal open on explicit user actions, so their
-// modules load lazily (menu warmed on idle for signed-in sessions) instead
-// of riding in the startup bundle of every page.
-const loadProfileMenuModule = () => import("./shell/ProfileMenu");
-const ProfileMenu = lazy(() =>
-  loadProfileMenuModule().then((module) => ({ default: module.ProfileMenu })),
-);
-const ProfileMenuIdentity = lazy(() =>
-  loadProfileMenuModule().then((module) => ({
-    default: module.ProfileMenuIdentity,
-  })),
-);
-const LogoutConfirmModal = lazy(() =>
-  import("./shell/LogoutConfirmModal").then((module) => ({
-    default: module.LogoutConfirmModal,
-  })),
-);
-
-const loadMobileMenuDrawerModule = () => import("@/components/ui/drawer");
-const Drawer = lazy(() =>
-  loadMobileMenuDrawerModule().then((module) => ({ default: module.Drawer })),
-);
-const DrawerContent = lazy(() =>
-  loadMobileMenuDrawerModule().then((module) => ({
-    default: module.DrawerContent,
-  })),
-);
-const DrawerTitle = lazy(() =>
-  loadMobileMenuDrawerModule().then((module) => ({
-    default: module.DrawerTitle,
-  })),
-);
-const DrawerDescription = lazy(() =>
-  loadMobileMenuDrawerModule().then((module) => ({
-    default: module.DrawerDescription,
-  })),
-);
-
-const OrdersPageRoute = lazy(() =>
-  import("./orders/OrdersPage").then((module) => ({
-    default: module.OrdersPage,
-  })),
-);
-const OrderHistoryPageRoute = lazy(() =>
-  import("./order-history/OrderHistoryPage").then((module) => ({
-    default: module.OrderHistoryPage,
-  })),
-);
-const CreatorDashboard = creatorDashboardBody.Body;
-const ReadingModeQuickMenu = lazy(() =>
-  import("./reading-mode/ReadingModeQuickMenu").then((module) => ({
-    default: module.ReadingModeQuickMenu,
-  })),
-);
-const SettingsQuickMenu = lazy(() =>
-  import("./settings/SettingsQuickMenu").then((module) => ({
-    default: module.SettingsQuickMenu,
-  })),
-);
-const CourseOverviewPage = courseOverviewBody.Body;
-const AnalyticsDashboardPage = lazy(() =>
-  import("./analytics/AnalyticsDashboardPage").then((module) => ({
-    default: module.AnalyticsDashboardPage,
-  })),
-);
-
-const loadCourseCreatePage = () => import("./courses/CourseCreatePage");
-
-const CourseCreatePage = lazy(() =>
-  loadCourseCreatePage().then((module) => ({
-    default: module.CourseCreatePage,
-  })),
-);
-
-function CourseEditorRouteFallback() {
-  return (
-    <CenteredLoadingSpinner
-      label="Loading course editor"
-      className="min-h-[calc(100dvh-10rem)] w-full"
-    />
-  );
-}
-
-// Settings is one click away from every page (the gear, the profile menu,
-// its keyboard shortcut) and is a large page: seven sections' worth of code
-// and styles that arrive in several round trips. Left to load on the click,
-// it opened a second late on an ordinary connection while every other page
-// was instant. So it is fetched ahead of time (see the warm-up effect).
-const SettingsPage = settingsPageBody.Body;
-/**
- * What a pointer or the keyboard is on when Settings or Discussions is about
- * to be opened (the menu's own items are buttons named for their page).
- */
-const SETTINGS_ENTRY_SELECTOR =
-  '[data-settings-quick-trigger], a[href="/settings"], a[href^="/settings/"], a[href="/discussions"], a[href^="/discussions/"], a[href^="/discussions?"], button[aria-label="Discussions"]';
-
-const AuthenticatedHomeBoundary = lazy(() =>
-  import("./home/AuthenticatedHomeBoundary").then((module) => ({
-    default: module.AuthenticatedHomeBoundary,
-  })),
-);
-const GuestHome = guestHomeBody.Body;
-const PlaceholderPage = lazy(() =>
-  import("./courses/PlaceholderPage").then((module) => ({
-    default: module.PlaceholderPage,
-  })),
-);
-const WorkspacePage = workspacePageBody.Body;
-const ReviewsPage = lazy(() =>
-  import("./reviews/ReviewsPage").then((module) => ({
-    default: module.ReviewsPage,
-  })),
-);
-const CouponsPage = lazy(() =>
-  import("./coupons/CouponsPage").then((module) => ({
-    default: module.CouponsPage,
-  })),
-);
-const NotificationsPage = lazy(() =>
-  import("./notifications/NotificationsPage").then((module) => ({
-    default: module.NotificationsPage,
-  })),
-);
-const QuizAnalyticsPage = lazy(() =>
-  import("./quizzes/QuizAnalyticsPage").then((module) => ({
-    default: module.QuizAnalyticsPage,
-  })),
-);
-const QuizBuilderPage = lazy(() =>
-  import("./quizzes/QuizBuilderPage").then((module) => ({
-    default: module.QuizBuilderPage,
-  })),
-);
-const QuizDirectAttemptPage = lazy(() =>
-  import("./quizzes/QuizDirectAttemptPage").then((module) => ({
-    default: module.QuizDirectAttemptPage,
-  })),
-);
-const StudentsPage = lazy(() =>
-  import("./students/StudentsPage").then((module) => ({
-    default: module.StudentsPage,
-  })),
-);
-const StudentDetailsPage = lazy(() =>
-  import("./students/StudentDetailsPage").then((module) => ({
-    default: module.StudentDetailsPage,
-  })),
-);
-const ProgressPage = lazy(() =>
-  import("./progress/ProgressPage").then((module) => ({
-    default: module.ProgressPage,
-  })),
-);
-const PublicProfilePageRoute = lazy(() =>
-  import("./profiles/PublicProfilePage").then((module) => ({
-    default: module.PublicProfilePage,
-  })),
-);
-const HomePageSettingsPage = lazy(() =>
-  import("./home-page-settings/HomePageSettingsPage").then((module) => ({
-    default: module.HomePageSettingsPage,
-  })),
-);
-const CouponBuilderPage = lazy(() =>
-  import("./coupons/CouponBuilderPage").then((module) => ({
-    default: module.CouponBuilderPage,
-  })),
-);
-const CouponsAccessDenied = lazy(() =>
-  import("./coupons/CouponsAccessDenied").then((module) => ({
-    default: module.CouponsAccessDenied,
-  })),
-);
-
-function AcademyPageFallback() {
-  return <AcademyRouteSkeleton />;
-}
-
-const neverSettles = new Promise<never>(() => {});
-
-/**
- * Keeps the dashboard's placeholder up for as long as it is rendered: it is
- * never ready, so the boundary around it goes on showing its fallback.
- */
-function DashboardOnItsWay(): null {
-  use(neverSettles);
-  return null;
-}
-
-/**
- * A home page built ahead of time holds three homes, because the build
- * cannot know whose it will be: the guest's, the placeholders of a
- * learner's, and the placeholders of the dashboard. The document's own
- * attributes pick one before anything is drawn (the head scripts set them
- * from what the browser remembers, see store/sessionPresence.ts and
- * store/homeHint.ts): the guest's for a visitor and for a learner with no
- * courses yet, the dashboard's for an account whose home that is, and the
- * learner's for anyone else who is signed in.
- */
-const guestHomePreviewClasses =
-  "guest-home-preview contents [:root[data-session-hint=signed-in]:not([data-home-hint=new-learner])_&]:hidden";
-const learnerHomePendingClasses =
-  "session-pending-home hidden [:root[data-session-hint=signed-in]:not([data-home-hint])_&]:block";
-const dashboardHomePendingClasses =
-  "dashboard-pending-home hidden [:root[data-session-hint=signed-in][data-home-hint$=dashboard]_&]:block";
-
-type ThemePreference = "light" | "dark" | "device";
-type AppearanceOption = ThemePreference | "theme";
-type AppearanceSwipeSource = AppearanceOption;
+import {
+  GUEST_HOME_CSS_URLS,
+  CATALOGUE_CSS_URLS,
+  GUEST_HOME_JS_URLS,
+  CATALOGUE_JS_URLS,
+  COURSE_OVERVIEW_CSS_URLS,
+  COURSE_OVERVIEW_JS_URLS,
+} from "./shell/academyRouteChunkUrls";
+import {
+  loadCourseCatalogueModule,
+  CourseCatalogue,
+  loadProfileMenuModule,
+  ProfileMenu,
+  ProfileMenuIdentity,
+  LogoutConfirmModal,
+  loadMobileMenuDrawerModule,
+  Drawer,
+  DrawerContent,
+  DrawerTitle,
+  DrawerDescription,
+  OrdersPageRoute,
+  OrderHistoryPageRoute,
+  CreatorDashboard,
+  ReadingModeQuickMenu,
+  SettingsQuickMenu,
+  CourseOverviewPage,
+  AnalyticsDashboardPage,
+  loadCourseCreatePage,
+  CourseCreatePage,
+  SettingsPage,
+  AuthenticatedHomeBoundary,
+  GuestHome,
+  PlaceholderPage,
+  WorkspacePage,
+  ReviewsPage,
+  CouponsPage,
+  NotificationsPage,
+  QuizAnalyticsPage,
+  QuizBuilderPage,
+  QuizDirectAttemptPage,
+  StudentsPage,
+  StudentDetailsPage,
+  ProgressPage,
+  PublicProfilePageRoute,
+  HomePageSettingsPage,
+  CouponBuilderPage,
+  CouponsAccessDenied,
+} from "./shell/academyLazyPages";
+import {
+  CourseEditorRouteFallback,
+  AcademyPageFallback,
+  DashboardOnItsWay,
+} from "./shell/academyPageFallbacks";
+import {
+  SETTINGS_ENTRY_SELECTOR,
+  procodrrLogoSvg,
+  SIDEBAR_COLLAPSED_WIDTH,
+  SIDEBAR_CONTENT_REVEAL_DISTANCE,
+  SIDEBAR_GESTURE_ACTIVATION_DISTANCE,
+  SIDEBAR_GESTURE_DIRECTION_RATIO,
+  SIDEBAR_FLING_MIN_DISTANCE,
+  SIDEBAR_FLING_VELOCITY,
+  SIDEBAR_HIDDEN_OFFSET_EXTRA,
+  SIDEBAR_REVEAL_COMMIT_THRESHOLD,
+  APPEARANCE_LONG_PRESS_DURATION,
+  APPEARANCE_LONG_PRESS_MOVE_TOLERANCE,
+  MOBILE_NAV_HIDE_SCROLL_THRESHOLD,
+  MOBILE_NAV_SHOW_SCROLL_THRESHOLD,
+  MOBILE_NAV_USER_SCROLL_GLIDE_MS,
+  MOBILE_NAV_USER_SCROLL_STEP_MS,
+  MOBILE_NAV_PLAYER_SELECTOR,
+  MOBILE_NAV_TOP_GUARD,
+  MOBILE_DRAWER_INITIAL_SNAP_POINT,
+  SIDEBAR_DOCK_VERTICAL_MAX_WIDTH,
+  SIDEBAR_RESIZE_STATE_SYNC_MS,
+  SIDEBAR_BRAND_DOUBLE_TAP_MS,
+  SIDEBAR_BRAND_DOUBLE_TAP_DISTANCE,
+} from "./shell/academyShellConstants";
+import {
+  guestHomePreviewClasses,
+  learnerHomePendingClasses,
+  dashboardHomePendingClasses,
+  SIDEBAR_PROFILE_BUTTON_CLASS,
+  SIDEBAR_NAV_ITEM_SQUIRCLE_CLASS,
+  SIDEBAR_DOCK_CLASS,
+  SIDEBAR_BRAND_CLASS,
+  SIDEBAR_COLLAPSE_BUTTON_CLASS,
+} from "./shell/academyShellClasses";
+import type {
+  ThemePreference,
+  AppearanceOption,
+  AppearanceSwipeSource,
+  AppearanceSwipe,
+  DockLongPress,
+  SidebarGestureSource,
+  SidebarResize,
+  PointerPositionEvent,
+  SidebarScreenSwipeStartEvent,
+  SidebarTooltip,
+} from "./shell/academyShellTypes";
+import { ShortcutKeys } from "./shell/ShortcutKeys";
+import { SidebarTooltipSurface } from "./shell/SidebarTooltipSurface";
+import {
+  getLearningMobileMenuSnapPoint,
+  isSidebarSwipeExcludedTarget,
+  isFocusedSidebarSwipeInput,
+  getSidebarResizeRenderKey,
+  subscribeToNothing,
+  getSurfacePageKey,
+} from "./shell/academyShellGeometry";
+import { LoginProfileButton } from "./shell/LoginProfileButton";
 interface CoursesPageProps {
   initialPublishedCoursePage?: CourseListResponse;
   initialPublishedCoursePageNeedsRefresh?: boolean;
@@ -551,488 +411,6 @@ export interface CoursesPageRenderContext {
   mobileBottomNavigation: boolean;
   mobileBottomNavigationHidden: boolean;
 }
-
-interface AppearanceSwipe {
-  pointerId: number;
-  source: AppearanceSwipeSource;
-  startX: number;
-}
-
-interface DockLongPress {
-  pointerId: number;
-  startX: number;
-  startY: number;
-  timer: number;
-  action: () => void;
-}
-
-type SidebarGestureSource = "rail" | "screen" | "overlay" | "overlay-rail";
-
-interface SidebarResize {
-  pointerId: number;
-  source: SidebarGestureSource;
-  screenOverlayAtStart: boolean;
-  active: boolean;
-  startedAt: number;
-  startX: number;
-  startY: number;
-  lastX: number;
-  lastTimestamp: number;
-  velocityX: number;
-  startWidth: number;
-  expandedWidthAtStart: number;
-  modeAtStart: SidebarMode;
-  collapsedAtStart: boolean;
-  previewWidth: number;
-  handle: HTMLElement | null;
-}
-
-interface PointerPositionEvent {
-  pointerId: number;
-  clientX: number;
-  clientY: number;
-  timeStamp: number;
-  buttons?: number;
-  pointerType?: string;
-  preventDefault?: () => void;
-}
-
-interface SidebarScreenSwipeStartEvent {
-  pointerId: number;
-  pointerType: string;
-  isPrimary: boolean;
-  clientX: number;
-  clientY: number;
-  timeStamp: number;
-  target: EventTarget | null;
-  handle: HTMLDivElement;
-  splitX?: number;
-}
-
-interface SidebarTooltip {
-  label: string;
-  active: boolean;
-  top: number;
-  left: number;
-  focusVisible: boolean;
-  preferenceControlled: boolean;
-}
-
-function ShortcutKeys({
-  className = "",
-  keys,
-}: {
-  className?: string;
-  keys: readonly string[];
-}) {
-  return (
-    <span className={`shortcut-keys ${className}`.trim()} aria-hidden="true">
-      {keys.map((key, index) => (
-        <span className="shortcut-keys__part" key={`${key}-${index}`}>
-          {index > 0 && <span className="shortcut-keys__join">+</span>}
-          <kbd>{key}</kbd>
-        </span>
-      ))}
-    </span>
-  );
-}
-
-const SIDEBAR_TOOLTIP_SOURCE_WIDTH = 352;
-const SIDEBAR_TOOLTIP_SOURCE_HEIGHT = 177;
-const SIDEBAR_TOOLTIP_RENDER_HEIGHT = 38;
-
-function SidebarTooltipSurface() {
-  const surfaceRef = useRef<SVGSVGElement>(null);
-  const [surfaceWidth, setSurfaceWidth] = useState<number | null>(null);
-
-  useLayoutEffect(() => {
-    const surface = surfaceRef.current;
-    if (!surface) return undefined;
-
-    const updateSurfaceWidth = () => {
-      const nextWidth = surface.getBoundingClientRect().width;
-      if (nextWidth <= 0) return;
-      setSurfaceWidth((currentWidth) =>
-        currentWidth !== null && Math.abs(currentWidth - nextWidth) < 0.05
-          ? currentWidth
-          : nextWidth,
-      );
-    };
-
-    updateSurfaceWidth();
-    const resizeObserver = new ResizeObserver(updateSurfaceWidth);
-    resizeObserver.observe(surface);
-    return () => resizeObserver.disconnect();
-  }, []);
-
-  const viewBoxWidth = surfaceWidth
-    ? (surfaceWidth * SIDEBAR_TOOLTIP_SOURCE_HEIGHT) /
-      SIDEBAR_TOOLTIP_RENDER_HEIGHT
-    : SIDEBAR_TOOLTIP_SOURCE_WIDTH;
-  const rightEdge = viewBoxWidth - 1;
-  const topRightCurveStart = viewBoxWidth - 21;
-  const rightCurveControl = viewBoxWidth - 10;
-  const bottomRightCurveEnd = viewBoxWidth - 22;
-
-  return (
-    <svg
-      ref={surfaceRef}
-      className="sidebar-nav-tooltip__surface"
-      viewBox={`0 0 ${viewBoxWidth} ${SIDEBAR_TOOLTIP_SOURCE_HEIGHT}`}
-      preserveAspectRatio="xMinYMid meet"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <defs>
-        <linearGradient
-          id="sidebar-tooltip-material"
-          x1="0"
-          y1="0"
-          x2="0"
-          y2="1"
-        >
-          <stop className="sidebar-nav-tooltip__surface-start" offset="0%" />
-          <stop className="sidebar-nav-tooltip__surface-end" offset="100%" />
-        </linearGradient>
-        <linearGradient id="sidebar-tooltip-edge" x1="0" y1="0" x2="0" y2="1">
-          <stop className="sidebar-nav-tooltip__edge-highlight" offset="0%" />
-          <stop className="sidebar-nav-tooltip__edge-accent" offset="100%" />
-        </linearGradient>
-      </defs>
-      <path
-        d={`M 51 1 H ${topRightCurveStart} C ${rightCurveControl} 1 ${rightEdge} 10 ${rightEdge} 21 V 156 C ${rightEdge} 167 ${rightCurveControl} 176 ${bottomRightCurveEnd} 176 H 51 C 40 176 34 167 34 156 V 132 C 34 126 32 123 29 120 L 4 96 C 1.6 93.7 0 91.2 0 88.5 C 0 85.8 1.6 83.3 4 81 L 29 56 C 32 53 34 50 34 45 V 21 C 34 10 40 1 51 1 Z`}
-      />
-    </svg>
-  );
-}
-
-const procodrrLogoSvg = logoDarkSvg.replace(
-  /fill="black"/g,
-  'fill="currentColor"',
-);
-
-const SIDEBAR_COLLAPSED_WIDTH = 76;
-const SIDEBAR_CONTENT_REVEAL_DISTANCE = 24;
-const SIDEBAR_GESTURE_ACTIVATION_DISTANCE = 12;
-const SIDEBAR_GESTURE_DIRECTION_RATIO = 1.2;
-const SIDEBAR_FLING_MIN_DISTANCE = 24;
-const SIDEBAR_FLING_VELOCITY = 0.3;
-const SIDEBAR_HIDDEN_OFFSET_EXTRA = 18;
-const SIDEBAR_REVEAL_COMMIT_THRESHOLD = 0.4;
-const APPEARANCE_LONG_PRESS_DURATION = 500;
-const APPEARANCE_LONG_PRESS_MOVE_TOLERANCE = 10;
-const MOBILE_NAV_HIDE_SCROLL_THRESHOLD = 56;
-const MOBILE_NAV_SHOW_SCROLL_THRESHOLD = 18;
-// How long a scroll still counts as the visitor's after the finger leaves
-// the screen or a scrolling key is pressed (a fling glides on), and how much
-// longer each further scroll step or wheel turn keeps it so.
-const MOBILE_NAV_USER_SCROLL_GLIDE_MS = 1200;
-const MOBILE_NAV_USER_SCROLL_STEP_MS = 250;
-const MOBILE_NAV_PLAYER_SELECTOR = "[data-learning-persistent-player]";
-const MOBILE_NAV_TOP_GUARD = 12;
-const MOBILE_DRAWER_INITIAL_SNAP_POINT = 0.82;
-
-const getLearningMobileMenuSnapPoint = () => {
-  const player = document.querySelector<HTMLElement>(
-    ".learning-workspace__player-wrap",
-  );
-  const viewportHeight = window.innerHeight;
-  if (!player || viewportHeight <= 0) return MOBILE_DRAWER_INITIAL_SNAP_POINT;
-
-  const playerBottom = Math.max(
-    0,
-    Math.min(viewportHeight, player.getBoundingClientRect().bottom),
-  );
-  return Math.max(
-    0.2,
-    Math.min(0.92, (viewportHeight - playerBottom) / viewportHeight),
-  );
-};
-
-const SIDEBAR_SWIPE_EXCLUSION_SELECTOR = [
-  ".sidebar-resize-handle",
-  ".learning-curriculum__resize-rail",
-  ".app-slider",
-  'input[type="range"]',
-  '[role="slider"]',
-  "progress",
-  '[role="progressbar"]',
-  ".course-progress",
-  ".learning-progress-track",
-  ".home-resume-progress",
-  ".home-mini-progress",
-  ".learning-card-progress",
-  ".learning-curriculum__progress-track",
-  "[data-player-control]",
-  "[data-player-menu]",
-  "[data-sidebar-swipe-ignore]",
-].join(",");
-
-const isSidebarSwipeExcludedTarget = (target: EventTarget | null) =>
-  target instanceof Element &&
-  Boolean(target.closest(SIDEBAR_SWIPE_EXCLUSION_SELECTOR));
-
-const isFocusedSidebarSwipeInput = (target: EventTarget | null) => {
-  const focused = document.activeElement;
-  if (
-    focused instanceof HTMLElement &&
-    focused.matches(
-      'input, textarea, select, [contenteditable]:not([contenteditable="false"])',
-    )
-  )
-    return true;
-  if (!(target instanceof Element)) return false;
-  const editable = target.closest<HTMLElement>(
-    'input:not([type="range"]), textarea, select, [contenteditable]:not([contenteditable="false"])',
-  );
-  if (!editable) return false;
-  return focused === editable || Boolean(focused && editable.contains(focused));
-};
-
-// The sidebar's profile button keeps one fixed corner radius while the
-// sidebar is expanded. The `!` is needed because the app-wide roundness
-// setting otherwise resizes every button's corners.
-//
-// On the collapsed rail it is a clearly visible squircle, but only once the
-// sidebar has actually finished narrowing: the collapsed state is switched on
-// at the start of that animation, so the squircle is tied to the width of the
-// surrounding container (the profile block here, the nav for menu items)
-// instead. Until the rail is narrow the ordinary rounded corners stay. The
-// same goes for dragging the rail wider: holding the resize handle changes
-// nothing until the rail actually grows.
-//
-// The button's height and the picture's inset from its left edge are tied
-// to the width of the profile block (a size container): 64px tall with the
-// picture 7px in when wide, easing to a 57px square with the picture centred
-// by the time the block is rail-width. The stylesheet instead switches
-// between two fixed layouts when the collapsed state changes, which left the
-// picture off-centre at the end of a drag until release, and made the button
-// balloon into a huge square at the start of a collapse.
-//
-// While the sidebar is being dragged, the profile button and the menu items
-// clip their own contents, so the profile arrow and a menu item's shortcut
-// badge are cut off at the button's edge instead of hanging outside it.
-//
-// The picture has no outline in any theme: neither the frame's border nor
-// the picture's own border and inner edge light are drawn.
-//
-// While the collapsed rail is being dragged wider, the name and the arrow
-// are laid out exactly as in the expanded button (same gap, same right
-// padding, both present) and simply come into view as the button widens,
-// the reverse of how they are cut off while it narrows.
-const SIDEBAR_PROFILE_BUTTON_CLASS =
-  "courses-profile__button h-[clamp(57px,calc(57px+(100cqw-57px)*0.07),64px)]! min-h-0! aspect-auto! justify-start! pl-[clamp(0.7px,calc(0.7px+(100cqw-57px)*0.063),7px)]! [:root:not([data-sidebar-state=collapsed])_.courses-app:not(.courses-app--collapsed)_&]:rounded-xl! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@min-[60.01px]:rounded-xl! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@min-[60.01px]:[corner-shape:round]! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@max-[60px]:rounded-[28.5px]! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@max-[60px]:[corner-shape:squircle]! [.courses-app--resizing_&]:overflow-hidden! [&_strong]:text-[15px]! [&>span:first-child]:border-transparent! [&_i]:border-transparent! [&_i]:shadow-none! [.courses-app--collapsed.courses-app--resizing_&]:gap-1! [.courses-app--collapsed.courses-app--resizing_&]:pr-[9px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>span:not(:first-child)]:block! [.courses-app--collapsed.courses-app--resizing_&]:[&>span:not(:first-child)]:max-w-[190px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>span:not(:first-child)]:opacity-100! [.courses-app--collapsed.courses-app--resizing_&]:[&>span:not(:first-child)]:[clip-path:none]! [.courses-app--collapsed.courses-app--resizing_&]:[&>svg]:block! [.courses-app--collapsed.courses-app--resizing_&]:[&>svg]:w-[19px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>svg]:min-w-[19px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>svg]:shrink-0! [.courses-app--collapsed.courses-app--resizing_&]:[&>svg]:max-w-[190px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>svg]:opacity-100! [.courses-app--collapsed.courses-app--resizing_&]:[&>svg]:[clip-path:none]!";
-// Menu items are as tall as the collapsed profile button, with the dock's
-// icon size and a matching label size, in both sidebar states. On the
-// collapsed rail they are squares and become the same squircle. The left
-// padding centres the icon in the collapsed square, which also keeps it on
-// the same vertical line in the expanded row.
-// Idle items carry a faint fill, about half as strong as the hover fill.
-// It is see-through unless the stylesheet supplies a solid one (it does
-// while the lesson video glows under the sidebar; see navigation.css).
-const SIDEBAR_NAV_ITEM_SQUIRCLE_CLASS =
-  "[:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@max-[60px]:rounded-[50%]! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@max-[60px]:[corner-shape:squircle] h-[57px]! min-h-[57px]! pl-4! [&_svg]:size-[26px]! [&_svg]:basis-[26px]! text-base! [:root:not([data-sidebar-state=collapsed])_.courses-app:not(.courses-app--collapsed)_&]:rounded-xl! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@min-[60.01px]:rounded-xl! [&:not(.is-active):not(:hover)]:bg-[var(--sidebar-menu-idle-background,color-mix(in_srgb,var(--surface)_35%,transparent))]! [.courses-app--resizing_&]:overflow-hidden!";
-
-/** At this sidebar width or narrower, a drag stacks the dock vertically. */
-const SIDEBAR_DOCK_VERTICAL_MAX_WIDTH = 180;
-/**
- * How long the pointer rests in a drag before React is told the width the
- * drag has reached (see previewSidebarResizeWidth).
- */
-const SIDEBAR_RESIZE_STATE_SYNC_MS = 140;
-/** How close two presses on the brand must be to count as one double tap. */
-const SIDEBAR_BRAND_DOUBLE_TAP_MS = 450;
-const SIDEBAR_BRAND_DOUBLE_TAP_DISTANCE = 40;
-
-/**
- * Everything a dragged sidebar's width decides about what is rendered: which
- * way the appearance dock lies, whether the sidebar's content has come into
- * view, and whether it is down to the collapsed rail. Two widths with the
- * same key render the same shell.
- */
-const getSidebarResizeRenderKey = (width: number) =>
-  (width > SIDEBAR_DOCK_VERTICAL_MAX_WIDTH ? 4 : 0) +
-  (width >= SIDEBAR_COLLAPSED_WIDTH + SIDEBAR_CONTENT_REVEAL_DISTANCE ? 2 : 0) +
-  (width <= SIDEBAR_COLLAPSED_WIDTH ? 1 : 0);
-
-// The dock has no box of its own (background, padding, shadow): its buttons
-// stand directly on the sidebar at the menu items' height and icon size, and
-// idle ones carry the same faint fill as an idle menu item, and the same
-// hover fill (dark and light themes each have their own), with no outline. Stacked
-// vertically, each button takes the dock's full width, which makes it a
-// square on the collapsed rail. There the buttons also take the same
-// squircle as the profile button and menu items, under the same rule: only
-// once the rail is narrow, and unaffected by holding the resize handle.
-// The colour and reading-mode menus open inside the dock, so every button in
-// them (swatches, the light/dark switch, the reading-mode toggle and its
-// selects) is excluded from every button rule here.
-// The dark/light and reading-mode icons take their own colours from the same
-// source as the menu icons (so they follow the icon style setting), and each
-// icon's glow follows its own colour instead of the theme accent.
-const SIDEBAR_DOCK_CLASS =
-  "[&.sidebar-appearance--vertical_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:w-full! [&.sidebar-appearance--vertical_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:basis-auto! [&.sidebar-appearance--vertical_.sidebar-palette-wrap]:w-full! [&.sidebar-appearance--vertical_.sidebar-palette-wrap]:h-auto! [&.sidebar-appearance--vertical_.sidebar-palette-wrap]:basis-auto! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@max-[60px]:[&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:rounded-[50%]! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@max-[60px]:[&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:[corner-shape:squircle]! bg-transparent! p-0! shadow-none! [&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*,.is-active,[aria-expanded=true],[aria-pressed=true])]:bg-[color-mix(in_srgb,var(--surface)_35%,transparent)]! [&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*,.is-active,[aria-expanded=true],[aria-pressed=true])]:hover:bg-[color-mix(in_srgb,var(--surface)_72%,transparent)]! in-data-[theme=light]:[&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*,.is-active,[aria-expanded=true],[aria-pressed=true])]:hover:bg-[color-mix(in_srgb,var(--selected)_68%,var(--surface))]! [&_button:not([data-palette-menu]_*,[data-reading-mode-menu]_*)>svg]:size-[26px] [&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:h-[57px]! [&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:min-h-[57px]! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:[&_button:not([data-palette-menu]_*,[data-reading-mode-menu]_*)>svg]:size-[26px] [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@min-[60.01px]:[&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:rounded-xl! [:is(.courses-app--collapsed,[data-sidebar-state=collapsed]_.courses-app)_&]:@min-[60.01px]:[&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:[corner-shape:round]! [:root:not([data-sidebar-state=collapsed])_.courses-app:not(.courses-app--collapsed)_&]:[&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:rounded-xl! [&_button:not([data-theme-swatch],[data-palette-menu]_*,[data-reading-mode-menu]_*)]:hover:border-transparent! mt-2! gap-2! [&_[data-appearance-mode-toggle]>svg]:text-(--dock-appearance-icon-color)! [&_[data-reading-mode-trigger]>svg]:text-(--dock-reading-mode-icon-color)! [&_button:not([data-palette-menu]_*,[data-reading-mode-menu]_*)>svg]:[filter:drop-shadow(0_2px_6px_color-mix(in_srgb,currentColor_38%,transparent))]!";
-
-// While the sidebar is animating or being dragged between its two states it
-// still counts as collapsed but is no longer narrow. In that in-between
-// stretch every piece shows the corners it has at rest when expanded, so
-// nothing changes shape when the motion ends.
-
-// While the expanded sidebar is being dragged narrower, the collapse button
-// rides the sidebar's right edge all the way down to the collapsed width, and
-// the logo is cut exactly where the button begins. Left to the stylesheet,
-// the button sits after the logo in a row with a gap: the gap hid the logo
-// early, and the row's left padding stopped the button short of its place.
-//
-// Dragging the collapsed rail wider does the reverse, and from the first
-// pixel: the button leaves with the sidebar's edge and the logo is revealed
-// behind it, starting at its first letter, which never moves sideways. The
-// stylesheet otherwise keeps the rail layout until the drag passes a
-// threshold and then jumps to the expanded one.
-//
-// The button keeps one line through all of this: the same height in the
-// header at rest, on the rail at rest and during either drag, and a
-// horizontal position that meets the resting one at both ends (the half-pixel
-// offsets absorb the nudge the stylesheet gives the icon on the rail).
-// On the rail the icon is centred over the menu icons, which is a few pixels
-// left of where the sidebar's edge alone would leave it, so the drag
-// positions ease across that difference over the last stretch before the
-// rail (the `clamp` terms) rather than stepping at release.
-// The collapse icon is drawn larger too, scaled about its centre and set
-// half a pixel lower, so its rounded bottom edge reads as level with the
-// bottom of the wordmark while it still covers the first letter on the rail.
-// The logo is drawn 10% larger than the stylesheet's slot for it, scaled
-// from its left edge so the first letter keeps its place; the rail's slot
-// for that letter is widened to match.
-// The gap before the collapse button is tightened so the larger wordmark
-// still fits whole at the narrowest expanded width.
-//
-// The collapse button and shortcut animate the same way as a drag. The
-// header keeps one layout for every collapsed state, positioned from the
-// sidebar's right edge, so while the sidebar narrows the button travels in
-// and covers the logo instead of jumping to the rail. On the rail the button
-// is hidden unless the sidebar is hovered; that fade is held back for the
-// length of the collapse so the button is seen arriving.
-//
-// The logo sits 4px lower than the stylesheet puts it, in every state. That
-// centres it on the collapse icon's line, and on the rail it puts the first
-// letter wholly behind the icon when the icon shows.
-//
-// The header keeps the rail's height for as long as the sidebar counts as
-// collapsed. The stylesheet makes it 2px taller once an outward drag passes
-// its content threshold, which pushed the whole menu down mid-drag.
-//
-// On the settled rail the logo's first letter is drawn a little smaller than
-// in the open sidebar, small enough to sit wholly behind the collapse icon
-// when the icon shows. (The icon used to carry a pad in the sidebar's
-// background colour to cover the letter's edges instead; over the lesson
-// video's ambient glow that pad showed as a dark ring.)
-// The window the letter shows through is narrowed to match (20px), or the
-// smaller wordmark would bring the start of its second letter into it.
-// On hover, in both sidebar states, the button's own hover background and
-// glow are switched off and the icon gets a single outline in the theme's
-// accent colour, with the same colour behind it.
-// The compact (48px) brand slot and its lower logo apply only to the settled
-// collapsed sidebar. While a drag has the full wordmark showing
-// (`resize-content-visible`), the stylesheet gives the slot its expanded
-// 50px and shifts the menu to match; forcing the compact size there as well
-// moved the logo and the whole menu by 2px mid-drag.
-// The logo keeps its 38px box in the compact slot too, so the mark sits at
-// the same height in every state.
-// It keeps one horizontal place in every state as well: the mark centred on
-// the menu's icon column. Only the settled collapsed sidebar used to have
-// that nudge, so the logo stepped 1.5px left on the frame it collapsed.
-const SIDEBAR_BRAND_CLASS =
-  "courses-sidebar__brand [.courses-app:not(.courses-app--collapsed)_&]:[&>.courses-logo-clip]:max-w-[min(156px,max(21px,calc(100%-36px)))]! [.courses-app--collapsed_&]:flex-row! [.courses-app--collapsed_&]:items-end! [.courses-app--collapsed_&]:justify-start! [.courses-app--collapsed_&]:pl-[19.375px]! [.courses-app--collapsed_&]:pr-[7px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:static! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:block! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:w-[156px]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:opacity-100! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:transform-none! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:[clip-path:inset(0)]! [.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:max-w-[min(156px,max(0px,calc(100%-36px)))]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:static! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:block! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:w-[156px]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:opacity-100! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:transform-none! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:[clip-path:inset(0)]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed:not(.courses-app--resizing)_&]:[&>.courses-logo-clip]:max-w-[min(156px,max(21px,calc(100%-36px)))]! [[data-collapsed-sidebar-logo=true]_.courses-app--collapsed.courses-app--resizing_&]:[&>.courses-logo-clip]:max-w-[min(156px,max(21px,calc(100%-36px)))]! [&>.courses-logo-clip>svg]:origin-left [&>.courses-logo-clip>svg]:scale-100 [&>.courses-logo-clip]:translate-y-[4px] [&>.courses-logo-clip]:-translate-x-[0.5px] min-[641px]:[&>.courses-logo-clip]:-translate-x-[1px] [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:h-12! [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:min-h-12! [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:[&>.courses-logo-clip]:-mb-[2px] [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:[&>.courses-logo-clip]:h-[38px]!";
-const SIDEBAR_COLLAPSE_BUTTON_CLASS =
-  "sidebar-collapse [.courses-app:not(.courses-app--collapsed)_&]:absolute! [.courses-app:not(.courses-app--collapsed)_&]:top-[14px]! [.courses-app:not(.courses-app--collapsed)_&]:bottom-auto! [.courses-app:not(.courses-app--collapsed)_&]:left-[calc(100%-39px-clamp(0px,(112px-100%)*0.1,4px))]! [.courses-app--collapsed_&]:absolute! [.courses-app--collapsed_&]:top-[14px]! [.courses-app--collapsed_&]:bottom-auto! [.courses-app--collapsed_&]:left-auto! [.courses-app--collapsed_&]:right-[calc(7.5px+clamp(0px,(120px-100%)*0.1,4px))]! [.courses-app--collapsed.courses-app--resizing_&]:opacity-100! [.courses-app--collapsed.courses-app--resizing_&]:pointer-events-auto! [.courses-app--collapsed:not(.courses-app--resizing)_.courses-sidebar:not(:hover)_&]:delay-[220ms]! [&>span]:scale-[1.16] [&>span]:translate-y-[0.5px] [.courses-app--collapsed_&]:[&>span]:translate-x-[0.3px] [.courses-app--collapsed_&]:[&>span]:translate-y-[0.15px] hover:bg-transparent! hover:shadow-none! hover:[&>span]:rounded-[24%]! hover:[&>span]:bg-[color-mix(in_srgb,var(--accent)_55%,var(--app-shell))]! hover:[&>span]:shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_55%,var(--app-shell))]!";
-
-function LoginProfileButton({
-  className,
-  arrowSize,
-  onLogin,
-  remembered,
-}: {
-  className: string;
-  arrowSize: number;
-  onLogin: () => void;
-  /**
-   * The profile remembered from the previous page load, shown while the
-   * session is still being checked so the button already looks like the
-   * signed-in one.
-   */
-  remembered?: AuthIdentityHint | null;
-}) {
-  const displayName = remembered?.displayName;
-  const handle = remembered?.username
-    ? remembered.username.startsWith("@")
-      ? remembered.username
-      : `@${remembered.username}`
-    : null;
-  return (
-    <button
-      type="button"
-      className={`${className} courses-profile__login-button`}
-      aria-label={
-        displayName
-          ? `Account for ${displayName}. Open account access`
-          : "Login. Sign in for more"
-      }
-      data-auth-identity-button=""
-      onClick={onLogin}
-    >
-      {/* The box is as large as the profile picture's frame, so the name
-          beside it does not move when the picture replaces the icon. The
-          icon is drawn a little larger than its default, its circle about
-          midway between that default and the picture's size. */}
-      {remembered?.avatarUrl ? (
-        <span className="courses-profile__avatar-wrap">
-          <ShellProfileAvatar avatarUrl={remembered.avatarUrl} />
-        </span>
-      ) : (
-        <i
-          aria-hidden="true"
-          className="courses-profile__login-icon flex size-13.5 shrink-0 items-center justify-center text-(--accent) [.mobile-menu-sheet\_\_profile_&]:size-13 [&>svg]:size-[52px] [&>svg]:shrink-0"
-        >
-          <GuestProfileIcon size={45.36} />
-        </i>
-      )}
-      <span className="courses-profile__login-copy">
-        <strong
-          className="courses-profile__login-title"
-          data-auth-identity-title=""
-        >
-          {displayName || "Login"}
-        </strong>
-        <small
-          className="courses-profile__login-subtitle"
-          data-auth-identity-subtitle=""
-        >
-          {displayName ? (handle ?? "Account") : "Sign in for more"}
-        </small>
-      </span>
-      {remembered ? (
-        <CaretDown
-          size={19}
-          aria-hidden="true"
-          className="courses-profile__caret"
-        />
-      ) : (
-        <i
-          aria-hidden="true"
-          className="courses-profile__login-arrow ml-auto flex shrink-0 items-center justify-center text-(--accent)"
-        >
-          <CaretRight size={arrowSize} weight="bold" />
-        </i>
-      )}
-    </button>
-  );
-}
-
-const subscribeToNothing = () => () => {};
-
-/** Names a page shown in the shell by what it is and where. */
-const getSurfacePageKey = (surfacePage: string, pathname = "") =>
-  `${surfacePage}:${pathname.replace(/(.)\/+$/, "$1")}`;
 
 export function CoursesPage({
   initialPublishedCoursePage,
