@@ -108,18 +108,25 @@ const getGeometry = (element: HTMLElement): GestureGeometry =>
 
 /**
  * Marks a part of the player that scrolls by itself (a reading lesson's
- * text). The swipe leaves it alone: a finger moving down a text is reading
- * it, not putting the player away.
+ * text). The swipe leaves it alone while the text has further up to go: a
+ * finger moving down a text is reading it, not putting the player away.
+ * At the top of the text (or a text that fits), a swipe down has nothing
+ * left to scroll and puts the reading away as it does a video; the text
+ * leaves that one direction to the page there (`LessonReadingStage`). Not
+ * in full screen, which is left by its own button.
  */
 export const LESSON_READING_SCROLL_ATTRIBUTE = "data-lesson-reading-scroll";
 
-const isExcludedTarget = (target: EventTarget | null) =>
-  target instanceof Element &&
-  Boolean(
-    target.closest(
-      `[data-video-player-mobile-sheet], [${LESSON_READING_SCROLL_ATTRIBUTE}]`,
-    ),
+const isExcludedTarget = (target: EventTarget | null) => {
+  if (!(target instanceof Element)) return false;
+  if (target.closest("[data-video-player-mobile-sheet]")) return true;
+  const reading = target.closest<HTMLElement>(
+    `[${LESSON_READING_SCROLL_ATTRIBUTE}]`,
   );
+  return Boolean(
+    reading && (reading.scrollTop > 0 || document.fullscreenElement !== null),
+  );
+};
 
 /**
  * On desktop the motion target is the player's slot in the lesson layout,

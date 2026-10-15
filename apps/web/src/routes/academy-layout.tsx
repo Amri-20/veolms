@@ -1159,6 +1159,7 @@ export default function AcademyLayout() {
       totalLessons: persistentPlayer.playerProps.totalLessons,
       lessonPath: persistentPlayer.lessonPath,
       manifestUrl: persistentPlayer.playerProps.playbackBootstrap?.manifestUrl,
+      readingArticle: persistentPlayer.playerProps.playbackAccessError?.article,
     });
   }, [persistentPlayer, playerPresentation]);
 

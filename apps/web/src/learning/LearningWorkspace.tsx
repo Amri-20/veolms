@@ -62,6 +62,7 @@ import {
   LESSON_PLAYER_SHORT_HEIGHT,
   LESSON_PLAYER_TINY_HEIGHT,
   LessonPlayerHeightHandle,
+  ReadingFullHeightGuide,
   useLessonHiddenVideoPullDown,
   useLessonPlayerHeight,
   useLessonTitleHeightSwipe,
@@ -3462,6 +3463,9 @@ export function LearningWorkspace({
                 onChange={setPlayerHeight}
                 growable={readingGrowable}
               />
+            ) : null}
+            {readingGrowable && registerPersistentPlayer ? (
+              <ReadingFullHeightGuide />
             ) : null}
           </div>
 

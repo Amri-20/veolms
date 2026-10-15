@@ -8,6 +8,10 @@ import {
   CourseCouponControl,
   type CourseCouponControlProps,
 } from "./CourseCouponControl";
+import {
+  CoursePriceBreakdown,
+  type CoursePriceBreakdownData,
+} from "./CoursePriceBreakdown";
 import { overviewCardClasses } from "./overviewStyles";
 
 export interface CoursePriceBarProps {
@@ -30,6 +34,11 @@ export interface CoursePriceBarProps {
      */
     couponBadge?: string;
   };
+  /**
+   * A paid course's price said in full (see `CoursePriceBreakdown`), shown
+   * with `price` on a phone, and with a coupon in use beside the button.
+   */
+  priceBreakdown?: CoursePriceBreakdownData;
   /** Left out when no coupon can be used on this course. */
   coupon?: CourseCouponControlProps;
   /** A coupon problem to show under the bar. */
@@ -142,6 +151,22 @@ const controlsReserveClasses = {
   applied: "@2xl/price:flex-[1_1_28rem]",
   button: "@2xl/price:flex-[1_1_12.5rem]",
 };
+
+/**
+ * The bar with the receipt (`CoursePriceBreakdown`): one column on a phone;
+ * on a wide bar two, the receipt on the left and, behind a thin rule, a
+ * narrow column with the coupon over the button, both its full width. A
+ * coupon then adds a line to the receipt and moves nothing else, as on a
+ * phone. Between the two the coupon and the button share a line under the
+ * receipt.
+ */
+const receiptLayoutClasses =
+  "flex flex-col gap-3.5 @2xl/price:grid @2xl/price:grid-cols-[minmax(0,1fr)_minmax(15rem,19rem)] @2xl/price:items-center @2xl/price:gap-x-8";
+const receiptActionsClasses =
+  "grid grid-cols-1 gap-2.5 @md/price:flex @md/price:items-center @md/price:gap-4 @2xl/price:grid @2xl/price:gap-2.5 @2xl/price:self-stretch @2xl/price:content-center @2xl/price:border-l @2xl/price:border-[color-mix(in_srgb,var(--text)_10%,transparent)] @2xl/price:pl-8";
+/** The button in that narrow column: its full width. */
+const receiptButtonClasses =
+  "@md/price:max-w-[max(12.5rem,38%)] @2xl/price:w-full @2xl/price:max-w-none";
 
 /** The price as the bar shows it; see `CoursePriceBarProps.price`. */
 export type CoursePriceDisplayPrice = NonNullable<CoursePriceBarProps["price"]>;
@@ -264,6 +289,7 @@ export function CoursePriceDisplay({
  */
 export function CoursePriceBar({
   price,
+  priceBreakdown,
   coupon,
   couponError,
   action,
@@ -274,6 +300,7 @@ export function CoursePriceBar({
   perks,
   children,
 }: CoursePriceBarProps) {
+  const receipt = Boolean(price && priceBreakdown);
   const couponFieldOpen = Boolean(
     coupon && coupon.isOpen && !coupon.applied && !closedMessage,
   );
@@ -287,8 +314,18 @@ export function CoursePriceBar({
         {/* One row once the bar is wide enough for the price and what the
           coupon and the button ask for (`controlsReserveClasses`); if not,
           those two take the next line, whatever the coupon's state. */}
-        <div className="flex flex-col gap-x-6 gap-y-3.5 @2xl/price:flex-row @2xl/price:flex-wrap @2xl/price:items-center @2xl/price:justify-between">
-          {price ? <CoursePriceDisplay price={price} /> : null}
+        <div
+          className={
+            receipt
+              ? receiptLayoutClasses
+              : "flex flex-col gap-x-6 gap-y-3.5 @2xl/price:flex-row @2xl/price:flex-wrap @2xl/price:items-center @2xl/price:justify-between"
+          }
+        >
+          {receipt && priceBreakdown ? (
+            <CoursePriceBreakdown breakdown={priceBreakdown} />
+          ) : price ? (
+            <CoursePriceDisplay price={price} />
+          ) : null}
 
           {closedMessage ? (
             <p className="m-0 text-[0.88rem] leading-snug font-medium text-(--text-secondary)">
@@ -296,15 +333,27 @@ export function CoursePriceBar({
             </p>
           ) : (
             <div
-              className={`grid grid-cols-1 gap-2.5 @md/price:flex @md/price:items-center @2xl/price:min-w-0 @2xl/price:justify-end @2xl/price:gap-4 ${
-                controlsReserveClasses[
-                  coupon ? (coupon.applied ? "applied" : "field") : "button"
-                ]
-              }`}
+              className={
+                receipt
+                  ? receiptActionsClasses
+                  : `grid grid-cols-1 gap-2.5 @md/price:flex @md/price:items-center @2xl/price:min-w-0 @2xl/price:justify-end @2xl/price:gap-4 ${
+                      controlsReserveClasses[
+                        coupon
+                          ? coupon.applied
+                            ? "applied"
+                            : "field"
+                          : "button"
+                      ]
+                    }`
+              }
             >
               {coupon ? (
                 <div className={couponSlotClasses}>
-                  <CourseCouponControl {...coupon} error={couponError} />
+                  <CourseCouponControl
+                    {...coupon}
+                    error={couponError}
+                    stackedOnWide={receipt}
+                  />
                 </div>
               ) : null}
               {/* With no price beside it and no coupon either, the button
@@ -314,11 +363,13 @@ export function CoursePriceBar({
               <Button
                 motion="static"
                 className={`${priceBarActionClasses} @md/price:min-w-50 @md/price:flex-[9999_1_12.5rem] ${
-                  coupon
-                    ? buttonBesideCouponClasses
-                    : price
-                      ? buttonAloneClasses
-                      : ""
+                  receipt
+                    ? receiptButtonClasses
+                    : coupon
+                      ? buttonBesideCouponClasses
+                      : price
+                        ? buttonAloneClasses
+                        : ""
                 }`}
                 disabled={action.disabled}
                 onClick={action.onClick}

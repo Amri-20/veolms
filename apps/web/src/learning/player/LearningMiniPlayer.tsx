@@ -1,4 +1,5 @@
 import {
+  PlayerThemeProvider,
   VideoPlayer,
   type VideoPlayerEvent,
   type VideoPlayerHandle,
@@ -42,7 +43,14 @@ import { CenteredLoadingSpinner } from "../../components/LoadingSpinner";
 import { useAuthStore } from "../../store/auth.store";
 import { useLearningMiniPlayerGestures } from "./useLearningMiniPlayerGestures";
 import { useLearningPlayerTheme } from "./useLearningPlayerTheme";
-import { MiniPlayerControls } from "./MiniPlayerControls";
+import {
+  MiniPlayerControls,
+  MiniPlayerWindowControls,
+} from "./MiniPlayerControls";
+import {
+  LessonReadingMiniature,
+  lessonReadingShellClasses,
+} from "./LessonReadingStage";
 import { LearningMiniPlayerBufferingIndicator } from "./learningMiniPlayerBufferingIndicator";
 import { MiniPlayerInfoBar } from "./MiniPlayerInfoBar";
 import { MiniPlayerReadingModeEffects } from "./MiniPlayerReadingModeEffects";
@@ -505,7 +513,10 @@ export function LearningMiniPlayer({
     typeof session.source.networking?.requestFilter === "function";
   const playbackCourseSlug = session.courseSlug;
   const playbackLessonNumber = session.selectedLesson;
+  // A reading has no video, and so nothing to fetch for it.
+  const reading = session.reading;
   const needsPlaybackBootstrap =
+    !reading &&
     !sourceAuthorisesRequests &&
     Boolean(playbackCourseSlug) &&
     playbackLessonNumber !== undefined;
@@ -615,7 +626,24 @@ export function LearningMiniPlayer({
       </span>
       <MiniPlayerResizeHandles expanded={isExpanded} />
       <MiniPlayerReadingModeEffects />
-      {awaitingPlaybackBootstrap ? (
+      {reading ? (
+        // A reading shows the picture of its text it was minimized with,
+        // under the window's own expand and close.
+        <div
+          className={`relative aspect-video w-full ${lessonReadingShellClasses}`}
+        >
+          <LessonReadingMiniature
+            article={reading.article}
+            frame={{ width: reading.frameWidth, scrollTop: reading.scrollTop }}
+          />
+          <PlayerThemeProvider theme={playerTheme}>
+            <MiniPlayerWindowControls
+              onClose={handleClose}
+              onRestore={handleRestore}
+            />
+          </PlayerThemeProvider>
+        </div>
+      ) : awaitingPlaybackBootstrap ? (
         <div className="aspect-video w-full bg-black text-white/70">
           <CenteredLoadingSpinner
             label="Loading video"

@@ -10,6 +10,10 @@ import {
   type RefObject,
 } from "react";
 import {
+  isAnyDrawerOpen,
+  subscribeToDrawerPresence,
+} from "../../components/ui/drawerPresence";
+import {
   LEARNING_MINI_PLAYER_ASPECT_RATIO as MINI_PLAYER_ASPECT_RATIO,
   LEARNING_MINI_PLAYER_MARGIN as MINI_PLAYER_MARGIN,
   clampLearningPlayerValue as clamp,
@@ -363,18 +367,38 @@ export function useLearningMiniPlayerGestures(
       }
     };
 
-    const restackPopoverAboveFullscreen = () => {
-      // Document fullscreen promotes <html> into the top layer, which covers
-      // an already-open popover. Close and reopen to restack above it.
+    const closePopover = () => {
       try {
         container.hidePopover();
       } catch {
         // Already closed, or the popover attribute was removed.
       }
+    };
+
+    const restackPopoverAboveFullscreen = () => {
+      // Document fullscreen promotes <html> into the top layer, which covers
+      // an already-open popover. Close and reopen to restack above it.
+      if (isAnyDrawerOpen()) return;
+      closePopover();
       openPopover();
     };
 
-    openPopover();
+    // A bottom sheet (the menu, a lesson list) is not in the top layer: the
+    // mini player steps out of it while one is open, and its own z-index
+    // keeps it under the sheet; it goes back on top once the sheet closes.
+    // (A closed popover is not drawn at all, so it stops being one instead,
+    // and stays in view under the sheet.)
+    const stepDownForDrawer = () => {
+      closePopover();
+      container.removeAttribute("popover");
+    };
+    const stopFollowingDrawers = subscribeToDrawerPresence((drawerOpen) => {
+      if (drawerOpen) stepDownForDrawer();
+      else openPopover();
+    });
+
+    if (isAnyDrawerOpen()) stepDownForDrawer();
+    else openPopover();
     document.addEventListener(
       "fullscreenchange",
       restackPopoverAboveFullscreen,
@@ -385,6 +409,7 @@ export function useLearningMiniPlayerGestures(
     );
 
     return () => {
+      stopFollowingDrawers();
       document.removeEventListener(
         "fullscreenchange",
         restackPopoverAboveFullscreen,

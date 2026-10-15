@@ -59,13 +59,22 @@ export function syncStoredLearningMiniPlayerLesson(lesson: {
   totalLessons?: number;
   lessonPath: string;
   manifestUrl?: string;
+  /** The new lesson's reading text; absent for a video lesson. */
+  readingArticle?: string;
 }): void {
   const session = getLearningMiniPlayerSnapshot();
   if (!session || session.mediaKey === lesson.mediaKey) return;
-  const { manifestUrl, ...fields } = lesson;
+  const { manifestUrl, readingArticle, ...fields } = lesson;
   writeLearningMiniPlayerSession({
     ...session,
     ...fields,
+    reading: readingArticle
+      ? {
+          article: readingArticle,
+          frameWidth: session.reading?.frameWidth ?? 640,
+          scrollTop: 0,
+        }
+      : undefined,
     currentTime: 0,
     source: {
       ...session.source,

@@ -7,6 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { LESSON_READING_SCROLL_ATTRIBUTE } from "./useLessonPlayerMinimizeGesture";
 
 const STORAGE_KEY = "veolms:learning-player-height";
 /**
@@ -152,9 +153,47 @@ interface PlayerSize {
   growth: number | null;
 }
 
+/** How long the 16:9 line stays lit after a resize snaps to it. */
+const SNAP_FLASH_MS = 450;
+
+/** Whether the slot was at its 16:9 height at the last step of a resize. */
+const atFullHeight = new WeakMap<HTMLElement, boolean>();
+const snapFlashTimers = new WeakMap<HTMLElement, number>();
+
+/**
+ * The line at the 16:9 height (`ReadingFullHeightGuide`) lights up the
+ * moment a resize that was away from that height snaps to it, stays lit for
+ * a moment while the resize holds there, then fades. A move out of the snap,
+ * up or down, puts it out at once (the mark is removed, and the line has no
+ * fade without it), so it never trails over the text.
+ */
+const flashOnSnap = (slot: HTMLElement, size: PlayerSize) => {
+  const full = size.height === null && size.growth === null;
+  const wasFull = atFullHeight.get(slot);
+  atFullHeight.set(slot, full);
+  if (full === wasFull) return;
+  window.clearTimeout(snapFlashTimers.get(slot));
+  if (!full) {
+    delete slot.dataset.learningPlayerSnapFlash;
+    return;
+  }
+  // The first step of a resize that begins at 16:9 is not a snap.
+  if (wasFull === undefined) return;
+  slot.dataset.learningPlayerSnapFlash = "on";
+  snapFlashTimers.set(
+    slot,
+    window.setTimeout(() => {
+      slot.dataset.learningPlayerSnapFlash = "fading";
+    }, SNAP_FLASH_MS),
+  );
+};
+
 const applySize = (slot: HTMLElement, size: PlayerSize) => {
   applyHeight(slot, size.height);
   applyGrowth(slot, size.growth);
+  if (slot.dataset.learningPlayerResizing !== undefined) {
+    flashOnSnap(slot, size);
+  }
 };
 
 /** Marks the slot while it is being resized; the player hides its controls. */
@@ -162,13 +201,15 @@ const markResizing = (slot: HTMLElement | null, resizing: boolean) => {
   if (!slot) return;
   if (resizing) slot.dataset.learningPlayerResizing = "";
   else delete slot.dataset.learningPlayerResizing;
+  // The next resize starts afresh: its first step is not a snap.
+  atFullHeight.delete(slot);
 };
 
 /**
  * Says whether a mouse (not a finger) is over the grip's strip.
  * Kept on the grip's strip, where its styles read it.
  */
-const GRIP_STRIP_SELECTOR = '[role="separator"][aria-label="Resize video"]';
+const GRIP_STRIP_SELECTOR = "[data-learning-player-height-grip]";
 
 const markMouseHover = (hovered: boolean) => {
   document
@@ -196,6 +237,21 @@ const resolveHeight = (wanted: number, fullHeight: number) =>
   wanted >= fullHeight - FULL_HEIGHT_SNAP ? null : Math.max(0, wanted);
 
 /**
+ * How tall the reading is with all of its text showing: it grows no further
+ * than that. (It is never taller than its text, so the scroll height is the
+ * text's, not the box's, while it is resized.)
+ */
+const readingContentHeight = () => {
+  const reading = document.querySelector<HTMLElement>(
+    `[${LESSON_READING_SCROLL_ATTRIBUTE}]`,
+  );
+  // Its bottom border is outside the scrolled area.
+  return reading
+    ? reading.scrollHeight + reading.offsetHeight - reading.clientHeight
+    : Number.POSITIVE_INFINITY;
+};
+
+/**
  * The size a drag to `wanted` pixels asks for: shorter than full, full, or
  * (a reading only) taller, up to most of the screen.
  */
@@ -207,7 +263,10 @@ const resolveSize = (
   if (canGrow && wanted > fullHeight + FULL_HEIGHT_SNAP) {
     const tallest = Math.max(
       fullHeight,
-      window.innerHeight - GROWN_SCREEN_CLEARANCE,
+      Math.min(
+        window.innerHeight - GROWN_SCREEN_CLEARANCE,
+        readingContentHeight(),
+      ),
     );
     const growth = Math.round(Math.min(wanted, tallest) - fullHeight);
     return { height: null, growth: growth > 0 ? growth : null };
@@ -333,8 +392,14 @@ export function LessonPlayerHeightHandle({
     <div
       role="separator"
       aria-orientation="horizontal"
-      aria-label="Resize video"
-      title="Drag to resize the video (Alt+V hides or shows it)"
+      data-learning-player-height-grip=""
+      // A reading has no video: the words name what it resizes.
+      aria-label={growable ? "Resize reading area" : "Resize video"}
+      title={
+        growable
+          ? "Drag to resize the reading area (Alt+V hides or shows it)"
+          : "Drag to resize the video (Alt+V hides or shows it)"
+      }
       aria-keyshortcuts="Alt+V"
       tabIndex={0}
       // A short video on a wider screen has its timeline on that edge too.
@@ -386,8 +451,27 @@ export function LessonPlayerHeightHandle({
         className="pointer-events-none invisible absolute top-full left-1/2 mt-3 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-(--accent) px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-(--on-accent) opacity-0 shadow-[0_8px_20px_rgb(0_0_0/0.35)] transition-[opacity,visibility] duration-200 group-data-pull-hint/player-height:visible group-data-pull-hint/player-height:opacity-100 group-data-dragging/player-height:invisible max-[640px]:hidden motion-reduce:transition-none"
       >
         <ArrowsOutLineVertical size={14} weight="bold" />
-        Drag this handle down to enlarge the video
+        {growable
+          ? "Drag this handle down to enlarge the reading area"
+          : "Drag this handle down to enlarge the video"}
       </span>
+    </div>
+  );
+}
+
+/**
+ * The line across a reading at a video's 16:9 height, the size a resize
+ * snaps back to. It lights up as a resize snaps there (the slot's mark is
+ * "on"), fades after a moment ("fading"), and vanishes at once, with no
+ * fade, when the resize moves out of the snap (no mark). See `flashOnSnap`.
+ */
+export function ReadingFullHeightGuide() {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-x-0 top-0 z-41 aspect-video opacity-0 motion-reduce:transition-none! [:where(.learning-workspace\_\_player-wrap):has([data-learning-player-snap-flash=on])_&]:opacity-100 [:where(.learning-workspace\_\_player-wrap):has([data-learning-player-snap-flash=on])_&]:transition-opacity [:where(.learning-workspace\_\_player-wrap):has([data-learning-player-snap-flash=on])_&]:duration-100 [:where(.learning-workspace\_\_player-wrap):has([data-learning-player-snap-flash=fading])_&]:transition-opacity [:where(.learning-workspace\_\_player-wrap):has([data-learning-player-snap-flash=fading])_&]:duration-300 [:where(.learning-workspace\_\_player-wrap):has([data-learning-player-snap-flash=fading])_&]:ease-out"
+    >
+      <span className="absolute inset-x-0 bottom-0 h-0.5 translate-y-1/2 bg-(--accent)" />
     </div>
   );
 }
