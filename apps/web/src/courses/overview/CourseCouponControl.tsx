@@ -22,14 +22,22 @@ export interface CourseCouponControlProps {
    * The bar itself does not grow a line for it.
    */
   error?: string | null;
+  /**
+   * On a wide bar it stands over the button in a narrow column (the bar
+   * with the receipt): as wide as the column and as thin as on a phone.
+   */
+  stackedOnWide?: boolean;
 }
 
 // The field a code is typed into. It fills the coupon's place in the bar
 // (see `couponSlotClasses` in `CoursePriceBar`): above the buy button on a
-// phone, beside it from a medium width. It is the buy button's height
-// (56px) at every width and has its corners (11px); the "Have a coupon?"
-// link is the same shape.
-const slotClasses = "flex h-14 items-center rounded-[0.6875rem]";
+// phone, beside it from a medium width. Beside the button it is the
+// button's height (56px); stacked over it on a phone it is thinner (44px),
+// so it reads as less important than the button. It has the button's
+// corners (11px); the "Have a coupon?" link is the same shape.
+const slotClasses = "flex h-11 items-center rounded-[0.6875rem] @md/price:h-14";
+// Over the button in a narrow column on a wide bar (`stackedOnWide`).
+const stackedSlotClasses = "@2xl/price:h-11";
 
 // Where the link and the coupon in use stand in the coupon's place, which
 // is wider than either. In a bar of one row the place ends at the buy
@@ -58,6 +66,7 @@ export function CourseCouponControl({
   onApply,
   onRemove,
   error,
+  stackedOnWide = false,
 }: CourseCouponControlProps) {
   if (applied) {
     return (
@@ -73,11 +82,19 @@ export function CourseCouponControl({
       // where it is; the code stays at the start, and what it says moves to
       // the end of the stub and is said in full.
       <div
-        className={`relative flex h-12 w-full max-w-full min-w-0 animate-in items-center rounded-[0.6875rem] bg-[color-mix(in_srgb,var(--success,#10b981)_13%,transparent)] text-(--text) duration-150 fade-in zoom-in-95 motion-reduce:animate-none @md/price:h-10 @md/price:w-fit ${besideButtonClasses}`}
+        className={`relative flex h-11 w-full max-w-full min-w-0 animate-in items-center rounded-[0.6875rem] bg-[color-mix(in_srgb,var(--success,#10b981)_13%,transparent)] text-(--text) duration-150 fade-in zoom-in-95 motion-reduce:animate-none @md/price:h-10 @md/price:w-fit ${
+          stackedOnWide
+            ? "@2xl/price:h-11 @2xl/price:w-full"
+            : besideButtonClasses
+        }`}
       >
         {/* No icon before the code: the notched shape already says
             "coupon". */}
-        <span className="flex min-w-0 flex-1 items-center justify-between gap-2 pr-3 pl-3.5 @md/price:flex-none @md/price:justify-start">
+        <span
+          className={`flex min-w-0 flex-1 items-center justify-between gap-2 pr-3 pl-3.5 @md/price:flex-none @md/price:justify-start ${
+            stackedOnWide ? "@2xl/price:flex-1 @2xl/price:justify-between" : ""
+          }`}
+        >
           <span className="truncate text-[0.86rem] leading-none font-bold tracking-wider uppercase">
             {applied.code}
           </span>
@@ -123,13 +140,21 @@ export function CourseCouponControl({
         {error ? (
           <p
             role="alert"
-            className="absolute bottom-[calc(100%+9px)] left-0 z-20 m-0 flex w-max max-w-full animate-in items-center gap-2 rounded-lg bg-(--coupon-note) px-3 py-2 text-[0.8rem] leading-snug font-semibold text-(--text) shadow-[0_10px_26px_-10px_rgb(0_0_0/0.55)] duration-150 [--coupon-note:color-mix(in_srgb,#f43f5e_18%,var(--surface))] fade-in @md/price:top-[calc(100%+9px)] @md/price:bottom-auto"
+            className={`absolute bottom-[calc(100%+9px)] left-0 z-20 m-0 flex w-max max-w-full animate-in items-center gap-2 rounded-lg bg-(--coupon-note) px-3 py-2 text-[0.8rem] leading-snug font-semibold text-(--text) shadow-[0_10px_26px_-10px_rgb(0_0_0/0.55)] duration-150 [--coupon-note:color-mix(in_srgb,#f43f5e_18%,var(--surface))] fade-in @md/price:top-[calc(100%+9px)] @md/price:bottom-auto ${
+              stackedOnWide
+                ? "@2xl/price:top-auto @2xl/price:bottom-[calc(100%+9px)]"
+                : ""
+            }`}
           >
             {/* The note's pointer: a corner of the same box, turned, on the
                 side that faces the field. */}
             <span
               aria-hidden="true"
-              className="absolute -bottom-[5px] left-5 size-2.5 rotate-45 bg-(--coupon-note) @md/price:-top-[5px] @md/price:bottom-auto"
+              className={`absolute -bottom-[5px] left-5 size-2.5 rotate-45 bg-(--coupon-note) @md/price:-top-[5px] @md/price:bottom-auto ${
+                stackedOnWide
+                  ? "@2xl/price:top-auto @2xl/price:-bottom-[5px]"
+                  : ""
+              }`}
             />
             <WarningCircle
               size={16}
@@ -141,7 +166,7 @@ export function CourseCouponControl({
           </p>
         ) : null}
         <div
-          className={`${slotClasses} w-full gap-1 border pr-1.5 pl-3.5 transition-colors duration-140 ${
+          className={`${slotClasses} ${stackedOnWide ? stackedSlotClasses : ""} w-full gap-1 border pr-1.5 pl-3.5 transition-colors duration-140 ${
             // A refused code turns the field's edge red, as solid as the accent
             // edge it has while it is typed in (a see-through red read as a
             // thinner line), only a little softened towards the surface, and
@@ -227,17 +252,23 @@ export function CourseCouponControl({
       // radius from `--control-radius-action`, hence the mark and the
       // variable (see `priceBarActionClasses`).
       //
-      // It rests on a faint tint of the accent, a little stronger under the
-      // pointer and stronger again when pressed.
+      // It is a quiet second action: no fill at rest, only the thin edge
+      // the field has, and a faint tint of the accent under the pointer,
+      // stronger when pressed (no fill at rest since 2026-10-15).
       //
       // On a phone it is centred over the button, across the bar, and as
-      // tall as the field that takes its place. On a line it shares with
+      // tall as the field that takes its place (44px, thinner than the
+      // button). On a line it shares with
       // the button only, it starts the line, its tinted edge in line with
       // the price's first figure. (It was pulled back by its own padding to
       // put the ticket there while it had no tint at rest, until
       // 2026-10-15.)
       data-control-radius-action
-      className={`group/coupon flex h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-[0.6875rem] border-0 bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] px-2 text-[0.9rem] font-semibold whitespace-nowrap text-(--accent-ink,var(--accent)) transition-colors duration-140 [--control-radius-action:0.6875rem] hover:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) active:bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] @md/price:w-fit @md/price:px-4 @2xl/price:ml-auto @2xl/price:@min-[20.05rem]/coupon:ml-0`}
+      className={`group/coupon flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-[0.6875rem] border border-[color-mix(in_srgb,var(--text)_14%,transparent)] bg-transparent px-2 text-[0.9rem] font-semibold whitespace-nowrap text-(--accent-ink,var(--accent)) transition-colors duration-140 [--control-radius-action:0.6875rem] hover:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) active:bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] @md/price:h-14 @md/price:w-fit @md/price:px-4 ${
+        stackedOnWide
+          ? "@2xl/price:h-11 @2xl/price:w-full"
+          : besideButtonClasses
+      }`}
     >
       {/* The ticket is an outline at rest and filled in under the pointer,
           the keyboard's focus or a press. Both drawings are in the page,

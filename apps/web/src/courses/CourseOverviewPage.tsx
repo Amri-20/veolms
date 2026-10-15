@@ -213,6 +213,8 @@ export interface CourseOverviewPricingProps {
   discount?: string;
   /** Catalog charge in major currency units. */
   amount?: number;
+  /** The marked price in major units, when `originalPrice` is shown. */
+  originalAmount?: number;
   currency?: string;
 }
 
@@ -261,6 +263,7 @@ function toOverviewPricingProps(
       originalPrice: formatPriceWithCurrency(pr.price, currency),
       discount: `${discountPct}% OFF`,
       amount: pr.salePrice,
+      originalAmount: pr.price,
       currency,
     };
   }
@@ -526,6 +529,49 @@ function CoursePurchaseSection({
         : couponOnTopOfSale
           ? discount
           : couponSavingLabel;
+  // A paid course's price said in full: the marked price and the sale's
+  // amount off, the coupon's amount off once one is in use, and the total.
+  // Left out where the price line says something else: a free course, the
+  // buyer's own higher amount, a coupon that takes nothing off.
+  const priceBreakdown = (() => {
+    if (isFree || isPayingAbovePrice || isCreatorNormal) return undefined;
+    if (appliedCoupon && couponSaving?.against === "nothing") return undefined;
+    const currency = appliedCoupon?.currency ?? courseCurrency;
+    const before = appliedCoupon
+      ? appliedCoupon.totalAmount + appliedCoupon.discountAmount
+      : baseNumericPrice;
+    const markedAmount =
+      originalPrice &&
+      discount &&
+      pricing?.originalAmount &&
+      (!appliedCoupon || couponOnTopOfSale)
+        ? pricing.originalAmount
+        : undefined;
+    return {
+      sale:
+        markedAmount && originalPrice && discount
+          ? {
+              marked: originalPrice,
+              discount: formatPriceWithCurrency(
+                markedAmount - before,
+                currency,
+              ),
+              label: discount.replace(/\s*off$/i, "").trim() + " off",
+            }
+          : undefined,
+      beforeCoupon: formatPriceWithCurrency(before, currency),
+      coupon: appliedCoupon
+        ? {
+            code: appliedCoupon.code,
+            discount: formatPriceWithCurrency(
+              appliedCoupon.discountAmount,
+              currency,
+            ),
+          }
+        : undefined,
+      total: displayPrice,
+    };
+  })();
   const perksList = inclusions ?? [
     "Full lifetime access",
     "Access on mobile & desktop",
@@ -1089,6 +1135,14 @@ function CoursePurchaseSection({
               couponBadge:
                 priceBadge && couponOnTopOfSale ? couponSavingLabel : undefined,
             }
+      }
+      priceBreakdown={
+        priceBreakdown
+          ? {
+              ...priceBreakdown,
+              totalSizeClassName: priceTextClasses[priceSizeVariant],
+            }
+          : undefined
       }
       coupon={
         appliedCoupon || showApplyCoupon

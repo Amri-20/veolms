@@ -42,6 +42,8 @@ import {
   type CourseLessonsSecondPressHoldProps,
 } from "./LessonPlayerControls";
 import {
+  getLessonReadingFrame,
+  LessonReadingMiniature,
   LessonReadingStage,
   lessonReadingShellClasses,
 } from "./LessonReadingStage";
@@ -859,6 +861,9 @@ export function LessonVideoPlayer({
       playing: snapshot?.media.playing ?? false,
       source: { ...source, startTime: currentTime },
       volume: snapshot?.media.volume ?? 1,
+      reading: playbackAccessError?.article
+        ? { article: playbackAccessError.article, ...getLessonReadingFrame() }
+        : undefined,
       getLivePlaybackSnapshot: () => {
         const liveSnapshot = playerRef.current?.getSnapshot().media;
         return {
@@ -874,7 +879,15 @@ export function LessonVideoPlayer({
         playerRef.current?.setMuted(true);
       },
     });
-  }, [lessonTitle, mediaKey, muted, onMinimize, persistResumePosition, source]);
+  }, [
+    lessonTitle,
+    mediaKey,
+    muted,
+    onMinimize,
+    persistResumePosition,
+    playbackAccessError?.article,
+    source,
+  ]);
 
   const minimizeGesture = useLessonPlayerMinimizeGesture({
     enabled: presentation === "full" && Boolean(onMinimize),
@@ -1084,6 +1097,10 @@ export function LessonVideoPlayer({
       playbackAccessError?.kind === "notice";
     const reading =
       presentation === "full" ? playbackAccessError?.article : undefined;
+    // Minimized, a reading shows its text as a small picture, as a video
+    // shows its frame.
+    const miniReading =
+      presentation === "mini" ? playbackAccessError?.article : undefined;
     const gateIllustration =
       presentation === "full" && playbackAccessError?.kind === "retry"
         ? playbackAccessError.illustration
@@ -1111,16 +1128,23 @@ export function LessonVideoPlayer({
         // vertical swipe from the page on touch screens as the player does,
         // and is the same kind of surface to the motion.
         className={cn(
-          "video-shell relative isolate aspect-video w-full overflow-hidden bg-black shadow-[0_18px_50px_rgba(0,0,0,.22)] [[data-learning-player-restore-phase=expanding]_&]:*:invisible! [[data-learning-player-window-motion]_&]:*:invisible!",
+          // A reading is the exception: its text travels with the window,
+          // as a video's picture does (`LessonReadingStage` hides its
+          // button).
+          "video-shell relative isolate aspect-video w-full overflow-hidden bg-black shadow-[0_18px_50px_rgba(0,0,0,.22)] [[data-learning-player-restore-phase=expanding]_&]:[&>:not([data-lesson-reading-scroll])]:invisible! [[data-learning-player-window-motion]_&]:[&>:not([data-lesson-reading-scroll])]:invisible!",
           presentation === "full" &&
             "touch-pan-x touch-pinch-zoom min-[641px]:[@media(pointer:fine)]:touch-pan-y",
           // Under a finger the surface is moved by the gesture itself, which
           // sets no mark on the host; it says so here instead.
-          minimizeGesture.controlsSuppressed && "*:invisible!",
-          reading && lessonReadingShellClasses,
+          minimizeGesture.controlsSuppressed &&
+            "[&>:not([data-lesson-reading-scroll])]:invisible!",
+          (reading || miniReading) && lessonReadingShellClasses,
         )}
         ref={reading ? readingSurfaceRef : undefined}
         data-learning-playback-gate={playbackAccessError?.kind ?? "pending"}
+        data-lesson-reading-moving={
+          reading && minimizeGesture.controlsSuppressed ? "" : undefined
+        }
         data-learning-player-motion-surface=""
         {...(presentation === "full" ? minimizeGesture.handlers : {})}
         role={
@@ -1144,16 +1168,20 @@ export function LessonVideoPlayer({
         {reading ? (
           <LessonReadingStage
             article={reading}
-            clearTop={Boolean(onMinimize)}
+            minimizeControl={
+              onMinimize ? (
+                <LessonPlayerMinimizeControl
+                  icon={<MinimizeIcon size={22} />}
+                  onMinimize={minimizeReadingFromControl}
+                />
+              ) : undefined
+            }
             clearBottom={readingFullscreen.available}
           />
-        ) : null}
-        {presentation === "full" && onMinimize ? (
+        ) : presentation === "full" && onMinimize ? (
           <LessonPlayerMinimizeControl
             icon={<MinimizeIcon size={22} />}
-            onMinimize={
-              reading ? minimizeReadingFromControl : minimizePlayerFromControl
-            }
+            onMinimize={minimizePlayerFromControl}
           />
         ) : null}
         {reading ? (
@@ -1175,7 +1203,10 @@ export function LessonVideoPlayer({
             />
           </PlayerThemeProvider>
         ) : null}
-        {playbackAccessError && (presentation === "mini" || !isPlainGate) ? (
+        {miniReading ? <LessonReadingMiniature article={miniReading} /> : null}
+        {playbackAccessError &&
+        !miniReading &&
+        (presentation === "mini" || !isPlainGate) ? (
           // The mini window is a few lines tall: it says what is wrong in
           // one line and keeps the action, sized to fit, between the
           // window's tap-to-expand surface and its buttons. The longer
@@ -1213,7 +1244,7 @@ export function LessonVideoPlayer({
                 : undefined
             }
           />
-        ) : reading ? null : (
+        ) : reading || miniReading ? null : (
           <div className="[container-type:size] pointer-events-none absolute inset-0 grid place-items-center p-6 text-center text-white">
             {isPending ? (
               <VideoLoadingSpinner />

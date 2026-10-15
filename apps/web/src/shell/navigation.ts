@@ -1,6 +1,5 @@
 import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { ChartBarIcon as ChartBar } from "@phosphor-icons/react/ChartBar";
-import { ChartLineUpIcon as ChartLineUp } from "@phosphor-icons/react/ChartLineUp";
 import { GearSixIcon as GearSix } from "@phosphor-icons/react/GearSix";
 import { HouseIcon as House } from "@phosphor-icons/react/House";
 import { LayoutIcon as Layout } from "@phosphor-icons/react/Layout";
@@ -48,12 +47,6 @@ const studentNavigation: readonly NavigationItem[] = [
     "Discussions",
     ChatCircleDots,
     "/discussions",
-  ),
-  createNavigationItem(
-    "student-progress",
-    "Progress",
-    ChartLineUp,
-    "/progress",
   ),
   createNavigationItem("student-settings", "Settings", GearSix, "/settings"),
 ];

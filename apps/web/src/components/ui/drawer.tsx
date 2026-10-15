@@ -3,6 +3,7 @@ import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer";
 
 import { cn } from "../../lib/utils";
 import { useBackDismiss } from "../../navigation/useBackDismiss";
+import { markDrawerOpen } from "./drawerPresence";
 import { speedUpSwipeClose } from "./drawerSwipeClose";
 
 // The popup derives its position from these variables, and Base UI changes
@@ -266,6 +267,12 @@ type DrawerContentProps = DrawerPrimitive.Popup.Props & {
   floatingContent?: React.ReactNode;
 };
 
+/** Counts this sheet as on screen for as long as its portal is mounted. */
+function DrawerPresenceMark() {
+  React.useLayoutEffect(() => markDrawerOpen(), []);
+  return null;
+}
+
 function DrawerContent({
   className,
   children,
@@ -298,6 +305,7 @@ function DrawerContent({
         )}
         style={viewportStyle}
       >
+        <DrawerPresenceMark />
         <DrawerPrimitive.Popup
           data-slot="drawer-popup"
           data-swipe-axis={swipeAxis}
