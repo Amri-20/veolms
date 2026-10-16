@@ -1,0 +1,181 @@
+import { lazy } from "react";
+import {
+  courseCatalogueBody,
+  courseOverviewBody,
+  creatorDashboardBody,
+  guestHomeBody,
+  settingsPageBody,
+  workspacePageBody,
+} from "../routing/prerenderedBodies";
+
+// The mobile navigation sheet is the only shell consumer of the Base UI
+// drawer stack (~70KB). Loading it lazily keeps that out of the startup
+// bundle of every page; the sheet is warmed on idle for compact viewports so
+// the first tap still opens instantly. All pieces come from one module, so
+// the compound-component context stays intact.
+// The catalogue is the /courses page body; every other page only pays for
+// it on navigation. Static prerender resolves the lazy module, so the
+// /courses document still ships with catalogue markup, and an idle warm-up
+// keeps client-side navigation instant.
+export const loadCourseCatalogueModule = courseCatalogueBody.preload;
+export const CourseCatalogue = courseCatalogueBody.Body;
+
+// Profile menu and logout modal open on explicit user actions, so their
+// modules load lazily (menu warmed on idle for signed-in sessions) instead
+// of riding in the startup bundle of every page.
+export const loadProfileMenuModule = () => import("./ProfileMenu");
+export const ProfileMenu = lazy(() =>
+  loadProfileMenuModule().then((module) => ({ default: module.ProfileMenu })),
+);
+export const ProfileMenuIdentity = lazy(() =>
+  loadProfileMenuModule().then((module) => ({
+    default: module.ProfileMenuIdentity,
+  })),
+);
+export const LogoutConfirmModal = lazy(() =>
+  import("./LogoutConfirmModal").then((module) => ({
+    default: module.LogoutConfirmModal,
+  })),
+);
+
+export const loadMobileMenuDrawerModule = () =>
+  import("@/components/ui/drawer");
+export const Drawer = lazy(() =>
+  loadMobileMenuDrawerModule().then((module) => ({ default: module.Drawer })),
+);
+export const DrawerContent = lazy(() =>
+  loadMobileMenuDrawerModule().then((module) => ({
+    default: module.DrawerContent,
+  })),
+);
+export const DrawerTitle = lazy(() =>
+  loadMobileMenuDrawerModule().then((module) => ({
+    default: module.DrawerTitle,
+  })),
+);
+export const DrawerDescription = lazy(() =>
+  loadMobileMenuDrawerModule().then((module) => ({
+    default: module.DrawerDescription,
+  })),
+);
+
+export const OrdersPageRoute = lazy(() =>
+  import("../orders/OrdersPage").then((module) => ({
+    default: module.OrdersPage,
+  })),
+);
+export const OrderHistoryPageRoute = lazy(() =>
+  import("../order-history/OrderHistoryPage").then((module) => ({
+    default: module.OrderHistoryPage,
+  })),
+);
+export const CreatorDashboard = creatorDashboardBody.Body;
+export const ReadingModeQuickMenu = lazy(() =>
+  import("../reading-mode/ReadingModeQuickMenu").then((module) => ({
+    default: module.ReadingModeQuickMenu,
+  })),
+);
+export const SettingsQuickMenu = lazy(() =>
+  import("../settings/SettingsQuickMenu").then((module) => ({
+    default: module.SettingsQuickMenu,
+  })),
+);
+export const CourseOverviewPage = courseOverviewBody.Body;
+export const AnalyticsDashboardPage = lazy(() =>
+  import("../analytics/AnalyticsDashboardPage").then((module) => ({
+    default: module.AnalyticsDashboardPage,
+  })),
+);
+
+export const loadCourseCreatePage = () => import("../courses/CourseCreatePage");
+
+export const CourseCreatePage = lazy(() =>
+  loadCourseCreatePage().then((module) => ({
+    default: module.CourseCreatePage,
+  })),
+);
+
+// Settings is one click away from every page (the gear, the profile menu,
+// its keyboard shortcut) and is a large page: seven sections' worth of code
+// and styles that arrive in several round trips. Left to load on the click,
+// it opened a second late on an ordinary connection while every other page
+// was instant. So it is fetched ahead of time (see the warm-up effect).
+export const SettingsPage = settingsPageBody.Body;
+
+export const AuthenticatedHomeBoundary = lazy(() =>
+  import("../home/AuthenticatedHomeBoundary").then((module) => ({
+    default: module.AuthenticatedHomeBoundary,
+  })),
+);
+export const GuestHome = guestHomeBody.Body;
+export const PlaceholderPage = lazy(() =>
+  import("../courses/PlaceholderPage").then((module) => ({
+    default: module.PlaceholderPage,
+  })),
+);
+export const WorkspacePage = workspacePageBody.Body;
+export const ReviewsPage = lazy(() =>
+  import("../reviews/ReviewsPage").then((module) => ({
+    default: module.ReviewsPage,
+  })),
+);
+export const CouponsPage = lazy(() =>
+  import("../coupons/CouponsPage").then((module) => ({
+    default: module.CouponsPage,
+  })),
+);
+export const NotificationsPage = lazy(() =>
+  import("../notifications/NotificationsPage").then((module) => ({
+    default: module.NotificationsPage,
+  })),
+);
+export const QuizAnalyticsPage = lazy(() =>
+  import("../quizzes/QuizAnalyticsPage").then((module) => ({
+    default: module.QuizAnalyticsPage,
+  })),
+);
+export const QuizBuilderPage = lazy(() =>
+  import("../quizzes/QuizBuilderPage").then((module) => ({
+    default: module.QuizBuilderPage,
+  })),
+);
+export const QuizDirectAttemptPage = lazy(() =>
+  import("../quizzes/QuizDirectAttemptPage").then((module) => ({
+    default: module.QuizDirectAttemptPage,
+  })),
+);
+export const StudentsPage = lazy(() =>
+  import("../students/StudentsPage").then((module) => ({
+    default: module.StudentsPage,
+  })),
+);
+export const StudentDetailsPage = lazy(() =>
+  import("../students/StudentDetailsPage").then((module) => ({
+    default: module.StudentDetailsPage,
+  })),
+);
+export const ProgressPage = lazy(() =>
+  import("../progress/ProgressPage").then((module) => ({
+    default: module.ProgressPage,
+  })),
+);
+export const PublicProfilePageRoute = lazy(() =>
+  import("../profiles/PublicProfilePage").then((module) => ({
+    default: module.PublicProfilePage,
+  })),
+);
+export const HomePageSettingsPage = lazy(() =>
+  import("../home-page-settings/HomePageSettingsPage").then((module) => ({
+    default: module.HomePageSettingsPage,
+  })),
+);
+export const CouponBuilderPage = lazy(() =>
+  import("../coupons/CouponBuilderPage").then((module) => ({
+    default: module.CouponBuilderPage,
+  })),
+);
+export const CouponsAccessDenied = lazy(() =>
+  import("../coupons/CouponsAccessDenied").then((module) => ({
+    default: module.CouponsAccessDenied,
+  })),
+);

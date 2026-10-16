@@ -356,9 +356,12 @@ export function useVerifyMfaTotp() {
 
   return useMutation<AuthMessageResponse, ApiError, TotpVerifyRequest>({
     mutationFn: (payload) => authService.verifyMfaTotp(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: authKeys.me() });
+    // Waits for the refreshed user: until it arrives the cached one still
+    // owes the second step, and a route guard meeting it after the step has
+    // closed takes the sign-in for one walked away from and ends it.
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: authKeys.sessions() });
+      await queryClient.invalidateQueries({ queryKey: authKeys.me() });
     },
   });
 }
@@ -412,9 +415,12 @@ export function usePasskeyLoginVerify() {
 
   return useMutation<AuthMessageResponse, ApiError, { response: unknown }>({
     mutationFn: (payload) => authService.verifyPasskeyLogin(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: authKeys.me() });
+    // Waits for the refreshed user: until it arrives the cached one still
+    // owes the second step, and a route guard meeting it after the step has
+    // closed takes the sign-in for one walked away from and ends it.
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: authKeys.sessions() });
+      await queryClient.invalidateQueries({ queryKey: authKeys.me() });
     },
   });
 }
