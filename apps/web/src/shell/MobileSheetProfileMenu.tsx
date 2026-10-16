@@ -18,7 +18,8 @@ export interface MobileSheetProfileMenuProps {
   sidebarPreferences: SidebarPreferences;
   selectNavigation: (label: string, item?: NavigationItemWithMetadata) => void;
   setProfileMenu: Dispatch<SetStateAction<boolean>>;
-  setRole: Dispatch<SetStateAction<CourseRole>>;
+  /** Closes the menu, then switches to the picked role. */
+  setRole: (role: CourseRole) => void;
   setEdgeSidebarOpen: Dispatch<SetStateAction<boolean>>;
   dismissProfileMenuThen: (afterDismiss: () => void) => void;
   dismissMobileMenuThen: (action: () => void) => void;

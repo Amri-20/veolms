@@ -138,8 +138,8 @@ function AccountPicture({
  * The button for the Google account this browser last signed in with: its
  * picture, "Continue as <first name>" over the address, and Google's "G".
  * The arrow beside it opens Google's own account chooser for any other
- * account. "Last used" marks it when Google was how this browser last
- * signed in.
+ * account. A small "Last used" tag sits on its top edge when Google was how
+ * this browser last signed in.
  */
 export function GoogleAccountButton({
   account,
@@ -168,42 +168,44 @@ export function GoogleAccountButton({
     account.email
   );
   return (
-    // With the tag, a little more room above the button, so the tag clears
-    // the "OR" line over it.
     <div
       className={cn(
         googleSurfaceClasses,
-        // Two lines, so taller than the one-line buttons: room for the
-        // "Last used" tag to sit centred on the top edge, clear of the name.
-        // A size container: on narrow phones the picture gives its room to
-        // the name.
+        // Two lines, so taller than the one-line buttons. A size container:
+        // on narrow phones everything tightens (the arrow's area, the gaps,
+        // the picture, the name) so the picture can stay.
         "@container flex min-h-14.5 items-stretch",
       )}
     >
       {lastUsed ? (
-        // Centred on the button's top edge, half above it and half below;
-        // the ring in the card's colour cuts the edge around it. A deeper
-        // shade of the accent, so white reads clearly on it in every theme.
-        <span className="pointer-events-none absolute top-0 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[color-mix(in_srgb,var(--accent)_78%,black)] px-2.5 py-0.5 [font-family:var(--app-font-family,sans-serif)] text-[0.6875rem] leading-3 font-bold tracking-[0.06em] whitespace-nowrap text-white uppercase shadow-[0_1px_6px_color-mix(in_srgb,var(--accent)_45%,transparent)] ring-2 ring-(--surface)">
+        // Centred on the button's top edge, half above it and half below.
+        // The fill is the accent mixed into the card's colour, not
+        // see-through, so the edge does not show through it.
+        <span className="pointer-events-none absolute top-0 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[color-mix(in_srgb,var(--accent)_18%,var(--surface))] px-2 py-px [font-family:var(--app-font-family,sans-serif)] text-[0.6875rem] leading-3.5 font-semibold tracking-[0.02em] whitespace-nowrap text-(--accent-ink,var(--accent))">
           Last used
         </span>
       ) : null}
       <button
         aria-busy={busyLabel !== null}
         aria-describedby={describedBy}
-        aria-label={`Continue as ${account.name} (${account.email}) with Google`}
+        aria-label={`Continue as ${account.name} (${account.email}) with Google${lastUsed ? ", last used" : ""}`}
         className={cn(
           pressableClasses,
-          "flex min-w-0 flex-1 items-center gap-3 rounded-l-[9px] py-2.5 pr-3 pl-3 text-left",
+          // More room right of the small "G" than left of the picture, so
+          // each icon's side gap is close to the space above and below it.
+          "flex min-w-0 flex-1 items-center gap-3 rounded-l-[9px] py-2.5 pr-4 pl-3 text-left @max-[20rem]:gap-2.5 @max-[20rem]:pr-2.5 @max-[16.5rem]:gap-2 @max-[16.5rem]:pr-2 @max-[16.5rem]:pl-2.5",
         )}
         disabled={disabled}
         onClick={onContinue}
         type="button"
       >
-        <AccountPicture account={account} className="@max-[18.5rem]:hidden" />
+        <AccountPicture
+          account={account}
+          className="@max-[20rem]:size-8 @max-[16.5rem]:size-7"
+        />
         <span className="flex min-w-0 flex-1 flex-col">
           {/* Wraps rather than cutting the name off when the button is narrow. */}
-          <span className="line-clamp-2 leading-4.5! wrap-anywhere">
+          <span className="line-clamp-2 leading-4.5! wrap-anywhere @max-[20rem]:text-sm">
             Continue as {firstName}
           </span>
           <span className="truncate text-xs leading-4 font-normal text-(--muted)">
@@ -221,7 +223,7 @@ export function GoogleAccountButton({
         title="Use another Google account"
         className={cn(
           pressableClasses,
-          "grid w-11 shrink-0 place-items-center rounded-r-[9px] text-(--muted) hover:text-(--text)",
+          "grid w-11 shrink-0 place-items-center rounded-r-[9px] text-(--muted) hover:text-(--text) @max-[20rem]:w-9 @max-[16.5rem]:w-8",
         )}
         disabled={disabled}
         onClick={onChooseAccount}

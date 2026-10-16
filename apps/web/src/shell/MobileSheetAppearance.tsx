@@ -13,6 +13,7 @@ import { getNavigationIconColor } from "./navigation";
 import { themeRevealOriginFromClick } from "./themeViewTransition";
 import type { ThemeRevealOrigin } from "./themeViewTransition";
 import { academyThemes } from "../themes";
+import { MOBILE_SHEET_DOCK_CLASS } from "./academyShellClasses";
 import type {
   SidebarDockItem,
   SidebarPreferences,
@@ -128,9 +129,21 @@ export function MobileSheetAppearance({
   // prettier-ignore
   return (
     <div
-      className={`mobile-menu-sheet__appearance sidebar-appearance--mobile-dock${mobilePaletteMenu ? " mobile-menu-sheet__appearance--palette-open" : ""}`}
+      className={`mobile-menu-sheet__appearance sidebar-appearance--mobile-dock ${MOBILE_SHEET_DOCK_CLASS}${mobilePaletteMenu ? " mobile-menu-sheet__appearance--palette-open" : ""}`}
       role="group"
       aria-label="Appearance controls"
+      style={
+        {
+          "--dock-appearance-icon-color": getNavigationIconColor(
+            "Appearance",
+            sidebarPreferences,
+          ),
+          "--dock-reading-mode-icon-color": getNavigationIconColor(
+            "Reading mode",
+            sidebarPreferences,
+          ),
+        } as CSSProperties
+      }
     >
       {sidebarDockItems.map((item) => {
         if (item === "appearance") {

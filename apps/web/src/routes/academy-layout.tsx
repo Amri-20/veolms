@@ -97,6 +97,7 @@ import {
   buildLoginDialogPath,
   buildLoginPath,
   LOGIN_PATH,
+  readLoginPurpose,
 } from "../routing/routeAccess";
 import { LoginDialogHost } from "../auth/LoginDialogHost";
 import {
@@ -662,11 +663,14 @@ export default function AcademyLayout() {
       // "Log in" from anywhere opens the pop-up over the page the visitor
       // is on (or the page the link was heading for), not a login page.
       if (requestedPathname === LOGIN_PATH) {
-        const loginReturnTo = new URLSearchParams(
-          requestedPath.split("#", 1)[0]?.split("?")[1] ?? "",
-        ).get("returnTo");
+        const loginSearch = requestedPath.split("#", 1)[0]?.split("?")[1] ?? "";
+        const loginReturnTo = new URLSearchParams(loginSearch).get("returnTo");
         void navigate(
-          buildLoginDialogPath(loginReturnTo, locationPathRef.current),
+          buildLoginDialogPath(
+            loginReturnTo,
+            locationPathRef.current,
+            readLoginPurpose(loginSearch),
+          ),
         );
         return;
       }

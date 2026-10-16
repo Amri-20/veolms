@@ -10,6 +10,7 @@ import { cn } from "../../lib/utils";
 import { DiscussionMarkdown } from "../discussion-editor/DiscussionMarkdown";
 import { createDiscussionDraft } from "../discussion-editor/types";
 import { LESSON_READING_SCROLL_ATTRIBUTE } from "./useLessonPlayerMinimizeGesture";
+import { useReadingFontScale } from "./readingFontScale";
 
 /**
  * What the player's shell wears while it holds a reading, in place of the
@@ -48,6 +49,8 @@ export function LessonReadingStage({
   minimizeControl,
   clearBottom = false,
   initialScrollTop = 0,
+  controlsHidden = false,
+  onTap,
 }: {
   article: string;
   /**
@@ -55,12 +58,22 @@ export function LessonReadingStage({
    * label's row, and scrolls away with the text.
    */
   minimizeControl?: ReactNode;
-  /** Leave room for the full screen buttons in the bottom corner. */
+  /** Leave room for the row of controls along the bottom. */
   clearBottom?: boolean;
   /** Where the text starts (the miniature shows the full player's place). */
   initialScrollTop?: number;
+  /** A tap on the text has put the controls away, this one's minimize too. */
+  controlsHidden?: boolean;
+  /**
+   * A tap on the text, as on a video: it shows or hides the controls. Only
+   * a finger or a pen taps; with a mouse the controls follow the pointer
+   * in and out instead (see `LessonVideoPlayer`). A tap on a link in the
+   * text, or the end of a drag that selected some of it, is not one.
+   */
+  onTap?: () => void;
 }) {
   const content = useMemo(() => createDiscussionDraft(article), [article]);
+  const [fontScale] = useReadingFontScale();
   // At the top of the text a finger moving down has nothing to scroll: the
   // browser is left only the upward swipes there, and the downward one goes
   // to the player, which puts the reading away like a video.
@@ -92,16 +105,40 @@ export function LessonReadingStage({
       className={cn(
         // The same side margins at every width, so the text starts under the
         // minimize arrow on a laptop as it does on a phone.
-        "absolute inset-0 overflow-y-auto border-b border-[color-mix(in_srgb,var(--text)_12%,transparent)] px-5 py-6 [scrollbar-width:thin]",
+        "absolute inset-y-0 right-[var(--lesson-reading-panel-width,0px)] left-0 overflow-y-auto border-b border-[color-mix(in_srgb,var(--text)_12%,transparent)] px-5 py-6 [scrollbar-width:thin]",
         minimizeControl && "pt-2",
         minimizeControl && atTop ? "touch-pan-down" : "touch-pan-y",
         // A phone turned sideways in full screen: the lines would run the
         // whole long side, so the text keeps well in from both edges.
         "pointer-coarse:landscape:[:fullscreen_&]:px-[max(4rem,calc(env(safe-area-inset-left)+1.25rem))]",
-        clearBottom && "pb-14",
+        // The control row: 42px buttons 10px up from the edge, and a gap.
+        clearBottom && "pb-16",
       )}
       {...{ [LESSON_READING_SCROLL_ATTRIBUTE]: "" }}
       ref={scrollerRef}
+      onClick={
+        onTap
+          ? (event) => {
+              const target = event.target;
+              if (
+                target instanceof Element &&
+                target.closest("a, button, input, textarea, select, summary")
+              ) {
+                return;
+              }
+              if (!window.getSelection()?.isCollapsed) return;
+              // A browser that does not say what clicked is asked whether
+              // it has a mouse at all.
+              const { pointerType } = event.nativeEvent as PointerEvent;
+              const byMouse = pointerType
+                ? pointerType === "mouse"
+                : window.matchMedia("(hover: hover) and (pointer: fine)")
+                    .matches;
+              if (byMouse) return;
+              onTap();
+            }
+          : undefined
+      }
       onScroll={(event) => {
         const { scrollTop } = event.currentTarget;
         setAtTop(scrollTop <= 0);
@@ -125,7 +162,15 @@ export function LessonReadingStage({
           // While the window moves (minimizing, turning back, expanding)
           // the text travels with it and the button is hidden, as a
           // playing video's controls are.
-          <div className="absolute -top-2 -left-5 [[data-learning-player-window-motion]_&]:invisible [[data-learning-player-restore-phase]_&]:invisible [[data-lesson-reading-moving]_&]:invisible">
+          <div
+            className={cn(
+              "absolute -top-2 -left-5 transition-opacity duration-200",
+              controlsHidden && "invisible opacity-0",
+              "[[data-learning-player-window-motion]_&]:invisible [[data-learning-player-restore-phase]_&]:invisible [[data-lesson-reading-moving]_&]:invisible",
+            )}
+            aria-hidden={controlsHidden ? true : undefined}
+            inert={controlsHidden ? true : undefined}
+          >
             {minimizeControl}
           </div>
         ) : null}
@@ -134,12 +179,18 @@ export function LessonReadingStage({
           Reading
         </p>
       </div>
-      <DiscussionMarkdown
-        content={content}
-        label="Lesson reading"
-        preserveSoftBreaks
-        className="max-w-none! wrap-anywhere [&>:first-child]:mt-0"
-      />
+      {/* The learner's text size. `zoom` grows everything in the text
+          together (headings, code, lists), which their own fixed sizes
+          would not do for a larger font size alone, and the lines wrap at
+          the new size. */}
+      <div style={fontScale === 1 ? undefined : { zoom: fontScale }}>
+        <DiscussionMarkdown
+          content={content}
+          label="Lesson reading"
+          preserveSoftBreaks
+          className="max-w-none! wrap-anywhere [&>:first-child]:mt-0"
+        />
+      </div>
     </div>
   );
 }

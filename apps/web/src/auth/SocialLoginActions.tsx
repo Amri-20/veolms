@@ -97,11 +97,12 @@ export function SocialLoginActions({
   const [loadingProvider, setLoadingProvider] = useState<
     "google" | "github" | null
   >(redirectReturn?.provider ?? null);
-  // "popup": waiting on the provider's window; "verifying": its code is
-  // being exchanged for a session here, inside the login pop-up.
-  const [popupStage, setPopupStage] = useState<"popup" | "verifying" | null>(
-    redirectReturn ? "verifying" : null,
-  );
+  // "popup": waiting on the provider's window; "leaving": the whole tab is
+  // on its way to the provider (its window was blocked); "verifying": its
+  // code is being exchanged for a session here, inside the login pop-up.
+  const [popupStage, setPopupStage] = useState<
+    "popup" | "leaving" | "verifying" | null
+  >(redirectReturn ? "verifying" : null);
   const redirectReturnStartedRef = useRef(false);
   const oauthUrlMutation = useOauthUrl();
   const oauthLoginMutation = useOauthLogin();
@@ -215,6 +216,8 @@ export function SocialLoginActions({
       flushSync(() => setPopupStage("verifying"));
       rememberOauthDialogPage();
       rememberLoginDialogSnapshot();
+      // Nothing is being verified yet: until the tab leaves, it says so.
+      flushSync(() => setPopupStage("leaving"));
       window.location.href = url;
       return;
     }
@@ -350,15 +353,19 @@ export function SocialLoginActions({
   const googleBusyLabel = googleBusy
     ? popupStage === "popup"
       ? "Waiting for Google…"
-      : "Verifying…"
+      : popupStage === "leaving"
+        ? "Opening Google…"
+        : "Verifying…"
     : null;
   const pendingMessage = oneTapPending
     ? "Verifying your Google account…"
     : popupStage === "popup"
       ? `Finish signing in with ${providerLabel} in the window that opened.`
-      : popupStage === "verifying"
-        ? "Signing you in…"
-        : null;
+      : popupStage === "leaving"
+        ? `Opening ${providerLabel}…`
+        : popupStage === "verifying"
+          ? "Signing you in…"
+          : null;
 
   return (
     // The way in the pop-up leads with; the email form follows it under an

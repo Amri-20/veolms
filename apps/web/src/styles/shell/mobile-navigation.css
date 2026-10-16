@@ -484,7 +484,7 @@
   #mobile-navigation-sheet > .reading-mode-quick-menu--mobile {
     top: auto;
     bottom: calc(
-      68px + var(--app-viewport-safe-area-bottom, 0px) + var(--translate-y, 0px)
+      71px + var(--app-viewport-safe-area-bottom, 0px) + var(--translate-y, 0px)
     );
     max-height: calc(100dvh - 92px - env(safe-area-inset-top, 0px));
   }

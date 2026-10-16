@@ -277,16 +277,33 @@ export function sanitizeReturnTo(
   }
 }
 
-export function buildLoginPath(returnTo?: string | null): string {
+export function buildLoginPath(
+  returnTo?: string | null,
+  purpose?: LoginPurpose | null,
+): string {
+  const params = new URLSearchParams();
   const target = sanitizeReturnTo(returnTo);
-  if (!target) {
-    return LOGIN_PATH;
-  }
-  return `${LOGIN_PATH}?returnTo=${encodeURIComponent(target)}`;
+  if (target) params.set("returnTo", target);
+  if (purpose) params.set(LOGIN_PURPOSE_PARAM, purpose);
+  const query = params.toString();
+  return query ? `${LOGIN_PATH}?${query}` : LOGIN_PATH;
 }
 
 /** The query parameter that opens the login pop-up over a page. */
 export const LOGIN_DIALOG_PARAM = "login";
+
+/**
+ * What the visitor was trying to do when asked to log in, so the pop-up can
+ * say so ("Log in to join the discussion").
+ */
+export const LOGIN_PURPOSE_PARAM = "loginFor";
+export type LoginPurpose = "discussion";
+
+export function readLoginPurpose(search: string): LoginPurpose | null {
+  return new URLSearchParams(search).get(LOGIN_PURPOSE_PARAM) === "discussion"
+    ? "discussion"
+    : null;
+}
 
 function canGuestStayOn(path: string): boolean {
   const pathname = path.split(/[?#]/, 1)[0] || "/";
@@ -305,6 +322,7 @@ function canGuestStayOn(path: string): boolean {
 export function buildLoginDialogPath(
   returnTo?: string | null,
   currentPath?: string | null,
+  purpose?: LoginPurpose | null,
 ): string {
   const target = sanitizeReturnTo(returnTo);
   const current = sanitizeReturnTo(currentPath);
@@ -318,6 +336,8 @@ export function buildLoginDialogPath(
   url.searchParams.set(LOGIN_DIALOG_PARAM, "1");
   if (target && behind !== target) url.searchParams.set("returnTo", target);
   else url.searchParams.delete("returnTo");
+  if (purpose) url.searchParams.set(LOGIN_PURPOSE_PARAM, purpose);
+  else url.searchParams.delete(LOGIN_PURPOSE_PARAM);
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
@@ -327,6 +347,7 @@ export function stripLoginDialogParams(search: string): string {
   if (!params.has(LOGIN_DIALOG_PARAM)) return search;
   params.delete(LOGIN_DIALOG_PARAM);
   params.delete("returnTo");
+  params.delete(LOGIN_PURPOSE_PARAM);
   const query = params.toString();
   return query ? `?${query}` : "";
 }
@@ -343,6 +364,8 @@ export function keepLoginDialogOpen(search: string, nextPath: string): string {
   url.searchParams.set(LOGIN_DIALOG_PARAM, "1");
   const returnTo = params.get("returnTo");
   if (returnTo) url.searchParams.set("returnTo", returnTo);
+  const purpose = readLoginPurpose(search);
+  if (purpose) url.searchParams.set(LOGIN_PURPOSE_PARAM, purpose);
   return `${url.pathname}${url.search}${url.hash}`;
 }
 

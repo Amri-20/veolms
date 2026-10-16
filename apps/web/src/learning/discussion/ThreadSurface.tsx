@@ -20,7 +20,7 @@ import { CommentComposer } from "../CommentComposer";
 import { getApplicationScrollElement } from "../../shell/applicationScroll";
 import {
   DISCUSSION_FEED_SORT_OPTIONS,
-  DISCUSSION_FEED_VIEW_OPTIONS,
+  getDiscussionFeedViewOptions,
   type DiscussionEntryFilter,
   type DiscussionFeedView,
   type InteractionCapabilities,
@@ -824,12 +824,11 @@ export function ThreadSurface({
     >
       <p className="min-w-0 truncate text-lg leading-none font-semibold tracking-[-0.02em] text-(--text)">
         {/* The count is of everyone's; it is not said beside only the
-            learner's own. */}
-        {feedView === "mine"
-          ? "My Discussions"
-          : discussionCount === undefined
-            ? "Discussions"
-            : `${discussionCount} Discussions`}
+            learner's own (the menu beside it then says "My Comments" and
+            so on). */}
+        {feedView === "mine" || discussionCount === undefined
+          ? "Discussions"
+          : `${discussionCount} Discussions`}
       </p>
       <span
         className="shrink-0 text-lg leading-none text-(--text-secondary)"
@@ -844,7 +843,7 @@ export function ThreadSurface({
         ariaLabel="Sort discussions"
         options={
           canFilterMine
-            ? DISCUSSION_FEED_VIEW_OPTIONS
+            ? getDiscussionFeedViewOptions(entryFilter)
             : DISCUSSION_FEED_SORT_OPTIONS
         }
         triggerClassName="h-auto! w-auto! max-w-full shrink-0! items-end! justify-start! gap-1! border-0! bg-transparent! p-0! shadow-none! text-[13px] leading-none! font-medium whitespace-nowrap text-(--text-secondary)! hover:bg-transparent! hover:text-(--text)! data-[state=open]:bg-transparent! data-[state=open]:shadow-none!"
