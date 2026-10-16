@@ -128,19 +128,43 @@ export function prepareAndroidSheetFont(): void {
   });
 }
 
-/** Which sheet this browser shows, or null where it shows no sheet. */
-export function detectAndroidSheetSize(): AndroidSheetSize | null {
+/**
+ * Whether this is Chrome on Android, which shows Google's prompt (FedCM)
+ * as its own sheet. A phone says "Android". A large tablet opens pages in
+ * Chrome's desktop mode by default (10" or more, 8 GB or more), and then
+ * says "Linux", with a desktop user agent; so does any phone or tablet
+ * whose "Desktop site" box is ticked. What the mode does not change is the
+ * browser's own features: the contact picker (`ContactsManager`) is
+ * Chrome's on Android only. Failing that, a "Linux" Chrome whose main
+ * pointer is a finger is taken for one too; a Linux computer has a mouse
+ * or touchpad, even with a touch screen. Windows, macOS and ChromeOS say
+ * so in either mode, and keep the corner card.
+ */
+function isChromeOnAndroid(): boolean {
   const data = (
     navigator as Navigator & {
       userAgentData?: { platform?: string; brands?: { brand: string }[] };
     }
   ).userAgentData;
-  const android = data?.platform
-    ? data.platform === "Android"
-    : /\bAndroid\b/.test(navigator.userAgent);
-  // The sheet is Chrome's own way of showing Google's prompt (FedCM).
-  const chrome = data?.brands?.some(({ brand }) => brand === "Google Chrome");
-  if (!android || !chrome) return null;
+  if (!data?.brands?.some(({ brand }) => brand === "Google Chrome")) {
+    return false;
+  }
+  if (data.platform === "Android") return true;
+  if (data.platform !== "Linux") return false;
+  if ("ContactsManager" in window) return true;
+  return (
+    navigator.maxTouchPoints > 0 &&
+    window.matchMedia("(pointer: coarse)").matches
+  );
+}
+
+/**
+ * Which sheet this browser shows, or null where it shows no sheet. The
+ * screen's size decides, not the window's or the user agent's: a tablet
+ * keeps its tablet sheet in desktop mode, or in split screen.
+ */
+export function detectAndroidSheetSize(): AndroidSheetSize | null {
+  if (!isChromeOnAndroid()) return null;
   return Math.min(window.screen.width, window.screen.height) >= 600
     ? "tablet"
     : "phone";
