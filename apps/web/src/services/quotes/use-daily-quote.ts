@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   dailyQuoteResponseSchema,
   type DailyQuoteResponse,
-} from "@veolms/contracts";
+} from "@veolms/contracts/quotes";
 import type { ApiError } from "../../lib/api-error";
 import { quotesService } from "./quotes.service";
 

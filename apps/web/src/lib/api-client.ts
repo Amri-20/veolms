@@ -13,7 +13,7 @@ import { setApiClient } from "@veolms/web-core";
 import {
   LEARNER_VIEW_HEADER,
   LEARNER_VIEW_HEADER_VALUE,
-} from "@veolms/contracts";
+} from "@veolms/contracts/learner-view";
 import { isLearnerView } from "./learner-view";
 
 export { getApiError, type ApiError };

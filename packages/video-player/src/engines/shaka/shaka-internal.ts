@@ -8,6 +8,7 @@ import type {
   VideoSource,
   VideoTextTrack,
 } from "../../core/types";
+import { notifyShakaRuntimeLoaded } from "./shaka-runtime-hooks";
 
 export interface ShakaEventLike {
   detail?: unknown;
@@ -184,7 +185,10 @@ export type ShakaRuntimeLoader = () => Promise<unknown>;
 export const SHAKA_SEGMENT_PREFETCH_LIMIT = 2;
 
 export async function defaultShakaRuntimeLoader(): Promise<unknown> {
-  return import("shaka-player");
+  const runtimeModule = await import("shaka-player");
+  // Extensions get the runtime before the caller creates a player from it.
+  notifyShakaRuntimeLoaded(runtimeModule);
+  return runtimeModule;
 }
 
 export function resolveShakaRuntime(module: unknown): ShakaRuntimeLike {

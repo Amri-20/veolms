@@ -107,8 +107,10 @@ export function LessonPlayerSlot({
       // reads that mark. The player itself is positioned on this slot,
       // so it follows. The slot sits above the page that scrolls
       // behind it, so the strip that resizes the video is never
-      // covered.
-      className={`learning-workspace__player-wrap ${stickyPlayer ? "z-40 has-[[data-learning-player-shortened]]:sticky! has-[[data-learning-player-shortened]]:top-0" : ""}`}
+      // covered. It never shrinks: on a phone its column scrolls, and the
+      // overflow a minimize swipe puts on it would otherwise let it shrink
+      // to nothing, hiding the player positioned on it mid-swipe.
+      className={`learning-workspace__player-wrap shrink-0 ${stickyPlayer ? "z-40 has-[[data-learning-player-shortened]]:sticky! has-[[data-learning-player-shortened]]:top-0" : ""}`}
       data-learning-player-motion-target=""
     >
       {showingQuiz ? (
