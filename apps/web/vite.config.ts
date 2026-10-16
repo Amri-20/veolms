@@ -367,6 +367,93 @@ function routeChunkPreloadPlugin(): Plugin {
   };
 }
 
+// Dev server only. Each `import picture from "./a.webp"` is a module of its
+// own in dev (`export default "/src/assets/a.webp"`), fetched and checked
+// for changes on every page load: about 120 requests before the app can
+// render, each a full round trip for a phone on the network. This writes
+// the URL Vite would have returned straight into the importing module, so
+// the browser fetches the picture itself only when it is shown. The value
+// is taken from Vite's own answer for that module, so it is the same URL
+// (or inlined data) as before. Stylesheets imported by URL (`?url`, the
+// palette and route stylesheets) are handled the same way; a stylesheet
+// imported for its styles is left alone. Production builds are not affected.
+const ASSET_IMPORT_INLINE_RE =
+  /\bimport\s+(?:([A-Za-z_$][\w$]*)|\{\s*default\s+as\s+([A-Za-z_$][\w$]*)\s*\})\s+from\s+(["'])([^"'\n]+\.(?:webp|png|jpe?g|avif|gif|svg|woff2?)(?:\?(?:url|no-inline|url&no-inline))?|[^"'\n]+\.css\?url(?:&no-inline)?)\3;?/g;
+const ASSET_DEFAULT_EXPORT_RE = /^export default ("(?:[^"\\\n]|\\.)*")/;
+
+function devAssetImportInlinePlugin(): Plugin {
+  let root = "";
+  return {
+    name: "veo-dev-asset-import-inline",
+    apply: "serve",
+    enforce: "post",
+    configResolved(config) {
+      root = config.root;
+    },
+    async transform(code, id, options) {
+      if (options?.ssr || this.environment?.name !== "client") return undefined;
+      if (id.includes("/node_modules/") || !/\.[cm]?[jt]sx?(?:$|\?)/.test(id)) {
+        return undefined;
+      }
+      if (!ASSET_IMPORT_INLINE_RE.test(code)) return undefined;
+      ASSET_IMPORT_INLINE_RE.lastIndex = 0;
+      const environment = this.environment as unknown as {
+        transformRequest?: (url: string) => Promise<{ code: string } | null>;
+      };
+      if (typeof environment.transformRequest !== "function") return undefined;
+
+      const replacements: Array<{ start: number; end: number; text: string }> =
+        [];
+      for (const match of code.matchAll(ASSET_IMPORT_INLINE_RE)) {
+        const binding = match[1] ?? match[2];
+        const specifier = match[4];
+        if (!binding || !specifier) continue;
+        const resolved = await this.resolve(specifier, id);
+        if (!resolved || resolved.external) continue;
+        const [file = "", query] = resolved.id.split("?");
+        const relative = path.relative(root, file).replaceAll("\\", "/");
+        if (
+          !relative ||
+          relative.startsWith("..") ||
+          path.isAbsolute(relative)
+        ) {
+          continue;
+        }
+        let value: string | undefined;
+        try {
+          const result = await environment.transformRequest(
+            `/${relative}${query ? `?${query}` : ""}`,
+          );
+          value = result?.code.match(ASSET_DEFAULT_EXPORT_RE)?.[1];
+        } catch {
+          value = undefined;
+        }
+        if (!value) continue;
+        // A change to the picture still refreshes the module that uses it.
+        this.addWatchFile(file);
+        replacements.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          // Keep the line count, so line mappings still hold.
+          text: `const ${binding} = ${value};${"\n".repeat(
+            match[0].split("\n").length - 1,
+          )}`,
+        });
+      }
+      if (!replacements.length) return undefined;
+
+      let next = "";
+      let cursor = 0;
+      for (const { start, end, text } of replacements) {
+        next += code.slice(cursor, start) + text;
+        cursor = end;
+      }
+      next += code.slice(cursor);
+      return { code: next, map: null };
+    },
+  };
+}
+
 // Writes a module-to-chunk report for the client build when
 // VEO_BUNDLE_REPORT is set, so bundle composition can be audited offline.
 // No effect on normal builds.
@@ -487,6 +574,7 @@ export default defineConfig(({ command, mode }) => {
     plugins: [
       earlyHlsPreloadPlugin(),
       routeChunkPreloadPlugin(),
+      devAssetImportInlinePlugin(),
       bundleReportPlugin(),
       tailwindcss(),
       reactRouter(),

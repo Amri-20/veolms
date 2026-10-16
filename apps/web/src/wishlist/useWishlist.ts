@@ -1,4 +1,4 @@
-import { WISHLIST_IMPORT_MAX_COURSES } from "@veolms/contracts";
+import { WISHLIST_IMPORT_MAX_COURSES } from "@veolms/contracts/wishlist";
 import { useCallback, useEffect, useMemo } from "react";
 
 import { courseMatchesWishlist, type Course } from "../courses/catalogue";
