@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { ApiError } from "../lib/api-client";
 import {
@@ -11,11 +11,11 @@ import { normalizeAppPath, sanitizeReturnTo } from "../routing/routeAccess";
 import { resolvePostAuthPath } from "./postAuthNavigation";
 import { ToastNotification } from "../ToastNotification";
 import { GoogleBrandIcon } from "./SocialBrandIcons";
+import type { CredentialAccount } from "./OneTapSigningInCard";
 import {
-  OneTapSigningInCard,
-  type CredentialAccount,
-} from "./OneTapSigningInCard";
-import { rememberGoogleSignIn } from "./lastGoogleAccount";
+  readLastGoogleAccount,
+  rememberGoogleSignIn,
+} from "./lastGoogleAccount";
 
 const GOOGLE_IDENTITY_SCRIPT = "https://accounts.google.com/gsi/client";
 
@@ -109,6 +109,22 @@ function loadGoogleIdentityServices(): Promise<void> {
   });
 
   return googleIdentityScript;
+}
+
+type SigningInModule = typeof import("./OneTapSigningInCard");
+type SigningInCard = SigningInModule["OneTapSigningInCard"];
+
+let signingInModule: Promise<SigningInModule> | null = null;
+
+// The "Signing in…" card (or Android's sheet) is only needed once Google's
+// prompt has been answered, so its code is fetched when the prompt goes up
+// rather than with every page.
+function loadSigningInModule(): Promise<SigningInModule> {
+  signingInModule ??= import("./OneTapSigningInCard").catch((error) => {
+    signingInModule = null;
+    throw error;
+  });
+  return signingInModule;
 }
 
 const ONE_TAP_FAILED_MESSAGE = "Google sign-in failed. Please try again.";
@@ -271,6 +287,15 @@ export function GlobalGoogleOneTap() {
   // The account being checked after Google's prompt, while it is.
   const [verifyingAccount, setVerifyingAccount] =
     useState<CredentialAccount | null>(null);
+  // The check is over: the card or sheet is on its way out.
+  const [verifyingDone, setVerifyingDone] = useState(false);
+  const [SigningInCard, setSigningInCard] = useState<SigningInCard | null>(
+    null,
+  );
+  const handleSigningInLeft = useCallback(() => {
+    setVerifyingAccount(null);
+    setVerifyingDone(false);
+  }, []);
 
   const clientId = authConfig?.googleClientId || "";
   const normalizedPath = normalizeAppPath(location.pathname);
@@ -321,20 +346,21 @@ export function GlobalGoogleOneTap() {
             callback: (response) => {
               if (!active || !response.credential) return;
 
+              setVerifyingDone(false);
               setVerifyingAccount(readCredentialAccount(response.credential));
               loginRef.current(
                 { credential: response.credential },
                 {
                   onSuccess: (result) => {
                     rememberGoogleSignIn(result.user);
-                    setVerifyingAccount(null);
+                    setVerifyingDone(true);
                     navigateRef.current(
                       resolvePostAuthPath(result, returnToRef.current),
                       { replace: true },
                     );
                   },
                   onError: (error) => {
-                    setVerifyingAccount(null);
+                    setVerifyingDone(true);
                     setErrorMessage(toOneTapErrorMessage(error));
                   },
                 },
@@ -343,6 +369,15 @@ export function GlobalGoogleOneTap() {
           });
           oneTapPromptStarted = true;
           googleIdentity.prompt();
+          void loadSigningInModule()
+            .then((module) => {
+              if (!active) return;
+              module.prepareOneTapSigningIn(readLastGoogleAccount()?.avatarUrl);
+              setSigningInCard(() => module.OneTapSigningInCard);
+            })
+            .catch(() => {
+              // Signing in still works, without the card.
+            });
         })
         .catch(() => {
           // Fallback gracefully
@@ -363,8 +398,12 @@ export function GlobalGoogleOneTap() {
 
   return (
     <>
-      {verifyingAccount ? (
-        <OneTapSigningInCard account={verifyingAccount} />
+      {verifyingAccount && SigningInCard ? (
+        <SigningInCard
+          account={verifyingAccount}
+          leaving={verifyingDone}
+          onLeft={handleSigningInLeft}
+        />
       ) : null}
       {errorMessage ? (
         <ToastNotification
