@@ -100,13 +100,19 @@ export function GoogleSignInButton({
   );
 }
 
-function AccountPicture({ account }: { account: LastGoogleAccount }) {
+function AccountPicture({
+  account,
+  className,
+}: {
+  account: LastGoogleAccount;
+  className?: string;
+}) {
   const [failed, setFailed] = useState(false);
   const initial = (account.name || account.email).charAt(0).toUpperCase();
   return account.avatarUrl && !failed ? (
     <img
       alt=""
-      className="size-9 shrink-0 rounded-full object-cover"
+      className={cn("size-9 shrink-0 rounded-full object-cover", className)}
       decoding="async"
       draggable={false}
       height={36}
@@ -118,7 +124,10 @@ function AccountPicture({ account }: { account: LastGoogleAccount }) {
   ) : (
     <span
       aria-hidden="true"
-      className="grid size-9 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--accent)_24%,var(--surface))] text-sm font-semibold text-(--accent-ink,var(--accent))"
+      className={cn(
+        "grid size-9 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--accent)_24%,var(--surface))] text-sm font-semibold text-(--accent-ink,var(--accent))",
+        className,
+      )}
     >
       {initial}
     </span>
@@ -166,7 +175,9 @@ export function GoogleAccountButton({
         googleSurfaceClasses,
         // Two lines, so taller than the one-line buttons: room for the
         // "Last used" tag to sit centred on the top edge, clear of the name.
-        "flex min-h-14.5 items-stretch",
+        // A size container: on narrow phones the picture gives its room to
+        // the name.
+        "@container flex min-h-14.5 items-stretch",
       )}
     >
       {lastUsed ? (
@@ -189,9 +200,12 @@ export function GoogleAccountButton({
         onClick={onContinue}
         type="button"
       >
-        <AccountPicture account={account} />
+        <AccountPicture account={account} className="@max-[18.5rem]:hidden" />
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate leading-4.5!">Continue as {firstName}</span>
+          {/* Wraps rather than cutting the name off when the button is narrow. */}
+          <span className="line-clamp-2 leading-4.5! wrap-anywhere">
+            Continue as {firstName}
+          </span>
           <span className="truncate text-xs leading-4 font-normal text-(--muted)">
             {secondLine}
           </span>
