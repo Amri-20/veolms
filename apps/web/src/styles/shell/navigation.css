@@ -683,7 +683,9 @@
     var(--surface-depth-shadow);
 }
 
-:root[data-theme="light"] .profile-menu {
+/* The phone sheet lays the menu flat on its own surface: a shadow there
+   shows only as a line under the last item. */
+:root[data-theme="light"] .profile-menu:not(.mobile-menu-sheet__profile-menu) {
   --profile-menu-cast-shadow: 0 1px 5px
     color-mix(in srgb, var(--text) 12%, transparent);
   box-shadow:
@@ -1091,13 +1093,15 @@
   left: calc(100% + 2px);
 }
 
+/* Beside the collapsed rail the menu's bottom lines up with the bottom of
+   its dock button. Each dock button below it takes one step: a 57px button
+   and the dock's 8px gap (SIDEBAR_DOCK_CLASS). */
 .courses-app--collapsed
   .sidebar-palette-menu--dock-attached.sidebar-palette-menu--collapsed {
   top: auto;
   bottom: calc(
-    -5px +
-      (var(--sidebar-dock-count, 1) - var(--palette-menu-dock-index, 0) - 1) *
-      42px
+    (var(--sidebar-dock-count, 1) - var(--palette-menu-dock-index, 0) - 1) *
+      65px
   );
 }
 

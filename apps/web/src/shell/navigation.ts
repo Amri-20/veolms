@@ -126,7 +126,8 @@ const navigationTones: Record<string, string> = {
   Notifications: "#f1be4b",
   Settings: "#a16cff",
   // Dock controls that are not pages.
-  Appearance: "#fbbf24",
+  // The colour theme button takes the theme's own primary colour.
+  Appearance: "var(--accent)",
   "Reading mode": "#34d399",
   Fullscreen: "#ff8a55",
   Logout: "#8c9294",

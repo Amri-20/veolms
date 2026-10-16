@@ -34,6 +34,7 @@ import {
 import { CourseCardThumbnail } from "./CourseCardThumbnail";
 import { PinToHomeMenuAction } from "./PinToHomeMenuAction";
 import { CourseThumbnailPlaceholder } from "./CourseThumbnailPlaceholder";
+import { raisedCourseCardClasses } from "../components/cardElevation";
 export {
   courseThumbnailSizes,
   getCourseThumbnailSrcSet,
@@ -236,12 +237,16 @@ export function CourseCard({
     setNotice(`${course.title} was restored.`);
   };
 
+  // The card is raised like the home page's course row (see
+  // `raisedCourseCardClasses`).
+  // On a phone the cards span the screen edge to edge, so they have no side
+  // border there: it would hold the thumbnail a pixel off each edge.
   return (
     <article
-      className={`${ALT_DRAG_TEXT_SELECT_CLASSES} group relative min-w-0 overflow-hidden rounded-2xl border transition-[background-color,box-shadow,opacity,border-color] duration-200 ${
+      className={`${ALT_DRAG_TEXT_SELECT_CLASSES} group relative min-w-0 overflow-hidden rounded-2xl border max-[640px]:border-x-0 transition-[background-color,box-shadow,opacity,border-color] duration-200 ${
         isDeleting
           ? "border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) opacity-60 pointer-events-none select-none"
-          : "border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) shadow-(--card-shadow) hover:bg-(--card-surface-hover,var(--hover)) hover:shadow-(--card-hover-shadow)"
+          : `border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) shadow-(--card-shadow) hover:bg-(--card-surface-hover,var(--hover)) hover:shadow-(--card-hover-shadow) ${raisedCourseCardClasses}`
       }`}
       aria-label={`${course.title}${isDeleting ? ", deleting..." : isPublic ? ", public course" : role === "creator" ? `, ${course.lifecycleStatus}` : course.enrolled ? `, ${progressText} complete` : ", not enrolled"}`}
       aria-busy={isDeleting}

@@ -1,4 +1,7 @@
-import { courseSurfaceElevation } from "../../components/cardElevation";
+import {
+  courseSurfaceElevation,
+  raisedCourseCardClasses,
+} from "../../components/cardElevation";
 import { guestHeroDayImage, guestHeroImage } from "../guest/guestHeroImage";
 import { GuestHomeSectionHeader } from "../guest/GuestHomeSectionHeader";
 import {
@@ -11,6 +14,8 @@ import {
   learnerHeroCopyWhenComplete,
   HeroPicture,
   heroSceneClasses,
+  heroThemeTintClasses,
+  heroBottomFadeClasses,
 } from "../guest/HeroPicture";
 import { getHomeTimeGreeting } from "../homeGreeting";
 import { LearnerCoursesSubtitle } from "./learnerCoursesSubtitle";
@@ -61,8 +66,15 @@ export const learnerCourseGridClasses = [
   "@[100rem]/courses:grid-cols-4",
 ].join(" ");
 
-/** The part of the page under the hero, with what goes in it. */
-export const learnerHomeBodyClasses = `grid min-w-0 pb-[clamp(1.75rem,3.6cqw,3rem)] ${guestHomeSectionGap} ${guestHomeGutter} ${guestHomeBlockStart}`;
+/**
+ * The part of the page under the hero, with what goes in it. Above a phone
+ * it is drawn 0.75rem up into the hero's faded foot (`heroBottomFadeClasses`):
+ * the picture is all but gone there, so the first heading keeps its usual
+ * distance from where the picture can still be seen. That is less than the
+ * smallest top padding (22px), so the heading never slips under the hero,
+ * which is drawn over the page below it.
+ */
+export const learnerHomeBodyClasses = `grid min-w-0 pb-[clamp(1.75rem,3.6cqw,3rem)] sm:-mt-3 ${guestHomeSectionGap} ${guestHomeGutter} ${guestHomeBlockStart}`;
 
 /** The page's own box (see `LearnerHome`). */
 export const learnerHomePageClasses = `learner-home-page @container/home min-w-0 ${courseSurfaceElevation}`;
@@ -143,7 +155,9 @@ export function LearnerResumeRowSkeleton() {
 /** One of the learner's course cards (see `LearnerCourseCard`). */
 function LearnerCourseCardSkeleton() {
   return (
-    <div className="flex min-w-0 items-center gap-3.5 overflow-hidden rounded-2xl border border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) p-3 shadow-(--card-shadow) @lg/courses:flex-col @lg/courses:items-stretch @lg/courses:gap-0 @lg/courses:p-0">
+    <div
+      className={`flex min-w-0 items-center gap-3.5 overflow-hidden rounded-2xl border border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) p-3 shadow-(--card-shadow) ${raisedCourseCardClasses} @lg/courses:flex-col @lg/courses:items-stretch @lg/courses:gap-0 @lg/courses:p-0`}
+    >
       <span
         className={`${onPage} block aspect-video w-30 shrink-0 rounded-lg @lg/courses:w-auto @lg/courses:rounded-none`}
       />
@@ -237,11 +251,11 @@ export function LearnerHomeShell({
       <section
         aria-label="Your home is loading"
         aria-busy="true"
-        className={`${heroSceneClasses} ${heroSizeClasses}`}
+        className={`${heroSceneClasses} ${heroBottomFadeClasses} ${heroSizeClasses}`}
       >
         <div
           aria-hidden="true"
-          className={`pointer-events-none absolute inset-0 -z-10 ${heroFadeClasses}`}
+          className={`pointer-events-none absolute inset-0 -z-10 ${heroFadeClasses} ${heroThemeTintClasses}`}
         />
         <div className={heroCopyBoxClasses}>
           <LearnerPhoneBackdrop />

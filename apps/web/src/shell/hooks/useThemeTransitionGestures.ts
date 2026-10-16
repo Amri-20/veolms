@@ -376,8 +376,14 @@ export function useThemeTransitionGestures({
       const profileSurface =
         event.target instanceof Element &&
         event.target.closest("[data-profile-surface]");
+      // The appearance dock shares the profile's box, but its buttons open
+      // menus of their own, which would come up over the profile menu.
+      const appearanceDock =
+        event.target instanceof Element &&
+        event.target.closest(".sidebar-appearance");
       if (
         !(event.target instanceof Node) ||
+        appearanceDock ||
         (!profileRef.current?.contains(event.target) && !profileSurface)
       ) {
         setProfileMenu(false);

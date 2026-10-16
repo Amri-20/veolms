@@ -227,12 +227,11 @@ export function useAppearanceControls({
     [appearanceAnimationsRef],
   );
 
-  const toggleAppearance = (mobile = false) => {
+  // Shift+D. It only switches between light and dark: an open colour menu
+  // stays open (and keeps the theme it is previewing), so the switch is seen
+  // happening behind it; only Escape or a click outside closes it.
+  const toggleAppearance = () => {
     setTheme(resolvedTheme === "dark" ? "light" : "dark");
-    revertPalettePreviewRef.current?.();
-    setReadingModeMenu(null);
-    if (mobile) setMobilePaletteMenu(false);
-    else setPaletteMenu(false);
   };
   toggleAppearanceRef.current = toggleAppearance;
   // The light/dark switch in the colour theme menu leaves the menu open.
@@ -253,6 +252,7 @@ export function useAppearanceControls({
   };
   const showReadingModeMenu = (mobile = false) => {
     revertPalettePreviewRef.current?.();
+    setProfileMenu(false);
     setPaletteMenu(false);
     setMobilePaletteMenu(false);
     setSettingsQuickMenu(null);

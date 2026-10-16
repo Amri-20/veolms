@@ -106,7 +106,10 @@ export const picturePlacementClasses =
  * a little way past that.
  */
 export const heroFadeClasses = [
-  "hidden @[50rem]/home:block",
+  // Stacked (above a phone, under 50rem) the layer has no fade of its own:
+  // it only carries the theme's tint (`heroThemeTintClasses`), turned to
+  // run down from the top behind the copy and gone before the picture.
+  "hidden sm:block @max-[50rem]/home:[--hero-tint-direction:to_bottom] @max-[50rem]/home:[--hero-tint-middle:28%] @max-[50rem]/home:[--hero-tint-end:58%]",
   "@[50rem]/home:bg-[linear-gradient(to_right,rgb(5_9_21/0.94)_0,rgb(5_9_21/0.8)_calc((100%_-_var(--picture-h)_*_1.05_+_var(--picture-shift))_*_0.573),rgb(5_9_21/0.3)_calc((100%_-_var(--picture-h)_*_1.05_+_var(--picture-shift))_*_0.978),transparent_calc((100%_-_var(--picture-h)_*_1.05_+_var(--picture-shift))_*_1.28))]",
   "@[50rem]/home:[:root[data-theme=light]_&]:bg-[linear-gradient(to_right,rgb(250_245_236/0.9)_0,rgb(250_245_236/0.72)_calc((100%_-_var(--picture-h)_*_1.05_+_var(--picture-shift))_*_0.573),rgb(250_245_236/0.24)_calc((100%_-_var(--picture-h)_*_1.05_+_var(--picture-shift))_*_0.944),transparent_calc((100%_-_var(--picture-h)_*_1.05_+_var(--picture-shift))_*_1.214))]",
 ].join(" ");
@@ -177,7 +180,8 @@ export const heroNameClasses =
  * may take two lines and the action a line of its own, at full width.
  * Beside the picture on a page under 56rem, where the hero has little room
  * for the row and no height to spare, it keeps to one line and gives up its
- * thumbnail for the title instead.
+ * Enter key instead (see `LearnerResumeRow`): as on a phone, the whole row
+ * is then the one link, and the title is part of it.
  *
  * A row sized by what is in it cannot also be measured by what is in it, so
  * beside the picture it is not a container, and everything there is chosen
@@ -202,7 +206,7 @@ export const resumeRowContentClasses =
   "relative z-10 flex flex-wrap items-center gap-x-3.5 gap-y-3 p-3 @[28rem]/resume:flex-nowrap @[50rem]/home:flex-nowrap @[50rem]/home:p-2.5";
 
 export const resumeThumbnailClasses =
-  "block h-15 w-26 shrink-0 overflow-hidden rounded-[0.625rem] @[50rem]/home:@max-[56rem]/home:hidden";
+  "block h-15 w-26 shrink-0 overflow-hidden rounded-[0.625rem]";
 
 /**
  * A phone's hero has no picture band (see `pictureBandClasses`). Behind its

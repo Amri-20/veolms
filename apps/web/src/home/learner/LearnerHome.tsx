@@ -112,15 +112,16 @@ export function LearnerHome({
     [enrolledCourses, pinnedCourseId],
   );
   const heroCourse = plan?.heroCourse;
-  // A pinned course already leads the page, so "My Courses" leaves it out
-  // rather than showing it twice; it comes back there once it is unpinned.
+  // The hero's course already leads the page, pinned or picked for the
+  // learner, so "My Courses" leaves it out rather than showing it twice; it
+  // comes back there once another course takes the hero's place.
   const listedCourses = useMemo(
     () =>
-      plan?.heroPinned
+      plan
         ? plan.courses.filter(
             (course) => course.courseId !== plan.heroCourse.courseId,
           )
-        : (plan?.courses ?? []),
+        : [],
     [plan],
   );
   const heroCourseKey = heroCourse ? getEnrolledCourseKey(heroCourse) : "";

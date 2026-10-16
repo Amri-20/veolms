@@ -126,6 +126,11 @@ export function MobileSheetAppearance({
   fullscreenActionLabel,
   toggleFullscreen,
 }: MobileSheetAppearanceProps) {
+  // The theme on screen, which is the one being previewed while the colour
+  // menu is open.
+  const displayedThemeName = academyThemes.find(
+    (themeOption) => themeOption.id === displayedAcademyTheme,
+  )?.name;
   // prettier-ignore
   return (
     <div
@@ -162,8 +167,8 @@ export function MobileSheetAppearance({
                 paletteMenuSource === "appearance"
               }
               aria-controls="mobile-theme-menu"
-              aria-label="Choose color theme and light or dark mode"
-              title="Color theme and mode"
+              aria-label={`Choose color theme and light or dark mode. Current theme: ${displayedThemeName}`}
+              title={`Color theme - ${displayedThemeName}`}
               onClick={(event) => {
                 if (consumeAppearanceGestureClick(event)) return;
                 if (

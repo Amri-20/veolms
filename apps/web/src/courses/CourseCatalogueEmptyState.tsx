@@ -72,7 +72,7 @@ export function CourseCatalogueEmptyState({
   const { Icon } = copy;
 
   return (
-    <div className="mt-6 grid min-h-90 place-items-center content-center rounded-xl border border-dashed border-(--border-strong) px-6 text-center">
+    <div className="mt-6 grid min-h-90 place-items-center content-center px-6 text-center">
       <Icon
         size={34}
         // The sign-in arrow's duotone fill is a box behind the arrow that

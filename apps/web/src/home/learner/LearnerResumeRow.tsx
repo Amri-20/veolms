@@ -187,9 +187,10 @@ export function LearnerResumeRow({
                 lesson: it leads to the course's own page, where the
                 curriculum is, and says so under the pointer. A name that is
                 cut off says itself in full instead. Only its letters take
-                the pointer; the rest of the line is the row's link. On a
-                phone the whole card is one link (it has no key either), so
-                a tap on the name opens the lesson like a tap anywhere else. */}
+                the pointer; the rest of the line is the row's link. Where
+                the row has no key (a phone, and beside the picture on a
+                page under 56rem) the whole card is one link, so a click or
+                a tap on the name opens the lesson like one anywhere else. */}
             <h2
               ref={titleRef}
               className="mt-0.5 line-clamp-2 text-[0.9375rem] leading-snug font-semibold @[28rem]/resume:block @[28rem]/resume:truncate @[50rem]/home:block @[50rem]/home:truncate"
@@ -200,7 +201,7 @@ export function LearnerResumeRow({
                 title={
                   titleCutOff ? course.courseTitle : VIEW_COURSE_CURRICULUM_HINT
                 }
-                className="pointer-events-auto rounded-xs underline-offset-[3px] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current max-sm:pointer-events-none max-sm:hover:no-underline"
+                className="pointer-events-auto rounded-xs underline-offset-[3px] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current max-sm:pointer-events-none max-sm:hover:no-underline @[50rem]/home:@max-[56rem]/home:pointer-events-none @[50rem]/home:@max-[56rem]/home:hover:no-underline"
               >
                 {course.courseTitle}
               </GuestHomeLink>
@@ -228,8 +229,10 @@ export function LearnerResumeRow({
           </div>
 
           {/* The shared action is taller, and wider at its sides, than the
-              row has room for. A phone has no key: the whole card is the
-              link there, and a tap anywhere on it opens the lesson. */}
+              row has room for. A phone has no key, and neither has the row
+              beside the picture on a page under 56rem, which keeps its
+              thumbnail instead: the whole card is the link there, and a
+              click or a tap anywhere on it opens the lesson. */}
           <GuestHomeLink
             ref={actionRef}
             href={href}
@@ -263,7 +266,7 @@ export function LearnerResumeRow({
                 TAP_KEY_RELEASE_MS,
               );
             }}
-            className={`${primaryActionClasses} ${enterKeyClasses} pointer-events-auto max-sm:hidden min-h-11! w-full shrink-0 px-5! text-[0.9375rem]! @[28rem]/resume:w-auto @[50rem]/home:w-auto`}
+            className={`${primaryActionClasses} ${enterKeyClasses} pointer-events-auto max-sm:hidden @[50rem]/home:@max-[56rem]/home:hidden min-h-11! w-full shrink-0 px-5! text-[0.9375rem]! @[28rem]/resume:w-auto @[50rem]/home:w-auto`}
           >
             Enter
             <ArrowElbowDownLeft
