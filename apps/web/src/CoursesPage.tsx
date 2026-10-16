@@ -18,6 +18,7 @@ import type {
   CourseOpenOptions,
 } from "./courses/catalogue";
 import { AcademyPaletteMenu } from "./shell/AcademyPaletteMenu";
+import { useMobileMenuRoleSwitch } from "./shell/hooks/useMobileMenuRoleSwitch";
 import { useAcademyPageContent } from "./shell/hooks/useAcademyPageContent";
 import { FloatingScrollbar } from "./shell/FloatingScrollbar";
 import { FrameEdge } from "./shell/FrameEdge";
@@ -690,6 +691,12 @@ export function CoursesPage({
     isLearningSurface,
     mobileMenuContentSnapPoint,
   });
+  const { switchRoleFromMobileMenu, applyRoleAfterMobileMenuClosed } =
+    useMobileMenuRoleSwitch({
+      mobileMenuOpen,
+      setRole,
+      dismissMobileMenuThen,
+    });
 
   const {
     navigationUsesCompactInteraction,
@@ -1373,7 +1380,9 @@ export function CoursesPage({
               else closeMobileMenu();
             }}
             onOpenChangeComplete={(open) => {
-              if (!open) setMobileMenuSnapPoint(mobileMenuCollapsedSnapPoint);
+              if (open) return;
+              setMobileMenuSnapPoint(mobileMenuCollapsedSnapPoint);
+              applyRoleAfterMobileMenuClosed();
             }}
             snapPoints={mobileMenuSnapPoints}
             snapPoint={mobileMenuSnapPoint}
@@ -1488,7 +1497,7 @@ export function CoursesPage({
                   sidebarPreferences={sidebarPreferences}
                   selectNavigation={selectNavigation}
                   setProfileMenu={setProfileMenu}
-                  setRole={setRole}
+                  setRole={switchRoleFromMobileMenu}
                   setEdgeSidebarOpen={setEdgeSidebarOpen}
                   dismissProfileMenuThen={dismissProfileMenuThen}
                   dismissMobileMenuThen={dismissMobileMenuThen}

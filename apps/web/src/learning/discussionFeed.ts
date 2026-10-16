@@ -7,8 +7,9 @@ export type DiscussionEntryFilter = "all" | DiscussionEntryKind;
 export type DiscussionFeedSort = "newest" | "top";
 
 /**
- * What the feed's menu offers: the two orders, and "Mine", which is the
- * newest first of only what the learner posted themselves.
+ * What the feed's menu offers: the two orders, and "mine", which is the
+ * newest first of only what the learner posted themselves (named after the
+ * tab: "My Comments", "My Notes" and so on).
  */
 export type DiscussionFeedView = DiscussionFeedSort | "mine";
 
@@ -17,11 +18,23 @@ export const DISCUSSION_FEED_SORT_OPTIONS = [
   ["top", "Top"],
 ] as const satisfies readonly (readonly [DiscussionFeedView, string])[];
 
-/** With "Mine", for a learner who is signed in: a guest has posted nothing. */
-export const DISCUSSION_FEED_VIEW_OPTIONS = [
+const MINE_LABELS: Record<DiscussionEntryFilter, string> = {
+  all: "My Discussions",
+  comment: "My Comments",
+  note: "My Notes",
+  question: "My Q&As",
+};
+
+/**
+ * With the learner's own, named after the tab, for a learner who is signed
+ * in: a guest has posted nothing.
+ */
+export const getDiscussionFeedViewOptions = (
+  entryFilter: DiscussionEntryFilter,
+): readonly (readonly [DiscussionFeedView, string])[] => [
   ...DISCUSSION_FEED_SORT_OPTIONS,
-  ["mine", "Mine"],
-] as const satisfies readonly (readonly [DiscussionFeedView, string])[];
+  ["mine", MINE_LABELS[entryFilter]],
+];
 
 export const getDiscussionFeedSort = (
   view: DiscussionFeedView,

@@ -187,7 +187,9 @@ export function LearnerResumeRow({
                 lesson: it leads to the course's own page, where the
                 curriculum is, and says so under the pointer. A name that is
                 cut off says itself in full instead. Only its letters take
-                the pointer; the rest of the line is the row's link. */}
+                the pointer; the rest of the line is the row's link. On a
+                phone the whole card is one link (it has no key either), so
+                a tap on the name opens the lesson like a tap anywhere else. */}
             <h2
               ref={titleRef}
               className="mt-0.5 line-clamp-2 text-[0.9375rem] leading-snug font-semibold @[28rem]/resume:block @[28rem]/resume:truncate @[50rem]/home:block @[50rem]/home:truncate"
@@ -198,7 +200,7 @@ export function LearnerResumeRow({
                 title={
                   titleCutOff ? course.courseTitle : VIEW_COURSE_CURRICULUM_HINT
                 }
-                className="pointer-events-auto rounded-xs underline-offset-[3px] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+                className="pointer-events-auto rounded-xs underline-offset-[3px] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current max-sm:pointer-events-none max-sm:hover:no-underline"
               >
                 {course.courseTitle}
               </GuestHomeLink>

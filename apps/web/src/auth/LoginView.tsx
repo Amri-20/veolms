@@ -26,6 +26,7 @@ import type { AuthFlowState, AuthIdentifier } from "./authFlow";
 import { generateUniqueUsername } from "./username";
 import { getSecondaryVerificationMethodRequired } from "./authConfig";
 import {
+  LOGIN_PURPOSE_PARAM,
   resolveAuthenticatedDestination,
   sanitizeReturnTo,
 } from "../routing/routeAccess";
@@ -121,6 +122,10 @@ export function LoginView({
   const returnPath = returnTo?.split(/[?#]/, 1)[0] ?? "";
   const isReturningToDiscussions =
     returnPath === "/discussions" || returnPath.startsWith("/discussions/");
+  // Asked to log in from a lesson's discussion (the reply box, say).
+  const isJoiningDiscussion =
+    isReturningToDiscussions ||
+    searchParams.get(LOGIN_PURPOSE_PARAM) === "discussion";
   // A browser that has signed in with Google before is greeted back, and
   // its account leads the card (see SocialLoginActions).
   const { account: rememberedGoogleAccount } = useLastGoogleAccount();
@@ -541,7 +546,7 @@ export function LoginView({
       );
     }
 
-    const welcomeSubtitle = isReturningToDiscussions
+    const welcomeSubtitle = isJoiningDiscussion
       ? isReturningVisitor
         ? "Log in to join the discussion"
         : "Log in or sign up to join the discussion"

@@ -71,6 +71,7 @@ import {
 } from "../services/learning-interactions/reply-pagination";
 import { adaptLearningReplyToCommentReply } from "./learning-replies.adapter";
 import { UndoDeleteButton } from "./useUndoableDeletion";
+import { useThreadSwipeAxisLock } from "./useThreadSwipeAxisLock";
 import {
   DiscussionAttachmentsList,
   AttachmentComposerPreview,
@@ -714,6 +715,8 @@ const ThreadPanelSlides = memo(function ThreadPanelSlides({
   if (slideTrail.current !== activeIndex) {
     setSlideTrail({ current: activeIndex, previous: slideTrail.current });
   }
+  const [swiper, setSwiper] = useState<SwiperInstance | null>(null);
+  useThreadSwipeAxisLock(swiper);
   const isSlideFilled = (index: number) =>
     index === activeIndex ||
     (openSettled &&
@@ -734,11 +737,16 @@ const ThreadPanelSlides = memo(function ThreadPanelSlides({
       touchMoveStopPropagation
       noSwiping
       noSwipingSelector="button,a,input,textarea,select,[contenteditable=true],[role=menu],[data-discussion-atomic-editor],.swiper-no-swiping"
-      onSwiper={(swiper) => {
-        onSwiperReady(swiper);
-        swiper.slideTo(activeIndex, 0);
+      onSwiper={(instance) => {
+        onSwiperReady(instance);
+        setSwiper(instance);
+        instance.slideTo(activeIndex, 0);
       }}
-      onSlideChange={(swiper) => {
+      // The open thread (and the address) change once the slide has come to
+      // rest. Changing them as the finger lifts rendered the page in the
+      // touchend task and again near the end of the slide, so the slide
+      // stalled when released and jumped the last stretch.
+      onSlideChangeTransitionEnd={(swiper) => {
         const entry = entries[swiper.activeIndex];
         if (entry) onActiveEntryChange(getClientEntityId(entry));
       }}
@@ -1108,6 +1116,13 @@ function ThreadSlide({
   };
 
   const focusComposer = () => onFocusComposer(entry.id);
+  // Guests get the same reply box as everyone else; reaching for it asks
+  // them to log in (or get access) instead of opening the editor.
+  const needsParticipationAccess = !entry.isLocked && !canParticipate;
+  const participationPromptText = getParticipationPromptText(
+    participationState,
+    participationActionLabel,
+  );
 
   return (
     <div
@@ -1211,7 +1226,9 @@ function ThreadSlide({
                 Start the conversation
               </p>
               <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-(--muted)">
-                Be the first to reply to {entry.name}.
+                {needsParticipationAccess
+                  ? participationPromptText
+                  : `Be the first to reply to ${entry.name}.`}
               </p>
             </div>
           )}
@@ -1248,7 +1265,7 @@ function ThreadSlide({
             <Lock size={16} weight="bold" />
             <span>This conversation is locked. Replies are disabled.</span>
           </div>
-        ) : canParticipate ? (
+        ) : (
           <ThreadReplyComposer
             entry={entry}
             currentUser={currentUser}
@@ -1258,33 +1275,30 @@ function ThreadSlide({
             onFocusHandled={onComposerFocusHandled}
             onSubmit={handleAddReply}
             courseId={courseId}
+            onGuestIntent={
+              canParticipate
+                ? undefined
+                : participationState === "pending" || !onParticipationAction
+                  ? ignoreGuestIntent
+                  : onParticipationAction
+            }
           />
-        ) : (
-          <div
-            className="-mx-4 -mb-4 mt-0 flex flex-col items-center justify-center gap-2 rounded-t-xl border-t border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-[color-mix(in_srgb,var(--surface)_72%,transparent)] px-4 py-4 text-center sm:mx-0 sm:mb-0 sm:rounded-xl"
-            data-testid="learning-thread-login-prompt"
-          >
-            <p className="text-sm font-medium text-(--muted)">
-              {participationState === "pending"
-                ? "Checking participation access…"
-                : participationActionLabel === "Get access"
-                  ? "Get access to participate in discussions."
-                  : "Log in to participate in discussions."}
-            </p>
-            {participationState !== "pending" && onParticipationAction ? (
-              <button
-                type="button"
-                onClick={onParticipationAction}
-                className="inline-flex min-h-9 items-center rounded-lg bg-(--accent) px-3 py-1.5 text-xs font-semibold text-(--on-accent) transition-colors hover:bg-(--accent-hover) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
-              >
-                {participationActionLabel ?? "Log in"}
-              </button>
-            ) : null}
-          </div>
         ))}
     </div>
   );
 }
+
+function getParticipationPromptText(
+  participationState: LessonParticipationState,
+  participationActionLabel?: string,
+) {
+  if (participationState === "pending") return "Checking access…";
+  return participationActionLabel === "Get access"
+    ? "Get access to join the discussion."
+    : "Log in to join the discussion.";
+}
+
+function ignoreGuestIntent() {}
 
 function ThreadRootEntry({
   entry,
@@ -1830,6 +1844,7 @@ function ThreadReplyComposer({
   onFocusHandled,
   onSubmit,
   courseId,
+  onGuestIntent,
 }: {
   entry: Comment;
   currentUser?: { name: string; avatar: string };
@@ -1843,6 +1858,9 @@ function ThreadReplyComposer({
     onCreateFailure?: () => void,
   ) => Promise<boolean> | boolean;
   courseId?: string;
+  /** Set for a viewer who may not reply: the box is shown, and reaching
+   * for it calls this (the login pop-up) instead of opening the editor. */
+  onGuestIntent?: () => void;
 }) {
   const [composerKey, setComposerKey] = useState(0);
   const [draft, setDraft] = useState<DiscussionDraft>(
@@ -1868,9 +1886,15 @@ function ThreadReplyComposer({
   // The editor is the heaviest part of the panel. Its place is held by a
   // look-alike until the panel has stopped sliding in, or until the reader
   // goes to write, whichever comes first.
-  const [editorMounted, setEditorMounted] = useState(editorReady);
-  if (editorReady && !editorMounted) setEditorMounted(true);
+  const [editorMounted, setEditorMounted] = useState(
+    editorReady && !onGuestIntent,
+  );
+  if (editorReady && !editorMounted && !onGuestIntent) setEditorMounted(true);
   const openEditor = () => {
+    if (onGuestIntent) {
+      onGuestIntent();
+      return;
+    }
     setEditorMounted(true);
     onRequestFocus();
   };
@@ -2000,7 +2024,7 @@ function ThreadReplyComposer({
       aria-label={`Reply to ${entry.name}`}
       aria-placeholder={REPLY_PLACEHOLDER_TEXT}
       onClick={openEditor}
-      onFocus={openEditor}
+      onFocus={onGuestIntent ? undefined : openEditor}
       className="min-h-11 w-full cursor-text px-4 py-2.5 font-(family-name:--app-font-family) text-[0.9375rem] leading-[1.6] text-(--muted) outline-none"
     >
       {REPLY_PLACEHOLDER_TEXT}
@@ -2063,8 +2087,8 @@ function ThreadReplyComposer({
         <button
           type="button"
           aria-label="Post reply"
-          disabled={!canSubmit || isPendingSubmission}
-          onClick={submit}
+          disabled={!onGuestIntent && (!canSubmit || isPendingSubmission)}
+          onClick={onGuestIntent ?? submit}
           className="grid size-10 shrink-0 place-items-center rounded-full bg-(--accent) text-(--on-accent) shadow-[0_8px_22px_color-mix(in_srgb,var(--accent-shadow)_62%,transparent)] transition-[background-color,opacity] hover:bg-(--accent-hover) disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) sm:size-11"
         >
           <PaperPlaneTilt size={23} weight="fill" aria-hidden="true" />

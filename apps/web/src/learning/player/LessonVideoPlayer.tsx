@@ -11,6 +11,7 @@ import { LockKeyIcon as LockKey } from "@phosphor-icons/react/LockKey";
 import {
   PlayerErrorNotice,
   PlayerThemeProvider,
+  getPlayerThemeStyle,
   VideoPlayer as VeoVideoPlayer,
   VideoPlayerNotice,
   VideoLoadingSpinner,
@@ -36,6 +37,7 @@ import {
   type NextLessonInfo,
 } from "./LessonEndScreenOverlay";
 import {
+  CourseLessonsButton,
   LessonCentralControls,
   LessonPlayerControls,
   LessonPlayerMinimizeControl,
@@ -49,6 +51,7 @@ import {
 } from "./LessonReadingStage";
 import {
   LessonReadingFullscreenControls,
+  LessonReadingNavigationControls,
   useLessonReadingFullscreen,
 } from "./LessonReadingControls";
 import { MiniPlayerWindowControls } from "./MiniPlayerControls";
@@ -922,7 +925,36 @@ export function LessonVideoPlayer({
     readingSurfaceRef,
     hasReading,
   );
+  // A tap on a reading's text puts its controls away, as a tap on a video
+  // does, and the next brings them back. With a mouse they follow the
+  // pointer instead: shown while it is over the reading, put away when it
+  // leaves, as a video's are.
+  const [readingControlsHidden, setReadingControlsHidden] = useState(false);
+  const toggleReadingControls = useCallback(
+    () => setReadingControlsHidden((hidden) => !hidden),
+    [],
+  );
   const exitReadingFullscreen = readingFullscreen.exit;
+  // A reading in full screen on a touch screen held sideways shows its
+  // lessons beside it, in the panel a video has there (see
+  // `readingLessonsPanelVisible`). Anywhere else the lessons open where a
+  // video's Lessons button opens them (the page's course column, or its
+  // drawer), which a reading in full screen would cover, so the reading
+  // leaves full screen first.
+  const readingLessonsBeside = readingFullscreen.landscapeOnTouch;
+  const toggleLessonsFromReading = useCallback(async () => {
+    if (readingLessonsBeside) {
+      onCourseLessonsToggle?.("side");
+      return;
+    }
+    await exitReadingFullscreen();
+    onCourseLessonsToggle?.(courseLessonsSidePanel ? "side" : "drawer");
+  }, [
+    courseLessonsSidePanel,
+    exitReadingFullscreen,
+    onCourseLessonsToggle,
+    readingLessonsBeside,
+  ]);
   const minimizeReadingFromControl = useCallback(async () => {
     await exitReadingFullscreen();
     void minimizePlayerFromControl();
@@ -959,6 +991,15 @@ export function LessonVideoPlayer({
     },
     [onMobileLandscapeFullscreenChange],
   );
+
+  // A reading turned sideways in full screen tells the page so, as a
+  // video's controls do, and the page's Lessons toggle then opens the side
+  // panel. There are no video controls to say it while a reading is up.
+  useEffect(() => {
+    if (!hasReading || !readingLessonsBeside) return undefined;
+    handleMobileLandscapeFullscreenChange(true);
+    return () => handleMobileLandscapeFullscreenChange(false);
+  }, [handleMobileLandscapeFullscreenChange, hasReading, readingLessonsBeside]);
 
   const handleTheaterModeChange = useCallback(
     (active: boolean) => {
@@ -1101,6 +1142,11 @@ export function LessonVideoPlayer({
     // shows its frame.
     const miniReading =
       presentation === "mini" ? playbackAccessError?.article : undefined;
+    const readingLessonsPanelVisible =
+      Boolean(reading) &&
+      readingLessonsBeside &&
+      courseLessonsOpen &&
+      Boolean(courseLessonsPanel);
     const gateIllustration =
       presentation === "full" && playbackAccessError?.kind === "retry"
         ? playbackAccessError.illustration
@@ -1141,12 +1187,44 @@ export function LessonVideoPlayer({
           (reading || miniReading) && lessonReadingShellClasses,
         )}
         ref={reading ? readingSurfaceRef : undefined}
+        // The reading, its controls and the lessons panel share the width
+        // as a video and the panel do: the panel takes what the video's
+        // resizable split leaves.
+        style={
+          readingLessonsPanelVisible
+            ? ({
+                "--lesson-reading-panel-width": `${100 - courseLessonsVideoWidthPercent}dvw`,
+              } as CSSProperties)
+            : undefined
+        }
         data-learning-playback-gate={playbackAccessError?.kind ?? "pending"}
         data-lesson-reading-moving={
           reading && minimizeGesture.controlsSuppressed ? "" : undefined
         }
         data-learning-player-motion-surface=""
         {...(presentation === "full" ? minimizeGesture.handlers : {})}
+        onPointerEnter={
+          reading
+            ? (event) => {
+                if (event.pointerType === "mouse") {
+                  setReadingControlsHidden(false);
+                }
+              }
+            : undefined
+        }
+        onPointerLeave={
+          reading
+            ? (event) => {
+                if (event.pointerType === "mouse") {
+                  setReadingControlsHidden(true);
+                }
+              }
+            : undefined
+        }
+        // A keyboard reaching the reading finds its controls there.
+        onFocusCapture={
+          reading ? () => setReadingControlsHidden(false) : undefined
+        }
         role={
           isPending
             ? "status"
@@ -1176,7 +1254,9 @@ export function LessonVideoPlayer({
                 />
               ) : undefined
             }
-            clearBottom={readingFullscreen.available}
+            clearBottom
+            controlsHidden={readingControlsHidden}
+            onTap={toggleReadingControls}
           />
         ) : presentation === "full" && onMinimize ? (
           <LessonPlayerMinimizeControl
@@ -1186,10 +1266,48 @@ export function LessonVideoPlayer({
         ) : null}
         {reading ? (
           <PlayerThemeProvider theme={playerTheme}>
+            <LessonReadingNavigationControls
+              canGoNext={canGoNext}
+              canGoPrevious={canGoPrevious}
+              hidden={readingControlsHidden}
+              showLessonNavigation={showLessonNavigation}
+              style={getPlayerThemeStyle(playerTheme)}
+              onGoNext={onGoNext}
+              onGoPrevious={onGoPrevious}
+            />
             <LessonReadingFullscreenControls
+              hidden={readingControlsHidden}
+              lessonsButton={
+                onCourseLessonsToggle ? (
+                  <CourseLessonsButton
+                    open={
+                      readingLessonsBeside || courseLessonsSidePanel
+                        ? courseLessonsOpen
+                        : courseLessonsDrawerOpen
+                    }
+                    onToggle={() => void toggleLessonsFromReading()}
+                    shortcutLabel={courseLessonsShortcutLabel}
+                    sidePanel={readingLessonsBeside || courseLessonsSidePanel}
+                    opensFromBottom={
+                      !readingLessonsBeside &&
+                      !courseLessonsSidePanel &&
+                      courseLessonsBottomSheet
+                    }
+                    textSize="sm"
+                    scrollportId={
+                      readingLessonsBeside
+                        ? "learning-fullscreen-course-curriculum-scrollport"
+                        : courseLessonsSidePanel
+                          ? "learning-course-curriculum-scrollport"
+                          : "lesson-drawer-curriculum-scrollport"
+                    }
+                  />
+                ) : undefined
+              }
               readingFullscreen={readingFullscreen}
-              enterIcon={<FullscreenEnterIcon size={20} />}
-              exitIcon={<FullscreenExitIcon size={20} />}
+              style={getPlayerThemeStyle(playerTheme)}
+              enterIcon={<FullscreenEnterIcon size={23} />}
+              exitIcon={<FullscreenExitIcon size={23} />}
             />
           </PlayerThemeProvider>
         ) : null}
@@ -1202,6 +1320,11 @@ export function LessonVideoPlayer({
               onRestore={onMiniRestore ?? (() => undefined)}
             />
           </PlayerThemeProvider>
+        ) : null}
+        {readingLessonsPanelVisible ? (
+          <div className="absolute inset-y-0 right-0 z-40 flex w-(--lesson-reading-panel-width)">
+            {courseLessonsPanel}
+          </div>
         ) : null}
         {miniReading ? <LessonReadingMiniature article={miniReading} /> : null}
         {playbackAccessError &&

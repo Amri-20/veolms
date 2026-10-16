@@ -10,6 +10,7 @@ import { AuthRouteGuard } from "../routing/RouteGuards";
 import {
   buildLoginDialogPath,
   LOGIN_PATH,
+  readLoginPurpose,
   normalizeAppPath,
   resolveAuthenticatedDestination,
   resolveSessionAccess,
@@ -60,7 +61,13 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
     // The pop-up's code is asked for now instead of once that page has
     // rendered and found it is wanted.
     void loginDialogBody.preload();
-    return redirect(buildLoginDialogPath(url.searchParams.get("returnTo")));
+    return redirect(
+      buildLoginDialogPath(
+        url.searchParams.get("returnTo"),
+        null,
+        readLoginPurpose(url.search),
+      ),
+    );
   }
 
   return null;

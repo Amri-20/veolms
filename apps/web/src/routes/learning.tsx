@@ -340,6 +340,7 @@ export default function LearningRoute() {
     navigateTo(
       buildLoginPath(
         `${location.pathname}${stripLoginDialogParams(location.search)}`,
+        "discussion",
       ),
       {
         exact: true,
