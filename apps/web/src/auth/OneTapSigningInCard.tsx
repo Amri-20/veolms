@@ -1,5 +1,10 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { GoogleBrandIcon } from "./SocialBrandIcons";
+import {
+  detectAndroidSheetSize,
+  OneTapSigningInSheet,
+  prepareAndroidSheetFont,
+} from "./OneTapSigningInSheet";
 
 /** Who Google's prompt signed in, as its credential says. */
 export interface CredentialAccount {
@@ -220,21 +225,59 @@ function ProgressLine() {
 }
 
 /**
+ * Called when Google's prompt goes up, seconds before the account is
+ * known: fetches what the card or sheet will need so it shows complete at
+ * once. The sheet's font is fetched only where the sheet is used. The
+ * picture is that of the Google account this browser last signed in with,
+ * which is usually the one picked again.
+ */
+export function prepareOneTapSigningIn(lastPictureUrl?: string): void {
+  if (detectAndroidSheetSize()) prepareAndroidSheetFont();
+  if (lastPictureUrl) {
+    const picture = new Image();
+    // Fetched as the card's own picture is, so it comes from the cache.
+    picture.referrerPolicy = "no-referrer";
+    picture.src = lastPictureUrl;
+  }
+}
+
+interface SigningInProps {
+  account: CredentialAccount;
+  /** The check is done: go away (the sheet slides), then call `onLeft`. */
+  leaving: boolean;
+  onLeft: () => void;
+}
+
+/**
+ * Takes over from the browser's own sign-in prompt the moment it closes,
+ * looking as it did: Chrome's sheet along the bottom on Android, the
+ * browser's card in the corner elsewhere.
+ */
+export function OneTapSigningInCard(props: SigningInProps) {
+  const [sheetSize] = useState(detectAndroidSheetSize);
+  return sheetSize ? (
+    <OneTapSigningInSheet {...props} size={sheetSize} />
+  ) : (
+    <BrowserSigningInCard {...props} />
+  );
+}
+
+/**
  * Takes over from the browser's sign-in card the moment it closes: the
  * same card, in the same place, still showing its progress line and the
  * account that was picked, with "Signing in…" where it said "Verifying…"
  * and no close button. It appears at once (no fade), under the browser's
  * card as that fades away, so the two read as one. The page under it
- * turns into the signed-in one in place when the check is done.
+ * turns into the signed-in one in place when the check is done, and the
+ * card goes at once.
  *
  * It copies the card's look only: no browser wording ("Sign in to … with
  * google.com"), nothing to press.
  */
-export function OneTapSigningInCard({
-  account,
-}: {
-  account: CredentialAccount;
-}) {
+function BrowserSigningInCard({ account, leaving, onLeft }: SigningInProps) {
+  useLayoutEffect(() => {
+    if (leaving) onLeft();
+  }, [leaving, onLeft]);
   const [{ look, colours }] = useState(() => {
     const family = detectBrowserFamily();
     const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
