@@ -25,6 +25,7 @@ import {
 import { ALT_DRAG_TEXT_SELECT_CLASSES } from "../../courses/altDragTextSelect";
 import { getPinCourseDragProps } from "./pinCourseDrag";
 import { useIsCutOff } from "./useIsCutOff";
+import { raisedCourseCardClasses } from "../../components/cardElevation";
 
 const plural = (count: number, one: string, many: string) =>
   `${count} ${count === 1 ? one : many}`;
@@ -115,7 +116,7 @@ export function LearnerCourseCard({
           ? `${course.courseTitle}, ${formatCourseProgress(progress)} complete`
           : course.courseTitle
       }
-      className={`${ALT_DRAG_TEXT_SELECT_CLASSES} group/card relative flex min-w-0 items-center gap-3.5 overflow-hidden rounded-2xl border border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) p-3 shadow-(--card-shadow) transition-[background-color,box-shadow] duration-200 hover:bg-(--card-surface-hover,var(--hover)) hover:shadow-(--card-hover-shadow) @lg/courses:flex-col @lg/courses:items-stretch @lg/courses:gap-0 @lg/courses:p-0`}
+      className={`${ALT_DRAG_TEXT_SELECT_CLASSES} group/card relative flex min-w-0 items-center gap-3.5 overflow-hidden rounded-2xl border border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) p-3 shadow-(--card-shadow) transition-[background-color,box-shadow] duration-200 hover:bg-(--card-surface-hover,var(--hover)) hover:shadow-(--card-hover-shadow) ${raisedCourseCardClasses} @lg/courses:flex-col @lg/courses:items-stretch @lg/courses:gap-0 @lg/courses:p-0`}
     >
       <div className="relative aspect-video w-30 shrink-0 overflow-hidden rounded-lg bg-[#05070c] @lg/courses:w-auto @lg/courses:rounded-none">
         <LearnerCourseThumbnail course={course} priority={priority} />

@@ -10,7 +10,12 @@ import { HeroLampSoundToggle } from "./HeroLampSoundToggle";
 import { HeroLaptopPower, useHeroLaptopPower } from "./HeroLaptopPower";
 import { HeroLaptopPowerSpot } from "./HeroLaptopPowerSpot";
 import { HeroLaptopScreen } from "./HeroLaptopScreen";
-import { HeroPicture, heroSceneClasses } from "./HeroPicture";
+import {
+  HeroPicture,
+  heroBottomFadeClasses,
+  heroSceneClasses,
+  heroThemeTintClasses,
+} from "./HeroPicture";
 import {
   guestHeroDayImage,
   guestHeroDayLampOnImage,
@@ -362,7 +367,7 @@ export function HeroDesk({
     <section
       aria-labelledby={labelledBy}
       data-lamp={lampOverride}
-      className={`${heroSceneClasses} ${className}`}
+      className={`${heroSceneClasses} ${heroBottomFadeClasses} ${className}`}
     >
       {laptopScreen ? (
         <HeroLaptop pictureRef={litPictureRef}>{laptopScreen}</HeroLaptop>
@@ -384,7 +389,7 @@ export function HeroDesk({
 
       <div
         aria-hidden="true"
-        className={`pointer-events-none absolute inset-0 -z-10 ${fadeClassName}`}
+        className={`pointer-events-none absolute inset-0 -z-10 ${fadeClassName} ${heroThemeTintClasses}`}
       />
 
       {children(pictures)}

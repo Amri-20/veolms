@@ -78,10 +78,12 @@ export const SIDEBAR_DOCK_CLASS =
 
 // The phone sheet's appearance row matches the desktop dock: no tray behind
 // the buttons, each button standing on its own at the dock's height, corners
-// and icon size. The tray clipped its children, so it no longer does: the
-// active button's shadow would be cut at the row's edge.
+// and icon size. Idle buttons keep the sheet's own darker fill and border so
+// each one has a clear edge; the active one rises. The tray clipped its
+// children, so it no longer does: the active button's shadow would be cut at
+// the row's edge.
 export const MOBILE_SHEET_DOCK_CLASS =
-  "bg-transparent! p-0! shadow-none! rounded-none! overflow-visible! gap-2! [&_button]:h-[57px]! [&_button]:min-h-[57px]! [&_button]:rounded-xl! [&_button:not(.is-active,[aria-expanded=true],[aria-pressed=true])]:bg-[color-mix(in_srgb,var(--surface)_35%,transparent)]! [&_button]:hover:border-transparent! [&_button>svg]:size-[26px] [&_[data-appearance-mode-toggle]>svg]:text-(--dock-appearance-icon-color)! [&_[data-reading-mode-trigger]>svg]:text-(--dock-reading-mode-icon-color)! [&_button>svg]:[filter:drop-shadow(0_2px_6px_color-mix(in_srgb,currentColor_38%,transparent))]!";
+  "bg-transparent! p-0! shadow-none! rounded-none! overflow-visible! gap-2! [&_button]:h-[57px]! [&_button]:min-h-[57px]! [&_button]:rounded-xl! [&_button>svg]:size-[26px] [&_[data-appearance-mode-toggle]>svg]:text-(--dock-appearance-icon-color)! [&_[data-reading-mode-trigger]>svg]:text-(--dock-reading-mode-icon-color)! [&_button>svg]:[filter:drop-shadow(0_2px_6px_color-mix(in_srgb,currentColor_38%,transparent))]!";
 
 // While the sidebar is animating or being dragged between its two states it
 // still counts as collapsed but is no longer narrow. In that in-between

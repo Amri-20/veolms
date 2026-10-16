@@ -5,7 +5,7 @@ import fs from "node:fs";
 import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { loadWebConfig } from "@veolms/config";
-import { defineConfig, loadEnv, type Plugin } from "vite";
+import { defineConfig, loadEnv, type Plugin, type Rolldown } from "vite";
 
 import { parseSiteOrigin } from "./src/routing/siteOrigin.ts";
 
@@ -169,7 +169,7 @@ const ROUTE_CHUNK_PRELOADS = [
     placeholder: "__VEO_CATALOGUE_CHUNK_URL__",
     cssPlaceholder: "__VEO_CATALOGUE_CSS_URLS__",
     jsPlaceholder: "__VEO_CATALOGUE_JS_URLS__",
-    facadeSuffix: "/src/courses/CourseCatalogue.tsx",
+    moduleSuffix: "/src/courses/CourseCatalogue.tsx",
     manifestSrcSuffix: "courses/CourseCatalogue.tsx",
     devUrl: "/src/courses/CourseCatalogue.tsx",
   },
@@ -177,7 +177,7 @@ const ROUTE_CHUNK_PRELOADS = [
     placeholder: "__VEO_GUEST_HOME_CHUNK_URL__",
     cssPlaceholder: "__VEO_GUEST_HOME_CSS_URLS__",
     jsPlaceholder: "__VEO_GUEST_HOME_JS_URLS__",
-    facadeSuffix: "/src/GuestHome.tsx",
+    moduleSuffix: "/src/GuestHome.tsx",
     manifestSrcSuffix: "src/GuestHome.tsx",
     devUrl: "/src/GuestHome.tsx",
   },
@@ -185,15 +185,43 @@ const ROUTE_CHUNK_PRELOADS = [
     placeholder: "__VEO_COURSE_OVERVIEW_CHUNK_URL__",
     cssPlaceholder: "__VEO_COURSE_OVERVIEW_CSS_URLS__",
     jsPlaceholder: "__VEO_COURSE_OVERVIEW_JS_URLS__",
-    facadeSuffix: "/src/courses/CourseOverviewPage.tsx",
+    moduleSuffix: "/src/courses/CourseOverviewPage.tsx",
     manifestSrcSuffix: "courses/CourseOverviewPage.tsx",
     devUrl: "/src/courses/CourseOverviewPage.tsx",
   },
 ];
 
+// The chunk a lazy route body's dynamic import loads. Usually the module is
+// that chunk's facade. A module that another chunk also imports statically
+// (the course page, through the course editor's preview) is placed by
+// Rolldown in a shared chunk with no facade, and the dynamic import loads
+// that chunk instead, so look for the chunk that contains the module.
+function findRouteBodyChunk(
+  bundle: Rolldown.OutputBundle,
+  moduleSuffix: string,
+) {
+  const chunks = Object.values(bundle).filter(
+    (item): item is Rolldown.OutputChunk => item.type === "chunk",
+  );
+  return (
+    chunks.find((chunk) =>
+      chunk.facadeModuleId?.replaceAll("\\", "/").endsWith(moduleSuffix),
+    ) ??
+    chunks.find((chunk) =>
+      Object.keys(chunk.modules).some((id) =>
+        id.replaceAll("\\", "/").endsWith(moduleSuffix),
+      ),
+    )
+  );
+}
+
 function routeChunkPreloadPlugin(): Plugin {
   let publicBase = "/";
   let command: "build" | "serve" = "build";
+  // What the client pass resolved. React Router builds the client first and
+  // shares plugin instances across its environments, so the server pass,
+  // which renders the prerendered documents, reuses these.
+  let clientUrls = new Map<string, string>();
 
   return {
     name: "veo-route-chunk-preload",
@@ -226,69 +254,68 @@ function routeChunkPreloadPlugin(): Plugin {
     },
     generateBundle(_outputOptions, bundle) {
       const isSsrPass = Boolean(this.environment?.config.build.ssr);
-      const urls = new Map<string, string>();
-      // Facade matching is only valid in the client pass: the SSR bundle
+      const urls = new Map<string, string>(isSsrPass ? clientUrls : []);
+      // Chunk matching is only valid in the client pass: the SSR bundle
       // emits its own chunk for these modules under a different hash, and
       // baking that name into the prerendered HTML points the preload at a
       // file that does not exist under client/assets.
       if (!isSsrPass) {
-        for (const item of Object.values(bundle)) {
-          if (item.type !== "chunk" || !item.facadeModuleId) continue;
-          const facade = item.facadeModuleId.replaceAll("\\", "/");
-          for (const entry of ROUTE_CHUNK_PRELOADS) {
-            if (facade.endsWith(entry.facadeSuffix)) {
-              urls.set(
-                entry.placeholder,
-                joinPublicPath(publicBase, item.fileName),
-              );
-              // The feature CSS usually belongs to chunks this one imports
-              // statically, so collect it across that whole graph.
-              const cssFiles = new Set<string>();
-              const jsFiles = new Set<string>();
-              const seen = new Set<string>();
-              const pending = [item.fileName];
-              while (pending.length) {
-                const fileName = pending.pop() as string;
-                if (seen.has(fileName)) continue;
-                seen.add(fileName);
-                const chunk = bundle[fileName];
-                if (!chunk || chunk.type !== "chunk") continue;
-                // A chunk made only of stylesheets is deleted after this
-                // hook; it never becomes a file that could be preloaded.
-                const moduleIds = Object.keys(chunk.modules);
-                const isStyleOnlyChunk =
-                  moduleIds.length > 0 &&
-                  moduleIds.every((id) => /\.css(?:$|\?)/u.test(id));
-                if (fileName !== item.fileName && !isStyleOnlyChunk) {
-                  jsFiles.add(fileName);
-                }
-                for (const file of chunk.viteMetadata?.importedCss ?? []) {
-                  cssFiles.add(file);
-                }
-                pending.push(...chunk.imports);
-              }
-              urls.set(
-                entry.cssPlaceholder,
-                [...cssFiles]
-                  .map((file) => joinPublicPath(publicBase, file))
-                  .join(","),
-              );
-              // The chunks it imports statically: the document preloads
-              // them too, so the lazy body is ready when hydration starts.
-              urls.set(
-                entry.jsPlaceholder,
-                [...jsFiles]
-                  .map((file) => joinPublicPath(publicBase, file))
-                  .join(","),
-              );
+        for (const entry of ROUTE_CHUNK_PRELOADS) {
+          const item = findRouteBodyChunk(bundle, entry.moduleSuffix);
+          if (!item) continue;
+          urls.set(
+            entry.placeholder,
+            joinPublicPath(publicBase, item.fileName),
+          );
+          // The feature CSS usually belongs to chunks this one imports
+          // statically, so collect it across that whole graph.
+          const cssFiles = new Set<string>();
+          const jsFiles = new Set<string>();
+          const seen = new Set<string>();
+          const pending = [item.fileName];
+          while (pending.length) {
+            const fileName = pending.pop() as string;
+            if (seen.has(fileName)) continue;
+            seen.add(fileName);
+            const chunk = bundle[fileName];
+            if (!chunk || chunk.type !== "chunk") continue;
+            // A chunk made only of stylesheets is deleted after this hook;
+            // it never becomes a file that could be preloaded.
+            const moduleIds = Object.keys(chunk.modules);
+            const isStyleOnlyChunk =
+              moduleIds.length > 0 &&
+              moduleIds.every((id) => /\.css(?:$|\?)/u.test(id));
+            if (fileName !== item.fileName && !isStyleOnlyChunk) {
+              jsFiles.add(fileName);
             }
+            for (const file of chunk.viteMetadata?.importedCss ?? []) {
+              cssFiles.add(file);
+            }
+            pending.push(...chunk.imports);
           }
+          urls.set(
+            entry.cssPlaceholder,
+            [...cssFiles]
+              .map((file) => joinPublicPath(publicBase, file))
+              .join(","),
+          );
+          // The chunks it imports statically: the document preloads them
+          // too, so the lazy body is ready when hydration starts.
+          urls.set(
+            entry.jsPlaceholder,
+            [...jsFiles]
+              .map((file) => joinPublicPath(publicBase, file))
+              .join(","),
+          );
         }
+        clientUrls = new Map(urls);
       }
 
-      if (urls.size < ROUTE_CHUNK_PRELOADS.length * 3) {
-        // The SSR pass does not emit the client chunks; read their URLs from
-        // the client manifest the way earlyHlsPreloadPlugin does.
+      if (isSsrPass && urls.size < ROUTE_CHUNK_PRELOADS.length * 3) {
+        // Only when the client pass ran with other plugin instances: read
+        // the client chunks' URLs from its manifest the way
+        // earlyHlsPreloadPlugin does. The manifest names a chunk only by the
+        // module that is its facade.
         const manifestPath = path.resolve(
           this.environment?.config.build.outDir ?? "",
           "../client/.vite/manifest.json",
@@ -342,12 +369,11 @@ function routeChunkPreloadPlugin(): Plugin {
             }
           }
         } catch {
-          // Leave unresolved placeholders untouched; the links then point at
-          // a non-module URL and the preload is simply wasted, never fatal.
+          // No client manifest; what is left unresolved fails below.
         }
       }
 
-      if (!urls.size) return;
+      const unresolved = new Set<string>();
       for (const item of Object.values(bundle)) {
         if (item.type === "chunk") {
           for (const [placeholder, url] of urls) {
@@ -362,6 +388,27 @@ function routeChunkPreloadPlugin(): Plugin {
             }
           }
         }
+        const text = item.type === "chunk" ? item.code : item.source;
+        if (typeof text !== "string") continue;
+        for (const entry of ROUTE_CHUNK_PRELOADS) {
+          for (const placeholder of [
+            entry.placeholder,
+            entry.cssPlaceholder,
+            entry.jsPlaceholder,
+          ]) {
+            if (text.includes(placeholder)) unresolved.add(placeholder);
+          }
+        }
+      }
+      // A placeholder left in place ships as a relative link: the browser
+      // requests it under the page's own address, gets the page back and
+      // logs a MIME-type error, and the body it stands for is not preloaded.
+      if (unresolved.size) {
+        this.error(
+          `Route chunk preload placeholders were not resolved: ${[
+            ...unresolved,
+          ].join(", ")}. See routeChunkPreloadPlugin in vite.config.ts.`,
+        );
       }
     },
   };

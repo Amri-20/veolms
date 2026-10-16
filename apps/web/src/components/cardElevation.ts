@@ -57,3 +57,21 @@ const dayElevation = [
 ].join(" ");
 
 export const courseSurfaceElevation = `${nightElevation} ${dayElevation}`;
+
+/**
+ * Course cards are raised like the home page's course row
+ * (`resumePaneClasses` in `home/learner/learnerHeroLayout.ts`): no outline
+ * and no lit edges, only a highlight along the top and a deep, soft shadow
+ * under the card, which deepens a little on hover. They are put on the card
+ * itself, after its card-token classes, and win over those while raised
+ * surfaces are on; with them off the card keeps its tokens, which are then
+ * flat. A card's loading placeholder takes the same classes, so nothing
+ * moves when the card replaces it.
+ */
+export const raisedCourseCardClasses = [
+  "[:root:not([data-elevated-surfaces=false])_&]:border-transparent",
+  "[:root:not([data-elevated-surfaces=false])_&]:shadow-[inset_0_1px_0_rgb(255_255_255/0.09),0_14px_28px_-12px_rgb(0_0_0/0.45),0_30px_60px_-22px_rgb(0_0_0/0.6)]",
+  "[:root:not([data-elevated-surfaces=false])_&]:hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.12),0_18px_32px_-12px_rgb(0_0_0/0.5),0_36px_68px_-22px_rgb(0_0_0/0.65)]",
+  "[:root[data-theme=light]:not([data-elevated-surfaces=false])_&]:shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_14px_28px_-12px_rgb(15_23_42/0.22),0_30px_60px_-22px_rgb(15_23_42/0.32)]",
+  "[:root[data-theme=light]:not([data-elevated-surfaces=false])_&]:hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.8),0_18px_32px_-12px_rgb(15_23_42/0.26),0_36px_68px_-22px_rgb(15_23_42/0.36)]",
+].join(" ");

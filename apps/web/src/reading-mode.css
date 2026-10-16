@@ -595,13 +595,14 @@
   min-width: var(--radix-select-trigger-width);
 }
 
+/* Bottom-aligned with the reading-mode button, as the colour menu is with
+   its own (see navigation.css): one 65px step per dock button below it. */
 .courses-app--collapsed .reading-mode-quick-menu--collapsed {
   top: auto;
   right: auto;
   bottom: calc(
-    4px +
-      (var(--sidebar-dock-count, 1) - var(--reading-mode-dock-index, 0) - 1) *
-      42px
+    (var(--sidebar-dock-count, 1) - var(--reading-mode-dock-index, 0) - 1) *
+      65px
   );
   left: calc(100% + 2px);
   width: 264px;

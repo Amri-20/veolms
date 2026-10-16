@@ -225,22 +225,31 @@ export function CourseCatalogue({
     return 0;
   };
 
-  // By day the page's resting controls are raised like the sidebar's selected
-  // menu item (its fill, its shadow, no outline), as the course cards are.
-  // The search field belongs to a shared component, so it is styled from
-  // here; it keeps its accent outline while it is being typed in.
+  // By day the search field is raised like the sidebar's selected menu item
+  // (its fill, its shadow, no outline), as the course cards are. It belongs
+  // to a shared component, so it is styled from here; it keeps its accent
+  // outline while it is being typed in.
   const raisedSearchField =
     "[:root[data-theme=light]:not([data-elevated-surfaces=false])_&_[data-expandable-search-field]:not(:focus-within)]:border-transparent [:root[data-theme=light]:not([data-elevated-surfaces=false])_&_[data-expandable-search-field]:not(:focus-within)]:bg-(image:--raised-surface-image) [:root[data-theme=light]:not([data-elevated-surfaces=false])_&_[data-expandable-search-field]:not(:focus-within)]:shadow-(--sidebar-menu-active-shadow)";
 
+  // The filter chips are coloured from the theme in both light and dark:
+  // resting chips take a light tint of the accent, with no outline, and the
+  // selected one is filled with the accent and lifted by a soft shadow of
+  // the same colour, with no edge lines. Its shadow is kept short, because
+  // the chip row clips anything that reaches far past it. The accent is laid
+  // on as an image, and under it the selected chip keeps the resting tint;
+  // only the hover fill is animated, so a chip that loses the selection takes
+  // its resting look at once instead of fading.
   const quickFilterTabClassName =
-    "inline-flex min-h-9 shrink-0 items-center gap-2 rounded-(--control-radius-structured) border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-[color-mix(in_srgb,var(--surface-strong)_84%,var(--canvas))] px-3.5 text-xs! leading-5! font-semibold max-[640px]:font-semibold! text-(--text-secondary) shadow-[0_5px_14px_color-mix(in_srgb,var(--accent-shadow)_16%,transparent)] transition-[background-color,border-color,color,box-shadow] hover:border-[color-mix(in_srgb,var(--text)_24%,transparent)] hover:bg-(--hover) hover:text-(--text) aria-selected:border-[color-mix(in_srgb,var(--accent)_70%,transparent)] aria-selected:bg-(--accent) aria-selected:text-(--on-accent) aria-selected:shadow-[0_7px_18px_color-mix(in_srgb,var(--accent-shadow)_45%,transparent)] aria-selected:hover:bg-(--accent-hover) sm:min-h-9 sm:px-4 sm:text-[0.8rem]! [:root[data-theme=light]:not([data-elevated-surfaces=false])_&:not([aria-selected=true])]:border-transparent [:root[data-theme=light]:not([data-elevated-surfaces=false])_&:not([aria-selected=true])]:bg-(image:--raised-surface-image) [:root[data-theme=light]:not([data-elevated-surfaces=false])_&:not([aria-selected=true])]:shadow-(--sidebar-menu-active-shadow)";
-  const quickFilterCountClassName = (active: boolean) =>
-    [
-      "inline-flex h-5 min-w-5 items-center justify-center rounded-[5px] border px-1 text-[0.625rem]! leading-none font-bold tabular-nums",
-      active
-        ? "border-[color-mix(in_srgb,var(--on-accent)_22%,transparent)] bg-[color-mix(in_srgb,var(--on-accent)_16%,transparent)] text-(--on-accent)"
-        : "border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-[color-mix(in_srgb,var(--canvas)_72%,transparent)] text-(--text-secondary)",
-    ].join(" ");
+    "group/quick-filter relative inline-flex min-h-9 shrink-0 items-center gap-2 rounded-(--control-radius-structured) border border-[color-mix(in_srgb,var(--text)_12%,transparent)] [--quick-filter-fill:color-mix(in_srgb,var(--accent)_16%,var(--surface))] bg-(--quick-filter-fill) px-3.5 text-xs! leading-5! font-semibold max-[640px]:font-semibold! text-(--text) shadow-[0_5px_14px_color-mix(in_srgb,var(--accent-shadow)_16%,transparent)] transition-[background-color,border-color,color,box-shadow] hover:border-[color-mix(in_srgb,var(--text)_24%,transparent)] hover:bg-[color-mix(in_srgb,var(--accent)_24%,var(--surface))] hover:text-(--text) aria-selected:border-[color-mix(in_srgb,var(--accent)_70%,transparent)] aria-selected:bg-(--accent) aria-selected:text-(--on-accent) aria-selected:shadow-[0_4px_11px_color-mix(in_srgb,var(--accent-shadow)_40%,transparent)] aria-selected:hover:bg-(--accent-hover) sm:min-h-9 sm:px-4 sm:text-[0.8rem]! [:root:not([data-elevated-surfaces=false])_&]:border-transparent [:root:not([data-elevated-surfaces=false])_&:not([aria-selected=true])]:shadow-none [:root:not([data-elevated-surfaces=false])_&[aria-selected=true]]:bg-[linear-gradient(var(--accent),var(--accent))] [:root:not([data-elevated-surfaces=false])_&[aria-selected=true]]:bg-(--quick-filter-fill) [:root:not([data-elevated-surfaces=false])_&]:transition-[background-color] [:root[data-theme=light]:not([data-elevated-surfaces=false])_&[aria-selected=true]]:shadow-[0_1px_3px_color-mix(in_srgb,var(--accent)_28%,transparent),0_5px_14px_color-mix(in_srgb,var(--accent)_32%,transparent)] [:root[data-theme=dark]:not([data-elevated-surfaces=false])_&[aria-selected=true]]:shadow-[0_1px_3px_rgb(0_0_0/35%),0_5px_14px_color-mix(in_srgb,var(--accent)_30%,transparent)]";
+  // A chip's count is not drawn inside it (a boxed number reads as a keyboard
+  // shortcut there). It stays in the chip's text for screen readers and
+  // shows only while the chip is hovered or focused from the keyboard, as a
+  // notification badge on its top-right corner. Touch screens cannot hover,
+  // so there the selected chip always shows its count. On the selected chip
+  // the badge swaps its colours so it stands apart from the accent fill.
+  const quickFilterCountClassName =
+    "pointer-events-none absolute -top-1.5 -right-1.5 z-1 inline-flex h-4 min-w-4 scale-75 items-center justify-center rounded-full bg-(--accent) px-[3px] text-[0.625rem]! leading-none font-bold tabular-nums text-(--on-accent) opacity-0 transition-[opacity,scale] duration-150 ease-out group-hover/quick-filter:scale-100 group-hover/quick-filter:opacity-100 group-focus-visible/quick-filter:scale-100 group-focus-visible/quick-filter:opacity-100 motion-reduce:transition-none group-aria-selected/quick-filter:bg-(--on-accent) group-aria-selected/quick-filter:text-(--accent) [@media(hover:none)]:group-aria-selected/quick-filter:scale-100 [@media(hover:none)]:group-aria-selected/quick-filter:opacity-100";
 
   const firstImageIndex = visibleCourses.findIndex((course) =>
     Boolean(course.thumbnail),
@@ -329,7 +338,7 @@ export function CourseCatalogue({
         />
       ) : null}
       <header
-        className={`relative flex ${desktopLayout ? "flex-row items-center gap-3" : "flex-col gap-4"} border-b border-(--border) ${mediumLayout ? "pb-4" : "pb-0"} max-[640px]:px-(--application-page-inline-gutter) min-[640px]:pb-4 min-[900px]:flex-row min-[900px]:items-center min-[900px]:gap-3`}
+        className={`relative flex ${desktopLayout ? "flex-row items-center gap-3" : "flex-col gap-4"} border-b border-(--border) ${mediumLayout ? "pb-4" : "pb-0"} max-[640px]:border-b-0 max-[640px]:px-(--application-page-inline-gutter) min-[640px]:pb-4 min-[900px]:flex-row min-[900px]:items-center min-[900px]:gap-3`}
       >
         <ExpandableSearch
           inputId="courses-search-input"
@@ -392,9 +401,13 @@ export function CourseCatalogue({
         }
       >
         <div className="min-w-0 text-left">
+          {/* The row scrolls sideways, which clips anything outside it, so it
+              gets room above and below for the chips' shadows, and on the
+              right for the last chip's count badge; the negative margins
+              keep the chips where they were. */}
           <div
             ref={quickFilterTabsRef}
-            className="inline-flex min-h-9 w-fit max-w-full gap-2 overflow-x-auto max-[640px]:-mx-(--application-page-inline-gutter) max-[640px]:w-[calc(100%+var(--application-page-inline-gutter)+var(--application-page-inline-gutter))]! max-[640px]:max-w-none! max-[640px]:px-(--application-page-inline-gutter) min-[641px]:-ml-(--application-page-inline-gutter) min-[641px]:pl-(--application-page-inline-gutter) min-[821px]:w-[calc(100%_+_var(--application-page-inline-gutter))]! min-[821px]:max-w-none! sm:min-h-10"
+            className="inline-flex min-h-9 w-fit max-w-full gap-2 overflow-x-auto -mt-3 -mb-6 pt-3 pb-6 min-[641px]:pr-2 max-[640px]:-mx-(--application-page-inline-gutter) max-[640px]:w-[calc(100%+var(--application-page-inline-gutter)+var(--application-page-inline-gutter))]! max-[640px]:max-w-none! max-[640px]:px-(--application-page-inline-gutter) min-[641px]:-ml-(--application-page-inline-gutter) min-[641px]:pl-(--application-page-inline-gutter) min-[821px]:w-[calc(100%_+_var(--application-page-inline-gutter))]! min-[821px]:max-w-none! sm:min-h-10"
             role="tablist"
             data-course-quick-filters
             data-fade-right={hasQuickFilterOverflow ? "true" : undefined}
@@ -414,11 +427,7 @@ export function CourseCatalogue({
                 onKeyDown={handleRovingTabKeyDown}
               >
                 <span>{label}</span>
-                <span
-                  className={quickFilterCountClassName(
-                    enrollmentFilter === value,
-                  )}
-                >
+                <span className={quickFilterCountClassName}>
                   {filterCountFor(value)}
                 </span>
               </button>
@@ -445,11 +454,7 @@ export function CourseCatalogue({
                   aria-hidden
                 />
                 <span>Wishlisted</span>
-                <span
-                  className={quickFilterCountClassName(
-                    enrollmentFilter === "wishlist",
-                  )}
-                >
+                <span className={quickFilterCountClassName}>
                   {quickFilterCounts.wishlist}
                 </span>
               </button>
@@ -462,7 +467,7 @@ export function CourseCatalogue({
         <CourseCatalogueLoadingSkeleton role={role} />
       ) : hasLoadError ? (
         <div
-          className="mt-6 grid min-h-90 place-items-center rounded-xl border border-dashed border-(--border-strong) px-6 text-center"
+          className="mt-6 grid min-h-90 place-items-center px-6 text-center"
           role="alert"
         >
           <div>
