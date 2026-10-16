@@ -30,7 +30,12 @@ import { readMiniPlayerWidthPreference } from "./lessonPlayerPersistence";
 const ACTIVATION_DISTANCE = 8;
 const DIRECTION_RATIO = 1.15;
 const COMMIT_PROGRESS = 0.5;
-const FLING_PROGRESS = 0.18;
+/**
+ * A flick down minimizes once it has gone this share of the way, at this
+ * speed (px/ms) or faster: a short flick is enough.
+ */
+const FLING_PROGRESS = 0.1;
+const FLING_COMMIT_VELOCITY = 0.7;
 const FLING_VELOCITY = 0.85;
 /**
  * A finger that rested this long before it lifted was not flicking, however
@@ -666,7 +671,8 @@ export function useLessonPlayerMinimizeGesture({
       const shouldCommit =
         !cancelled &&
         (progress >= COMMIT_PROGRESS ||
-          (progress >= FLING_PROGRESS && gesture.velocityY >= FLING_VELOCITY));
+          (progress >= FLING_PROGRESS &&
+            gesture.velocityY >= FLING_COMMIT_VELOCITY));
 
       if (!shouldCommit) {
         settleBack();
