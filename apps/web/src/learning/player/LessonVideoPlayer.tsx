@@ -97,6 +97,9 @@ import {
 const RESUME_PERSIST_INTERVAL_MS = 5_000;
 // A lesson left this close to its end counts as finished when it is reopened.
 const FINISHED_LESSON_RESUME_TAIL_SECONDS = 3;
+// From here on the next lesson is preloaded, whatever the video's length: a
+// percentage would start hours early in a long lesson.
+const NEAR_LESSON_END_SECONDS = 60;
 const LESSON_PLAYER_CONTROLS_IDLE_DELAY_MS = 1_000;
 const MAX_MINI_PLAYER_RESTORE_DRIFT_SECONDS = 0.35;
 const LESSON_PLAYER_SHORTCUTS = {
@@ -173,6 +176,11 @@ export interface LessonVideoPlayerProps {
   onMiniRestore?: () => void;
   onMobileLandscapeFullscreenChange?: (active: boolean) => void;
   onProgressChange?: (progress: number) => void;
+  /**
+   * Called on every time update once a minute or less of the video is left
+   * (see `NEAR_LESSON_END_SECONDS`); the owner decides what to do once.
+   */
+  onNearLessonEnd?: () => void;
   /**
    * The course this lesson belongs to, as the progress API knows it. With
    * it, the seconds of video actually played are tallied towards the
@@ -384,6 +392,7 @@ export function LessonVideoPlayer({
   media,
   totalLessons,
   onProgressChange,
+  onNearLessonEnd,
   watchTimeCourseKey,
   onAutoplayEnabledChange = () => undefined,
   onCourseLessonsToggle,
@@ -514,6 +523,7 @@ export function LessonVideoPlayer({
         : protectedPlayback,
       segmentToken: playbackBootstrap?.segmentToken,
       segmentTokenExpiresAt: playbackBootstrap?.segmentTokenExpiresAt,
+      inlinedMasterManifest: playbackBootstrap?.inlinedMasterManifest,
       refreshSegmentToken:
         playbackBootstrap?.segmentToken && refreshPlaybackToken
           ? refreshPlaybackToken
@@ -747,6 +757,12 @@ export function LessonVideoPlayer({
             ),
           );
           if (
+            event.detail.duration - event.detail.currentTime <=
+            NEAR_LESSON_END_SECONDS
+          ) {
+            onNearLessonEnd?.();
+          }
+          if (
             showEndScreen &&
             event.detail.currentTime < event.detail.duration - 1
           ) {
@@ -818,6 +834,7 @@ export function LessonVideoPlayer({
       mediaKey,
       onLessonEnded,
       onProgressChange,
+      onNearLessonEnd,
       trackWatchTime,
       persistResumePosition,
       playbackSuspended,

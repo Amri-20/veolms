@@ -24,6 +24,13 @@ export interface EarlyShakaPreloadSession {
   consumed: boolean;
   ready: Promise<void>;
   networkingFilters?: ShakaNetworkingFilters;
+  /**
+   * Started ahead of a likely click (a hovered or next lesson) rather than
+   * for the page being opened; a player being torn down leaves it alone.
+   */
+  speculative?: boolean;
+  /** The position (seconds) the preload was made for. */
+  startTime?: number;
 }
 
 interface EarlyShakaPreloadSettle {
@@ -134,6 +141,20 @@ export function consumeEarlyShakaPreloadSession(
   }
 }
 
+/** The manifest of the preload a player most recently took over. */
+let lastAdoptedManifestUrl: string | null = null;
+
+/**
+ * Called by a player that took over a preload session. The page opening
+ * that lesson may ask for its preload a moment later; it is already playing,
+ * so no second player is started for it.
+ */
+export function noteEarlyShakaPreloadAdopted(
+  session: EarlyShakaPreloadSession,
+): void {
+  lastAdoptedManifestUrl = session.manifestUrl;
+}
+
 export async function waitForEarlyShakaPreloadSession(): Promise<EarlyShakaPreloadSession | null> {
   const session = getEarlyShakaPreloadSession();
   if (!session || session.consumed) {
@@ -171,7 +192,11 @@ function startPreload(
 
 export async function startEarlyShakaPreload(
   source: VideoSource,
-  options: { runtimeLoader?: () => Promise<unknown> } = {},
+  options: {
+    runtimeLoader?: () => Promise<unknown>;
+    /** A hovered or next lesson, not the page being opened. */
+    speculative?: boolean;
+  } = {},
 ): Promise<EarlyShakaPreloadSession | null> {
   if (typeof document === "undefined") {
     return null;
@@ -188,8 +213,14 @@ export async function startEarlyShakaPreload(
     (!existing.mediaKey || !source.id || existing.mediaKey === source.id);
   if (existingMatches && existing?.player) {
     existing!.mediaKey = source.id;
+    // The page now opening this lesson owns the preload from here on.
+    if (!options.speculative) existing!.speculative = false;
     settleEarlySession();
     return existing;
+  }
+  if (!existing && source.src === lastAdoptedManifestUrl) {
+    // Already being played by the player that adopted its preload.
+    return null;
   }
   if (existing && !existingMatches) {
     await abandonEarlyShakaPreloadSession({ destroyPlayer: true });
@@ -210,6 +241,7 @@ export async function startEarlyShakaPreload(
       ready,
     };
   }
+  session.speculative = Boolean(options.speculative);
   session.manifestUrl = source.src;
   session.mediaKey = source.id;
   store[EARLY_SHAKA_PRELOAD_GLOBAL_KEY] = session;
@@ -249,6 +281,7 @@ export async function startEarlyShakaPreload(
     registerShakaNetworkingFilters(player, networkingFilters);
     session.player = player;
     session.networkingFilters = networkingFilters;
+    session.startTime = source.startTime ?? 0;
     session.preloadPromise = startPreload(player, source).catch(() => null);
     settleEarlySession();
     return session;

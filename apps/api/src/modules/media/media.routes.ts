@@ -7,6 +7,7 @@ import {
   mediaImageVariantManifestSchema,
   mediaUploadCompleteResponseSchema,
   videoJobProgressResponseSchema,
+  videoPlaybackBootstrapQuerySchema,
   videoPlaybackBootstrapSchema,
   videoPlaybackTokenSchema,
   videoTranscodeCancelResponseSchema,
@@ -73,6 +74,7 @@ const mediaRoutes: RoutePlugin = async (app, options) => {
           idOrSlug: z.string().min(1).max(160),
           lessonNumber: z.coerce.number().int().positive(),
         }),
+        querystring: videoPlaybackBootstrapQuerySchema,
         response: {
           200: jsonResponse(
             "Authorized video playback bootstrap",

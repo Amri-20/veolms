@@ -51,6 +51,7 @@ export function createMediaController({ service }: { service: MediaService }) {
   async function getPlaybackBootstrap(
     request: FastifyRequest<{
       Params: { idOrSlug: string; lessonNumber: number };
+      Querystring: { inlineManifest?: "0" | "1" };
     }>,
   ) {
     const user = request.user
@@ -64,6 +65,10 @@ export function createMediaController({ service }: { service: MediaService }) {
       request.params.idOrSlug,
       request.params.lessonNumber,
       user,
+      {
+        inlineManifest: request.query?.inlineManifest === "1",
+        logger: request.log,
+      },
     );
   }
 
