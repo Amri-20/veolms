@@ -74,7 +74,7 @@ const otpRoutes: RoutePlugin = async (app, options) => {
         response: {
           200: jsonResponse(
             "Mobile verification OTP dispatched successfully.",
-            authMessageResponseSchema,
+            otpSendResponseSchema,
           ),
           400: errorResponse("Validation error or missing parameters."),
           404: errorResponse("User account was not found."),

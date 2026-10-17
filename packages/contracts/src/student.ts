@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { enrollmentStatusSchema } from "./course/enrollment.ts";
+import { phoneNumberSchema } from "./auth/user.ts";
 
 /**
  * Summary representation of a student learner in list views.
@@ -38,6 +39,8 @@ export const studentListItemSchema = z.strictObject({
   username: z.string(),
   displayName: z.string(),
   email: z.string().email().nullable().optional(),
+  /** Admins only; null for instructors and learners without a number. */
+  phoneNo: z.string().nullable().optional(),
   avatarUrl: z.string().nullable().optional(),
   joinedAt: z.string().or(z.date()),
   enrolledCoursesCount: z.number().int().nonnegative(),
@@ -144,3 +147,25 @@ export const studentDetailResponseSchema = z.strictObject({
   courses: z.array(studentCourseDetailSchema),
 });
 export type StudentDetailResponse = z.infer<typeof studentDetailResponseSchema>;
+
+/**
+ * An admin's change to a learner's contact details (PATCH
+ * /students/:username/contact). The email is required: it can be changed but
+ * never removed. A null phone number removes it. A changed email or number is
+ * saved unverified, so the learner confirms it by code.
+ */
+export const studentContactUpdateRequestSchema = z.strictObject({
+  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
+  phoneNo: phoneNumberSchema.nullable(),
+});
+export type StudentContactUpdateRequest = z.infer<
+  typeof studentContactUpdateRequestSchema
+>;
+
+export const studentContactUpdateResponseSchema = z.strictObject({
+  email: z.string().email(),
+  phoneNo: z.string().nullable(),
+});
+export type StudentContactUpdateResponse = z.infer<
+  typeof studentContactUpdateResponseSchema
+>;

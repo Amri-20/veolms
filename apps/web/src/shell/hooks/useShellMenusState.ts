@@ -1,17 +1,12 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import type { ToastMessage } from "../../ToastNotification";
 import { MOBILE_NAVIGATION_REVEAL_EVENT } from "../../learning/player/mobileNavigationFollow";
-import type { SidebarDockItem } from "../../settings/settingsPreferences";
 import type { ShortcutPlatform } from "../../keyboardShortcuts";
 import { useGlobalSearchShortcut } from "../../searchShortcut";
 import { useShortcutPlatform } from "../../useShortcutPlatform";
 import { getDocumentFullscreenElement } from "../../fullscreen";
 import { MOBILE_DRAWER_INITIAL_SNAP_POINT } from "../academyShellConstants";
 import type { SidebarTooltip } from "../academyShellTypes";
-
-export interface UseShellMenusStateArgs {
-  sidebarDockItems: SidebarDockItem[];
-}
 
 export interface UseShellMenusStateResult {
   courseMenu: string | null;
@@ -24,7 +19,6 @@ export interface UseShellMenusStateResult {
   setPaletteMenu: Dispatch<SetStateAction<boolean>>;
   paletteMenuSource: "appearance" | "theme";
   setPaletteMenuSource: Dispatch<SetStateAction<"appearance" | "theme">>;
-  paletteMenuDockIndex: number;
   readingModeMenu: "desktop" | "mobile" | null;
   setReadingModeMenu: Dispatch<SetStateAction<"desktop" | "mobile" | null>>;
   settingsQuickMenu: "desktop" | "mobile" | null;
@@ -64,9 +58,7 @@ export interface UseShellMenusStateResult {
   shortcutPlatform: ShortcutPlatform;
 }
 
-export function useShellMenusState({
-  sidebarDockItems,
-}: UseShellMenusStateArgs): UseShellMenusStateResult {
+export function useShellMenusState(): UseShellMenusStateResult {
   const [courseMenu, setCourseMenu] = useState<string | null>(null);
   const [profileMenu, setProfileMenu] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
@@ -74,9 +66,6 @@ export function useShellMenusState({
   const [paletteMenuSource, setPaletteMenuSource] = useState<
     "appearance" | "theme"
   >("theme");
-  const paletteMenuDockIndex = sidebarDockItems.indexOf(
-    paletteMenuSource === "appearance" ? "appearance" : "theme",
-  );
   const [readingModeMenu, setReadingModeMenu] = useState<
     "desktop" | "mobile" | null
   >(null);
@@ -137,7 +126,6 @@ export function useShellMenusState({
     setPaletteMenu,
     paletteMenuSource,
     setPaletteMenuSource,
-    paletteMenuDockIndex,
     readingModeMenu,
     setReadingModeMenu,
     settingsQuickMenu,

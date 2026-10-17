@@ -47,6 +47,12 @@ export interface ConfirmActionModalProps {
    * navigation the action starts.
    */
   closeOnConfirm?: boolean;
+  /**
+   * Form fields under the description, for an action that needs a few
+   * values. The first field takes focus when the dialog opens, and Enter in
+   * a field confirms.
+   */
+  children?: ReactNode;
 }
 
 const ACTION_BUTTON_CLASS =
@@ -72,7 +78,10 @@ export function ConfirmActionModal({
   tone = "accent",
   emphasis = "confirm",
   closeOnConfirm = false,
+  children,
 }: ConfirmActionModalProps) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const fieldsRef = useRef<HTMLFormElement | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const cancelBtnRef = useRef<HTMLButtonElement | null>(null);
   const confirmBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -107,12 +116,12 @@ export function ConfirmActionModal({
 
       if (event.key !== "Tab") return;
 
-      const focusableElements = [
-        closeBtnRef.current,
-        ...(cancelEmphasized
-          ? [confirmBtnRef.current, cancelBtnRef.current]
-          : [cancelBtnRef.current, confirmBtnRef.current]),
-      ].filter((element): element is HTMLButtonElement => element !== null);
+      // In page order: the close button, any fields, then the two actions.
+      const focusableElements = Array.from(
+        dialogRef.current?.querySelectorAll<
+          HTMLButtonElement | HTMLInputElement
+        >("button, input") ?? [],
+      ).filter((element) => !element.disabled);
 
       if (!focusableElements.length) return;
       const first = focusableElements[0]!;
@@ -129,7 +138,11 @@ export function ConfirmActionModal({
 
     window.addEventListener("keydown", handleKeyDown);
     const focusTimer = window.setTimeout(
-      () => cancelBtnRef.current?.focus(),
+      () =>
+        (
+          fieldsRef.current?.querySelector<HTMLInputElement>("input") ??
+          cancelBtnRef.current
+        )?.focus(),
       50,
     );
 
@@ -138,7 +151,7 @@ export function ConfirmActionModal({
       window.clearTimeout(focusTimer);
       previousActiveElement?.focus();
     };
-  }, [cancelEmphasized, dismissModal, isOpen]);
+  }, [dismissModal, isOpen]);
 
   if (!isOpen || typeof document === "undefined") return null;
 
@@ -183,6 +196,7 @@ export function ConfirmActionModal({
       aria-describedby={descriptionId}
     >
       <div
+        ref={dialogRef}
         className="relative w-full max-w-md rounded-[20px] border border-(--border) bg-(--card-surface,var(--surface)) p-6 text-(--text) shadow-2xl animate-in zoom-in-95 duration-150"
         style={{ boxShadow: "var(--card-floating-shadow,var(--card-shadow))" }}
         onClick={(event) => event.stopPropagation()}
@@ -221,6 +235,22 @@ export function ConfirmActionModal({
         >
           {description}
         </p>
+
+        {children ? (
+          <form
+            ref={fieldsRef}
+            className="mt-4 flex flex-col gap-3"
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!isPending && !confirmDisabled) onConfirm();
+            }}
+          >
+            {children}
+            {/* Lets Enter in a field submit the form. */}
+            <button type="submit" hidden tabIndex={-1} />
+          </form>
+        ) : null}
 
         <div className="mt-6 flex items-center justify-end gap-2.5 max-[480px]:flex-col-reverse">
           {cancelEmphasized

@@ -1,4 +1,6 @@
 import type {
+  StudentContactUpdateRequest,
+  StudentContactUpdateResponse,
   StudentCourseDetail,
   StudentDetailResponse,
   StudentListItem,
@@ -9,11 +11,16 @@ import type { Database } from "@veolms/database";
 import type { Kysely } from "kysely";
 
 import { AppError } from "../../lib/errors.ts";
-import { ADMIN_ROLE } from "../auth/index.ts";
+import {
+  ADMIN_ROLE,
+  createAuthService,
+  type AuthService,
+} from "../auth/index.ts";
 import * as studentsRepo from "./students.repository.ts";
 
 export interface StudentsServiceOptions {
   database: Kysely<Database>;
+  authService?: AuthService;
 }
 
 /** The staff member asking for student data. */
@@ -120,7 +127,10 @@ export function resolveStudentAvatar(
   return null;
 }
 
-export function createStudentsService({ database }: StudentsServiceOptions) {
+export function createStudentsService({
+  database,
+  authService,
+}: StudentsServiceOptions) {
   async function resolveStudentAvatars(
     users: readonly {
       id: string;
@@ -159,6 +169,9 @@ export function createStudentsService({ database }: StudentsServiceOptions) {
   ): Promise<StudentListResponse> {
     const limit = query.limit || 50;
     const creatorId = resolveCreatorScope(actor);
+    // Phone numbers are admin-only, and so is finding a learner by one: an
+    // instructor could otherwise test whether a number is a learner's.
+    const searchPhone = !creatorId;
 
     // The total describes the whole filtered population, so only the first
     // page carries it; later pages would recount the same rows.
@@ -171,6 +184,7 @@ export function createStudentsService({ database }: StudentsServiceOptions) {
         status: query.status,
         sortBy: query.sortBy,
         creatorId,
+        searchPhone,
       }),
       query.cursor
         ? undefined
@@ -179,6 +193,7 @@ export function createStudentsService({ database }: StudentsServiceOptions) {
             courseId: query.courseId,
             status: query.status,
             creatorId,
+            searchPhone,
           }),
     ]);
 
@@ -278,6 +293,7 @@ export function createStudentsService({ database }: StudentsServiceOptions) {
         username: user.username,
         displayName: user.display_name,
         email: user.email,
+        phoneNo: searchPhone ? user.phone_no : null,
         avatarUrl,
         joinedAt: user.created_at.toISOString(),
         enrolledCoursesCount,
@@ -508,9 +524,45 @@ export function createStudentsService({ database }: StudentsServiceOptions) {
     };
   }
 
+  /**
+   * An admin changes a learner's email or phone number, or removes the
+   * number. Instructors may not: contact details are admin-only, as the
+   * phone number already is on the details page.
+   */
+  async function updateStudentContact(
+    username: string,
+    input: StudentContactUpdateRequest,
+    actor: StudentsActor,
+  ): Promise<StudentContactUpdateResponse> {
+    if (resolveCreatorScope(actor)) {
+      throw new AppError(
+        403,
+        "FORBIDDEN",
+        "Only admins can change a learner's contact details.",
+      );
+    }
+    const user = await studentsRepo.findStudentByUsername(
+      database,
+      username,
+      undefined,
+    );
+    if (!user) {
+      throw new AppError(
+        404,
+        "STUDENT_NOT_FOUND",
+        `Student with username '${username}' was not found.`,
+      );
+    }
+    // Built on first use: the other modules that make a students service
+    // never change contact details.
+    authService ??= createAuthService({ database });
+    return authService.updateContactAsAdmin(user.id, input);
+  }
+
   return {
     listStudents,
     getStudentByUsername,
+    updateStudentContact,
     resolveStudentAvatars,
     getActiveLearnerCount,
     getStudentPopulationCounts,
