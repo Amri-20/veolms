@@ -112,8 +112,14 @@ export function getAcademyRoutes(): RouteConfigEntry {
       caseSensitive: true,
     }),
     route("coupons", marker, { id: "coupons", caseSensitive: true }),
+    // The Home Page screen became the Platform page's first tab; the old
+    // address leads there.
     route("home-page", marker, {
       id: "home-page-settings",
+      caseSensitive: true,
+    }),
+    route("platform/:platformTab?", "routes/platform-marker.tsx", {
+      id: "platform",
       caseSensitive: true,
     }),
     route("coupons/create", marker, {

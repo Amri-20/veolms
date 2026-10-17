@@ -24,15 +24,21 @@ export const CourseCatalogue = courseCatalogueBody.Body;
 // Profile menu and logout modal open on explicit user actions, so their
 // modules load lazily (menu warmed on idle for signed-in sessions) instead
 // of riding in the startup bundle of every page.
-export const loadProfileMenuModule = () => import("./ProfileMenu");
-export const ProfileMenu = lazy(() =>
-  loadProfileMenuModule().then((module) => ({ default: module.ProfileMenu })),
+// Both render at once when the module is already loaded (see the drawer
+// parts below): as bare `lazy()` parts the phone sheet rose empty on its
+// first open, then grew when they arrived a moment later.
+const profileMenuBody = definePrerenderedBody(
+  () => import("./ProfileMenu"),
+  (module) => module.ProfileMenu,
 );
-export const ProfileMenuIdentity = lazy(() =>
-  loadProfileMenuModule().then((module) => ({
-    default: module.ProfileMenuIdentity,
-  })),
+const profileMenuIdentityBody = definePrerenderedBody(
+  () => import("./ProfileMenu"),
+  (module) => module.ProfileMenuIdentity,
 );
+export const loadProfileMenuModule = () =>
+  Promise.all([profileMenuBody.preload(), profileMenuIdentityBody.preload()]);
+export const ProfileMenu = profileMenuBody.Body;
+export const ProfileMenuIdentity = profileMenuIdentityBody.Body;
 export const LogoutConfirmModal = lazy(() =>
   import("./LogoutConfirmModal").then((module) => ({
     default: module.LogoutConfirmModal,
@@ -179,9 +185,9 @@ export const PublicProfilePageRoute = lazy(() =>
     default: module.PublicProfilePage,
   })),
 );
-export const HomePageSettingsPage = lazy(() =>
-  import("../home-page-settings/HomePageSettingsPage").then((module) => ({
-    default: module.HomePageSettingsPage,
+export const PlatformPage = lazy(() =>
+  import("../platform/PlatformPage").then((module) => ({
+    default: module.PlatformPage,
   })),
 );
 export const CouponBuilderPage = lazy(() =>

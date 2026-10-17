@@ -3,7 +3,10 @@ import { test } from "node:test";
 
 import type { PaymentGateway } from "@veolms/contracts";
 
-import { findGatewayCapture } from "./captured-gateway-payment.ts";
+import {
+  findGatewayCapture,
+  gatewayOrderHasNoLivePayment,
+} from "./captured-gateway-payment.ts";
 
 type OrderPayment = Awaited<
   ReturnType<PaymentGateway["fetchOrderPayments"]>
@@ -86,4 +89,31 @@ await test("a paid order with no captured payment to name is left for the webhoo
   assert.deepEqual(await findGatewayCapture(fake, unconfirmed), {
     state: "paid-unidentified",
   });
+});
+
+await test("a closed checkout can be released only when no payment for it can still be taken", async () => {
+  const cases: Array<[string, Partial<OrderPayment>[], boolean]> = [
+    // Nothing was tried in the window.
+    ["created", [], true],
+    // Every attempt was declined.
+    ["attempted", [{ status: "failed" }, { status: "failed" }], true],
+    // A UPI request still waiting in the buyer's app, or an authorised card.
+    ["attempted", [{ status: "failed" }, { status: "processing" }], false],
+    ["attempted", [{ status: "captured" }], false],
+    ["paid", [], false],
+  ];
+  for (const [orderStatus, payments, expected] of cases) {
+    const { fake } = gateway(orderStatus, payments);
+    assert.equal(
+      await gatewayOrderHasNoLivePayment(fake, "order_1"),
+      expected,
+      `${orderStatus} with ${JSON.stringify(payments)}`,
+    );
+  }
+});
+
+await test("an order the gateway has not seen a payment for is not asked about its payments", async () => {
+  const { fake, calls } = gateway("created");
+  await gatewayOrderHasNoLivePayment(fake, "order_1");
+  assert.equal(calls.fetchOrderPayments, 0);
 });

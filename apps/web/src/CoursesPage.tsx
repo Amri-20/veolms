@@ -61,6 +61,7 @@ import { useShellRefs } from "./shell/hooks/useShellRefs";
 import { useLessonBackgroundPage } from "./shell/hooks/useLessonBackgroundPage";
 import { useShellGestureRefs } from "./shell/hooks/useShellGestureRefs";
 import { useShellLayoutEffects } from "./shell/hooks/useShellLayoutEffects";
+import { usePlatformAppearanceDefaults } from "./shell/hooks/usePlatformAppearanceDefaults";
 import { useShellEffects } from "./shell/hooks/useShellEffects";
 import { useShellWarmUpEffects } from "./shell/hooks/useShellWarmUpEffects";
 import { useShellKeyboardEffects } from "./shell/hooks/useShellKeyboardEffects";
@@ -100,6 +101,7 @@ interface CoursesPageProps {
   page?: string;
   section?: string | null;
   settingsTab?: string;
+  platformTab?: string;
   discussionTab?: string;
   courseSlug?: string;
   quizId?: string;
@@ -116,6 +118,7 @@ interface CoursesPageProps {
     scrollTop: number;
     section?: string;
     settingsTab?: string;
+    platformTab?: string;
   } | null;
   /**
    * While a lesson fills the screen: the page and navigation section the
@@ -144,6 +147,7 @@ export function CoursesPage({
   page = "courses",
   section: requestedSection = null,
   settingsTab = SETTINGS_DEFAULT_TAB,
+  platformTab,
   discussionTab = "q-and-a",
   courseSlug,
   quizId,
@@ -204,7 +208,6 @@ export function CoursesPage({
     sidebarHeaderLayout,
     sidebarDockItems,
     settingsInSidebarDock,
-    readingModeDockIndex,
     sidebarMaxWidth,
     showSidebarAppearanceControl,
     showSidebarThemeIcon,
@@ -246,7 +249,6 @@ export function CoursesPage({
     setPaletteMenu,
     paletteMenuSource,
     setPaletteMenuSource,
-    paletteMenuDockIndex,
     readingModeMenu,
     setReadingModeMenu,
     settingsQuickMenu,
@@ -282,9 +284,7 @@ export function CoursesPage({
     isFullscreen,
     setIsFullscreen,
     shortcutPlatform,
-  } = useShellMenusState({
-    sidebarDockItems,
-  });
+  } = useShellMenusState();
   const {
     authUser,
     authUserFetched,
@@ -516,6 +516,13 @@ export function CoursesPage({
     longPressAudioContextRef,
   });
 
+  usePlatformAppearanceDefaults({
+    storedPreferencesReady,
+    setTheme,
+    setAcademyTheme,
+    appliedThemeRef,
+  });
+
   useShellEffects({
     onNavigatePage,
     page,
@@ -565,6 +572,7 @@ export function CoursesPage({
 
   const { settingsWarmed } = useShellWarmUpEffects({
     compactNavigation,
+    isGuest: !isAuthenticated && !accountStatusUnknown,
     mobileMenuOpen,
     mobileNavigationSheetMounted,
     setMobileNavigationSheetMounted,
@@ -976,6 +984,7 @@ export function CoursesPage({
     quizId,
     requestedSection,
     settingsTab,
+    platformTab,
     showPageBackButton,
     username,
     prepareCourseEditorEdit,
@@ -1235,8 +1244,6 @@ export function CoursesPage({
                 appearanceControlsRef={appearanceControlsRef}
                 appearanceControlsHorizontal={appearanceControlsHorizontal}
                 sidebarPreferences={sidebarPreferences}
-                readingModeDockIndex={readingModeDockIndex}
-                paletteMenuDockIndex={paletteMenuDockIndex}
                 sidebarDockItems={sidebarDockItems}
                 appearanceModeTriggerRef={appearanceModeTriggerRef}
                 paletteMenu={paletteMenu}
@@ -1284,6 +1291,11 @@ export function CoursesPage({
                 <Suspense fallback={null}>
                   <SettingsQuickMenu
                     id="desktop-settings-quick-menu"
+                    // Rounded rows and a tighter heading inside the menu's
+                    // 8px padding (its surface is in courses.css). Its rows
+                    // have no trailing column, so none is kept for them: the
+                    // collapsed menu is only as wide as its longest row.
+                    className="[&_[role=menuitem]]:rounded-[9px]! [&_[role=menuitem]]:grid-cols-[28px_minmax(0,1fr)]! [&>p]:mt-0! [&>p]:pt-1! [&>p]:pb-1.5! [&>p]:pl-3!"
                     isOpen={settingsQuickMenu === "desktop"}
                     activeTab={
                       page === "settings"
@@ -1502,7 +1514,6 @@ export function CoursesPage({
                   dismissProfileMenuThen={dismissProfileMenuThen}
                   dismissMobileMenuThen={dismissMobileMenuThen}
                   onNavigatePage={onNavigatePage}
-                  closeMobileMenu={closeMobileMenu}
                   setLogoutConfirmOpen={setLogoutConfirmOpen}
                 />
                 <MobileSheetAppearance

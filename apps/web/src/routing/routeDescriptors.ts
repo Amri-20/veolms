@@ -6,8 +6,11 @@ import { isValidPublicProfileUsername } from "@veolms/contracts/username-rules";
 import { getDemoCourseTitle } from "../learning/courseMetadata";
 import type { AcademyStaticPageData } from "../routes/academyStaticPageData";
 import {
+  PLATFORM_DEFAULT_TAB,
+  PLATFORM_TABS,
   SETTINGS_DEFAULT_TAB,
   readDiscussionTab,
+  readPlatformTab,
   readSettingsTab,
   resolveSessionTabPath,
 } from "./tabSessionState";
@@ -26,6 +29,7 @@ export type ShellPage =
   | "coupons"
   | "coupon-builder"
   | "home-page-settings"
+  | "platform"
   | "reviews"
   | "quizzes"
   | "quiz-builder"
@@ -51,6 +55,7 @@ export interface ShellRouteDescriptor {
   page: ShellPage;
   section?: string;
   settingsTab?: string;
+  platformTab?: string;
   discussionTab?: string;
   title: string;
   description: string;
@@ -61,6 +66,7 @@ export interface LearningRouteDescriptor {
   page: "learning";
   section: "Courses";
   settingsTab?: undefined;
+  platformTab?: undefined;
   discussionTab?: undefined;
 }
 
@@ -69,6 +75,7 @@ export interface CourseOverviewRouteDescriptor {
   page: "course-overview";
   section: "Courses";
   settingsTab?: undefined;
+  platformTab?: undefined;
   discussionTab?: undefined;
 }
 
@@ -391,13 +398,23 @@ export const routeDescriptors = {
     description:
       "Create and manage discount coupons, promotional offers and special campaigns for your learners.",
   },
+  // The old address of the Platform page's Home page tab; it leads there.
   "home-page-settings": {
     kind: "shell",
     page: "home-page-settings",
-    section: "Home Page",
-    title: "Home Page",
+    section: "Platform",
+    title: "Platform",
     description:
       "Choose what signed-out visitors see on the academy home page.",
+  },
+  platform: {
+    kind: "shell",
+    page: "platform",
+    section: "Platform",
+    platformTab: PLATFORM_DEFAULT_TAB,
+    title: "Platform",
+    description:
+      "Manage academy-wide settings: the home page, the default look and the student rules.",
   },
   "coupon-create": {
     kind: "shell",
@@ -435,7 +452,8 @@ export const destinationPaths: Readonly<Record<string, string>> = {
   dashboard: "/",
   courses: "/courses",
   coupons: "/coupons",
-  "home-page-settings": "/home-page",
+  "home-page-settings": "/platform/home",
+  platform: "/platform",
   "coupon-create": "/coupons/create",
   "coupon-edit": "/coupons/:couponId",
   "create-course": "/courses/create",
@@ -463,7 +481,8 @@ export const destinationPaths: Readonly<Record<string, string>> = {
   Coupons: "/coupons",
   "/Coupons": "/coupons",
   "/coupons": "/coupons",
-  "Home Page": "/home-page",
+  "Home Page": "/platform/home",
+  Platform: "/platform",
   "/my-learning": "/courses",
   Students: "/students",
   Progress: "/progress",
@@ -487,6 +506,11 @@ const canonicalPathsByRouteId = {
   courses: "/courses",
   coupons: "/coupons",
   "home-page-settings": "/home-page",
+  platform: "/platform",
+  "platform-home": "/platform/home",
+  "platform-appearance": "/platform/appearance",
+  "platform-security": "/platform/security",
+  "platform-general": "/platform/general",
   "coupon-create": "/coupons/create",
   "coupon-edit": "/coupons/:couponId",
   "course-create": "/courses/create",
@@ -538,6 +562,9 @@ const hasOwn = <ObjectType extends object>(
   key: PropertyKey,
 ): key is keyof ObjectType => Object.prototype.hasOwnProperty.call(value, key);
 
+const isPlatformTab = (value: string) =>
+  (PLATFORM_TABS as readonly string[]).includes(value);
+
 export const normalizeNavigationPath = (path: string) =>
   String(path).replace(/\/+$/, "") || "/";
 
@@ -556,6 +583,12 @@ export const getEffectiveRouteId = (
         normalizedPath,
       );
     return match?.[1] ? `settings-${match[1]}` : "home-fallback";
+  }
+
+  if (routeId === "platform") {
+    if (normalizedPath === "/platform") return routeId;
+    const tab = /^\/platform\/([^/]+)$/.exec(normalizedPath)?.[1];
+    return tab && isPlatformTab(tab) ? `platform-${tab}` : "home-fallback";
   }
 
   if (routeId === "learning" || routeId === "legacy-learning") {
@@ -657,6 +690,15 @@ export const getRouteDescriptor = (
     return learningDescriptor;
   if (routeId === "settings") {
     return { ...routeDescriptors.settings, settingsTab: readSettingsTab() };
+  }
+  if (routeId === "platform") {
+    return { ...routeDescriptors.platform, platformTab: readPlatformTab() };
+  }
+  if (routeId.startsWith("platform-")) {
+    const tab = routeId.slice("platform-".length);
+    return isPlatformTab(tab)
+      ? { ...routeDescriptors.platform, platformTab: tab }
+      : undefined;
   }
   if (routeId === "discussions") {
     return {

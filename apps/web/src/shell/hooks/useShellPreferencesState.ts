@@ -39,7 +39,6 @@ export interface UseShellPreferencesStateResult {
   sidebarHeaderLayout: "inline";
   sidebarDockItems: SidebarDockItem[];
   settingsInSidebarDock: boolean;
-  readingModeDockIndex: number;
   sidebarMaxWidth: number;
   showSidebarAppearanceControl: boolean;
   showSidebarThemeIcon: boolean;
@@ -93,7 +92,6 @@ export function useShellPreferencesState({
     sidebarPreferences.dockOrder,
   ).filter((item) => selectedSidebarDockItems.includes(item));
   const settingsInSidebarDock = sidebarDockItems.includes("settings");
-  const readingModeDockIndex = sidebarDockItems.indexOf("reading-mode");
   const sidebarMaxWidth = clampSidebarMaxWidth(
     sidebarPreferences?.sidebarMaxWidth,
   );
@@ -118,7 +116,6 @@ export function useShellPreferencesState({
     sidebarHeaderLayout,
     sidebarDockItems,
     settingsInSidebarDock,
-    readingModeDockIndex,
     sidebarMaxWidth,
     showSidebarAppearanceControl,
     showSidebarThemeIcon,

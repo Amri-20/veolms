@@ -34,6 +34,9 @@ const mfaRoutes: RoutePlugin = async (app, options) => {
         response: {
           200: jsonResponse("MFA secret metadata.", totpSetupResponseSchema),
           401: errorResponse("Unauthorized."),
+          403: errorResponse(
+            "Two-factor sign-in is turned off for students on this academy.",
+          ),
         },
       },
       preHandler: context.authenticated,
@@ -192,7 +195,7 @@ const mfaRoutes: RoutePlugin = async (app, options) => {
           ),
           401: errorResponse("Unauthorized."),
           403: errorResponse(
-            "Step-up MFA required to replace existing factor.",
+            "Step-up MFA required to replace existing factor, or two-factor sign-in is turned off for students.",
           ),
         },
       },

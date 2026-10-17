@@ -63,6 +63,7 @@ import {
   useCheckoutPreview,
   useAwaitPaidOrder,
   useCreateCheckoutOrder,
+  useReleaseCheckoutOrder,
   useVerifyPayment,
 } from "../services/payments";
 import { useAuthConfig, useCurrentUser } from "../services/auth";
@@ -346,6 +347,7 @@ function CoursePurchaseSection({
   const checkoutIntentRef = useRef<{ intent: string; key: string } | null>(
     null,
   );
+  const releaseOrder = useReleaseCheckoutOrder();
   const verify = useVerifyPayment();
   const awaitPaidOrder = useAwaitPaidOrder();
   const paymentConfirmationRef = useRef<AbortController | null>(null);
@@ -856,7 +858,18 @@ function CoursePurchaseSection({
             setPaymentError(
               "The payment window was closed before the payment was completed. You can try again whenever you are ready.",
             );
-            setIsPaymentBusy(false);
+            // The order is cancelled on the server, so paying again (with
+            // another coupon, at another amount) is not refused as a second
+            // payment while the closed window's time runs out. The button
+            // waits for that answer, so a quick second click does not race
+            // it. A payment the gateway may still take keeps its order.
+            void releaseOrder
+              .mutateAsync(order.order.id)
+              .then((result) => {
+                if (result.released) checkoutIntentRef.current = null;
+              })
+              .catch(() => undefined)
+              .finally(() => setIsPaymentBusy(false));
           },
         },
       });

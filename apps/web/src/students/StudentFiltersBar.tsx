@@ -86,7 +86,7 @@ export function StudentFiltersBar({
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search students by name, @username, or email..."
+            placeholder="Search by name, @username, email or phone..."
             aria-label="Search students"
             aria-keyshortcuts={SEARCH_SHORTCUT_ARIA_KEYSHORTCUTS}
             data-search-shortcut-target

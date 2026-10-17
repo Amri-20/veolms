@@ -73,6 +73,20 @@ export const createCheckoutOrderResponseSchema = z.strictObject({
 export type CreateCheckoutOrderResponse = z.infer<
   typeof createCheckoutOrderResponseSchema
 >;
+/**
+ * The answer to the buyer closing the payment window. `released` is true
+ * when the order was cancelled and another checkout may start at once; false
+ * when it was left as it is because a payment for it may still arrive (the
+ * gateway has one in progress or captured, or could not be asked), or it
+ * had already ended.
+ */
+export const releaseCheckoutOrderResponseSchema = z.strictObject({
+  released: z.boolean(),
+  status: orderStatusSchema,
+});
+export type ReleaseCheckoutOrderResponse = z.infer<
+  typeof releaseCheckoutOrderResponseSchema
+>;
 export const createPurchaseResponseSchema = createCheckoutOrderResponseSchema;
 export type CreatePurchaseResponse = CreateCheckoutOrderResponse;
 

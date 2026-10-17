@@ -15,6 +15,7 @@ import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { CheckCircleIcon as CheckCircle } from "@phosphor-icons/react/CheckCircle";
 import { CircleNotchIcon as CircleNotch } from "@phosphor-icons/react/CircleNotch";
 import { EnvelopeSimpleIcon as EnvelopeSimple } from "@phosphor-icons/react/EnvelopeSimple";
+import { PhoneIcon as Phone } from "@phosphor-icons/react/Phone";
 import type { StudentListItem } from "@veolms/contracts";
 import type { NavigateTo } from "../routing/navigation";
 import { getApplicationScrollElement } from "../shell/applicationScroll";
@@ -257,6 +258,16 @@ const StudentVirtualRow = memo(function StudentVirtualRow({
           </button>
         ) : (
           <span className="pl-2 text-xs text-(--muted)">—</span>
+        )}
+        {student.phoneNo && (
+          // Tucked into the email button's bottom padding so a row with a
+          // phone is no taller than one without.
+          <span className="-mt-1 flex max-w-full items-center gap-1.5 px-2 text-xs text-(--text-secondary)">
+            <Phone size={14} className="shrink-0 text-(--muted)" />
+            <span className="truncate font-mono text-[12px]">
+              {student.phoneNo}
+            </span>
+          </span>
         )}
       </div>
 
@@ -580,7 +591,7 @@ export function StudentsTable({
                 Learner
               </div>
               <div role="columnheader" className="px-4 py-3.5">
-                Email
+                Contact
               </div>
               <div role="columnheader" className="px-4 py-3.5">
                 Enrolled Courses

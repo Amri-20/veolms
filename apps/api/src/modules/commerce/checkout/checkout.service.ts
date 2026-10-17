@@ -7,6 +7,7 @@ import {
   type CreateCheckoutOrderResponse,
   type PaymentGateway,
   type PricingCalculation,
+  type ReleaseCheckoutOrderResponse,
 } from "@veolms/contracts";
 import type { Database, DatabaseExecutor as Executor } from "@veolms/database";
 import type { Kysely } from "kysely";
@@ -41,7 +42,10 @@ import {
   createPaymentService,
   type PaymentService,
 } from "../payments/payment.service.ts";
-import { findGatewayCapture } from "../payments/captured-gateway-payment.ts";
+import {
+  findGatewayCapture,
+  gatewayOrderHasNoLivePayment,
+} from "../payments/captured-gateway-payment.ts";
 import { createExtraPaymentRefundService } from "../payments/extra-payment-refund.service.ts";
 import { courseSaleState } from "../pricing/purchasable.ts";
 import {
@@ -73,6 +77,10 @@ export interface CheckoutService {
     },
     request: CreateCheckoutOrderRequest,
   ): Promise<CreateCheckoutOrderResponse>;
+  releaseCheckoutOrder(
+    userId: string,
+    orderId: string,
+  ): Promise<ReleaseCheckoutOrderResponse>;
 }
 
 export interface CheckoutServiceOptions {
@@ -918,8 +926,98 @@ export function createCheckoutService({
     };
   }
 
+  /**
+   * The buyer closed the payment window. Their order is cancelled, so that
+   * paying again (with another coupon, at another amount) can start at once
+   * instead of waiting out the window (see settleOpenOrders, which refuses
+   * a new checkout while an earlier window for the same thing may be open).
+   *
+   * Only when no payment for it can still arrive: the gateway is asked
+   * first, and an order with a payment in progress or captured, a transfer
+   * reported, or a gateway that cannot be reached is left as it is. The
+   * window refusal then still protects the buyer from paying twice, and the
+   * recovery cycle settles a captured payment as before.
+   *
+   * The payment row is left open on purpose: the recovery worker goes on
+   * checking it, so a capture that still arrives (it should not: the window
+   * is closed) is found and, its order being cancelled, recorded as an
+   * extra payment to send back (payments/extra-payment.ts).
+   *
+   * Done under the buyer's checkout lock, and only if the order was not
+   * handed out again since the gateway was asked: another tab of theirs
+   * may have opened a window for it in between.
+   */
+  async function releaseCheckoutOrder(
+    userId: string,
+    orderId: string,
+  ): Promise<ReleaseCheckoutOrderResponse> {
+    const order = await orderRepo.findOrderById(database, orderId, {
+      type: "user",
+      id: userId,
+    });
+    if (!order) throw CommerceErrors.ORDER_NOT_FOUND(orderId);
+    if (order.status !== "pending") {
+      return { released: false, status: order.status };
+    }
+
+    const handedOutBefore = await paymentRepo.findLastCheckoutHandOutAt(
+      database,
+      orderId,
+    );
+    const payment = await paymentRepo.findPaymentByOrderId(database, orderId);
+    if (payment && payment.amount > 0 && payment.gateway_provider !== "free") {
+      if (payment.status === "captured") {
+        return { released: false, status: order.status };
+      }
+      if (payment.gateway_provider === "manual" || !payment.gateway_order_id) {
+        return { released: false, status: order.status };
+      }
+      let noLivePayment = false;
+      try {
+        noLivePayment = await gatewayOrderHasNoLivePayment(
+          paymentGateway,
+          payment.gateway_order_id,
+        );
+      } catch {
+        noLivePayment = false;
+      }
+      if (!noLivePayment) return { released: false, status: order.status };
+    }
+
+    return await database.transaction().execute(async (trx) => {
+      await orderRepo.lockBuyerCheckout(trx, userId);
+      const current = await orderRepo.findOrderByIdForUpdate(trx, orderId);
+      if (!current || current.status !== "pending") {
+        return {
+          released: false,
+          status: current?.status ?? order.status,
+        };
+      }
+      const handedOutNow = await paymentRepo.findLastCheckoutHandOutAt(
+        trx,
+        orderId,
+      );
+      const handedOutAgain =
+        handedOutNow !== undefined &&
+        (handedOutBefore === undefined ||
+          handedOutNow.getTime() !== handedOutBefore.getTime());
+      if (
+        handedOutAgain ||
+        (await manualPaymentRepo.findPendingManualPaymentRequestByOrderId(
+          trx,
+          orderId,
+        ))
+      ) {
+        return { released: false, status: current.status };
+      }
+      await orderRepo.cancelUnpaidOrders(trx, [orderId], new Date());
+      return { released: true, status: "cancelled" as const };
+    });
+  }
+
   return {
     previewCheckout,
     createOrder,
+    releaseCheckoutOrder,
   };
 }

@@ -19,6 +19,10 @@ import {
 } from "../themeViewTransition";
 import type { ThemeRevealOrigin } from "../themeViewTransition";
 import { getInitialAcademyTheme, persistAcademyTheme } from "../../themes";
+import {
+  persistDisplayMode,
+  readInitialDisplayMode,
+} from "../../store/appearanceDefaults";
 import type {
   PageTabColors,
   SidebarMode,
@@ -151,14 +155,8 @@ export function useShellLayoutEffects({
       const shellState = getInitialSidebarShellState();
       setSidebarMode(shellState.mode);
       setSidebarWidth(shellState.width);
-      const storedTheme = localStorage.getItem("veolms-theme");
-      setTheme(
-        storedTheme === "light" ||
-          storedTheme === "dark" ||
-          storedTheme === "device"
-          ? storedTheme
-          : "dark",
-      );
+      // The visitor's own mode, or the academy's default.
+      setTheme(readInitialDisplayMode());
       setAcademyTheme(getInitialAcademyTheme());
       setSidebarPreferences(getInitialSidebarPreferences());
       setPageTabColors(readPageTabColors());
@@ -258,7 +256,7 @@ export function useShellLayoutEffects({
       setResolvedTheme(nextTheme);
     };
     applyTheme();
-    localStorage.setItem("veolms-theme", theme);
+    persistDisplayMode(theme);
     if (theme !== "device") return undefined;
     media.addEventListener("change", applyTheme);
     return () => media.removeEventListener("change", applyTheme);

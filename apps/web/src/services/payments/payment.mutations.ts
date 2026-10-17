@@ -36,6 +36,9 @@ export function useCreateCheckoutOrder() {
     },
   });
 }
+export const useReleaseCheckoutOrder = () =>
+  useMutation({ mutationFn: paymentService.releaseOrder });
+
 export function useVerifyPayment() {
   const queryClient = useQueryClient();
   return useMutation<

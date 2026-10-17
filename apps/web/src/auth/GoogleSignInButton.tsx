@@ -2,6 +2,7 @@ import { CaretDownIcon as CaretDown } from "@phosphor-icons/react/CaretDown";
 import { useState, type ReactNode } from "react";
 import { LoadingSpinnerIcon } from "../components/LoadingSpinner";
 import { cn } from "../lib/utils";
+import { useGoogleButtonFont, type GoogleButtonFont } from "./googleButtonFont";
 import type { LastGoogleAccount } from "./lastGoogleAccount";
 import { GoogleBrandIcon } from "./SocialBrandIcons";
 
@@ -11,7 +12,7 @@ import { GoogleBrandIcon } from "./SocialBrandIcons";
  *
  * - Google's standard "G", unaltered, at 20px (the guidelines allow no other
  *   logo, colour or size), with 12px before it and 10px after it.
- * - Google Sans Medium, the guidelines' button font (loaded below).
+ * - Google Sans Medium, the guidelines' button font (see googleButtonFont).
  * - "Continue with Google", one of the guidelines' wordings; the account
  *   version says "Continue as <name>", as Google's own personalised button
  *   does.
@@ -24,28 +25,6 @@ import { GoogleBrandIcon } from "./SocialBrandIcons";
  *   (see LoginCardParts).
  */
 
-// Google Sans comes from Google Fonts, asked for when the login card's code
-// loads (this module), so it is usually in by the time the card is drawn.
-// Until then the app's font stands in.
-const GOOGLE_SANS_STYLESHEET =
-  "https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500&display=swap";
-
-function loadGoogleSans() {
-  if (typeof document === "undefined") return;
-  if (document.querySelector("link[data-google-sans]")) return;
-  const preconnect = document.createElement("link");
-  preconnect.rel = "preconnect";
-  preconnect.href = "https://fonts.gstatic.com";
-  preconnect.crossOrigin = "anonymous";
-  document.head.appendChild(preconnect);
-  const stylesheet = document.createElement("link");
-  stylesheet.rel = "stylesheet";
-  stylesheet.href = GOOGLE_SANS_STYLESHEET;
-  stylesheet.dataset.googleSans = "";
-  document.head.appendChild(stylesheet);
-}
-loadGoogleSans();
-
 /**
  * The surface both versions share. Important on the font: the login card's
  * stylesheet sets `font: inherit` on buttons, which outranks utilities.
@@ -53,8 +32,21 @@ loadGoogleSans();
 const googleSurfaceClasses = [
   "relative w-full min-h-11.5 rounded-[10px] border",
   "border-[color-mix(in_srgb,var(--text)_24%,transparent)] bg-[color-mix(in_srgb,var(--canvas)_30%,var(--surface))] text-(--text)",
-  "[font-family:'Google_Sans',var(--app-font-family,sans-serif)]! text-[0.9375rem]! leading-5! font-medium! tracking-[0.1px]!",
+  "text-[0.9375rem]! leading-5! font-medium! tracking-[0.1px]!",
 ].join(" ");
+
+/**
+ * The words' font (see useGoogleButtonFont): Google Sans once it is in (the
+ * family named GOOGLE_BUTTON_FONT_FAMILY), else the app's own. While it is
+ * on its way the words are hidden (`wordsClasses`).
+ */
+const fontClasses: Record<GoogleButtonFont, string> = {
+  pending: "[font-family:var(--app-font-family,sans-serif)]!",
+  google: "[font-family:LoginGoogleSans,var(--app-font-family,sans-serif)]!",
+  fallback: "[font-family:var(--app-font-family,sans-serif)]!",
+};
+const wordsClasses = (font: GoogleButtonFont) =>
+  font === "pending" ? "invisible" : undefined;
 
 /** Hover and press: the text's colour laid over the fill, as Google does. */
 const pressableClasses =
@@ -73,6 +65,7 @@ export function GoogleSignInButton({
   disabled: boolean;
   onClick: () => void;
 }) {
+  const font = useGoogleButtonFont();
   return (
     <button
       aria-busy={busyLabel !== null}
@@ -80,6 +73,7 @@ export function GoogleSignInButton({
       aria-label={busyLabel ? "Verifying Google sign-in" : undefined}
       className={cn(
         googleSurfaceClasses,
+        fontClasses[font],
         pressableClasses,
         "flex items-center justify-center gap-2.5 px-3 whitespace-nowrap",
       )}
@@ -91,10 +85,10 @@ export function GoogleSignInButton({
       {busyLabel ? (
         <>
           <LoadingSpinnerIcon size={18} className="text-current!" />
-          {busyLabel}
+          <span className={wordsClasses(font)}>{busyLabel}</span>
         </>
       ) : (
-        "Continue with Google"
+        <span className={wordsClasses(font)}>Continue with Google</span>
       )}
     </button>
   );
@@ -158,6 +152,7 @@ export function GoogleAccountButton({
   onContinue: () => void;
   onChooseAccount: () => void;
 }) {
+  const font = useGoogleButtonFont();
   const firstName = account.name.split(/\s+/)[0] || account.name;
   const secondLine: ReactNode = busyLabel ? (
     <span className="flex items-center gap-1.5">
@@ -171,6 +166,7 @@ export function GoogleAccountButton({
     <div
       className={cn(
         googleSurfaceClasses,
+        fontClasses[font],
         // Two lines, so taller than the one-line buttons. A size container:
         // on narrow phones everything tightens (the arrow's area, the gaps,
         // the picture, the name) so the picture can stay.
@@ -203,7 +199,9 @@ export function GoogleAccountButton({
           account={account}
           className="@max-[20rem]:size-8 @max-[16.5rem]:size-7"
         />
-        <span className="flex min-w-0 flex-1 flex-col">
+        <span
+          className={cn("flex min-w-0 flex-1 flex-col", wordsClasses(font))}
+        >
           {/* Wraps rather than cutting the name off when the button is narrow. */}
           <span className="line-clamp-2 leading-4.5! wrap-anywhere @max-[20rem]:text-sm">
             Continue as {firstName}

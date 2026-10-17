@@ -669,7 +669,11 @@
   filter: saturate(1.14) brightness(1.05);
 }
 
-:root[data-theme="light"] .sidebar-palette-menu {
+/* The sidebar's reading and settings menus share this light surface; the
+   settings menu also needs to outweigh the profile menu's light rule below. */
+:root[data-theme="light"] .sidebar-palette-menu,
+:root[data-theme="light"] .sidebar-appearance > .reading-mode-quick-menu,
+:root[data-theme="light"] .courses-profile > .profile-menu.settings-quick-menu {
   background-color: color-mix(
     in srgb,
     var(--surface-strong) 94%,
@@ -1093,16 +1097,12 @@
   left: calc(100% + 2px);
 }
 
-/* Beside the collapsed rail the menu's bottom lines up with the bottom of
-   its dock button. Each dock button below it takes one step: a 57px button
-   and the dock's 8px gap (SIDEBAR_DOCK_CLASS). */
+/* Beside the collapsed rail the menu sits on the sidebar's bottom edge, as
+   the reading and settings menus do. */
 .courses-app--collapsed
   .sidebar-palette-menu--dock-attached.sidebar-palette-menu--collapsed {
   top: auto;
-  bottom: calc(
-    (var(--sidebar-dock-count, 1) - var(--palette-menu-dock-index, 0) - 1) *
-      65px
-  );
+  bottom: 0;
 }
 
 /* Static documents receive the persisted sidebar state from the head

@@ -1,4 +1,6 @@
 import {
+  studentContactUpdateRequestSchema,
+  studentContactUpdateResponseSchema,
   studentDetailResponseSchema,
   studentListQuerySchema,
   studentListResponseSchema,
@@ -15,12 +17,19 @@ import { createStudentsService } from "./students.service.ts";
 
 const studentsRoutes: RoutePlugin = async (app, options) => {
   const auth = createAuthContext(options);
-  const service = createStudentsService({ database: options.database });
+  const service = createStudentsService({
+    database: options.database,
+    authService: auth.authService,
+  });
   const controller = createStudentsController({ service });
 
   const requireInstructorOrAdmin = [
     ...auth.mfaVerified,
     auth.middleware.requireRoles([ADMIN_ROLE, INSTRUCTOR_ROLE]),
+  ];
+  const requireAdmin = [
+    ...auth.mfaVerified,
+    auth.middleware.requireRoles([ADMIN_ROLE]),
   ];
 
   app.get(
@@ -67,6 +76,32 @@ const studentsRoutes: RoutePlugin = async (app, options) => {
       },
     },
     controller.getByUsername,
+  );
+
+  app.patch(
+    "/students/:username/contact",
+    {
+      preHandler: requireAdmin,
+      schema: {
+        operationId: "updateStudentContact",
+        tags: ["Students"],
+        summary: "Change a student's email or phone number (admins only)",
+        params: studentUsernameParamsSchema,
+        body: studentContactUpdateRequestSchema,
+        response: {
+          200: jsonResponse(
+            "The student's contact details as saved",
+            studentContactUpdateResponseSchema,
+          ),
+          400: errorResponse("Invalid email or phone number"),
+          401: errorResponse("Authentication required"),
+          403: errorResponse("Forbidden"),
+          404: errorResponse("Student not found"),
+          409: errorResponse("Email or phone number already in use"),
+        },
+      },
+    },
+    controller.updateContact,
   );
 };
 

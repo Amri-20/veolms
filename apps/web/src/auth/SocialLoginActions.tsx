@@ -9,12 +9,11 @@ import {
   useLastGoogleAccount,
 } from "./lastGoogleAccount";
 import {
-  OAUTH_PROVIDER_STORAGE_KEY,
-  OAUTH_RETURN_TO_STORAGE_KEY,
   clearOauthHandoff,
   clearOauthRedirectResult,
   peekOauthRedirectResult,
   rememberOauthDialogPage,
+  rememberOauthHandoff,
 } from "./oauthFlow";
 import { useGoogleSilentSignInCheck } from "./googleSilentSignIn";
 import { rememberLoginDialogSnapshot } from "./loginDialogSnapshot";
@@ -121,8 +120,8 @@ export function SocialLoginActions({
 
   useEffect(() => () => stopListeningRef.current?.(), []);
 
-  const reset = () => {
-    clearOauthHandoff();
+  const reset = (options?: { keepSharedCopy?: boolean }) => {
+    clearOauthHandoff(options);
     setLoadingProvider(null);
     setPopupStage(null);
   };
@@ -230,8 +229,10 @@ export function SocialLoginActions({
         return;
       }
       // Closed without an answer: the buttons work again. The listener
-      // stays, in case the answer is still on its way.
-      reset();
+      // stays, in case the answer is still on its way. The shared copy
+      // stays too: on Android the window also closes when Chrome hands the
+      // answer to the installed app, which reads it (see oauthFlow).
+      reset({ keepSharedCopy: true });
     });
   };
 
@@ -249,12 +250,7 @@ export function SocialLoginActions({
 
     // Written before the window opens: it starts with a copy of this tab's
     // session storage, which it needs if it has to finish signing in itself.
-    sessionStorage.setItem(OAUTH_PROVIDER_STORAGE_KEY, provider);
-    if (returnTo) {
-      sessionStorage.setItem(OAUTH_RETURN_TO_STORAGE_KEY, returnTo);
-    } else {
-      sessionStorage.removeItem(OAUTH_RETURN_TO_STORAGE_KEY);
-    }
+    rememberOauthHandoff(provider, returnTo);
     const redirectUri = `${window.location.origin}/auth/callback`;
     const providerName = provider === "google" ? "Google" : "GitHub";
     const googleOptions =

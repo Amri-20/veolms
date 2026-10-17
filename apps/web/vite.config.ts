@@ -5,7 +5,13 @@ import fs from "node:fs";
 import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { loadWebConfig } from "@veolms/config";
-import { defineConfig, loadEnv, type Plugin, type Rolldown } from "vite";
+import {
+  defineConfig,
+  loadEnv,
+  type Plugin,
+  type Rolldown,
+  type UserConfig,
+} from "vite";
 
 import { parseSiteOrigin } from "./src/routing/siteOrigin.ts";
 
@@ -570,7 +576,33 @@ function bundleReportPlugin(): Plugin {
   };
 }
 
-export default defineConfig(({ command, mode }) => {
+/**
+ * The academy's default look (Platform > Appearance) as the build API has
+ * it, written into every page's head so that a first visit opens in it.
+ * Later changes reach visitors through the API; when the API cannot answer
+ * in time the build keeps the built-in default rather than failing.
+ */
+async function fetchPlatformAppearance(apiUrl: string): Promise<unknown> {
+  const base = apiUrl.replace(/\/+$/u, "").replace(/\/api\/v1$/u, "/v1");
+  const url = `${base.endsWith("/v1") ? base : `${base}/v1`}/platform/public-settings`;
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(4_000),
+      headers: { accept: "application/json" },
+    });
+    if (!response.ok) return null;
+    const body: unknown = await response.json();
+    const payload =
+      body && typeof body === "object" && "data" in body ? body.data : body;
+    return payload && typeof payload === "object" && "appearance" in payload
+      ? payload.appearance
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
   const environment = {
     ...process.env,
     ...loadEnv(mode, workspaceRoot, ""),
@@ -584,6 +616,11 @@ export default defineConfig(({ command, mode }) => {
       "VITE_SITE_URL must be the site's public origin, such as https://academy.example.com (http or https, no path or query).",
     );
   }
+
+  const platformAppearance =
+    command === "build"
+      ? await fetchPlatformAppearance(config.STATIC_BUILD_API_URL)
+      : null;
 
   return {
     envDir: workspaceRoot,
@@ -641,6 +678,9 @@ export default defineConfig(({ command, mode }) => {
       ),
       "import.meta.env.VITE_CDN_URL": JSON.stringify(config.VITE_CDN_URL),
       "import.meta.env.VITE_SITE_URL": JSON.stringify(siteOrigin ?? ""),
+      // Checked where it is read (store/appearanceDefaults.ts).
+      "import.meta.env.VEO_PLATFORM_APPEARANCE":
+        JSON.stringify(platformAppearance),
       // The API's own setting, handed to the login form so its countdown
       // ends when the API starts accepting another send.
       "import.meta.env.OTP_RESEND_COOLDOWN_SECONDS": JSON.stringify(

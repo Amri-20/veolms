@@ -13,7 +13,13 @@ import type { AuthIdentifier } from "./authFlow";
  * case the visitor asks for a new one on the code step.
  *
  * Held in memory as well, for a browser that refuses storage.
+ *
+ * Kept apart per flow (`SentCodeScope`): a sign-in code and the code that
+ * confirms a mobile number before a purchase are different codes on the
+ * server, so one must never stand in for the other.
  */
+
+export type SentCodeScope = "login" | "phone-verification";
 
 interface SentCode {
   destination: string;
@@ -35,13 +41,17 @@ const EXPIRY_MARGIN_MS = 30_000;
  */
 const FALLBACK_LIFETIME_SECONDS = 5 * 60;
 
-const SENT_CODE_KEY = "veolms-login-code-sent";
+const SENT_CODE_KEYS: Record<SentCodeScope, string> = {
+  login: "veolms-login-code-sent",
+  "phone-verification": "veolms-phone-verification-code-sent",
+};
 
-let memorySentCode: SentCode | null = null;
+const memorySentCodes: Partial<Record<SentCodeScope, SentCode>> = {};
 
-function readSentCode(): SentCode | null {
+function readSentCode(scope: SentCodeScope): SentCode | null {
+  const memorySentCode = memorySentCodes[scope] ?? null;
   try {
-    const stored = window.sessionStorage.getItem(SENT_CODE_KEY);
+    const stored = window.sessionStorage.getItem(SENT_CODE_KEYS[scope]);
     if (!stored) return memorySentCode;
     const value = JSON.parse(stored) as Partial<SentCode>;
     return typeof value.destination === "string" &&
@@ -69,26 +79,28 @@ function resolveDestination(identifier: AuthIdentifier) {
 export function rememberCodeSent(
   identifier: AuthIdentifier,
   expiresInSeconds: number | undefined,
+  scope: SentCodeScope = "login",
 ) {
   const at = Date.now();
-  memorySentCode = {
+  const sent: SentCode = {
     destination: resolveDestination(identifier),
     at,
     expiresAt: at + (expiresInSeconds ?? FALLBACK_LIFETIME_SECONDS) * 1000,
   };
+  memorySentCodes[scope] = sent;
   try {
-    window.sessionStorage.setItem(
-      SENT_CODE_KEY,
-      JSON.stringify(memorySentCode),
-    );
+    window.sessionStorage.setItem(SENT_CODE_KEYS[scope], JSON.stringify(sent));
   } catch {
     // Storage can be unavailable in privacy-restricted contexts.
   }
 }
 
 /** When this tab last had a code sent to that destination, if it did. */
-export function codeSentAt(identifier: AuthIdentifier): number | null {
-  const sent = readSentCode();
+export function codeSentAt(
+  identifier: AuthIdentifier,
+  scope: SentCodeScope = "login",
+): number | null {
+  const sent = readSentCode(scope);
   return sent !== null && sent.destination === resolveDestination(identifier)
     ? sent.at
     : null;
@@ -100,8 +112,11 @@ export function codeSentAt(identifier: AuthIdentifier): number | null {
  * same address then returns to the code step without sending another, and
  * the wait before a new one keeps counting from the first send.
  */
-export function hasUsableSentCode(identifier: AuthIdentifier): boolean {
-  const sent = readSentCode();
+export function hasUsableSentCode(
+  identifier: AuthIdentifier,
+  scope: SentCodeScope = "login",
+): boolean {
+  const sent = readSentCode(scope);
   return (
     sent !== null &&
     sent.destination === resolveDestination(identifier) &&
@@ -110,10 +125,10 @@ export function hasUsableSentCode(identifier: AuthIdentifier): boolean {
 }
 
 /** Once a code has been used it is no longer one the visitor can enter. */
-export function forgetCodeSent() {
-  memorySentCode = null;
+export function forgetCodeSent(scope: SentCodeScope = "login") {
+  delete memorySentCodes[scope];
   try {
-    window.sessionStorage.removeItem(SENT_CODE_KEY);
+    window.sessionStorage.removeItem(SENT_CODE_KEYS[scope]);
   } catch {
     // Storage can be unavailable in privacy-restricted contexts.
   }

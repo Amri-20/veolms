@@ -489,8 +489,10 @@
 
 .sidebar-appearance
   > .reading-mode-quick-menu:not(.reading-mode-quick-menu--collapsed) {
+  /* On the same line as the colour menu (navigation.css) and the settings
+     menu (courses.css): 8px above the dock. */
   right: 0;
-  bottom: calc(100% + 2px);
+  bottom: calc(100% + 8px);
   left: 0;
   width: auto;
   max-width: none;
@@ -595,15 +597,12 @@
   min-width: var(--radix-select-trigger-width);
 }
 
-/* Bottom-aligned with the reading-mode button, as the colour menu is with
-   its own (see navigation.css): one 65px step per dock button below it. */
+/* Beside the collapsed rail every menu sits on the sidebar's bottom edge,
+   as the colour and settings menus do. */
 .courses-app--collapsed .reading-mode-quick-menu--collapsed {
   top: auto;
   right: auto;
-  bottom: calc(
-    (var(--sidebar-dock-count, 1) - var(--reading-mode-dock-index, 0) - 1) *
-      65px
-  );
+  bottom: 0;
   left: calc(100% + 2px);
   width: 264px;
 }

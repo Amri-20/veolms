@@ -18,6 +18,16 @@ export function isMfaMandatoryAccount(
     return true;
   }
 
+  return isStaffAccount(roles);
+}
+
+/**
+ * Admins and instructors: two-factor sign-in is always required of them,
+ * whatever the academy decides for students.
+ */
+export function isStaffAccount(
+  roles: readonly string[] | null | undefined,
+): boolean {
   return Boolean(
     roles?.some((role) => MANDATORY_MFA_ROLES.has(role.toLowerCase())),
   );

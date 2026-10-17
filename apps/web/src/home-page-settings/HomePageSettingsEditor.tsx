@@ -1,20 +1,16 @@
 import { CircleNotchIcon as CircleNotch } from "@phosphor-icons/react/CircleNotch";
-import { ShieldWarningIcon as ShieldWarning } from "@phosphor-icons/react/ShieldWarning";
 import { WarningCircleIcon as WarningCircle } from "@phosphor-icons/react/WarningCircle";
 import type { HomePageSettings } from "@veolms/contracts";
 import { DEFAULT_HOME_PAGE_SETTINGS } from "@veolms/contracts/home-page-defaults";
 import { useState, type FormEvent } from "react";
 import { Button } from "../components/Button";
 import { CenteredLoadingSpinner } from "../components/LoadingSpinner";
-import { PageHeading } from "../components/PageHeading";
 import { getApiError } from "../lib/api-error";
-import type { NavigateTo } from "../routing/navigation";
 import {
   useHomePageSettings,
   useHomePageSettingsOptions,
   useUpdateHomePageSettings,
 } from "../services/home";
-import { AcademyBrandSection } from "./AcademyBrandSection";
 import { CourseSectionEditor } from "./CourseSectionEditor";
 import { DiscussionsEditor } from "./DiscussionsEditor";
 import { HeroVideoEditor } from "./HeroVideoEditor";
@@ -23,8 +19,6 @@ import {
   TextField,
   surfaceClass,
 } from "./homePageSettingsControls";
-
-const pageClass = "mx-auto grid w-full max-w-[1100px] gap-5";
 
 /** Why the settings cannot be saved yet, or null when they can. */
 function getBlockingProblem(settings: HomePageSettings): string | null {
@@ -317,89 +311,40 @@ function HomePageSettingsForm({
   );
 }
 
-function AccessDenied({ onNavigatePage }: { onNavigatePage?: NavigateTo }) {
-  return (
-    <main className={pageClass}>
-      <div
-        className={`${surfaceClass} grid place-items-center p-10 text-center`}
-      >
-        <span className="flex size-11 items-center justify-center rounded-xl bg-(--accent)/10 text-(--accent)">
-          <ShieldWarning size={24} weight="bold" />
-        </span>
-        <h1 className="mt-3 text-lg font-semibold">Access denied</h1>
-        <p className="mt-1 max-w-md text-sm text-(--muted)">
-          The home page can only be changed by academy administrators.
-        </p>
-        <div className="mt-4">
-          <Button onClick={() => onNavigatePage?.("/")}>Return home</Button>
-        </div>
-      </div>
-    </main>
-  );
-}
-
 /**
  * Where an academy admin configures the home page that signed-out visitors
- * see: the hero copy, the highlight cards, the two course rows and the
- * discussion list.
+ * see: the hero copy and video, the highlight cards, the two course rows and
+ * the discussion list. The Home page tab of the Platform page.
  */
-export function HomePageSettingsPage({
-  canManage,
-  onNavigatePage,
-  setNotice,
-}: {
-  /** Only administrators may open this page; the API enforces it as well. */
-  canManage: boolean;
-  onNavigatePage?: NavigateTo;
-  setNotice?: (message: string) => void;
-}) {
-  if (!canManage) return <AccessDenied onNavigatePage={onNavigatePage} />;
-  return <HomePageSettingsEditor setNotice={setNotice} />;
-}
-
-function HomePageSettingsEditor({
+export function HomePageSettingsEditor({
   setNotice,
 }: {
   setNotice?: (message: string) => void;
 }) {
   const settingsQuery = useHomePageSettings();
 
-  return (
-    <main className={pageClass} aria-labelledby="home-page-settings-title">
-      <PageHeading
-        id="home-page-settings-title"
-        title="Home Page"
-        description="Choose what signed-out visitors see on the home page. To check the result, open the site in a private window."
-      />
-
-      <AcademyBrandSection setNotice={setNotice} />
-
-      {settingsQuery.isLoading ? (
-        <CenteredLoadingSpinner
-          label="Loading home page settings"
-          className="min-h-52 py-24"
-        />
-      ) : settingsQuery.isError || !settingsQuery.data ? (
-        <div
-          role="alert"
-          className={`${surfaceClass} grid place-items-center gap-3 p-10 text-center`}
-        >
-          <p className="text-sm font-semibold text-(--text)">
-            The home page settings could not be loaded.
-          </p>
-          <Button onClick={() => void settingsQuery.refetch()}>
-            Try again
-          </Button>
-        </div>
-      ) : (
-        <HomePageSettingsForm
-          // A save replaces the saved copy; start the draft from it again.
-          key={settingsQuery.data.updatedAt ?? "default"}
-          saved={settingsQuery.data.settings}
-          savedAt={settingsQuery.data.updatedAt}
-          setNotice={setNotice}
-        />
-      )}
-    </main>
+  return settingsQuery.isLoading ? (
+    <CenteredLoadingSpinner
+      label="Loading home page settings"
+      className="min-h-52 py-24"
+    />
+  ) : settingsQuery.isError || !settingsQuery.data ? (
+    <div
+      role="alert"
+      className={`${surfaceClass} grid place-items-center gap-3 p-10 text-center`}
+    >
+      <p className="text-sm font-semibold text-(--text)">
+        The home page settings could not be loaded.
+      </p>
+      <Button onClick={() => void settingsQuery.refetch()}>Try again</Button>
+    </div>
+  ) : (
+    <HomePageSettingsForm
+      // A save replaces the saved copy; start the draft from it again.
+      key={settingsQuery.data.updatedAt ?? "default"}
+      saved={settingsQuery.data.settings}
+      savedAt={settingsQuery.data.updatedAt}
+      setNotice={setNotice}
+    />
   );
 }

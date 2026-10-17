@@ -1,8 +1,10 @@
+import { z } from "zod";
 import {
   checkoutPreviewRequestSchema,
   checkoutPreviewResponseSchema,
   createCheckoutOrderRequestSchema,
   createCheckoutOrderResponseSchema,
+  releaseCheckoutOrderResponseSchema,
 } from "@veolms/contracts";
 import { normalizeIP } from "@fastify/rate-limit";
 import { jsonResponse } from "../../../lib/responses.ts";
@@ -11,6 +13,7 @@ import type { RoutePlugin } from "../../../lib/route-plugin.ts";
 import { createCommerceContext } from "../shared/commerce.context.ts";
 import { createCheckoutService } from "./checkout.service.ts";
 import { createCheckoutController } from "./checkout.controller.ts";
+import { createPlatformSettingsService } from "../../platform/index.ts";
 
 const checkoutRoutes: RoutePlugin = async (app, options) => {
   const ctx = createCommerceContext(options);
@@ -18,7 +21,12 @@ const checkoutRoutes: RoutePlugin = async (app, options) => {
     database: options.database,
     paymentGateway: options.services.paymentGateway,
   });
-  const controller = createCheckoutController({ service });
+  const controller = createCheckoutController({
+    service,
+    platformSettings: createPlatformSettingsService({
+      database: options.database,
+    }),
+  });
 
   // 1. POST /checkout/preview - Calculates authoritative total, items and coupon preview
   app.post(
@@ -97,6 +105,31 @@ const checkoutRoutes: RoutePlugin = async (app, options) => {
       },
     },
     controller.createOrder,
+  );
+
+  // 3. POST /checkout/orders/:orderId/release - The buyer closed the payment window
+  app.post(
+    "/checkout/orders/:orderId/release",
+    {
+      preHandler: ctx.requireAuthenticated,
+      schema: {
+        operationId: "releaseCheckoutOrder",
+        tags: ["Commerce - Checkout"],
+        summary: "Release an order whose payment window was closed",
+        description:
+          "Cancels the buyer's unpaid order after they closed the payment window, so another checkout can start at once. Leaves it as it is when the gateway has a payment for it in progress or captured, or cannot be asked.",
+        params: z.object({ orderId: z.uuid() }),
+        response: {
+          200: jsonResponse(
+            "Whether the order was released",
+            releaseCheckoutOrderResponseSchema,
+          ),
+          401: errorResponse("Unauthorized"),
+          404: errorResponse("Order not found"),
+        },
+      },
+    },
+    controller.releaseCheckoutOrder,
   );
 };
 

@@ -1,3 +1,9 @@
+import {
+  followsDefaultColorTheme,
+  readPlatformAppearance,
+  recordColorThemeShown,
+} from "./store/appearanceDefaults";
+
 export interface AcademyTheme {
   id: string;
   name: string;
@@ -230,17 +236,31 @@ export function pickRandomAcademyTheme(
   return selectionPool[index] || DEFAULT_ACADEMY_THEME;
 }
 
+/**
+ * The theme a visitor who has not picked their own sees: the academy's
+ * default (Platform > Appearance), when this version has that theme.
+ */
+export function getDefaultAcademyTheme(): string {
+  const themeId = readPlatformAppearance().defaultColorTheme;
+  return paletteIds.has(themeId) ? themeId : DEFAULT_ACADEMY_THEME;
+}
+
 export function getInitialAcademyTheme(): string {
   if (typeof window === "undefined") return DEFAULT_ACADEMY_THEME;
 
   const savedVersion = window.localStorage.getItem(THEME_VERSION_KEY);
   const savedTheme = window.localStorage.getItem(THEME_KEY);
-  const currentTheme =
+  const savedThemeIsCurrent =
     savedVersion === ACADEMY_THEME_VERSION &&
     savedTheme !== null &&
-    paletteIds.has(savedTheme)
+    paletteIds.has(savedTheme);
+  const followsDefault = followsDefaultColorTheme(
+    () => savedThemeIsCurrent && savedTheme !== DEFAULT_ACADEMY_THEME,
+  );
+  const currentTheme =
+    !followsDefault && savedThemeIsCurrent
       ? savedTheme
-      : DEFAULT_ACADEMY_THEME;
+      : getDefaultAcademyTheme();
   const rotation = getThemeRotationPreferences();
 
   if (!rotation.enabled) {
@@ -260,6 +280,7 @@ export function persistAcademyTheme(theme: string): void {
   if (typeof window === "undefined" || !paletteIds.has(theme)) return;
   window.localStorage.setItem(THEME_KEY, theme);
   window.localStorage.setItem(THEME_VERSION_KEY, ACADEMY_THEME_VERSION);
+  recordColorThemeShown(theme);
 
   if (getThemeRotationPreferences().enabled) {
     window.sessionStorage.setItem(SESSION_THEME_KEY, theme);

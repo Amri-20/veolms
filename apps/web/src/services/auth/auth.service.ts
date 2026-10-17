@@ -137,8 +137,8 @@ export const authService = {
 
   sendPhoneVerificationOtp: (
     payload: PhoneVerificationSendRequest,
-  ): Promise<AuthMessageResponse> => {
-    return api.post<AuthMessageResponse>("/auth/me/phone/otp/send", payload);
+  ): Promise<OtpSendResponse> => {
+    return api.post<OtpSendResponse>("/auth/me/phone/otp/send", payload);
   },
 
   sendEmailVerificationOtp: (

@@ -11,7 +11,7 @@ import {
   SESSION_TTL_MS,
   SESSION_USER_AGENT_MAX_LENGTH,
 } from "../shared/auth.constants.ts";
-import { isMfaMandatoryAccount } from "../shared/mfa-policy.ts";
+import { isMfaMandatoryAccount, isStaffAccount } from "../shared/mfa-policy.ts";
 import type {
   AuthenticatedRequestContext,
   EstablishedSession,
@@ -28,10 +28,12 @@ import {
   toUserProfileFields,
 } from "../shared/auth.utils.ts";
 import {
+  clearSessionAuthCache,
   getCachedAuthContext,
   setCachedAuthContext,
 } from "../shared/session-auth-cache.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
+import { createPlatformSettingsService } from "../../platform/index.ts";
 import type { Executor } from "../shared/repository.types.ts";
 
 export interface SessionServiceOptions {
@@ -53,17 +55,34 @@ export interface SessionPrerequisites {
 
 export function createSessionService({ database }: SessionServiceOptions) {
   const outbox = createOutboxService();
+  const platformSettings = createPlatformSettingsService({ database });
 
-  /** Same rules as resolveMfaState, for factor facts that are already loaded. */
+  /**
+   * Whether two-factor sign-in is off for this account: a student's, while
+   * the academy has turned it off for students. Their factors stay enrolled
+   * and count again if it is turned back on.
+   */
+  async function isTwoFactorOffFor(roles: readonly string[]) {
+    return (
+      !isStaffAccount(roles) &&
+      !(await platformSettings.isStudentTwoFactorEnabled())
+    );
+  }
+
+  /**
+   * Same rules as resolveMfaState, for factor facts that are already loaded.
+   * `twoFactorOff` is the academy's student rule (see isTwoFactorOffFor).
+   */
   function buildMfaState(
     mfaMandatory: boolean,
     roles: readonly string[] | null | undefined,
     factors: { totpEnabled: boolean; passkeyCount: number },
+    twoFactorOff = false,
   ): MfaState {
     const isAdmin = Boolean(
       roles?.some((role) => role.toLowerCase() === ADMIN_ROLE),
     );
-    if (config.SKIP_ADMIN_MFA && isAdmin) {
+    if ((config.SKIP_ADMIN_MFA && isAdmin) || twoFactorOff) {
       return {
         totpEnabled: false,
         passkeyEnabled: false,
@@ -169,6 +188,7 @@ export function createSessionService({ database }: SessionServiceOptions) {
       }),
       roles,
       factors,
+      await isTwoFactorOffFor(roles),
     );
 
     // Stored within what the session list is allowed to return. A longer
@@ -315,17 +335,29 @@ export function createSessionService({ database }: SessionServiceOptions) {
     // The session row carries the user id, so the user, role and factor
     // reads need nothing from each other: one parallel round trip instead of
     // a serial user read followed by a second batch.
-    const [user, roles, { totpEnabled, passkeyCount }] = await Promise.all([
+    const [
+      user,
+      roles,
+      { totpEnabled, passkeyCount },
+      studentTwoFactorEnabled,
+    ] = await Promise.all([
       userRepository.findUserById(database, session.user_id),
       userRepository.listUserRoleNames(database, session.user_id),
       mfaRepository.findMfaFactorState(database, session.user_id),
+      platformSettings.isStudentTwoFactorEnabled(),
     ]);
     if (!user) {
       return null;
     }
 
     const isAdmin = roles.some((role) => role.toLowerCase() === ADMIN_ROLE);
-    const skipAdminMfa = Boolean(config.SKIP_ADMIN_MFA && isAdmin);
+    // An admin skipped by configuration, or a student while the academy has
+    // turned two-factor sign-in off for students: a session waiting for its
+    // second step counts as complete.
+    const skipMfa = Boolean(
+      (config.SKIP_ADMIN_MFA && isAdmin) ||
+      (!studentTwoFactorEnabled && !isStaffAccount(roles)),
+    );
 
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
     if (session.last_used_at < fifteenMinutesAgo) {
@@ -337,9 +369,9 @@ export function createSessionService({ database }: SessionServiceOptions) {
         ...toUserProfileFields(user),
         name: user.display_name,
         roles,
-        totpEnabled: skipAdminMfa ? false : totpEnabled,
-        passkeyEnabled: skipAdminMfa ? false : passkeyCount > 0,
-        mfaMandatory: skipAdminMfa
+        totpEnabled: skipMfa ? false : totpEnabled,
+        passkeyEnabled: skipMfa ? false : passkeyCount > 0,
+        mfaMandatory: skipMfa
           ? false
           : isMfaMandatoryAccount(Boolean(user.mfa_mandatory), roles),
       },
@@ -347,7 +379,7 @@ export function createSessionService({ database }: SessionServiceOptions) {
         id: session.id,
         user_id: session.user_id,
         token_hash: session.token_hash,
-        mfa_verified: skipAdminMfa ? true : session.mfa_verified,
+        mfa_verified: skipMfa ? true : session.mfa_verified,
         revoked_at: session.revoked_at,
         expires_at: session.expires_at,
       },
@@ -360,6 +392,11 @@ export function createSessionService({ database }: SessionServiceOptions) {
   return {
     resolveMfaState,
     userHasAnyMfaFactor,
+    /**
+     * Drops every cached sign-in answer, after a change to the rules they
+     * were worked out under (the academy's student two-factor setting).
+     */
+    forgetCachedAuthContexts: clearSessionAuthCache,
     loadSessionPrerequisites,
     establishSession,
     completeMfaEnrolment,
