@@ -663,6 +663,11 @@ export default defineConfig(({ command, mode }) => {
       host: "127.0.0.1",
     },
     resolve: {
+      // Extension packages outside this app (VEO_ROUTES_FILE) import these
+      // too. Each must be the app's own single copy: a second React Router
+      // or TanStack Query has its own context, so a plugin component would
+      // not see the app's router or QueryClient.
+      dedupe: ["react", "react-dom", "react-router", "@tanstack/react-query"],
       alias: [
         { find: "@", replacement: webSourceRoot },
         // React 19 provides the hook directly; Base UI's CommonJS shim cannot
