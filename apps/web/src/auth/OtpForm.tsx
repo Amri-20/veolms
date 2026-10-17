@@ -1,6 +1,6 @@
 import { CaretLeftIcon as CaretLeft } from "@phosphor-icons/react/CaretLeft";
 import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { Icon } from "../icons/Icon";
 import { cn } from "../lib/utils";
 import {
@@ -32,6 +32,8 @@ export interface OtpFormProps {
   errorMessage?: string | null;
   /** Replaces the line under the heading, e.g. when the code was sent earlier. */
   notice?: string | null;
+  /** The whole line under the heading, in place of the one built here. */
+  subtitle?: ReactNode;
   /**
    * When the code on its way was sent (epoch milliseconds), if known. The
    * wait before another can be requested runs from then, not from when this
@@ -95,6 +97,7 @@ export function OtpForm({
   errorMessage,
   identifier,
   notice,
+  subtitle,
   onCodeChange,
   onIdentifierChange,
   onResend,
@@ -106,6 +109,9 @@ export function OtpForm({
   status,
 }: OtpFormProps) {
   const verifying = status === "verifying";
+  // The first code can still be on its way (sent as the step opened).
+  const sendingLabel =
+    sendCount > 1 ? "Sending a new code…" : "Sending a code…";
   const [invalidReason, setInvalidReason] = useState<string | null>(null);
   const [countedSendCount, setCountedSendCount] = useState(sendCount);
   const [remaining, setRemaining] = useState(() => resendSecondsLeft(sentAt));
@@ -185,11 +191,12 @@ export function OtpForm({
           centered
           title={byEmail ? "Check your email" : "Check your phone"}
           subtitle={
-            notice ? (
+            subtitle ??
+            (notice ? (
               <>We already sent a code to {destination}. Enter it below.</>
             ) : (
               <>We sent a 6-digit code to {destination}</>
-            )
+            ))
           }
         />
       </div>
@@ -217,13 +224,13 @@ export function OtpForm({
 
         <LoginSubmitButton
           busy={verifying || resending}
-          busyLabel={resending ? "Sending a new code…" : "Verifying…"}
+          busyLabel={resending ? sendingLabel : "Verifying…"}
           className="mt-1.5"
           label={submitLabel}
           pendingMessage={
             verifying
               ? "Checking your code. Please wait."
-              : "Sending a new code. Please wait."
+              : `${sendingLabel.slice(0, -1)}. Please wait.`
           }
         />
       </form>
@@ -236,7 +243,7 @@ export function OtpForm({
           Didn&apos;t get it?{" "}
           {resending ? (
             <span className="text-[color-mix(in_srgb,var(--muted)_78%,var(--surface))]">
-              Sending a new code…
+              {sendingLabel}
             </span>
           ) : cooling ? (
             <span className="text-[color-mix(in_srgb,var(--muted)_78%,var(--surface))]">

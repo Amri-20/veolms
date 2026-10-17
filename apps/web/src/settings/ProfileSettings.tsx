@@ -33,7 +33,7 @@ import { ResponsiveAvatar } from "../components/ResponsiveAvatar";
 import { ToastNotification } from "../ToastNotification";
 import { PublicProfileCard } from "../components/PublicProfileCard";
 import "../styles/features/profile.css";
-import { OtpCodeInput } from "../auth/OtpCodeInput";
+import { OTP_CODE_FIELD_ID, OtpCodeInput } from "../auth/OtpCodeInput";
 import {
   DEFAULT_COUNTRY_ID,
   findCountry,
@@ -775,7 +775,7 @@ export function ProfileSettings({
     window.addEventListener("keydown", handleKeyDown);
     const focusTimer = window.setTimeout(() => {
       verificationDialogRef.current
-        ?.querySelector<HTMLInputElement>(".auth-otp__digit")
+        ?.querySelector<HTMLInputElement>(`#${OTP_CODE_FIELD_ID}`)
         ?.focus();
     }, 50);
 
@@ -1901,7 +1901,7 @@ export function ProfileSettings({
                   <div className="settings-profile__verification-dialog-field">
                     <label
                       className="settings-profile__verification-dialog-field-label"
-                      htmlFor="auth-otp-digit-1"
+                      htmlFor={OTP_CODE_FIELD_ID}
                     >
                       Verification code
                     </label>
