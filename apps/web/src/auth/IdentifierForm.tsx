@@ -13,8 +13,10 @@ import { IdentifierMethodSwitch } from "./IdentifierMethodSwitch";
 import { readIdentifierDraft, saveIdentifierDraft } from "./identifierDraft";
 import {
   findCountry,
+  findCountryByPhoneNumber,
   normalizeEmail,
   toInternationalPhoneNumber,
+  toNationalNumber,
   validateEmail,
   validateMobile,
 } from "./identifier";
@@ -49,6 +51,11 @@ export interface IdentifierFormProps {
   submitLabel?: string;
   /** The line under the button, when not the login's. */
   footnote?: string;
+  /**
+   * A number to start the mobile field with (international form, such as
+   * "+918317390847"), in place of what was typed last time.
+   */
+  initialPhoneNo?: string;
 }
 
 const EMAIL_FIELD_ID = "auth-identifier-email";
@@ -67,6 +74,7 @@ export function IdentifierForm({
   submitTone = "primary",
   submitLabel,
   footnote,
+  initialPhoneNo,
 }: IdentifierFormProps) {
   const sending = status === "sending";
   const locked = sending || disabled;
@@ -89,6 +97,14 @@ export function IdentifierForm({
     if (draft.mobile) setMobile(draft.mobile);
     const draftCountry = draft.countryId && findCountry(draft.countryId);
     if (draftCountry) setCountry(draftCountry);
+    const initialCountry =
+      initialPhoneNo && findCountryByPhoneNumber(initialPhoneNo);
+    if (initialPhoneNo && initialCountry) {
+      setCountry(initialCountry);
+      setMobile(toNationalNumber(initialPhoneNo, initialCountry));
+    }
+    // The first value only, as with the draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const error = invalidReason ?? errorMessage ?? null;

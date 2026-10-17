@@ -60,6 +60,8 @@ import { useEnrolledCourses } from "../services/enrollments";
 import { getApiError } from "../lib/api-error";
 import {
   readCheckoutStartError,
+  CHECKOUT_WINDOW_BLOCKED_MESSAGE,
+  openCheckoutWindow,
   useCheckoutPreview,
   useAwaitPaidOrder,
   useCreateCheckoutOrder,
@@ -129,7 +131,10 @@ export type PriceSizeVariant = "normal" | "medium" | "large" | "xlarge";
 
 declare global {
   interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
+    Razorpay?: new (options: Record<string, unknown>) => {
+      open: () => void;
+      close?: () => void;
+    };
   }
 }
 
@@ -362,6 +367,9 @@ function CoursePurchaseSection({
     }
   };
   useEffect(() => stopCheckoutWatch, []);
+  // Whether the gateway's window came up (see openCheckoutWindow).
+  const stopWindowLoadWatchRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopWindowLoadWatchRef.current?.(), []);
   const isEnrolled = Boolean(user && course.enrolled);
 
   const [isPaymentBusy, setIsPaymentBusy] = useState(false);
@@ -805,6 +813,9 @@ function CoursePurchaseSection({
 
       // Whether the gateway's window has told the page how it ended.
       let checkoutAnswered = false;
+      // The gateway refused to load its window here (see
+      // openCheckoutWindow); its own close then says nothing more.
+      let windowBlocked = false;
       const rzp = new window.Razorpay({
         key: order.gateway.keyId,
         amount: order.gateway.amount,
@@ -851,6 +862,7 @@ function CoursePurchaseSection({
         modal: {
           ondismiss: () => {
             checkoutAnswered = true;
+            if (windowBlocked) return;
             // A payment that went through is being confirmed; the gateway
             // closing its own window afterwards is not a cancellation.
             const confirmation = paymentConfirmationRef.current;
@@ -874,7 +886,23 @@ function CoursePurchaseSection({
         },
       });
 
-      rzp.open();
+      // Opens the window. If it never comes up, nothing can have been paid
+      // in it, so the order is let go and the button given back with the
+      // reason.
+      stopWindowLoadWatchRef.current?.();
+      stopWindowLoadWatchRef.current = openCheckoutWindow(rzp, () => {
+        windowBlocked = true;
+        checkoutAnswered = true;
+        stopCheckoutWatch();
+        setPaymentError(CHECKOUT_WINDOW_BLOCKED_MESSAGE);
+        void releaseOrder
+          .mutateAsync(order.order.id)
+          .then((result) => {
+            if (result.released) checkoutIntentRef.current = null;
+          })
+          .catch(() => undefined)
+          .finally(() => setIsPaymentBusy(false));
+      });
       watchForUnansweredClose(order.order.id, () => checkoutAnswered);
     } catch (error) {
       // The server asks for the number when this page could not tell
@@ -1234,6 +1262,11 @@ function CoursePurchaseSection({
         <Suspense fallback={null}>
           <PhoneVerificationDialog
             purpose={isFree && !phoneGate.amount ? "enroll" : "pay"}
+            savedPhoneNo={
+              currentUser.data && !currentUser.data.mobileVerified
+                ? currentUser.data.phoneNo
+                : null
+            }
             onClose={() => setPhoneGate(null)}
             onVerified={() => {
               const { amount } = phoneGate;

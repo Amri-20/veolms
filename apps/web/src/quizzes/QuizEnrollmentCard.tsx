@@ -11,6 +11,10 @@ import { LoadingSpinnerIcon } from "../components/LoadingSpinner";
 import { productName } from "../routing/routeDescriptors";
 import { useCurrentUser } from "../services/auth";
 import { readCheckoutStartError } from "../services/payments/checkoutError";
+import {
+  CHECKOUT_WINDOW_BLOCKED_MESSAGE,
+  openCheckoutWindow,
+} from "../services/payments/checkoutWindowLoad";
 import "../services/payments/razorpay-checkout.css";
 import {
   useAwaitPaidOrder,
@@ -245,6 +249,9 @@ export function QuizEnrollmentCard({
         throw new Error("Payment gateway is unavailable. Please try again.");
       }
 
+      // The gateway refused to load its window here (see
+      // openCheckoutWindow); its own close then says nothing more.
+      let windowBlocked = false;
       const rzp = new window.Razorpay({
         key: order.gateway.keyId,
         amount: order.gateway.amount,
@@ -283,6 +290,7 @@ export function QuizEnrollmentCard({
         },
         modal: {
           ondismiss: () => {
+            if (windowBlocked) return;
             // A payment that went through is being confirmed; the gateway
             // closing its own window afterwards is not a cancellation.
             const confirmation = paymentConfirmationRef.current;
@@ -301,7 +309,20 @@ export function QuizEnrollmentCard({
         },
       });
 
-      rzp.open();
+      // Opens the window. If it never comes up, nothing can have been paid
+      // in it, so the order is let go and the button given back with the
+      // reason.
+      openCheckoutWindow(rzp, () => {
+        windowBlocked = true;
+        setErrorMessage(CHECKOUT_WINDOW_BLOCKED_MESSAGE);
+        void releaseOrder
+          .mutateAsync(order.order.id)
+          .then((result) => {
+            if (result.released) checkoutIntentRef.current = null;
+          })
+          .catch(() => undefined)
+          .finally(() => setIsProcessing(false));
+      });
     } catch (err: unknown) {
       setIsProcessing(false);
       // A refusal from the server is a plain object, not an `Error`; read
