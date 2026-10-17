@@ -1,5 +1,6 @@
 import type { OauthProvider } from "@veolms/contracts";
 import {
+  OAUTH_CALLBACK_PATH_TEST,
   OAUTH_POPUP_MARK_STORAGE_KEY,
   OAUTH_POPUP_WINDOW_NAME,
 } from "./oauthPopup";
@@ -46,7 +47,7 @@ export function rememberOauthDialogPage(): void {
  * oauthPopup) is left to its own script.
  */
 export function getOauthDialogReturnScript(): string {
-  return `(function(){try{if(location.pathname!=="/auth/callback"||window.name===${JSON.stringify(OAUTH_POPUP_WINDOW_NAME)}||sessionStorage.getItem(${JSON.stringify(OAUTH_POPUP_MARK_STORAGE_KEY)})==="1"||window.parent!==window)return;var page=sessionStorage.getItem(${JSON.stringify(OAUTH_DIALOG_PAGE_STORAGE_KEY)});sessionStorage.removeItem(${JSON.stringify(OAUTH_DIALOG_PAGE_STORAGE_KEY)});if(!page||page.charAt(0)!=="/"||page.charAt(1)==="/"||page.charAt(1)===${JSON.stringify("\\")})return;sessionStorage.setItem(${JSON.stringify(OAUTH_REDIRECT_RESULT_STORAGE_KEY)},location.search);document.documentElement.setAttribute(${JSON.stringify(OAUTH_RETURN_ATTRIBUTE)},"");var style=document.createElement("style");style.textContent="html[${OAUTH_RETURN_ATTRIBUTE}] #root{visibility:hidden}";document.head.appendChild(style);location.replace(page);}catch(e){}})();`;
+  return `(function(){try{if(!${OAUTH_CALLBACK_PATH_TEST}||window.name===${JSON.stringify(OAUTH_POPUP_WINDOW_NAME)}||sessionStorage.getItem(${JSON.stringify(OAUTH_POPUP_MARK_STORAGE_KEY)})==="1"||window.parent!==window)return;var page=sessionStorage.getItem(${JSON.stringify(OAUTH_DIALOG_PAGE_STORAGE_KEY)});sessionStorage.removeItem(${JSON.stringify(OAUTH_DIALOG_PAGE_STORAGE_KEY)});if(!page||page.charAt(0)!=="/"||page.charAt(1)==="/"||page.charAt(1)===${JSON.stringify("\\")})return;sessionStorage.setItem(${JSON.stringify(OAUTH_REDIRECT_RESULT_STORAGE_KEY)},location.search);document.documentElement.setAttribute(${JSON.stringify(OAUTH_RETURN_ATTRIBUTE)},"");var style=document.createElement("style");style.textContent="html[${OAUTH_RETURN_ATTRIBUTE}] #root{visibility:hidden}";document.head.appendChild(style);location.replace(page);}catch(e){}})();`;
 }
 
 /** True on a callback document the script above is replacing. */
