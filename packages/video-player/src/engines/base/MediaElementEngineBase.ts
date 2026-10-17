@@ -393,6 +393,24 @@ export abstract class MediaElementEngineBase implements VideoEngine {
     return this.#media;
   }
 
+  /**
+   * Moves the engine to another media element that is already playing-ready
+   * (a prepared standby), keeping the lifecycle and the current operation:
+   * listeners move over and the state is read from the new element.
+   */
+  protected replaceMediaElement(
+    media: HTMLMediaElement,
+    standby: HTMLMediaElement | null,
+  ): void {
+    const previous = this.#media;
+    if (previous === media) return;
+    if (previous) this.unbindMediaEvents(previous);
+    this.#media = media;
+    this.bindMediaEvents(media);
+    this.syncMediaState();
+    this.#events.emit("mediachange", { media, standby });
+  }
+
   protected requireMedia(): HTMLMediaElement {
     this.assertNotDestroyed();
     if (!this.#media) {

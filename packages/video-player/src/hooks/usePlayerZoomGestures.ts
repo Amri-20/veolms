@@ -114,7 +114,10 @@ function getPlayerRoot(element: HTMLElement): HTMLElement {
 function getGeometry(element: HTMLElement): PlayerZoomGeometry {
   const root = getPlayerRoot(element);
   const bounds = root.getBoundingClientRect();
-  const media = root.querySelector("video");
+  // The element on screen, not a hidden standby (see PlayerMedia).
+  const media = root.querySelector<HTMLVideoElement>(
+    "video:not([data-player-standby])",
+  );
   return getPlayerZoomGeometry(
     bounds.width,
     bounds.height,

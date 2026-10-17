@@ -158,7 +158,9 @@ export function useLessonNavigation({
     }
     setAutoPlayOnLessonChange(true);
     requestAnimationFrame(() => {
-      const video = document.querySelector<HTMLVideoElement>("video");
+      const video = document.querySelector<HTMLVideoElement>(
+        "video:not([data-player-standby])",
+      );
       safeResumeVideo(video);
     });
   }, [setActiveLessonView, setAutoPlayOnLessonChange]);

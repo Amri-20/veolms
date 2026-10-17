@@ -1578,6 +1578,9 @@ export function LessonVideoPlayer({
       lockLandscapeOnFullscreen
       mediaProps={{
         muted: restoreAutoplayRef.current !== null ? true : muted,
+        // A hovered or next lesson is prepared in a hidden second element
+        // and switched to at once when opened.
+        withStandby: true,
       }}
       className={cn(
         // A failure's message is drawn on the video, and the window is

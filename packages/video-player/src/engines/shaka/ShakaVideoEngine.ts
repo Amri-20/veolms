@@ -14,6 +14,8 @@ import {
   discardEarlyShakaPreloadManager,
   getEarlyShakaPreloadSession,
   noteEarlyShakaPreloadAdopted,
+  noteShakaSourceLoading,
+  onSpeculativeShakaPreload,
   waitForEarlyShakaPreloadSession,
   type EarlyShakaPreloadSession,
 } from "./shaka-early-preload";
@@ -52,6 +54,47 @@ type ShakaListener = (event: ShakaEventLike) => void;
 
 const PRELOAD_START_TOLERANCE_SECONDS = 2;
 const MANUAL_QUALITY_SWITCH_SAFE_MARGIN_SECONDS = 2;
+/**
+ * A standby (the next video, prepared out of sight) keeps only its start:
+ * enough to begin on at once, little to download for a hover that may not
+ * turn into a click. The full buffer applies once it is switched to.
+ */
+const STANDBY_BUFFERING_GOAL_SECONDS = 6;
+/** How long a load waits for a standby still decoding its first frame. */
+const STANDBY_READY_WAIT_MS = 1_500;
+/** A standby without a decoded first frame by then is given up. */
+const STANDBY_FIRST_FRAME_TIMEOUT_MS = 8_000;
+/** `HTMLMediaElement.HAVE_CURRENT_DATA`: a frame is decoded and showable. */
+const HAVE_CURRENT_DATA = 2;
+
+/** Resolves true once `media` has a decoded frame to show, false on timeout. */
+function waitForFirstFrame(
+  media: HTMLMediaElement,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (media.readyState >= HAVE_CURRENT_DATA) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const done = (ready: boolean) => {
+      window.clearTimeout(timer);
+      media.removeEventListener("loadeddata", onData);
+      media.removeEventListener("canplay", onData);
+      media.removeEventListener("emptied", onEmptied);
+      resolve(ready);
+    };
+    const onData = () => {
+      if (media.readyState >= HAVE_CURRENT_DATA) done(true);
+    };
+    const onEmptied = () => done(false);
+    const timer = window.setTimeout(() => done(false), timeoutMs);
+    media.addEventListener("loadeddata", onData);
+    media.addEventListener("canplay", onData);
+    media.addEventListener("emptied", onEmptied);
+  });
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
 
 /** A `veo:` performance mark; diagnostic only, never in the way of playback. */
 function markPlayback(name: string, detail?: Record<string, unknown>): void {
@@ -170,6 +213,11 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     typeof createShakaNetworkingFilters
   >["responseFilter"] = null;
   #adoptedPreloadSession: EarlyShakaPreloadSession | null = null;
+  /** The hidden element the next video is prepared in (see setStandbyMedia). */
+  #standbyMedia: HTMLMediaElement | null = null;
+  /** Settles once the player last playing in the standby element is gone. */
+  #standbyReleased: Promise<void> = Promise.resolve();
+  #stopWatchingSpeculativePreloads: (() => void) | null = null;
   #autoQuality = true;
   #selectedTextTrackId: string | null = null;
   #browserSupported: boolean | null = null;
@@ -177,6 +225,21 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
   constructor(options: ShakaVideoEngineOptions = {}) {
     super();
     this.#runtimeLoader = options.runtimeLoader ?? defaultShakaRuntimeLoader;
+  }
+
+  setStandbyMedia(media: HTMLMediaElement | null): void {
+    if (this.#standbyMedia === media) return;
+    const previous = this.#standbyMedia;
+    this.assignStandbyMedia(media);
+    if (previous) void this.dropStandbyPreparedIn(previous);
+    if (!media) {
+      this.#stopWatchingSpeculativePreloads?.();
+      this.#stopWatchingSpeculativePreloads = null;
+      return;
+    }
+    this.#stopWatchingSpeculativePreloads ??= onSpeculativeShakaPreload(
+      (session) => void this.prepareStandby(session),
+    );
   }
 
   override getCapabilities(): VideoEngineCapabilities {
@@ -207,6 +270,21 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     markPlayback("shaka-load", { id: source.id });
 
     try {
+      // Prepared out of sight (a hovered or next lesson): switch to it.
+      const standbySession = await this.readyStandbyFor(source);
+      if (!this.isCurrentOperation(generation)) return;
+      if (standbySession) {
+        this.switchToStandby(standbySession, media);
+        await this.completeStandbyLoad(
+          standbySession,
+          source,
+          options,
+          runtime,
+          generation,
+        );
+        return;
+      }
+
       const speculativeSession = await this.adoptSpeculativePreloadSession(
         source,
         media,
@@ -221,6 +299,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
       this.clearNetworkingFilters();
       const preloadSession =
         speculativeSession ?? this.takeMatchingPreloadSession(source);
+      if (!preloadSession) noteShakaSourceLoading(source.src);
       if (
         !configureShakaPlayer(player, source, runtime, {
           reset: !preloadSession,
@@ -276,15 +355,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
         return;
       }
 
-      for (const track of source.textTracks ?? []) {
-        await addExternalTextTrack(player, track);
-        if (!this.isCurrentOperation(generation)) {
-          return;
-        }
-      }
-
-      this.refreshTracks(true);
-      this.finishLoading(source);
+      await this.finishLoad(player, source, generation);
     } catch (error) {
       if (!this.isCurrentOperation(generation)) {
         return;
@@ -445,7 +516,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
       });
     }
 
-    if (!this.#player && preloadSession?.player) {
+    if (!this.#player && preloadSession?.player && !preloadSession.standby) {
       markPlayback("preload-adopted-on-attach");
       noteEarlyShakaPreloadAdopted(preloadSession);
       this.#player = preloadSession.player;
@@ -480,6 +551,11 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
   ): Promise<void> {
     rememberShakaBandwidthEstimate(this.#player);
     this.clearNetworkingFilters();
+    this.#stopWatchingSpeculativePreloads?.();
+    this.#stopWatchingSpeculativePreloads = null;
+    if (this.#standbyMedia)
+      await this.dropStandbyPreparedIn(this.#standbyMedia);
+    this.assignStandbyMedia(null);
     const player = this.#player;
     const adoptedSession = this.#adoptedPreloadSession;
     this.#adoptedPreloadSession = null;
@@ -527,6 +603,238 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     return this.#runtime;
   }
 
+  private async finishLoad(
+    player: ShakaPlayerLike,
+    source: VideoSource,
+    generation: number,
+  ): Promise<void> {
+    for (const track of source.textTracks ?? []) {
+      await addExternalTextTrack(player, track);
+      if (!this.isCurrentOperation(generation)) return;
+    }
+    this.refreshTracks(true);
+    this.finishLoading(source);
+  }
+
+  /**
+   * Gets a speculative preload (a hovered or next lesson) ready to show:
+   * loaded into the hidden standby element, at its start position, with the
+   * first frame decoded. A load of that lesson then only has to swap the two
+   * elements (see switchToStandby): no teardown, no new media pipeline, no
+   * black frame, no seek.
+   */
+  private async prepareStandby(
+    session: EarlyShakaPreloadSession,
+  ): Promise<void> {
+    const standby = this.#standbyMedia;
+    const player = session.player;
+    const preloadPromise = session.preloadPromise;
+    if (
+      !standby ||
+      !this.#player ||
+      !this.mediaElement ||
+      !player ||
+      !preloadPromise ||
+      session.consumed ||
+      session.standby ||
+      // The lesson already on screen needs no standby copy.
+      this.getSnapshot().source?.src === session.manifestUrl
+    ) {
+      return;
+    }
+
+    let resolveReady: (ready: boolean) => void = () => undefined;
+    const ready = new Promise<boolean>((resolve) => {
+      resolveReady = resolve;
+    });
+    const prepared = { media: standby, ready, isReady: false };
+    const settle = (isReady: boolean) => {
+      prepared.isReady = isReady;
+      resolveReady(isReady);
+    };
+    session.standby = prepared;
+    markPlayback("standby-prepare");
+    try {
+      const manager = await preloadPromise;
+      // The player last shown in this element must be gone first.
+      await this.#standbyReleased;
+      if (!manager || !this.isStandbyCurrent(session, standby)) {
+        settle(false);
+        return;
+      }
+      // The preload is spent here; nothing else may load it again.
+      session.preloadPromise = null;
+      player.configure({
+        streaming: { bufferingGoal: STANDBY_BUFFERING_GOAL_SECONDS },
+      });
+      standby.muted = true;
+      await player.attach(standby);
+      await player.load(manager, session.startTime ?? 0);
+      if (!this.isStandbyCurrent(session, standby)) {
+        settle(false);
+        return;
+      }
+      const decoded = await waitForFirstFrame(
+        standby,
+        STANDBY_FIRST_FRAME_TIMEOUT_MS,
+      );
+      markPlayback(decoded ? "standby-ready" : "standby-not-ready");
+      settle(decoded && this.isStandbyCurrent(session, standby));
+    } catch {
+      // A newer hover replaced it, or the browser refused; nothing to show.
+      settle(false);
+    }
+  }
+
+  /**
+   * The standby never plays: it only holds the next video's first frame. A
+   * page script reaching for "the" video element could otherwise start it
+   * out of sight, and it would run on and drift from where it should start.
+   */
+  private readonly keepStandbyPaused = (event: Event): void => {
+    const media = event.currentTarget;
+    if (media instanceof HTMLMediaElement && media === this.#standbyMedia) {
+      media.pause();
+    }
+  };
+
+  private assignStandbyMedia(media: HTMLMediaElement | null): void {
+    this.#standbyMedia?.removeEventListener("play", this.keepStandbyPaused);
+    this.#standbyMedia = media;
+    media?.addEventListener("play", this.keepStandbyPaused);
+  }
+
+  private isStandbyCurrent(
+    session: EarlyShakaPreloadSession,
+    standby: HTMLMediaElement,
+  ): boolean {
+    return (
+      !session.consumed &&
+      getEarlyShakaPreloadSession() === session &&
+      this.#standbyMedia === standby
+    );
+  }
+
+  /** Gives up a standby prepared in `media` (the element is going away). */
+  private async dropStandbyPreparedIn(media: HTMLMediaElement): Promise<void> {
+    const session = getEarlyShakaPreloadSession();
+    if (session && !session.consumed && session.standby?.media === media) {
+      await abandonEarlyShakaPreloadSession({ destroyPlayer: true });
+    }
+  }
+
+  /**
+   * The standby prepared for `source`, once its first frame is decoded
+   * (waiting a moment for one still getting there), or null. A standby for
+   * this source that did not get ready is dropped, so the load starts clean.
+   */
+  private async readyStandbyFor(
+    source: VideoSource,
+  ): Promise<EarlyShakaPreloadSession | null> {
+    const session = getEarlyShakaPreloadSession();
+    const standby = this.#standbyMedia;
+    if (
+      !session ||
+      !standby ||
+      session.consumed ||
+      session.standby?.media !== standby ||
+      !session.player ||
+      session.player === this.#player ||
+      !preloadSessionMatchesSource(session, source)
+    ) {
+      return null;
+    }
+    const ready = await Promise.race([
+      session.standby.ready,
+      delay(STANDBY_READY_WAIT_MS).then(() => false),
+    ]);
+    if (ready && this.isStandbyCurrent(session, standby)) return session;
+    markPlayback("standby-not-used", { ready });
+    if (getEarlyShakaPreloadSession() === session) {
+      await abandonEarlyShakaPreloadSession({ destroyPlayer: true });
+    }
+    return null;
+  }
+
+  /**
+   * Makes the standby the element on screen and its player this engine's;
+   * the element that was playing becomes the standby. Synchronous, so the
+   * swap lands in a single frame. The old player is destroyed afterwards,
+   * out of sight, without holding up playback.
+   */
+  private switchToStandby(
+    session: EarlyShakaPreloadSession,
+    previousMedia: HTMLMediaElement,
+  ): void {
+    const player = session.player;
+    const standby = session.standby?.media;
+    if (!player || !standby) return;
+
+    markPlayback("standby-switched");
+    noteEarlyShakaPreloadAdopted(session);
+    consumeEarlyShakaPreloadSession(session);
+    this.#adoptedPreloadSession = null;
+
+    const previous = this.#player;
+    this.clearNetworkingFilters();
+    if (previous) this.unbindShakaEvents(previous);
+    this.#player = player;
+    if (session.networkingFilters) {
+      this.#requestFilter = session.networkingFilters.requestFilter;
+      this.#responseFilter = session.networkingFilters.responseFilter;
+    }
+    this.bindShakaEvents(player);
+
+    standby.volume = previousMedia.volume;
+    standby.muted = previousMedia.muted;
+    standby.playbackRate = previousMedia.playbackRate;
+    previousMedia.pause();
+    this.assignStandbyMedia(previousMedia);
+    this.replaceMediaElement(standby, previousMedia);
+    this.#standbyReleased = previous
+      ? previous.destroy().catch(() => undefined)
+      : Promise.resolve();
+  }
+
+  /** The rest of a load switched to a standby: its settings and tracks. */
+  private async completeStandbyLoad(
+    session: EarlyShakaPreloadSession,
+    source: VideoSource,
+    options: VideoLoadOptions,
+    runtime: ShakaRuntimeLike,
+    generation: number,
+  ): Promise<void> {
+    const player = this.requirePlayer();
+    if (!configureShakaPlayer(player, source, runtime, { reset: false })) {
+      throw new VideoEngineError({
+        category: "PLAYER",
+        code: "INVALID_SHAKA_CONFIGURATION",
+        message: "Shaka rejected the supplied playback configuration.",
+      });
+    }
+    this.installNetworkingFilters(source);
+    // The full buffer from here on (the standby kept only its start).
+    player.configure({
+      streaming: createShakaConfiguration(source, runtime).streaming,
+    });
+
+    // The learner's place moved since the standby was made: go there.
+    const startTime = options.startTime ?? source.startTime;
+    if (
+      startTime !== undefined &&
+      Math.abs((session.startTime ?? 0) - startTime) >
+        PRELOAD_START_TOLERANCE_SECONDS
+    ) {
+      markPlayback("preload-start-mismatch", {
+        preloaded: session.startTime ?? 0,
+        requested: startTime,
+      });
+      this.requireMedia().currentTime = startTime;
+    }
+
+    await this.finishLoad(player, source, generation);
+  }
+
   /**
    * A lesson hovered or about to come next may have been preloaded on its
    * own Shaka player while this engine kept playing. When this load is for
@@ -545,6 +853,8 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     if (
       !session ||
       session.consumed ||
+      // Loaded into a standby element: only switchToStandby can use it.
+      session.standby ||
       !preloadedPlayer ||
       preloadedPlayer === this.#player ||
       !preloadSessionMatchesSource(session, source)

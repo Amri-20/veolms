@@ -258,14 +258,18 @@ export function useCurriculumModel({
     if (!main) return;
     if (showingQuiz) {
       main.setAttribute("data-learning-quiz-active", "true");
-      const video = document.querySelector<HTMLVideoElement>("video");
+      const video = document.querySelector<HTMLVideoElement>(
+        "video:not([data-player-standby])",
+      );
       if (video && !video.paused) {
         video.pause();
       }
     } else {
       main.removeAttribute("data-learning-quiz-active");
       if (autoPlayOnLessonChange) {
-        const video = document.querySelector<HTMLVideoElement>("video");
+        const video = document.querySelector<HTMLVideoElement>(
+          "video:not([data-player-standby])",
+        );
         safeResumeVideo(video);
       }
     }
