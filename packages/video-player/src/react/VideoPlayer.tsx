@@ -23,6 +23,7 @@ import type { VideoEngine } from "../core/VideoEngine";
 import type { VideoSource } from "../core/types";
 import { NativeVideoEngine } from "../engines/native/NativeVideoEngine";
 import { ShakaVideoEngine } from "../engines/shaka/ShakaVideoEngine";
+import { isEarlyShakaStandbyReady } from "../engines/shaka/shaka-early-preload";
 import type { PlayerShortcutOverrides } from "../keyboard";
 import type {
   StoryboardLoader,
@@ -316,10 +317,13 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
       ? ({ "--video-player-accent": accentColor } as CSSProperties)
       : undefined;
     const resolvedPoster = poster ?? source.metadata?.poster;
+    // A video prepared in the standby element is switched to at once: the
+    // picture goes straight from one video to the other, with no poster.
     const retainedPosterVisible =
       keepPosterVisibleUntilFirstPlay &&
       resolvedPoster !== undefined &&
-      playedSourceIdentity !== sourceIdentity;
+      playedSourceIdentity !== sourceIdentity &&
+      !(mediaProps?.withStandby && isEarlyShakaStandbyReady(source));
 
     return (
       <div

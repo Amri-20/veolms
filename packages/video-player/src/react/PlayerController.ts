@@ -77,6 +77,12 @@ export interface PlayerLoadRequest {
   autoPlay?: boolean;
 }
 
+/** Told which element plays now, and which one is the standby. */
+export type ActiveMediaListener = (
+  media: HTMLVideoElement,
+  standby: HTMLVideoElement | null,
+) => void;
+
 export class PlayerController {
   readonly engine: VideoEngine;
 
@@ -100,6 +106,8 @@ export class PlayerController {
   #loadGeneration = 0;
   #playRequestGeneration = 0;
   #hudId = 0;
+  #standbyMedia: HTMLVideoElement | null = null;
+  readonly #activeMediaListeners = new Set<ActiveMediaListener>();
 
   constructor(engine: VideoEngine) {
     this.engine = engine;
@@ -145,6 +153,12 @@ export class PlayerController {
     for (const type of forwardedVideoEngineEvents) {
       this.forwardEngineEvent(type);
     }
+
+    this.#engineUnsubscribers.push(
+      this.engine.on("mediachange", ({ media, standby }) =>
+        this.handleEngineMediaChange(media, standby),
+      ),
+    );
 
     if (typeof document !== "undefined") {
       document.addEventListener(
@@ -235,6 +249,62 @@ export class PlayerController {
     return this.enqueueMediaTransition(() =>
       this.applyMediaRequest(media, generation),
     );
+  }
+
+  /** Whether the engine can prepare the next video in a standby element. */
+  get supportsStandbyMedia(): boolean {
+    return typeof this.engine.setStandbyMedia === "function";
+  }
+
+  /**
+   * The hidden second element the engine may prepare the next video in.
+   * After a switch the two elements trade roles; `onActiveMediaChange`
+   * says which is which.
+   */
+  setStandbyMedia(media: HTMLVideoElement | null): void {
+    if (this.#destroyed || this.#standbyMedia === media) return;
+    this.#standbyMedia = media;
+    this.engine.setStandbyMedia?.(media);
+  }
+
+  onActiveMediaChange(listener: ActiveMediaListener): () => void {
+    this.#activeMediaListeners.add(listener);
+    return () => this.#activeMediaListeners.delete(listener);
+  }
+
+  /** The engine moved to its standby element: that one is the media now. */
+  private handleEngineMediaChange(
+    media: HTMLMediaElement,
+    standby: HTMLMediaElement | null,
+  ): void {
+    if (!(media instanceof HTMLVideoElement)) return;
+    const previous = this.#media;
+    if (previous) {
+      previous.removeEventListener(
+        "enterpictureinpicture",
+        this.handlePictureInPictureChange,
+      );
+      previous.removeEventListener(
+        "leavepictureinpicture",
+        this.handlePictureInPictureChange,
+      );
+    }
+    media.addEventListener(
+      "enterpictureinpicture",
+      this.handlePictureInPictureChange,
+    );
+    media.addEventListener(
+      "leavepictureinpicture",
+      this.handlePictureInPictureChange,
+    );
+    this.#media = media;
+    this.#requestedMedia = media;
+    this.#standbyMedia = standby instanceof HTMLVideoElement ? standby : null;
+    this.syncCapabilities();
+    this.syncPictureInPicture();
+    for (const listener of this.#activeMediaListeners) {
+      listener(media, this.#standbyMedia);
+    }
   }
 
   detachMedia(media?: HTMLVideoElement): Promise<void> {

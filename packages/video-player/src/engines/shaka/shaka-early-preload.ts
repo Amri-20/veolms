@@ -31,6 +31,48 @@ export interface EarlyShakaPreloadSession {
   speculative?: boolean;
   /** The position (seconds) the preload was made for. */
   startTime?: number;
+  /**
+   * Set when a playing engine loaded this preload into its hidden standby
+   * element: `ready` settles true once the first frame is decoded there,
+   * false when that did not work out.
+   */
+  standby?: {
+    media: HTMLMediaElement;
+    ready: Promise<boolean>;
+    /** True from the moment `ready` settles true. */
+    isReady: boolean;
+  };
+}
+
+/**
+ * Whether a standby with its first frame decoded is waiting for `src`: the
+ * player then switches to it at once, so nothing (a poster) needs to cover
+ * the change of video.
+ */
+export function isEarlyShakaStandbyReady(
+  source: Pick<VideoSource, "src" | "id">,
+): boolean {
+  const session = getEarlyShakaPreloadSession();
+  if (!session || session.consumed || !session.standby?.isReady) return false;
+  return (
+    session.manifestUrl === source.src ||
+    Boolean(session.mediaKey && source.id && session.mediaKey === source.id)
+  );
+}
+
+type SpeculativePreloadListener = (session: EarlyShakaPreloadSession) => void;
+const speculativePreloadListeners = new Set<SpeculativePreloadListener>();
+
+/**
+ * Called with each speculative preload (a hovered or next lesson) once its
+ * player has started preloading, so an engine with a standby element can
+ * get it ready to show. Returns the unsubscribe function.
+ */
+export function onSpeculativeShakaPreload(
+  listener: SpeculativePreloadListener,
+): () => void {
+  speculativePreloadListeners.add(listener);
+  return () => speculativePreloadListeners.delete(listener);
 }
 
 interface EarlyShakaPreloadSettle {
@@ -153,6 +195,16 @@ export function noteEarlyShakaPreloadAdopted(
   session: EarlyShakaPreloadSession,
 ): void {
   lastAdoptedManifestUrl = session.manifestUrl;
+}
+
+/**
+ * Called by a player starting to load `manifestUrl` without a preload. The
+ * page's own preload of that video can arrive a moment later; it is already
+ * loading, so that preload is not started. Left running, it would also hold
+ * the single preload slot, and no hovered or next lesson could be prepared.
+ */
+export function noteShakaSourceLoading(manifestUrl: string): void {
+  lastAdoptedManifestUrl = manifestUrl;
 }
 
 export async function waitForEarlyShakaPreloadSession(): Promise<EarlyShakaPreloadSession | null> {
@@ -284,6 +336,9 @@ export async function startEarlyShakaPreload(
     session.startTime = source.startTime ?? 0;
     session.preloadPromise = startPreload(player, source).catch(() => null);
     settleEarlySession();
+    if (session.speculative) {
+      for (const listener of speculativePreloadListeners) listener(session);
+    }
     return session;
   } catch (error) {
     if (store[EARLY_SHAKA_PRELOAD_GLOBAL_KEY] !== session) return null;
