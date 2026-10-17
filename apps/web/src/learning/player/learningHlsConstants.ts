@@ -203,5 +203,4 @@ export const LEARNING_HLS_STREAMING = {
   rebufferingGoal: 1.5,
   bufferingGoal: 60,
   bufferBehind: 30,
-  segmentPrefetchLimit: 3,
 } as const;

@@ -96,7 +96,6 @@ function startPreloadForBootstrap(
       segmentTokenExpiresAt: bootstrap.segmentTokenExpiresAt,
       inlinedMasterManifest: bootstrap.inlinedMasterManifest,
       refreshSegmentToken,
-      speculative,
     }),
     { speculative },
   );

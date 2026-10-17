@@ -51,6 +51,7 @@ export interface ShakaVideoEngineOptions {
 type ShakaListener = (event: ShakaEventLike) => void;
 
 const PRELOAD_START_TOLERANCE_SECONDS = 2;
+const MANUAL_QUALITY_SWITCH_SAFE_MARGIN_SECONDS = 2;
 
 /** A `veo:` performance mark; diagnostic only, never in the way of playback. */
 function markPlayback(name: string, detail?: Record<string, unknown>): void {
@@ -346,7 +347,14 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     }
 
     player.configure({ abr: { enabled: false } });
-    player.selectVariantTrack(track, false);
+    // With a 60s buffer, keeping it would show the old quality for up to a
+    // minute; drop what is buffered ahead except a short margin, so the
+    // chosen quality appears within seconds without the picture freezing.
+    player.selectVariantTrack(
+      track,
+      true,
+      MANUAL_QUALITY_SWITCH_SAFE_MARGIN_SECONDS,
+    );
     this.#autoQuality = false;
     this.refreshTracks(false);
     const quality = this.getQualities().find((item) => item.id === id) ?? null;

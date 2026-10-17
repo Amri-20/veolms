@@ -192,7 +192,14 @@ export interface ShakaRuntimeLike {
 
 export type ShakaRuntimeLoader = () => Promise<unknown>;
 
-export const SHAKA_SEGMENT_PREFETCH_LIMIT = 3;
+/**
+ * One segment in flight per stream. Segments run 2-6s and download several
+ * times faster than they play, so the buffer still fills; more in flight
+ * only leaves downloads behind after a seek, still pulling bytes (behind
+ * some extensions an abort never reaches the network) while the new
+ * position waits, and repeated seeks then stall for good.
+ */
+export const SHAKA_SEGMENT_PREFETCH_LIMIT = 1;
 
 /**
  * Streaming defaults for VOD lessons. Playback starts once 1.5s is buffered

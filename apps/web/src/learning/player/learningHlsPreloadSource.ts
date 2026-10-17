@@ -21,13 +21,6 @@ function shouldResumeFromLastPosition(): boolean {
   return true;
 }
 
-// Two segments per stream, at the quality the player would pick anyway (so
-// they are the ones it plays), instead of three. The player puts its normal
-// settings back once it takes the preload over.
-const SPECULATIVE_PRELOAD_STREAMING = {
-  segmentPrefetchLimit: 2,
-} as const;
-
 export function createLearningHlsPreloadSource(options: {
   manifestUrl: string;
   mediaKey?: string;
@@ -40,12 +33,6 @@ export function createLearningHlsPreloadSource(options: {
     token: string;
     expiresAt?: number;
   } | null>;
-  /**
-   * A guess at the next click (a hovered or next lesson), not the lesson
-   * being opened: fetch less of it, so passing over a few lessons competes
-   * less with the video playing now.
-   */
-  speculative?: boolean;
 }) {
   const startTime =
     options.mediaKey && shouldResumeFromLastPosition()
@@ -58,12 +45,7 @@ export function createLearningHlsPreloadSource(options: {
     type: isDash ? "application/dash+xml" : LEARNING_HLS_MIME_TYPE,
     kind: isDash ? ("dash" as const) : ("hls" as const),
     startTime,
-    streaming: options.speculative
-      ? {
-          ...LEARNING_HLS_STREAMING,
-          ...SPECULATIVE_PRELOAD_STREAMING,
-        }
-      : { ...LEARNING_HLS_STREAMING },
+    streaming: { ...LEARNING_HLS_STREAMING },
     inlinedManifest: options.inlinedMasterManifest,
     networking: {
       requestFilter: createLearningHlsRequestFilter({
