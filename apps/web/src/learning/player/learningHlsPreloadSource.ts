@@ -21,6 +21,12 @@ function shouldResumeFromLastPosition(): boolean {
   return true;
 }
 
+// A preload fetches its first segments through Shaka's segment prefetch, so
+// it needs one; playback itself runs without (see the video player's
+// SHAKA_SEGMENT_PREFETCH_LIMIT), and the player switches to that when it
+// takes the preload over.
+const PRELOAD_SEGMENT_PREFETCH_LIMIT = 1;
+
 export function createLearningHlsPreloadSource(options: {
   manifestUrl: string;
   mediaKey?: string;
@@ -45,7 +51,10 @@ export function createLearningHlsPreloadSource(options: {
     type: isDash ? "application/dash+xml" : LEARNING_HLS_MIME_TYPE,
     kind: isDash ? ("dash" as const) : ("hls" as const),
     startTime,
-    streaming: { ...LEARNING_HLS_STREAMING },
+    streaming: {
+      ...LEARNING_HLS_STREAMING,
+      segmentPrefetchLimit: PRELOAD_SEGMENT_PREFETCH_LIMIT,
+    },
     inlinedManifest: options.inlinedMasterManifest,
     networking: {
       requestFilter: createLearningHlsRequestFilter({

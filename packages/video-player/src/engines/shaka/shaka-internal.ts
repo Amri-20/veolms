@@ -193,13 +193,17 @@ export interface ShakaRuntimeLike {
 export type ShakaRuntimeLoader = () => Promise<unknown>;
 
 /**
- * One segment in flight per stream. Segments run 2-6s and download several
- * times faster than they play, so the buffer still fills; more in flight
- * only leaves downloads behind after a seek, still pulling bytes (behind
- * some extensions an abort never reaches the network) while the new
- * position waits, and repeated seeks then stall for good.
+ * No segment prefetch during playback: segments go through Shaka's plain
+ * fetch-and-retry path. With prefetch on and a deep buffer, a seek that
+ * cancels an init segment mid-download (dragging the scrubber across DASH
+ * periods does this every time) leaves it in Shaka's prefetch map as if it
+ * were on its way; it is never requested again, the new period's media
+ * cannot be appended without it, and playback waits forever. Segments run
+ * 2-6s and download several times faster than they play, so the 60s buffer
+ * fills just the same. A preload sets its own limit (it needs one to fetch
+ * the first segment); see `PRELOAD_SEGMENT_PREFETCH_LIMIT` in the web app.
  */
-export const SHAKA_SEGMENT_PREFETCH_LIMIT = 1;
+export const SHAKA_SEGMENT_PREFETCH_LIMIT = 0;
 
 /**
  * Streaming defaults for VOD lessons. Playback starts once 1.5s is buffered
