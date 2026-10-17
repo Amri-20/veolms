@@ -9,8 +9,16 @@
 // hidden frame instead (`askOauthProviderSilently`), so no window flashes
 // open and shut. The frame comes back to /auth/callback too and hands its
 // answer over the same way, to the page that holds it.
+//
+// The window is known on /auth/callback by its name, or by a mark in its
+// own session storage. Google's later sign-in pages (the account chooser
+// once an account is picked, consent) enforce Cross-Origin-Opener-Policy,
+// which moves the window into a new browsing context group: its name is
+// cleared and `opener` is gone. Session storage stays with the window, so
+// the mark still says what it is, and the channel still reaches the page.
 
 export const OAUTH_POPUP_WINDOW_NAME = "veolms-oauth";
+export const OAUTH_POPUP_MARK_STORAGE_KEY = "veolms_oauth_popup_window";
 const OAUTH_POPUP_CHANNEL = "veolms-oauth";
 /** Followed by an id of its own, so each frame's answer is told apart. */
 const OAUTH_SILENT_FRAME_PREFIX = "veolms-oauth-silent:";
@@ -35,13 +43,14 @@ declare global {
 
 /**
  * Runs in the head of every document and does nothing outside a sign-in
- * window or hidden frame on /auth/callback. A window posts the address on a
+ * window (its name or mark) or hidden frame on /auth/callback; the mark is
+ * taken as soon as it is read. A window posts the address on a
  * channel (it reaches the page even if the provider's pages cut the window
  * off from its opener) and to its opener, and closes once either answers. A
  * frame posts it to the page it is in. Each message says who sent it.
  */
 export function getOauthPopupHandoffScript(): string {
-  return `(function(){try{if(location.pathname!=="/auth/callback")return;var name=window.name,silent=name.indexOf(${JSON.stringify(OAUTH_SILENT_FRAME_PREFIX)})===0&&window.parent!==window;if(name!==${JSON.stringify(OAUTH_POPUP_WINDOW_NAME)}&&!silent)return;var done=false,channel=null;window.__VEO_OAUTH_POPUP__=new Promise(function(resolve){function finish(handedOff){if(done)return;done=true;if(channel)channel.close();window.removeEventListener("message",onMessage);if(silent){resolve(true);}else if(handedOff){resolve(true);window.close();}else{window.name="";resolve(false);}}function onAck(data){if(data&&data.type===${JSON.stringify(ACK_MESSAGE)})finish(true);}function onMessage(event){if(event.origin===location.origin)onAck(event.data);}var message={type:${JSON.stringify(RESULT_MESSAGE)},search:location.search,from:name};window.addEventListener("message",onMessage);if(silent){window.parent.postMessage(message,location.origin);}else{if(typeof BroadcastChannel==="function"){channel=new BroadcastChannel(${JSON.stringify(OAUTH_POPUP_CHANNEL)});channel.onmessage=function(event){onAck(event.data);};channel.postMessage(message);}if(window.opener&&window.opener!==window){try{window.opener.postMessage(message,location.origin);}catch(e){}}}setTimeout(function(){finish(false);},${HANDOFF_TIMEOUT_MS});});}catch(e){}})();`;
+  return `(function(){try{if(location.pathname!=="/auth/callback")return;var name=window.name,silent=name.indexOf(${JSON.stringify(OAUTH_SILENT_FRAME_PREFIX)})===0&&window.parent!==window;if(!silent&&(window.parent!==window||(name!==${JSON.stringify(OAUTH_POPUP_WINDOW_NAME)}&&sessionStorage.getItem(${JSON.stringify(OAUTH_POPUP_MARK_STORAGE_KEY)})!=="1")))return;if(!silent)sessionStorage.removeItem(${JSON.stringify(OAUTH_POPUP_MARK_STORAGE_KEY)});var done=false,channel=null;window.__VEO_OAUTH_POPUP__=new Promise(function(resolve){function finish(handedOff){if(done)return;done=true;if(channel)channel.close();window.removeEventListener("message",onMessage);if(silent){resolve(true);}else if(handedOff){resolve(true);window.close();}else{window.name="";resolve(false);}}function onAck(data){if(data&&data.type===${JSON.stringify(ACK_MESSAGE)})finish(true);}function onMessage(event){if(event.origin===location.origin)onAck(event.data);}var message={type:${JSON.stringify(RESULT_MESSAGE)},search:location.search,from:silent?name:${JSON.stringify(OAUTH_POPUP_WINDOW_NAME)}};window.addEventListener("message",onMessage);if(silent){window.parent.postMessage(message,location.origin);}else{if(typeof BroadcastChannel==="function"){channel=new BroadcastChannel(${JSON.stringify(OAUTH_POPUP_CHANNEL)});channel.onmessage=function(event){onAck(event.data);};channel.postMessage(message);}if(window.opener&&window.opener!==window){try{window.opener.postMessage(message,location.origin);}catch(e){}}}setTimeout(function(){finish(false);},${HANDOFF_TIMEOUT_MS});});}catch(e){}})();`;
 }
 
 /**
@@ -126,12 +135,22 @@ export function openOauthPopup(providerLabel: string): Window | null {
     0,
     Math.round(window.screenY + (window.outerHeight - height) / 2),
   );
+  // A new window starts with a copy of this tab's session storage, so the
+  // mark is put here for the moment it opens, then taken off again.
+  sessionStorage.setItem(OAUTH_POPUP_MARK_STORAGE_KEY, "1");
   const popup = window.open(
     "",
     OAUTH_POPUP_WINDOW_NAME,
     `popup=yes,width=${width},height=${height},left=${left},top=${top}`,
   );
+  sessionStorage.removeItem(OAUTH_POPUP_MARK_STORAGE_KEY);
   if (!popup) return null;
+  try {
+    // A window that was already open under this name copied nothing.
+    popup.sessionStorage.setItem(OAUTH_POPUP_MARK_STORAGE_KEY, "1");
+  } catch {
+    // Still on the provider's page; it got the mark when it opened.
+  }
 
   // A blank window until the provider's page arrives; say what it is for.
   try {
