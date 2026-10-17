@@ -307,6 +307,43 @@ export function writeResumePosition(
 }
 
 /**
+ * Where a lesson was left is kept per browser, but the progress shown in the
+ * list ("34% complete") is the account's, from the server. A lesson watched
+ * in another browser would otherwise open at 0 here. With nothing stored in
+ * this browser, the account's progress becomes the position to resume from;
+ * a position this browser already has is never replaced.
+ */
+export function seedResumePositionFromProgress(
+  mediaKey: string,
+  progressPercent: number,
+  durationSeconds: number,
+  storage: (StorageReader & StorageWriter) | null = getBrowserStorage(),
+): void {
+  if (
+    !storage ||
+    !Number.isFinite(progressPercent) ||
+    !Number.isFinite(durationSeconds) ||
+    progressPercent <= 0 ||
+    progressPercent >= 99 ||
+    durationSeconds <= 0
+  ) {
+    return;
+  }
+  try {
+    if (storage.getItem(lessonPlayerStorageKeys.resume(mediaKey)) !== null) {
+      return;
+    }
+  } catch {
+    return;
+  }
+  writeResumePosition(
+    mediaKey,
+    Math.floor((progressPercent / 100) * durationSeconds),
+    storage,
+  );
+}
+
+/**
  * Forgets where a lesson was left, so it opens from the beginning next time.
  * Writing a position of 0 does not do this: writeResumePosition ignores it.
  */

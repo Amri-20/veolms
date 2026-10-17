@@ -122,6 +122,24 @@ export function getVideoPlaybackCdnOrigin(): string | null {
   }
 }
 
+/**
+ * A kept bootstrap is reused (a hover then a click, the preload then the
+ * player) until its segment token has less than this left. The player
+ * renews a token while it plays, but a lesson opened with a nearly expired
+ * one would start by waiting on that renewal.
+ */
+const BOOTSTRAP_TOKEN_REUSE_MARGIN_SECONDS = 60;
+
+function dropExpiringBootstrap(key: string): void {
+  const kept = bootstrapCache.get(key);
+  const expiresAt = kept?.segmentTokenExpiresAt;
+  if (expiresAt === undefined) return;
+  const now = Math.floor(Date.now() / 1000);
+  if (expiresAt - now > BOOTSTRAP_TOKEN_REUSE_MARGIN_SECONDS) return;
+  bootstrapCache.delete(key);
+  bootstrapRequests.delete(key);
+}
+
 function requestKey({
   courseSlug,
   lessonNumber,
@@ -176,7 +194,8 @@ async function readResponsePayload(response: Response): Promise<unknown> {
 async function requestBootstrap(
   options: VideoPlaybackBootstrapRequest,
 ): Promise<VideoPlaybackBootstrap> {
-  const path = playbackPath(options, "playback-bootstrap");
+  // Asks for the master playlist inline, saving the player that request.
+  const path = `${playbackPath(options, "playback-bootstrap")}?inlineManifest=1`;
   const response = await fetch(resolveVideoPlaybackApiUrl(path), {
     method: "GET",
     credentials: "include",
@@ -318,6 +337,7 @@ export function getVideoPlaybackBootstrap(
   options: VideoPlaybackBootstrapRequest,
 ): Promise<VideoPlaybackBootstrap> {
   const key = requestKey(options);
+  dropExpiringBootstrap(key);
   const existing = bootstrapRequests.get(key);
   if (existing) return existing;
 
@@ -356,7 +376,9 @@ export function getVideoPlaybackBootstrap(
 export function getCachedVideoPlaybackBootstrap(
   options: VideoPlaybackBootstrapRequest,
 ): VideoPlaybackBootstrap | null {
-  return bootstrapCache.get(requestKey(options)) ?? null;
+  const key = requestKey(options);
+  dropExpiringBootstrap(key);
+  return bootstrapCache.get(key) ?? null;
 }
 
 /** The server's refusal of this lesson, while it is still being kept. */

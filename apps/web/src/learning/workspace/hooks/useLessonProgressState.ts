@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { NextLessonInfo } from "../../player";
 import type { Lesson } from "../../courseContent";
 import { mediaService } from "../../../services/media";
@@ -11,6 +11,7 @@ import type {
   AdaptedCurriculumSection,
 } from "../../courseCurriculumAdapter";
 import { useLearningProgress } from "../../useLearningProgress";
+import { seedResumePositionFromProgress } from "../../player/lessonPlayerPersistence";
 import { LESSON_PROGRESS_COMPLETE_THRESHOLD } from "../workspaceConstants";
 import type { useCourseOverview } from "../../../services/courses";
 
@@ -100,6 +101,27 @@ export function useLessonProgressState({
         : undefined,
     [lessonIdsByNumber, progressCourseKey, userId],
   );
+  // Lessons this account has started elsewhere resume where it left them,
+  // for the player and for the hover/next-lesson preload alike (both read
+  // the position stored in this browser).
+  useEffect(() => {
+    if (!courseSlug || !adaptedCurriculum) return;
+    const coursePersistenceKey = encodeURIComponent(courseSlug);
+    for (const [lessonNumber, progress] of Object.entries(
+      persistedLessonProgress,
+    )) {
+      const durationSeconds = adaptedCurriculum.lessonsByNumber.get(
+        Number(lessonNumber),
+      )?.durationSeconds;
+      if (!durationSeconds) continue;
+      seedResumePositionFromProgress(
+        `${coursePersistenceKey}-lesson-${lessonNumber}`,
+        progress,
+        durationSeconds,
+      );
+    }
+  }, [adaptedCurriculum, courseSlug, persistedLessonProgress]);
+
   const lessonProgress = useMemo(() => {
     if (Object.keys(localLessonProgress).length === 0) {
       return persistedLessonProgress;

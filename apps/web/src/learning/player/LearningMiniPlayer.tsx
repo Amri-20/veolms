@@ -586,6 +586,7 @@ export function LearningMiniPlayer({
       protectedPlayback: playbackBootstrap.source === "paid-bootstrap-api",
       segmentToken: playbackBootstrap.segmentToken,
       segmentTokenExpiresAt: playbackBootstrap.segmentTokenExpiresAt,
+      inlinedMasterManifest: playbackBootstrap.inlinedMasterManifest,
       refreshSegmentToken: playbackBootstrap.segmentToken
         ? () =>
             refreshVideoPlaybackToken({

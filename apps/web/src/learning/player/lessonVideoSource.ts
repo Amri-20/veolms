@@ -43,6 +43,8 @@ export function createLearningLessonVideoSource(options: {
   protectedPlayback?: boolean;
   segmentToken?: string;
   segmentTokenExpiresAt?: number;
+  /** The master playlist from the bootstrap, served in place of fetching it. */
+  inlinedMasterManifest?: string;
   refreshSegmentToken?: () => Promise<{
     token: string;
     expiresAt?: number;
@@ -71,6 +73,7 @@ export function createLearningLessonVideoSource(options: {
       title: options.lessonTitle,
     },
     streaming: streaming ? { ...LEARNING_HLS_STREAMING } : undefined,
+    inlinedManifest: streaming ? options.inlinedMasterManifest : undefined,
     networking: streaming
       ? {
           requestFilter: createLearningHlsRequestFilter({

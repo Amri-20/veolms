@@ -5,6 +5,7 @@ import { CircleIcon as Circle } from "@phosphor-icons/react/Circle";
 import type { LessonResource } from "@veolms/contracts";
 import type { Lesson } from "./courseContent";
 import { CurriculumLessonCard } from "./CurriculumLessonCard";
+import { useLessonHoverPreload } from "./useLessonHoverPreload";
 
 const LESSON_PROGRESS_COMPLETE_THRESHOLD = 99.5;
 
@@ -18,6 +19,11 @@ interface CurriculumLessonButtonProps {
   onSelectLesson: (lessonNumber: number) => void;
   onClose?: () => void;
   activeLessonRef?: RefObject<HTMLButtonElement | null>;
+  /**
+   * The course to preload the lesson through while the pointer rests on
+   * it. Left out, the lesson is not preloaded.
+   */
+  hoverPreloadCourseKey?: string;
   /** Extra classes for the row itself (how it behaves off screen). */
   className?: string;
 }
@@ -31,9 +37,15 @@ const CurriculumLessonButton = memo(function CurriculumLessonButton({
   onSelectLesson,
   onClose,
   activeLessonRef,
+  hoverPreloadCourseKey,
   className = "",
 }: CurriculumLessonButtonProps) {
-  const [number, title, duration, status] = lesson;
+  const [number, title, duration, status, , contentType] = lesson;
+  const hoverPreload = useLessonHoverPreload(
+    hoverPreloadCourseKey,
+    number,
+    isAvailable && !isActive && (contentType ?? "video") === "video",
+  );
   const completed =
     status === "done" || progress >= LESSON_PROGRESS_COMPLETE_THRESHOLD;
   const showProgress = isActive || progress > 0;
@@ -45,8 +57,13 @@ const CurriculumLessonButton = memo(function CurriculumLessonButton({
       disabled={!isAvailable}
       title={isAvailable ? undefined : "Log in to watch this lecture"}
       aria-label={isAvailable ? undefined : `${title} (log in to watch)`}
+      onPointerEnter={hoverPreload?.onPointerEnter}
+      onPointerLeave={hoverPreload?.onPointerLeave}
+      onFocus={hoverPreload?.onFocus}
+      onBlur={hoverPreload?.onBlur}
       onClick={() => {
         if (!isAvailable) return;
+        hoverPreload?.cancel();
         onSelectLesson(number);
         onClose?.();
       }}
@@ -216,6 +233,10 @@ function CurriculumLesson({ rows, lesson, className }: CurriculumLessonProps) {
     onSelectLesson: rows.onSelectLesson,
     onClose: rows.onClose,
     activeLessonRef: isActive ? rows.activeLessonRef : undefined,
+    // A locked lesson would only be refused; nothing to preload.
+    hoverPreloadCourseKey: rows.lockedLessonNumbers?.has(number)
+      ? undefined
+      : rows.resourceCourseKey,
     className,
   };
 

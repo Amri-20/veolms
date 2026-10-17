@@ -27,6 +27,8 @@ export function createLearningHlsPreloadSource(options: {
   protectedPlayback?: boolean;
   segmentToken?: string;
   segmentTokenExpiresAt?: number;
+  /** The master playlist from the bootstrap, served in place of fetching it. */
+  inlinedMasterManifest?: string;
   refreshSegmentToken?: () => Promise<{
     token: string;
     expiresAt?: number;
@@ -44,6 +46,7 @@ export function createLearningHlsPreloadSource(options: {
     kind: isDash ? ("dash" as const) : ("hls" as const),
     startTime,
     streaming: { ...LEARNING_HLS_STREAMING },
+    inlinedManifest: options.inlinedMasterManifest,
     networking: {
       requestFilter: createLearningHlsRequestFilter({
         protectedPlayback: options.protectedPlayback,

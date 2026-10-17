@@ -87,6 +87,10 @@ function appendHlsCacheQuery(uri: string, origin: string | null): string {
   return `${path}?${params.toString()}${hash}`;
 }
 
+// An inlined playlist is served from a data: URI; a query appended to one
+// would become part of its content.
+const IN_MEMORY_URI = /^(?:data|blob):/i;
+
 export function appendLearningHlsCacheVersion(
   request: VideoNetworkRequest,
 ): void {
@@ -99,7 +103,23 @@ export function appendLearningHlsCacheVersion(
   const origin = getLearningMediaOrigin();
 
   request.uris = request.uris.map((uri) =>
-    appendHlsCacheQuery(repairShakaSetSchemeUri(uri, origin), origin),
+    IN_MEMORY_URI.test(uri)
+      ? uri
+      : appendHlsCacheQuery(repairShakaSetSchemeUri(uri, origin), origin),
+  );
+}
+
+/**
+ * Requests that carry the CDN playback token: playlists (.m3u8/.mpd),
+ * segments (.ts today, .m4s and init.mp4 with CMAF), captions, and AES-128
+ * keys (key.bin).
+ */
+function carriesPlaybackToken(type: VideoNetworkRequest["type"]): boolean {
+  return (
+    type === "manifest" ||
+    type === "segment" ||
+    type === "text" ||
+    type === "key"
   );
 }
 
@@ -122,7 +142,8 @@ export function createLearningHlsRequestFilter(options?: {
 
   return async (request: VideoNetworkRequest): Promise<void> => {
     appendLearningHlsCacheVersion(request);
-    if (request.type !== "segment" && request.type !== "text") return;
+    if (!carriesPlaybackToken(request.type)) return;
+    if (request.uris.every((uri) => IN_MEMORY_URI.test(uri))) return;
 
     const refreshBefore = Math.floor(Date.now() / 1000) + 30;
     if (
@@ -146,7 +167,9 @@ export function createLearningHlsRequestFilter(options?: {
     if (!currentToken) return;
     const queryParam = currentToken.length === 40 ? "t" : "veo_token";
     request.uris = request.uris.map((uri) =>
-      appendLearningHlsQueryParameter(uri, queryParam, currentToken!),
+      IN_MEMORY_URI.test(uri)
+        ? uri
+        : appendLearningHlsQueryParameter(uri, queryParam, currentToken!),
     );
   };
 }
@@ -173,10 +196,11 @@ function appendLearningHlsQueryParameter(
 
 export const LEARNING_HLS_STREAMING = {
   abrEnabled: true,
-  // A VOD player does not need Shaka's default ~10s startup buffer. Keep the
-  // first playable frame responsive while retaining a small rebuffer safety
-  // margin for normal network jitter.
-  bufferingGoal: 2,
-  rebufferingGoal: 1,
-  bufferBehind: 60,
+  // Start as soon as one 2s segment is in (1.5s), then build a 60s cushion
+  // so a phone losing signal for half a minute keeps playing. 30s is kept
+  // behind the playhead, so seeking back a little needs no network. The
+  // cushion sits in MSE SourceBuffers, which the page cannot read back.
+  rebufferingGoal: 1.5,
+  bufferingGoal: 60,
+  bufferBehind: 30,
 } as const;

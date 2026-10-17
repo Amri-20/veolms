@@ -22,6 +22,10 @@ import * as mediaRepo from "./media.repository.ts";
 import { enqueueImageJob } from "@veolms/database";
 import { probeVideoSource } from "../../lib/video-prober.ts";
 import { getCdnDeliveryUrl } from "../../services/cdn-delivery.ts";
+import {
+  createMasterManifestCache,
+  MASTER_MANIFEST_MAX_BYTES,
+} from "./master-manifest-cache.ts";
 import type {
   MediaConvertWebhookPayload,
   MediaConvertWebhookResponse,
@@ -37,6 +41,34 @@ const VIDEO_QUALITIES: VideoQualityLevel[] = ["360p", "720p", "1080p"];
 // copied link is of little use to anyone else.
 const LESSON_RESOURCE_DOWNLOAD_TTL_SECONDS = 300;
 const accessService = createAccessService();
+// Shared by every request this process serves; see master-manifest-cache.ts.
+const MASTER_MANIFEST_CACHE = createMasterManifestCache();
+
+/** Reads a small text object, giving up past `maxBytes`. */
+async function readStorageText(
+  storage: AppServices["storage"],
+  key: string,
+  maxBytes: number,
+): Promise<string | null> {
+  const file = await storage.getObject(key);
+  if (!file) return null;
+  if (file.contentLength !== undefined && file.contentLength > maxBytes) {
+    file.body.destroy();
+    return null;
+  }
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for await (const chunk of file.body) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    bytes += buffer.length;
+    if (bytes > maxBytes) {
+      file.body.destroy();
+      return null;
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
 
 type PlaybackUser = {
   id: string;
@@ -1292,9 +1324,17 @@ export function createMediaService({
     const manifestPrefix = manifestKey.replace(/\/[^/]+$/u, "");
     if (services.storage.isCdnPublicKey(manifestPrefix)) return null;
 
+    // A token is its expiry plus a signature of the folder, so two learners
+    // given one in the same second would share it, and the CDN binds a token
+    // to the first client that uses it. Spreading expiries over up to a
+    // quarter of the lifetime (at most an hour) keeps their tokens apart.
+    const ttlSeconds = services.storage.getCdnHlsTokenTtlSeconds();
+    const expiryJitterSeconds = crypto.randomInt(
+      0,
+      Math.max(1, Math.min(3_600, Math.floor(ttlSeconds / 4))),
+    );
     const expiresAt =
-      Math.floor(Date.now() / 1000) +
-      services.storage.getCdnHlsTokenTtlSeconds();
+      Math.floor(Date.now() / 1000) + ttlSeconds - expiryJitterSeconds;
     const token = services.storage.createCdnAccessToken(
       manifestPrefix,
       expiresAt,
@@ -1309,10 +1349,41 @@ export function createMediaService({
     return { token, expiresAt };
   }
 
+  /**
+   * The HLS master playlist or DASH MPD to hand the player with its
+   * bootstrap, when it can be had within a few hundred milliseconds. Never
+   * fails the bootstrap.
+   */
+  async function readInlinedMasterManifest(
+    manifestKey: string,
+    logger?: FastifyBaseLogger,
+  ): Promise<string | undefined> {
+    if (!/\.(?:m3u8|mpd)$/iu.test(manifestKey)) return undefined;
+    try {
+      const text = await MASTER_MANIFEST_CACHE.resolve(manifestKey, (key) =>
+        readStorageText(services.storage, key, MASTER_MANIFEST_MAX_BYTES),
+      );
+      if (text === undefined) {
+        logger?.debug(
+          { manifestKey },
+          "Master playlist not inlined; the player fetches it from the CDN.",
+        );
+      }
+      return text;
+    } catch (error) {
+      logger?.warn(
+        { err: error, manifestKey },
+        "Master playlist inline failed.",
+      );
+      return undefined;
+    }
+  }
+
   async function getPlaybackBootstrap(
     courseIdOrSlug: string,
     lessonNumber: number,
     user?: PlaybackUser,
+    options: { inlineManifest?: boolean; logger?: FastifyBaseLogger } = {},
   ): Promise<VideoPlaybackBootstrap> {
     const context = await resolveAuthorizedPlaybackLesson(
       courseIdOrSlug,
@@ -1345,7 +1416,14 @@ export function createMediaService({
       );
     }
     const playbackToken = createPlaybackSegmentToken(manifestKey);
-    const chapterRows = await chapterRowsPromise;
+    // Read alongside the chapters; access has already been checked above.
+    const inlinedMasterManifestPromise = options.inlineManifest
+      ? readInlinedMasterManifest(manifestKey, options.logger)
+      : Promise.resolve(undefined);
+    const [chapterRows, inlinedMasterManifest] = await Promise.all([
+      chapterRowsPromise,
+      inlinedMasterManifestPromise,
+    ]);
     const chapters = chapterRows.map((chapter) => {
       let thumbnailUrl: string | undefined;
       if (chapter.thumbnail_key) {
@@ -1380,6 +1458,7 @@ export function createMediaService({
       ...(chapters.length > 0 ? { chapters } : {}),
       title: context.lesson_title,
       source: "paid-bootstrap-api",
+      ...(inlinedMasterManifest ? { inlinedMasterManifest } : {}),
     };
   }
 

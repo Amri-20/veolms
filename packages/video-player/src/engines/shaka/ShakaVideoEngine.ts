@@ -13,18 +13,21 @@ import {
   consumeEarlyShakaPreloadSession,
   discardEarlyShakaPreloadManager,
   getEarlyShakaPreloadSession,
+  noteEarlyShakaPreloadAdopted,
   waitForEarlyShakaPreloadSession,
   type EarlyShakaPreloadSession,
 } from "./shaka-early-preload";
 import {
   addExternalTextTrack,
   configureShakaPlayer,
+  createShakaConfiguration,
   createShakaNetworkingFilters,
   defaultShakaRuntimeLoader,
   normalizeShakaAudioTrack,
   normalizeShakaQuality,
   normalizeShakaTextTrack,
   registerShakaNetworkingFilters,
+  rememberShakaBandwidthEstimate,
   resolveShakaLoadMimeType,
   resolveShakaRuntime,
   unregisterShakaNetworkingFilters,
@@ -46,6 +49,32 @@ export interface ShakaVideoEngineOptions {
 }
 
 type ShakaListener = (event: ShakaEventLike) => void;
+
+const PRELOAD_START_TOLERANCE_SECONDS = 2;
+const MANUAL_QUALITY_SWITCH_SAFE_MARGIN_SECONDS = 2;
+
+/** A `veo:` performance mark; diagnostic only, never in the way of playback. */
+function markPlayback(name: string, detail?: Record<string, unknown>): void {
+  try {
+    performance.mark(`veo:${name}`, detail ? { detail } : undefined);
+  } catch {
+    // Marks are diagnostics.
+  }
+}
+
+function preloadSessionMatchesSource(
+  session: EarlyShakaPreloadSession,
+  source: VideoSource,
+): boolean {
+  const manifestMatches = session.manifestUrl === source.src;
+  const mediaKeyMatches = Boolean(
+    session.mediaKey && source.id && session.mediaKey === source.id,
+  );
+  // The paid bootstrap can resolve after the player source was created. A
+  // stable media key is sufficient to adopt that session; its manifest URL
+  // may be the protected API HLS path rather than the local fallback URL.
+  return manifestMatches || mediaKeyMatches;
+}
 
 function visualQualityKey(track: ShakaVariantTrackLike): string {
   return [
@@ -166,17 +195,32 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     source: VideoSource,
     options: VideoLoadOptions = {},
   ): Promise<void> {
-    this.requireMedia();
-    const player = this.requirePlayer();
+    const media = this.requireMedia();
+    let player = this.requirePlayer();
     const runtime = this.requireRuntime();
     const generation = this.beginOperation();
     this.startLoading(source);
     this.#selectedTextTrackId = null;
     this.#autoQuality = source.streaming?.abrEnabled ?? true;
+    // What the previous video measured sets where this one starts.
+    rememberShakaBandwidthEstimate(player);
+    markPlayback("shaka-load", { id: source.id });
 
     try {
+      const speculativeSession = await this.adoptSpeculativePreloadSession(
+        source,
+        media,
+      );
+      if (!this.isCurrentOperation(generation)) {
+        if (speculativeSession) {
+          await discardEarlyShakaPreloadManager(speculativeSession);
+        }
+        return;
+      }
+      player = this.requirePlayer();
       this.clearNetworkingFilters();
-      const preloadSession = this.takeMatchingPreloadSession(source);
+      const preloadSession =
+        speculativeSession ?? this.takeMatchingPreloadSession(source);
       if (
         !configureShakaPlayer(player, source, runtime, {
           reset: !preloadSession,
@@ -191,6 +235,19 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
       this.installNetworkingFilters(source);
 
       const startTime = options.startTime ?? source.startTime;
+      // A preload plays from where it was preloaded; one made for another
+      // position (the learner's place changed since) would start there.
+      if (
+        preloadSession?.preloadPromise &&
+        Math.abs((preloadSession.startTime ?? 0) - (startTime ?? 0)) >
+          PRELOAD_START_TOLERANCE_SECONDS
+      ) {
+        markPlayback("preload-start-mismatch", {
+          preloaded: preloadSession.startTime ?? 0,
+          requested: startTime ?? 0,
+        });
+        await discardEarlyShakaPreloadManager(preloadSession);
+      }
       const mimeType = resolveShakaLoadMimeType(source, options);
       const asset =
         preloadSession?.preloadPromise != null
@@ -202,6 +259,15 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
           return;
         }
         await player.load(asset, startTime);
+        // A preload plays with the settings it was made with (a hovered
+        // lesson preloads less); this source's buffering applies from here.
+        // Only buffering: re-applying ABR would switch quality straight away
+        // and fetch again what the preload already has.
+        if (this.isCurrentOperation(generation)) {
+          player.configure({
+            streaming: createShakaConfiguration(source, runtime).streaming,
+          });
+        }
       } else {
         await player.load(asset, startTime, mimeType);
       }
@@ -240,6 +306,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     const player = this.requirePlayer();
     const generation = this.beginOperation();
     this.updateSnapshot({ lifecycle: "unloading" });
+    rememberShakaBandwidthEstimate(player);
     this.clearNetworkingFilters();
 
     try {
@@ -280,7 +347,14 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     }
 
     player.configure({ abr: { enabled: false } });
-    player.selectVariantTrack(track, false);
+    // With a 60s buffer, keeping it would show the old quality for up to a
+    // minute; drop what is buffered ahead except a short margin, so the
+    // chosen quality appears within seconds without the picture freezing.
+    player.selectVariantTrack(
+      track,
+      true,
+      MANUAL_QUALITY_SWITCH_SAFE_MARGIN_SECONDS,
+    );
     this.#autoQuality = false;
     this.refreshTracks(false);
     const quality = this.getQualities().find((item) => item.id === id) ?? null;
@@ -372,6 +446,8 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     }
 
     if (!this.#player && preloadSession?.player) {
+      markPlayback("preload-adopted-on-attach");
+      noteEarlyShakaPreloadAdopted(preloadSession);
       this.#player = preloadSession.player;
       this.#adoptedPreloadSession = preloadSession;
       if (preloadSession.networkingFilters) {
@@ -393,6 +469,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     _media: HTMLMediaElement,
   ): Promise<void> {
     this.#selectedTextTrackId = null;
+    rememberShakaBandwidthEstimate(this.#player);
     this.clearNetworkingFilters();
     this.clearTrackMaps();
     await this.#player?.detach();
@@ -401,6 +478,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
   protected override async onDestroying(
     _media: HTMLMediaElement | null,
   ): Promise<void> {
+    rememberShakaBandwidthEstimate(this.#player);
     this.clearNetworkingFilters();
     const player = this.#player;
     const adoptedSession = this.#adoptedPreloadSession;
@@ -408,8 +486,14 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     if (adoptedSession && !adoptedSession.consumed) {
       consumeEarlyShakaPreloadSession(adoptedSession);
       await discardEarlyShakaPreloadManager(adoptedSession);
-    } else if (!adoptedSession && getEarlyShakaPreloadSession()) {
-      await abandonEarlyShakaPreloadSession({ destroyPlayer: true });
+    } else if (!adoptedSession) {
+      // A speculative preload (a hovered or next lesson) is for whichever
+      // player opens that lesson next, often the one replacing this one; it
+      // must outlive this player's teardown.
+      const leftover = getEarlyShakaPreloadSession();
+      if (leftover && !leftover.speculative) {
+        await abandonEarlyShakaPreloadSession({ destroyPlayer: true });
+      }
     }
     if (player) {
       this.unbindShakaEvents(player);
@@ -443,6 +527,64 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     return this.#runtime;
   }
 
+  /**
+   * A lesson hovered or about to come next may have been preloaded on its
+   * own Shaka player while this engine kept playing. When this load is for
+   * that lesson, the preloaded player (manifest and first segments already
+   * fetched) replaces the current one on the media element.
+   */
+  private async adoptSpeculativePreloadSession(
+    source: VideoSource,
+    media: HTMLMediaElement,
+  ): Promise<EarlyShakaPreloadSession | null> {
+    if (this.#adoptedPreloadSession && !this.#adoptedPreloadSession.consumed) {
+      return null;
+    }
+    const session = getEarlyShakaPreloadSession();
+    const preloadedPlayer = session?.player;
+    if (
+      !session ||
+      session.consumed ||
+      !preloadedPlayer ||
+      preloadedPlayer === this.#player ||
+      !preloadSessionMatchesSource(session, source)
+    ) {
+      if (session && !session.consumed) {
+        markPlayback("preload-not-adopted", {
+          hasPlayer: Boolean(preloadedPlayer),
+          samePlayer: preloadedPlayer === this.#player,
+          matches: preloadSessionMatchesSource(session, source),
+        });
+      }
+      return null;
+    }
+
+    // Claimed before any await, so a newer hover cannot abandon it mid-swap.
+    markPlayback("preload-adopted-on-load");
+    noteEarlyShakaPreloadAdopted(session);
+    consumeEarlyShakaPreloadSession(session);
+    this.#adoptedPreloadSession = null;
+    const previous = this.#player;
+    this.clearNetworkingFilters();
+    if (previous) {
+      this.unbindShakaEvents(previous);
+      await previous.destroy().catch(() => undefined);
+    }
+    this.#player = preloadedPlayer;
+    if (session.networkingFilters) {
+      this.#requestFilter = session.networkingFilters.requestFilter;
+      this.#responseFilter = session.networkingFilters.responseFilter;
+    }
+    this.bindShakaEvents(preloadedPlayer);
+    try {
+      await preloadedPlayer.attach(media);
+    } catch (error) {
+      await discardEarlyShakaPreloadManager(session);
+      throw error;
+    }
+    return session;
+  }
+
   private takeMatchingPreloadSession(
     source: VideoSource,
   ): EarlyShakaPreloadSession | null {
@@ -456,14 +598,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
       return null;
     }
 
-    const manifestMatches = session.manifestUrl === source.src;
-    const mediaKeyMatches = Boolean(
-      session.mediaKey && source.id && session.mediaKey === source.id,
-    );
-    // The paid bootstrap can resolve after the player source was created. A
-    // stable media key is sufficient to adopt that session; its manifest URL
-    // may be the protected API HLS path rather than the local fallback URL.
-    if (!manifestMatches && !mediaKeyMatches) {
+    if (!preloadSessionMatchesSource(session, source)) {
       consumeEarlyShakaPreloadSession(session);
       this.#adoptedPreloadSession = null;
       void discardEarlyShakaPreloadManager(session);
@@ -519,6 +654,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     listen("textchanged", () => this.refreshTracks(true));
     listen("texttrackvisibilitychanged", () => this.refreshTracks(true));
     listen("adaptation", () => {
+      rememberShakaBandwidthEstimate(player);
       this.refreshTracks(false);
       const active =
         this.getQualities().find((quality) => quality.active) ?? null;

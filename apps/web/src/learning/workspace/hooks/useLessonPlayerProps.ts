@@ -8,6 +8,7 @@ import type { LearningMiniPlayerRequest } from "../../player/learningMiniPlayerT
 import { type Lesson, createLessonVideo } from "../../courseContent";
 import { mediaService } from "../../../services/media";
 import { VideoPlaybackBootstrapError } from "../../videoPlaybackBootstrap";
+import { preloadLessonPlayback } from "../../earlyHlsPreload";
 import type { VideoPlaybackBootstrap } from "@veolms/contracts";
 import type { CourseLesson } from "@veolms/contracts";
 import type { useSecondPressHold } from "../../../gestures/useSecondPressHold";
@@ -161,6 +162,18 @@ export function useLessonPlayerProps({
     lessonPlayerSeekRef.current?.(seconds);
   }, []);
 
+  // In the lesson's last minute the next one is preloaded once, so autoplay
+  // or "Next" starts it from memory. Not earlier: a learner who stops halfway
+  // through a long lesson should not pay for the next one.
+  const preloadedNextLessonRef = useRef<string | null>(null);
+  const handleNearLessonEnd = useCallback(() => {
+    if (!courseSlug || nextLessonId === undefined || showingQuiz) return;
+    const preloadKey = `${courseSlug}:${selectedLesson}:${nextLessonId}`;
+    if (preloadedNextLessonRef.current === preloadKey) return;
+    preloadedNextLessonRef.current = preloadKey;
+    void preloadLessonPlayback(courseSlug, nextLessonId);
+  }, [courseSlug, nextLessonId, selectedLesson, showingQuiz]);
+
   const currentLessonTitle = currentLesson[1];
   const selectedLessonDurationSeconds = selectedLessonRecord?.durationSeconds;
   const selectedLessonMediaId = selectedLessonRecord?.contentMediaId;
@@ -238,6 +251,7 @@ export function useLessonPlayerProps({
       onMiniPlayerRestoreReady,
       onMobileLandscapeFullscreenChange: handleMobileLandscapeFullscreenChange,
       onProgressChange: updateSelectedLessonProgress,
+      onNearLessonEnd: handleNearLessonEnd,
       onSeekToTimestampReady: registerLessonPlayerSeek,
       resumePersistenceKey: `${coursePersistenceKey}-lesson-${selectedLesson}`,
     }),
@@ -292,6 +306,7 @@ export function useLessonPlayerProps({
       updateAutoplayEnabled,
       updatePlayerMinimizeGesture,
       updateSelectedLessonProgress,
+      handleNearLessonEnd,
     ],
   );
   return {

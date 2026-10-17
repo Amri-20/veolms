@@ -7,6 +7,7 @@ import type { LessonResource } from "@veolms/contracts";
 import type { Lesson } from "./courseContent";
 import { LessonResourcesMenu } from "./LessonResourcesMenu";
 import { LESSON_CARD_ACTION_CLASS } from "./lessonCardAction";
+import { useLessonHoverPreload } from "./useLessonHoverPreload";
 import "./curriculum-lesson-card.css";
 
 const LESSON_PROGRESS_COMPLETE_THRESHOLD = 99.5;
@@ -72,6 +73,11 @@ export interface CurriculumLessonCardProps {
   quizActive?: boolean;
   onOpenQuiz?: (lessonNumber: number) => void;
   portalContainer?: RefObject<HTMLElement | null>;
+  /**
+   * The course to preload the lesson through while the pointer rests on
+   * it. Left out, the lesson is not preloaded.
+   */
+  hoverPreloadCourseKey?: string;
   /** Extra classes for the card itself (how it behaves off screen). */
   className?: string;
 }
@@ -100,9 +106,18 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
   quizActive = false,
   onOpenQuiz,
   portalContainer,
+  hoverPreloadCourseKey,
   className = "",
 }: CurriculumLessonCardProps) {
   const [number, title, duration, status, , contentType] = lesson;
+  const hoverPreload = useLessonHoverPreload(
+    hoverPreloadCourseKey,
+    number,
+    isAvailable &&
+      !isLocked &&
+      !isActive &&
+      (contentType ?? "video") === "video",
+  );
   const completed =
     status === "done" || progress >= LESSON_PROGRESS_COMPLETE_THRESHOLD;
   const watched = completed ? 100 : Math.max(0, Math.min(100, progress));
@@ -152,8 +167,13 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
         disabled={!isAvailable}
         title={isAvailable ? undefined : "Log in to watch this lecture"}
         aria-current={isActive ? "true" : undefined}
+        onPointerEnter={hoverPreload?.onPointerEnter}
+        onPointerLeave={hoverPreload?.onPointerLeave}
+        onFocus={hoverPreload?.onFocus}
+        onBlur={hoverPreload?.onBlur}
         onClick={() => {
           if (!isAvailable) return;
+          hoverPreload?.cancel();
           onSelectLesson(number);
           onClose?.();
         }}

@@ -27,6 +27,20 @@ export const videoPlaybackBootstrapSchema = z.strictObject({
   chapters: z.array(videoPlaybackChapterSchema).optional(),
   title: z.string().min(1).optional(),
   source: z.literal("paid-bootstrap-api"),
+  /**
+   * The manifest at `manifestUrl` (HLS master playlist or DASH MPD), so the
+   * player can skip that
+   * request. Sent only to callers that ask for it (`inlineManifest=1`): an
+   * older page validates this object strictly and would reject the field.
+   * Relative URIs in it are relative to `manifestUrl`.
+   */
+  inlinedMasterManifest: z.string().min(1).optional(),
+});
+
+/** Query of the playback bootstrap request. */
+export const videoPlaybackBootstrapQuerySchema = z.object({
+  /** `1` asks for `inlinedMasterManifest` when it can be read quickly. */
+  inlineManifest: z.enum(["0", "1"]).optional(),
 });
 
 /**
