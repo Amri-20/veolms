@@ -501,6 +501,35 @@ function devAssetImportInlinePlugin(): Plugin {
   };
 }
 
+// Extension packages that live outside this app (a deployment's own
+// plugins, whose routes come in through VEO_ROUTES_FILE) use Tailwind classes
+// too. VEO_STYLE_SOURCES lists their source folders, separated like PATH;
+// each becomes an `@source` of the app's one utilities build in styles.css,
+// so their classes are generated in the same order as everything else.
+// No effect when it is not set.
+function extraStyleSourcesPlugin(): Plugin {
+  const sources = (process.env.VEO_STYLE_SOURCES ?? "")
+    .split(path.delimiter)
+    .map((source) => source.trim())
+    .filter(Boolean);
+  const stylesEntry = path.join(webSourceRoot, "styles.css");
+  return {
+    name: "veo-extra-style-sources",
+    enforce: "pre",
+    transform(code, id) {
+      if (sources.length === 0) return null;
+      const [file = "", query = ""] = id.split("?");
+      if (path.normalize(file) !== stylesEntry) return null;
+      // Only the stylesheet itself: `?url` and the like are JS modules.
+      if (query && !/^(?:direct|inline)(?:&|$)/u.test(query)) return null;
+      const lines = sources.map(
+        (source) => `@source ${JSON.stringify(source.replaceAll("\\", "/"))};`,
+      );
+      return { code: `${code}\n${lines.join("\n")}\n`, map: null };
+    },
+  };
+}
+
 // Writes a module-to-chunk report for the client build when
 // VEO_BUNDLE_REPORT is set, so bundle composition can be audited offline.
 // No effect on normal builds.
@@ -623,6 +652,7 @@ export default defineConfig(({ command, mode }) => {
       routeChunkPreloadPlugin(),
       devAssetImportInlinePlugin(),
       bundleReportPlugin(),
+      extraStyleSourcesPlugin(),
       tailwindcss(),
       reactRouter(),
     ],

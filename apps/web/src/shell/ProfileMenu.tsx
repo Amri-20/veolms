@@ -14,6 +14,7 @@ import type { AvatarImageVariant } from "@veolms/contracts";
 import { isValidPublicProfileUsername } from "@veolms/contracts/username-rules";
 import type { CourseRole } from "../courses/catalogue";
 import { getRoleDisplayName } from "./workspaceRole";
+import { useWebContributions } from "../lib/web-contributions";
 
 export interface ProfileIdentityData {
   displayName: string;
@@ -199,6 +200,11 @@ export function ProfileMenu({
     onNavigate(path);
   };
 
+  // Links plugins add to the account section (see web-core contributions).
+  const contributedLinks = useWebContributions().profileMenuLinks.filter(
+    (link) => !link.roles || link.roles.includes(role),
+  );
+
   const canPreviewAsStudent = allowedRoles.includes("student");
   const canPreviewAsCreator = allowedRoles.includes("creator");
   const canSwitchWorkspace = canPreviewAsStudent && canPreviewAsCreator;
@@ -341,6 +347,20 @@ export function ProfileMenu({
           />
           <span>Progress</span>
         </a>
+        {contributedLinks.map(({ id: linkId, label, href, icon: LinkIcon }) => (
+          <a
+            key={linkId}
+            className="profile-menu__item"
+            role="menuitem"
+            href={href}
+            onClick={(event) => openDestination(event, href)}
+          >
+            {LinkIcon ? (
+              <LinkIcon className="profile-menu__item-icon" size={21} />
+            ) : null}
+            <span>{label}</span>
+          </a>
+        ))}
         {role === "student" ? (
           <a
             className="profile-menu__item profile-menu__item--orders"

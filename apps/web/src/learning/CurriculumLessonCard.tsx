@@ -7,6 +7,7 @@ import type { LessonResource } from "@veolms/contracts";
 import type { Lesson } from "./courseContent";
 import { LessonResourcesMenu } from "./LessonResourcesMenu";
 import { LESSON_CARD_ACTION_CLASS } from "./lessonCardAction";
+import { useWebContributions } from "../lib/web-contributions";
 import "./curriculum-lesson-card.css";
 
 const LESSON_PROGRESS_COMPLETE_THRESHOLD = 99.5;
@@ -65,7 +66,10 @@ export interface CurriculumLessonCardProps {
   onClose?: () => void;
   activeLessonRef?: RefObject<HTMLButtonElement | null>;
   resources?: readonly LessonResource[];
-  /** Course slug or id; resources are downloaded through this course. */
+  /**
+   * Course slug or id; resources are downloaded through this course, and
+   * plugin lesson actions act on it.
+   */
   resourceCourseKey?: string;
   hasQuiz?: boolean;
   /** The lesson's quiz is what the learner is looking at right now. */
@@ -116,7 +120,15 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
     !isLocked &&
     Boolean(resourceCourseKey) &&
     Boolean(resources?.length);
-  const hasActions = showLock || showQuiz || showResources;
+  // Actions plugins add to every lesson card (see web-core contributions).
+  // They need the course to act on and, like the quiz, an unlocked lesson.
+  const { lessonCardActions } = useWebContributions();
+  const showContributed =
+    isAvailable &&
+    !isLocked &&
+    Boolean(resourceCourseKey) &&
+    lessonCardActions.length > 0;
+  const hasActions = showLock || showQuiz || showResources || showContributed;
   // Said after the lesson's length to a screen reader; most lessons have
   // nothing to add, and then there is no element for it.
   const spokenState = !isAvailable
@@ -241,6 +253,20 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
               <Exam size={17} weight="fill" aria-hidden="true" />
             </button>
           ) : null}
+          {showContributed && resourceCourseKey
+            ? lessonCardActions.map(({ id, component: Action }) => (
+                <Action
+                  key={id}
+                  courseKey={resourceCourseKey}
+                  lessonNumber={number}
+                  displayNumber={displayNumber}
+                  lessonTitle={title}
+                  contentType={contentType ?? "video"}
+                  isActive={isActive}
+                  actionClassName={LESSON_CARD_ACTION_CLASS}
+                />
+              ))
+            : null}
           {showResources && resources && resourceCourseKey ? (
             <LessonResourcesMenu
               courseKey={resourceCourseKey}

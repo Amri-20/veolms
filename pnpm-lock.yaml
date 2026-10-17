@@ -555,6 +555,13 @@ importers:
       '@veolms/plugin-sdk':
         specifier: workspace:*
         version: link:../plugin-sdk
+      react:
+        specifier: '>=18.2 <20'
+        version: 19.2.8
+    devDependencies:
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
 
 packages:
 
