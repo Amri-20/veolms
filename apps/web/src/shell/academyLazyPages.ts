@@ -1,5 +1,6 @@
 import { lazy } from "react";
 import {
+  definePrerenderedBody,
   courseCatalogueBody,
   courseOverviewBody,
   creatorDashboardBody,
@@ -38,26 +39,40 @@ export const LogoutConfirmModal = lazy(() =>
   })),
 );
 
+// The sheet's content, title and description first render when it opens, so
+// as bare `lazy()` parts each suspended once on that first open even though
+// the module was warm. That hid the whole drawer behind its Suspense boundary
+// mid-open, which tore down its Back layer, and in Firefox the history step
+// that followed closed the sheet again. Like the page bodies, these render
+// at once when the module has already loaded.
+const loadDrawerModule = () => import("@/components/ui/drawer");
+const drawerBody = definePrerenderedBody(
+  loadDrawerModule,
+  (module) => module.Drawer,
+);
+const drawerContentBody = definePrerenderedBody(
+  loadDrawerModule,
+  (module) => module.DrawerContent,
+);
+const drawerTitleBody = definePrerenderedBody(
+  loadDrawerModule,
+  (module) => module.DrawerTitle,
+);
+const drawerDescriptionBody = definePrerenderedBody(
+  loadDrawerModule,
+  (module) => module.DrawerDescription,
+);
 export const loadMobileMenuDrawerModule = () =>
-  import("@/components/ui/drawer");
-export const Drawer = lazy(() =>
-  loadMobileMenuDrawerModule().then((module) => ({ default: module.Drawer })),
-);
-export const DrawerContent = lazy(() =>
-  loadMobileMenuDrawerModule().then((module) => ({
-    default: module.DrawerContent,
-  })),
-);
-export const DrawerTitle = lazy(() =>
-  loadMobileMenuDrawerModule().then((module) => ({
-    default: module.DrawerTitle,
-  })),
-);
-export const DrawerDescription = lazy(() =>
-  loadMobileMenuDrawerModule().then((module) => ({
-    default: module.DrawerDescription,
-  })),
-);
+  Promise.all([
+    drawerBody.preload(),
+    drawerContentBody.preload(),
+    drawerTitleBody.preload(),
+    drawerDescriptionBody.preload(),
+  ]);
+export const Drawer = drawerBody.Body;
+export const DrawerContent = drawerContentBody.Body;
+export const DrawerTitle = drawerTitleBody.Body;
+export const DrawerDescription = drawerDescriptionBody.Body;
 
 export const OrdersPageRoute = lazy(() =>
   import("../orders/OrdersPage").then((module) => ({
