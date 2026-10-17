@@ -74,3 +74,21 @@ export async function findGatewayCapture(
       : payment.payment_method,
   };
 }
+
+/**
+ * Whether no payment for a gateway order can still be taken: none was
+ * started, or every one that was failed. A payment the buyer started and has
+ * not finished (a UPI request waiting in their app, a card waiting on the
+ * bank, an authorised payment not yet captured) is `processing` here and may
+ * still be captured.
+ */
+export async function gatewayOrderHasNoLivePayment(
+  paymentGateway: PaymentGateway,
+  gatewayOrderId: string,
+): Promise<boolean> {
+  const gatewayOrder = await paymentGateway.fetchOrder(gatewayOrderId);
+  if (gatewayOrder.status === "created") return true;
+  if (gatewayOrder.status === "paid") return false;
+  const payments = await paymentGateway.fetchOrderPayments(gatewayOrderId);
+  return payments.every((payment) => payment.status === "failed");
+}

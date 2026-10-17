@@ -15,6 +15,7 @@ import "../services/payments/razorpay-checkout.css";
 import {
   useAwaitPaidOrder,
   useCreateCheckoutOrder,
+  useReleaseCheckoutOrder,
   useVerifyPayment,
 } from "../services/payments/payment.mutations";
 import {
@@ -80,6 +81,7 @@ export function QuizEnrollmentCard({
   const checkoutIntentRef = useRef<{ intent: string; key: string } | null>(
     null,
   );
+  const releaseOrder = useReleaseCheckoutOrder();
   const verify = useVerifyPayment();
   const awaitPaidOrder = useAwaitPaidOrder();
   const paymentConfirmationRef = useRef<AbortController | null>(null);
@@ -285,7 +287,16 @@ export function QuizEnrollmentCard({
             // closing its own window afterwards is not a cancellation.
             const confirmation = paymentConfirmationRef.current;
             if (confirmation && !confirmation.signal.aborted) return;
-            setIsProcessing(false);
+            // As on the course page: the order is cancelled on the server
+            // (unless a payment for it may still arrive), so buying again
+            // is not refused while the closed window's time runs out.
+            void releaseOrder
+              .mutateAsync(order.order.id)
+              .then((result) => {
+                if (result.released) checkoutIntentRef.current = null;
+              })
+              .catch(() => undefined)
+              .finally(() => setIsProcessing(false));
           },
         },
       });
