@@ -208,19 +208,18 @@ export const SHAKA_STREAMING_DEFAULTS = {
 } as const;
 
 /**
- * Retries tuned for flaky mobile links: four tries, ~0.4s/0.6s/0.9s apart.
- * A request that stops receiving bytes for 5s, or cannot connect within 5s,
- * is given up and retried at once; without that, one stuck request after a
- * seek waited out the whole 15s timeout on every attempt (about a minute).
+ * Retries tuned for flaky mobile links: four tries, ~0.4s/0.6s/0.9s apart,
+ * each allowed Shaka's usual 30s. No stall or connection timeout: a 1080p
+ * segment (~1.6MB) on a slow link, or behind an extension that hands the
+ * page the body only once it is complete, shows no progress for seconds
+ * while still arriving, and aborting it there loops forever at that tier.
  */
 export const SHAKA_SEGMENT_RETRY_DEFAULTS = {
   maxAttempts: 4,
   baseDelay: 400,
   backoffFactor: 1.5,
   fuzzFactor: 0.3,
-  timeout: 15_000,
-  stallTimeout: 5_000,
-  connectionTimeout: 5_000,
+  timeout: 30_000,
 } as const;
 
 /**
