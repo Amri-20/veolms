@@ -38,9 +38,10 @@ import {
 } from "../shared/auth.utils.ts";
 import type { AuthLogger } from "../shared/auth.types.ts";
 import type { SessionService } from "../session/session.service.ts";
+import { createPlatformSettingsService } from "../../platform/index.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
 
-import { isMfaMandatoryAccount } from "../shared/mfa-policy.ts";
+import { isMfaMandatoryAccount, isStaffAccount } from "../shared/mfa-policy.ts";
 
 export interface MfaServiceOptions {
   database: Kysely<Database>;
@@ -126,6 +127,26 @@ export function createMfaService({
   sessionService,
 }: MfaServiceOptions) {
   const outbox = createOutboxService();
+  const platformSettings = createPlatformSettingsService({ database });
+
+  /**
+   * A student cannot add a second factor while the academy has turned
+   * two-factor sign-in off for students: it would never be asked for.
+   */
+  async function assertTwoFactorAvailable(user: AuthenticatedMfaUser) {
+    if (
+      isStaffAccount(user.roles) ||
+      (await platformSettings.isStudentTwoFactorEnabled())
+    ) {
+      return;
+    }
+    throw new AppError(
+      403,
+      "TWO_FACTOR_OFF_FOR_STUDENTS",
+      "Two-factor sign-in is turned off for students on this academy.",
+    );
+  }
+
   async function assertStepUpForFactorChange(
     userId: string,
     mfaVerified: boolean,
@@ -161,7 +182,8 @@ export function createMfaService({
     return backupCodes;
   }
 
-  function setupTotp(user: AuthenticatedMfaUser) {
+  async function setupTotp(user: AuthenticatedMfaUser) {
+    await assertTwoFactorAvailable(user);
     const label = user.email || user.username || user.phoneNo || "user";
     return generateTotpSecret(label, config.ACADEMY_NAME);
   }
@@ -424,6 +446,7 @@ export function createMfaService({
     mfaVerified: boolean,
     requestOrigin?: string,
   ) {
+    await assertTwoFactorAvailable(user);
     await assertStepUpForFactorChange(user.id, mfaVerified);
 
     const rpId = resolveRpIdForOrigin(requestOrigin);

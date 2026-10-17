@@ -23,6 +23,10 @@ import {
   type SetupService,
 } from "../setup/setup.service.ts";
 import { createAcademyBrandService } from "../../academy/academy-brand.service.ts";
+import {
+  createPlatformSettingsService,
+  type PlatformSettingsService,
+} from "../../platform/index.ts";
 
 export interface AuthContext {
   middleware: AuthMiddleware;
@@ -32,6 +36,8 @@ export interface AuthContext {
   sessionService: SessionService;
   mfaService: MfaService;
   setupService: SetupService;
+  /** The academy's sign-in and enrolment rules (Platform > Security). */
+  platformSettings: PlatformSettingsService;
   /** Requires a valid session, without asserting MFA step-up. */
   authenticated: AuthMiddleware["authenticate"][];
   /** Requires a valid session that has cleared MFA where the account has it. */
@@ -84,6 +90,7 @@ export function createAuthContext({
     sessionService,
     mfaService,
     setupService,
+    platformSettings: createPlatformSettingsService({ database }),
     authenticated,
     mfaVerified: [...authenticated, middleware.requireMfaVerified],
   };

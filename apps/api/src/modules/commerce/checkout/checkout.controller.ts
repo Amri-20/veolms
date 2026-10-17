@@ -4,13 +4,18 @@ import type {
   CreateCheckoutOrderRequest,
 } from "@veolms/contracts";
 import type { CheckoutService } from "./checkout.service.ts";
-import { config } from "../../../config.ts";
 import { AppError } from "../../../lib/errors.ts";
+import type { PlatformSettingsService } from "../../platform/index.ts";
 
 export function createCheckoutController({
   service,
+  platformSettings,
 }: {
   service: CheckoutService;
+  platformSettings: Pick<
+    PlatformSettingsService,
+    "requiresVerifiedPhoneForEnrollment"
+  >;
 }) {
   async function previewCheckout(
     request: FastifyRequest<{ Body: CheckoutPreviewRequest }>,
@@ -23,11 +28,11 @@ export function createCheckoutController({
     request: FastifyRequest<{ Body: CreateCheckoutOrderRequest }>,
   ) {
     // Paid or free, an enrolment needs a verified mobile number when the
-    // academy asks for one. The course page asks for it before it gets
-    // here; this holds for any other way in.
+    // academy asks for one (Platform > Security). The course page asks for
+    // it before it gets here; this holds for any other way in.
     if (
-      config.REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT &&
-      !request.user!.mobileVerified
+      !request.user!.mobileVerified &&
+      (await platformSettings.requiresVerifiedPhoneForEnrollment())
     ) {
       throw new AppError(
         403,

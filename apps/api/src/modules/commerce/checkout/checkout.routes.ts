@@ -13,6 +13,7 @@ import type { RoutePlugin } from "../../../lib/route-plugin.ts";
 import { createCommerceContext } from "../shared/commerce.context.ts";
 import { createCheckoutService } from "./checkout.service.ts";
 import { createCheckoutController } from "./checkout.controller.ts";
+import { createPlatformSettingsService } from "../../platform/index.ts";
 
 const checkoutRoutes: RoutePlugin = async (app, options) => {
   const ctx = createCommerceContext(options);
@@ -20,7 +21,12 @@ const checkoutRoutes: RoutePlugin = async (app, options) => {
     database: options.database,
     paymentGateway: options.services.paymentGateway,
   });
-  const controller = createCheckoutController({ service });
+  const controller = createCheckoutController({
+    service,
+    platformSettings: createPlatformSettingsService({
+      database: options.database,
+    }),
+  });
 
   // 1. POST /checkout/preview - Calculates authoritative total, items and coupon preview
   app.post(

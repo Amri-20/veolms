@@ -15,12 +15,15 @@ type SettingsTabIcon = ComponentType<{
   style?: CSSProperties;
 }>;
 
-export interface SettingsTabDefinition {
-  id: SettingsTab;
+/** A tab of a settings-style page (Settings, Platform). */
+export interface PageTabDefinition<Id extends string = string> {
+  id: Id;
   label: string;
   Icon: SettingsTabIcon;
   tone: "blue" | "cyan" | "gold" | "green" | "orange" | "rose" | "violet";
 }
+
+export type SettingsTabDefinition = PageTabDefinition<SettingsTab>;
 
 // What everyone can change comes first; the account's own sections follow.
 export const SETTINGS_TABS: readonly SettingsTabDefinition[] = [

@@ -27,6 +27,15 @@ export function RecommendedBadge() {
   );
 }
 
+/** A short state in place of a control, such as "Not supported". */
+export function StatusNote({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-full bg-[color-mix(in_srgb,var(--text)_8%,transparent)] px-2 py-0.5 text-[0.72rem] font-semibold whitespace-nowrap text-(--muted)">
+      {children}
+    </span>
+  );
+}
+
 export interface ChoiceCardProps {
   checked: boolean;
   // Receives the click event so callers can derive a pointer reveal origin;

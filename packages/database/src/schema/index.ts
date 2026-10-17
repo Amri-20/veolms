@@ -127,6 +127,7 @@ import type {
   UserLearningSettingsTable,
 } from "./learning-goals.schema.ts";
 import type { HomePageSettingsTable } from "./home-page.schema.ts";
+import type { PlatformSettingsTable } from "./platform-settings.schema.ts";
 import type { QuoteTable } from "./quotes.schema.ts";
 import type { WishlistItemTable } from "./wishlist.schema.ts";
 import type { LearningProgressTable } from "./learning-progress.schema.ts";
@@ -229,6 +230,7 @@ export interface Database {
   learning_progress: LearningProgressTable;
   user_learning_settings: UserLearningSettingsTable;
   home_page_settings: HomePageSettingsTable;
+  platform_settings: PlatformSettingsTable;
   quotes: QuoteTable;
   wishlist_items: WishlistItemTable;
 

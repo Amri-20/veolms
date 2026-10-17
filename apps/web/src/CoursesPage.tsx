@@ -61,6 +61,7 @@ import { useShellRefs } from "./shell/hooks/useShellRefs";
 import { useLessonBackgroundPage } from "./shell/hooks/useLessonBackgroundPage";
 import { useShellGestureRefs } from "./shell/hooks/useShellGestureRefs";
 import { useShellLayoutEffects } from "./shell/hooks/useShellLayoutEffects";
+import { usePlatformAppearanceDefaults } from "./shell/hooks/usePlatformAppearanceDefaults";
 import { useShellEffects } from "./shell/hooks/useShellEffects";
 import { useShellWarmUpEffects } from "./shell/hooks/useShellWarmUpEffects";
 import { useShellKeyboardEffects } from "./shell/hooks/useShellKeyboardEffects";
@@ -100,6 +101,7 @@ interface CoursesPageProps {
   page?: string;
   section?: string | null;
   settingsTab?: string;
+  platformTab?: string;
   discussionTab?: string;
   courseSlug?: string;
   quizId?: string;
@@ -116,6 +118,7 @@ interface CoursesPageProps {
     scrollTop: number;
     section?: string;
     settingsTab?: string;
+    platformTab?: string;
   } | null;
   /**
    * While a lesson fills the screen: the page and navigation section the
@@ -144,6 +147,7 @@ export function CoursesPage({
   page = "courses",
   section: requestedSection = null,
   settingsTab = SETTINGS_DEFAULT_TAB,
+  platformTab,
   discussionTab = "q-and-a",
   courseSlug,
   quizId,
@@ -510,6 +514,13 @@ export function CoursesPage({
     sidebarResizeRef,
     dockLongPressRef,
     longPressAudioContextRef,
+  });
+
+  usePlatformAppearanceDefaults({
+    storedPreferencesReady,
+    setTheme,
+    setAcademyTheme,
+    appliedThemeRef,
   });
 
   useShellEffects({
@@ -972,6 +983,7 @@ export function CoursesPage({
     quizId,
     requestedSection,
     settingsTab,
+    platformTab,
     showPageBackButton,
     username,
     prepareCourseEditorEdit,
