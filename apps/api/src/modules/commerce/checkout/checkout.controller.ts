@@ -44,8 +44,18 @@ export function createCheckoutController({
     return await service.createOrder(user, request.body);
   }
 
+  async function releaseCheckoutOrder(
+    request: FastifyRequest<{ Params: { orderId: string } }>,
+  ) {
+    return await service.releaseCheckoutOrder(
+      request.user!.id,
+      request.params.orderId,
+    );
+  }
+
   return {
     previewCheckout,
     createOrder,
+    releaseCheckoutOrder,
   };
 }
