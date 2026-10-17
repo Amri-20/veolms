@@ -19,6 +19,13 @@
 
 export const OAUTH_POPUP_WINDOW_NAME = "veolms-oauth";
 export const OAUTH_POPUP_MARK_STORAGE_KEY = "veolms_oauth_popup_window";
+/**
+ * Head-script test for the callback address. The deployed site sends
+ * `/auth/callback` on to `/auth/callback/` (trailing slash) before the page
+ * loads, so both forms count; the dev server keeps the first.
+ */
+export const OAUTH_CALLBACK_PATH_TEST =
+  '(location.pathname==="/auth/callback"||location.pathname==="/auth/callback/")';
 const OAUTH_POPUP_CHANNEL = "veolms-oauth";
 /** Followed by an id of its own, so each frame's answer is told apart. */
 const OAUTH_SILENT_FRAME_PREFIX = "veolms-oauth-silent:";
@@ -50,7 +57,7 @@ declare global {
  * frame posts it to the page it is in. Each message says who sent it.
  */
 export function getOauthPopupHandoffScript(): string {
-  return `(function(){try{if(location.pathname!=="/auth/callback")return;var name=window.name,silent=name.indexOf(${JSON.stringify(OAUTH_SILENT_FRAME_PREFIX)})===0&&window.parent!==window;if(!silent&&(window.parent!==window||(name!==${JSON.stringify(OAUTH_POPUP_WINDOW_NAME)}&&sessionStorage.getItem(${JSON.stringify(OAUTH_POPUP_MARK_STORAGE_KEY)})!=="1")))return;if(!silent)sessionStorage.removeItem(${JSON.stringify(OAUTH_POPUP_MARK_STORAGE_KEY)});var done=false,channel=null;window.__VEO_OAUTH_POPUP__=new Promise(function(resolve){function finish(handedOff){if(done)return;done=true;if(channel)channel.close();window.removeEventListener("message",onMessage);if(silent){resolve(true);}else if(handedOff){resolve(true);window.close();}else{window.name="";resolve(false);}}function onAck(data){if(data&&data.type===${JSON.stringify(ACK_MESSAGE)})finish(true);}function onMessage(event){if(event.origin===location.origin)onAck(event.data);}var message={type:${JSON.stringify(RESULT_MESSAGE)},search:location.search,from:silent?name:${JSON.stringify(OAUTH_POPUP_WINDOW_NAME)}};window.addEventListener("message",onMessage);if(silent){window.parent.postMessage(message,location.origin);}else{if(typeof BroadcastChannel==="function"){channel=new BroadcastChannel(${JSON.stringify(OAUTH_POPUP_CHANNEL)});channel.onmessage=function(event){onAck(event.data);};channel.postMessage(message);}if(window.opener&&window.opener!==window){try{window.opener.postMessage(message,location.origin);}catch(e){}}}setTimeout(function(){finish(false);},${HANDOFF_TIMEOUT_MS});});}catch(e){}})();`;
+  return `(function(){try{if(!${OAUTH_CALLBACK_PATH_TEST})return;var name=window.name,silent=name.indexOf(${JSON.stringify(OAUTH_SILENT_FRAME_PREFIX)})===0&&window.parent!==window;if(!silent&&(window.parent!==window||(name!==${JSON.stringify(OAUTH_POPUP_WINDOW_NAME)}&&sessionStorage.getItem(${JSON.stringify(OAUTH_POPUP_MARK_STORAGE_KEY)})!=="1")))return;if(!silent)sessionStorage.removeItem(${JSON.stringify(OAUTH_POPUP_MARK_STORAGE_KEY)});var done=false,channel=null;window.__VEO_OAUTH_POPUP__=new Promise(function(resolve){function finish(handedOff){if(done)return;done=true;if(channel)channel.close();window.removeEventListener("message",onMessage);if(silent){resolve(true);}else if(handedOff){resolve(true);window.close();}else{window.name="";resolve(false);}}function onAck(data){if(data&&data.type===${JSON.stringify(ACK_MESSAGE)})finish(true);}function onMessage(event){if(event.origin===location.origin)onAck(event.data);}var message={type:${JSON.stringify(RESULT_MESSAGE)},search:location.search,from:silent?name:${JSON.stringify(OAUTH_POPUP_WINDOW_NAME)}};window.addEventListener("message",onMessage);if(silent){window.parent.postMessage(message,location.origin);}else{if(typeof BroadcastChannel==="function"){channel=new BroadcastChannel(${JSON.stringify(OAUTH_POPUP_CHANNEL)});channel.onmessage=function(event){onAck(event.data);};channel.postMessage(message);}if(window.opener&&window.opener!==window){try{window.opener.postMessage(message,location.origin);}catch(e){}}}setTimeout(function(){finish(false);},${HANDOFF_TIMEOUT_MS});});}catch(e){}})();`;
 }
 
 /**
