@@ -204,7 +204,6 @@ export function CoursesPage({
     sidebarHeaderLayout,
     sidebarDockItems,
     settingsInSidebarDock,
-    readingModeDockIndex,
     sidebarMaxWidth,
     showSidebarAppearanceControl,
     showSidebarThemeIcon,
@@ -246,7 +245,6 @@ export function CoursesPage({
     setPaletteMenu,
     paletteMenuSource,
     setPaletteMenuSource,
-    paletteMenuDockIndex,
     readingModeMenu,
     setReadingModeMenu,
     settingsQuickMenu,
@@ -282,9 +280,7 @@ export function CoursesPage({
     isFullscreen,
     setIsFullscreen,
     shortcutPlatform,
-  } = useShellMenusState({
-    sidebarDockItems,
-  });
+  } = useShellMenusState();
   const {
     authUser,
     authUserFetched,
@@ -1235,8 +1231,6 @@ export function CoursesPage({
                 appearanceControlsRef={appearanceControlsRef}
                 appearanceControlsHorizontal={appearanceControlsHorizontal}
                 sidebarPreferences={sidebarPreferences}
-                readingModeDockIndex={readingModeDockIndex}
-                paletteMenuDockIndex={paletteMenuDockIndex}
                 sidebarDockItems={sidebarDockItems}
                 appearanceModeTriggerRef={appearanceModeTriggerRef}
                 paletteMenu={paletteMenu}
@@ -1284,6 +1278,11 @@ export function CoursesPage({
                 <Suspense fallback={null}>
                   <SettingsQuickMenu
                     id="desktop-settings-quick-menu"
+                    // Rounded rows and a tighter heading inside the menu's
+                    // 8px padding (its surface is in courses.css). Its rows
+                    // have no trailing column, so none is kept for them: the
+                    // collapsed menu is only as wide as its longest row.
+                    className="[&_[role=menuitem]]:rounded-[9px]! [&_[role=menuitem]]:grid-cols-[28px_minmax(0,1fr)]! [&>p]:mt-0! [&>p]:pt-1! [&>p]:pb-1.5! [&>p]:pl-3!"
                     isOpen={settingsQuickMenu === "desktop"}
                     activeTab={
                       page === "settings"

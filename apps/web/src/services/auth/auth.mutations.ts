@@ -178,11 +178,7 @@ export function useSendOtp() {
 }
 
 export function useSendPhoneVerificationOtp() {
-  return useMutation<
-    AuthMessageResponse,
-    ApiError,
-    PhoneVerificationSendRequest
-  >({
+  return useMutation<OtpSendResponse, ApiError, PhoneVerificationSendRequest>({
     mutationFn: (payload) => authService.sendPhoneVerificationOtp(payload),
   });
 }

@@ -9,11 +9,13 @@ import { GithubLogoIcon as GithubLogo } from "@phosphor-icons/react/GithubLogo";
 import { GlobeIcon as Globe } from "@phosphor-icons/react/Globe";
 import { GraduationCapIcon as GraduationCap } from "@phosphor-icons/react/GraduationCap";
 import { LinkedinLogoIcon as LinkedinLogo } from "@phosphor-icons/react/LinkedinLogo";
+import { PencilSimpleIcon as PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { PhoneIcon as Phone } from "@phosphor-icons/react/Phone";
 import { TrendUpIcon as TrendUp } from "@phosphor-icons/react/TrendUp";
 import { WarningCircleIcon as WarningCircle } from "@phosphor-icons/react/WarningCircle";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import type { AdminOrder, StudentCourseDetail } from "@veolms/contracts";
+import { safeExternalUrl } from "../lib/external-url";
 import { OrderRefundModal } from "../orders/OrderRefundModal";
 import type { NavigateTo } from "../routing/navigation";
 import { useCurrentUser } from "../services/auth";
@@ -34,6 +36,13 @@ export interface StudentDetailsPageProps {
   setNotice?: (message: string) => void;
 }
 
+// Only admins open it, and it carries the contact form's validation.
+const StudentContactModal = lazy(() =>
+  import("./StudentContactModal").then((module) => ({
+    default: module.StudentContactModal,
+  })),
+);
+
 export function StudentDetailsPage({
   username,
   onNavigatePage,
@@ -51,6 +60,7 @@ export function StudentDetailsPage({
   const [refundOrder, setRefundOrder] = useState<AdminOrder | null>(null);
   const [accessChange, setAccessChange] =
     useState<StudentCourseAccessChange | null>(null);
+  const [editingContact, setEditingContact] = useState(false);
 
   const openCourse = (course: StudentCourseDetail) =>
     onNavigatePage?.(`/courses/${course.courseSlug}`);
@@ -74,6 +84,9 @@ export function StudentDetailsPage({
   };
 
   const student = data?.student;
+  const githubUrl = safeExternalUrl(student?.socials?.githubUrl);
+  const linkedinUrl = safeExternalUrl(student?.socials?.linkedinUrl);
+  const websiteUrl = safeExternalUrl(student?.socials?.websiteUrl);
   const metrics = data?.metrics;
   const courses = data?.courses ?? [];
 
@@ -267,13 +280,29 @@ export function StudentDetailsPage({
                     )}
 
                     {student.phoneNo && (
-                      <div className="inline-flex items-center gap-1.5 rounded-lg border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--surface)_70%,transparent)] px-2.5 py-1 font-medium text-(--muted)">
+                      <a
+                        href={`tel:${student.phoneNo.replace(/[^\d+]/g, "")}`}
+                        title="Call this number"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--surface)_70%,transparent)] px-2.5 py-1 font-medium text-(--muted) transition-colors hover:border-(--accent) hover:text-(--accent)"
+                      >
                         <Phone size={14} className="shrink-0" />
                         <span className="font-mono text-[11.5px]">
                           {student.phoneNo}
                         </span>
-                      </div>
+                      </a>
                     )}
+
+                    {isAdmin ? (
+                      <button
+                        type="button"
+                        onClick={() => setEditingContact(true)}
+                        aria-haspopup="dialog"
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--surface)_70%,transparent)] px-2.5 py-1 font-medium text-(--muted) transition-colors hover:border-(--accent) hover:text-(--accent)"
+                      >
+                        <PencilSimple size={14} className="shrink-0" />
+                        <span>Edit contact</span>
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -294,9 +323,9 @@ export function StudentDetailsPage({
                     View progress
                   </button>
                 ) : null}
-                {student.socials?.githubUrl && (
+                {githubUrl && (
                   <a
-                    href={student.socials.githubUrl}
+                    href={githubUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex h-9 w-9 items-center justify-center rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-[color-mix(in_srgb,var(--surface)_75%,transparent)] text-(--muted) hover:text-(--accent) hover:border-(--accent) transition-colors"
@@ -305,9 +334,9 @@ export function StudentDetailsPage({
                     <GithubLogo size={18} weight="duotone" />
                   </a>
                 )}
-                {student.socials?.linkedinUrl && (
+                {linkedinUrl && (
                   <a
-                    href={student.socials.linkedinUrl}
+                    href={linkedinUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex h-9 w-9 items-center justify-center rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-[color-mix(in_srgb,var(--surface)_75%,transparent)] text-(--muted) hover:text-(--accent) hover:border-(--accent) transition-colors"
@@ -316,9 +345,9 @@ export function StudentDetailsPage({
                     <LinkedinLogo size={18} weight="duotone" />
                   </a>
                 )}
-                {student.socials?.websiteUrl && (
+                {websiteUrl && (
                   <a
-                    href={student.socials.websiteUrl}
+                    href={websiteUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex h-9 w-9 items-center justify-center rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-[color-mix(in_srgb,var(--surface)_75%,transparent)] text-(--muted) hover:text-(--accent) hover:border-(--accent) transition-colors"
@@ -510,6 +539,19 @@ export function StudentDetailsPage({
           onClose={() => setAccessChange(null)}
           setNotice={setNotice}
         />
+      ) : null}
+
+      {editingContact && student ? (
+        <Suspense fallback={null}>
+          <StudentContactModal
+            username={student.username}
+            studentName={student.displayName || `@${student.username}`}
+            email={student.email ?? null}
+            phoneNo={student.phoneNo ?? null}
+            onClose={() => setEditingContact(false)}
+            setNotice={setNotice}
+          />
+        </Suspense>
       ) : null}
     </div>
   );

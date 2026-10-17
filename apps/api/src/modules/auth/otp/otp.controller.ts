@@ -29,13 +29,16 @@ export function createOtpController(context: AuthContext) {
 
   async function sendPhoneVerification(
     request: FastifyRequest<{ Body: PhoneVerificationSendRequest }>,
-  ): Promise<{ message: string }> {
+  ): Promise<OtpSendResponse> {
     await authService.sendPhoneVerificationOtp(
       request.user!.id,
       request.body.phoneNo,
       request.ip,
     );
-    return { message: "Mobile verification OTP sent successfully." };
+    return {
+      message: "Mobile verification OTP sent successfully.",
+      codeExpiresInSeconds: config.OTP_TTL_MINUTES * 60,
+    };
   }
 
   async function sendEmailVerification(

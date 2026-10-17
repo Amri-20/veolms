@@ -1,4 +1,5 @@
 import type {
+  StudentContactUpdateRequest,
   StudentListQuery,
   StudentUsernameParams,
 } from "@veolms/contracts";
@@ -10,7 +11,7 @@ export interface StudentsControllerOptions {
   service: StudentsService;
 }
 
-// Both routes run behind requireRoles, so the user is always present here.
+// Every route runs behind requireRoles, so the user is always present here.
 const requireActor = (request: FastifyRequest) => {
   const user = request.user as NonNullable<FastifyRequest["user"]>;
   return { id: user.id, roles: user.roles };
@@ -36,9 +37,24 @@ export function createStudentsController({
     );
   }
 
+  async function updateContact(
+    request: FastifyRequest<{
+      Params: StudentUsernameParams;
+      Body: StudentContactUpdateRequest;
+    }>,
+    _reply: FastifyReply,
+  ) {
+    return await service.updateStudentContact(
+      request.params.username,
+      request.body,
+      requireActor(request),
+    );
+  }
+
   return {
     list,
     getByUsername,
+    updateContact,
   };
 }
 

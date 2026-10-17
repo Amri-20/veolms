@@ -547,3 +547,36 @@ export async function assignRole(
     .values({ user_id: userId, role_id: roleId })
     .execute();
 }
+
+/**
+ * Replaces an account's email and/or phone number on an admin's behalf. A
+ * replaced channel is unverified and unpublished until its owner confirms it.
+ */
+export async function updateUserContact(
+  database: Executor,
+  userId: string,
+  changes: {
+    email?: string;
+    phoneNo?: string | null;
+  },
+) {
+  return database
+    .updateTable("users")
+    .set({
+      ...(changes.email !== undefined
+        ? { email: changes.email, email_verified_at: null, email_public: false }
+        : {}),
+      ...(changes.phoneNo !== undefined
+        ? {
+            phone_no: changes.phoneNo,
+            phone_verified_at: null,
+            mobile_public: false,
+          }
+        : {}),
+      updated_at: new Date(),
+    })
+    .where("id", "=", userId)
+    .where("is_deleted", "=", false)
+    .returning(["email", "phone_no"])
+    .executeTakeFirst();
+}

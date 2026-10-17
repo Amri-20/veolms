@@ -8,6 +8,7 @@ import { UserIcon as User } from "@phosphor-icons/react/User";
 import { lazy, Suspense, useEffect, useState } from "react";
 import type { PublicProfileResponse } from "@veolms/contracts";
 import { PageHeading } from "../components/PageHeading";
+import { safeExternalUrl } from "../lib/external-url";
 import { PublicProfileCard } from "../components/PublicProfileCard";
 import { ResponsiveAvatar } from "../components/ResponsiveAvatar";
 import { NOT_FOUND_SECTION } from "../routing/routeDescriptors";
@@ -26,18 +27,6 @@ const NotFoundPage = lazy(() =>
 interface PublicProfilePageProps {
   username?: string;
   onNavigateBack?: () => void;
-}
-
-function safeExternalUrl(value: string | null) {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:"
-      ? url.href
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 function PublicProfileAvatar({ profile }: { profile: PublicProfileResponse }) {

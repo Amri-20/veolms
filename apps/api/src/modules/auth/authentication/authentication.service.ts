@@ -771,6 +771,101 @@ export function createAuthService({
     forgetCachedAccount(userId);
   }
 
+  /**
+   * An admin replaces a learner's email or phone number, or removes the
+   * number (the email is required). Only what changed is written, and a
+   * changed channel is saved unverified: the learner confirms it by code,
+   * as when they change it themselves. The caller checks the admin role.
+   */
+  async function updateContactAsAdmin(
+    userId: string,
+    input: { email: string; phoneNo: string | null },
+  ): Promise<{ email: string; phoneNo: string | null }> {
+    const currentUser = await userRepository.findUserById(database, userId);
+    if (!currentUser || currentUser.is_deleted) {
+      throw new AppError(404, "USER_NOT_FOUND", "User account was not found.");
+    }
+
+    const email = input.email.trim().toLowerCase();
+    const phoneNo = input.phoneNo?.trim()
+      ? normalizePhoneIdentifier(input.phoneNo)
+      : null;
+    if (phoneNo !== null && phoneNo.length < 8) {
+      throw new AppError(
+        400,
+        "INVALID_PHONE_NUMBER",
+        "Enter a valid mobile number.",
+      );
+    }
+
+    const emailChanged = email !== currentUser.email;
+    const phoneChanged = phoneNo !== currentUser.phone_no;
+    if (!emailChanged && !phoneChanged) return { email, phoneNo };
+
+    // Deactivated accounts keep their email and number (both are unique
+    // columns), so they count as taken too.
+    if (emailChanged) {
+      const owner = await userRepository.findUserStatusByIdentifier(
+        database,
+        email,
+        "email",
+      );
+      if (owner && owner.id !== userId) {
+        throw new AppError(
+          409,
+          "EMAIL_TAKEN",
+          "This email is already used by another account.",
+        );
+      }
+    }
+    if (phoneChanged && phoneNo !== null) {
+      const owner = await userRepository.findUserStatusByIdentifier(
+        database,
+        phoneNo,
+        "phone",
+      );
+      if (owner && owner.id !== userId) {
+        throw new AppError(
+          409,
+          "PHONE_TAKEN",
+          "This phone number is already used by another account.",
+        );
+      }
+    }
+
+    let updated;
+    try {
+      updated = await userRepository.updateUserContact(database, userId, {
+        ...(emailChanged ? { email } : {}),
+        ...(phoneChanged ? { phoneNo } : {}),
+      });
+    } catch (error) {
+      // Another account took the email or number between the check above
+      // and this write.
+      const constraint =
+        (error as { code?: unknown; constraint?: unknown }).code === "23505"
+          ? String((error as { constraint?: unknown }).constraint ?? "")
+          : null;
+      if (constraint === null) throw error;
+      throw constraint.includes("phone")
+        ? new AppError(
+            409,
+            "PHONE_TAKEN",
+            "This phone number is already used by another account.",
+          )
+        : new AppError(
+            409,
+            "EMAIL_TAKEN",
+            "This email is already used by another account.",
+          );
+    }
+    if (!updated) {
+      throw new AppError(404, "USER_NOT_FOUND", "User account was not found.");
+    }
+    forgetCachedAccount(userId);
+    return { email: updated.email ?? email, phoneNo: updated.phone_no };
+  }
+
   async function deactivateAccount(userId: string): Promise<void> {
     if (!sessionService) {
       throw new AppError(
@@ -1665,6 +1760,7 @@ export function createAuthService({
     generateUniqueUsername,
     createUser,
     requireUser,
+    updateContactAsAdmin,
     deactivateAccount,
   };
 }

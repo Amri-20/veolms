@@ -41,7 +41,7 @@ export const otpVerifyRequestSchema = z
 // is what first-admin setup and the code service accept, and what the
 // responses allow for a stored number; capped at 15 here, a 15-digit number
 // entered at setup could never be confirmed from the profile.
-const phoneNumberSchema = z
+export const phoneNumberSchema = z
   .string()
   .trim()
   .min(8, "Phone number is too short")

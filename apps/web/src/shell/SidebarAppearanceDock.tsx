@@ -36,8 +36,6 @@ export interface SidebarAppearanceDockProps {
   appearanceControlsRef: RefObject<HTMLDivElement | null>;
   appearanceControlsHorizontal: boolean;
   sidebarPreferences: SidebarPreferences;
-  readingModeDockIndex: number;
-  paletteMenuDockIndex: number;
   sidebarDockItems: SidebarDockItem[];
   appearanceModeTriggerRef: RefObject<HTMLButtonElement | null>;
   paletteMenu: boolean;
@@ -121,8 +119,6 @@ export function SidebarAppearanceDock({
   appearanceControlsRef,
   appearanceControlsHorizontal,
   sidebarPreferences,
-  readingModeDockIndex,
-  paletteMenuDockIndex,
   sidebarDockItems,
   appearanceModeTriggerRef,
   paletteMenu,
@@ -189,15 +185,6 @@ export function SidebarAppearanceDock({
             "Reading mode",
             sidebarPreferences,
           ),
-          "--reading-mode-dock-index": Math.max(
-            0,
-            readingModeDockIndex,
-          ),
-          "--palette-menu-dock-index": Math.max(
-            0,
-            paletteMenuDockIndex,
-          ),
-          "--sidebar-dock-count": sidebarDockItems.length,
         } as CSSProperties
       }
     >

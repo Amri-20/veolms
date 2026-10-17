@@ -38,6 +38,40 @@ type UserExpressionBuilder = ExpressionBuilder<
 >;
 
 /**
+ * The students search: name, username or email contain the text (a leading
+ * "@" is dropped). With `includePhone` a search made only of phone
+ * characters also matches the phone number by its digits, so "+91 98765
+ * 43210" and "9876543210" both find "+919876543210".
+ */
+function studentSearchCondition(
+  search: string,
+  { includePhone }: { includePhone: boolean },
+) {
+  const cleanSearch = search.replace(/^@+/, "").trim();
+  if (!cleanSearch) return null;
+  // "%", "_" and "\\" in the search are matched as typed.
+  const term = `%${escapeLikePattern(cleanSearch)}%`;
+  const phoneDigits = /^[+\d\s().-]+$/.test(cleanSearch)
+    ? cleanSearch.replace(/\D/g, "")
+    : "";
+  return (eb: UserExpressionBuilder) =>
+    eb.or([
+      eb("u.display_name", "ilike", term),
+      eb("u.username", "ilike", term),
+      eb("u.email", "ilike", term),
+      ...(includePhone && phoneDigits.length >= 3
+        ? [
+            eb(
+              sql<string>`regexp_replace(u.phone_no, '[^0-9]', '', 'g')`,
+              "like",
+              `%${phoneDigits}%`,
+            ),
+          ]
+        : []),
+    ]);
+}
+
+/**
  * Ids of the non-deleted courses a creator owns. Every query below takes an
  * optional `creatorId`: when set (a non-admin caller) the student
  * population, the filters, the sort keys and the per-student aggregates all
@@ -102,6 +136,8 @@ export interface ListStudentsOptions {
   sortBy?: "recent" | "name" | "courses" | "progress";
   /** Restrict to learners of this creator's courses (non-admin callers). */
   creatorId?: string;
+  /** Also match the search against phone numbers (admins only). */
+  searchPhone?: boolean;
 }
 
 export interface StudentCountOptions {
@@ -110,6 +146,8 @@ export interface StudentCountOptions {
   status?: "all" | "active" | "completed" | "inactive";
   /** Restrict to learners of this creator's courses (non-admin callers). */
   creatorId?: string;
+  /** Also match the search against phone numbers (admins only). */
+  searchPhone?: boolean;
 }
 
 export type StudentListSort = NonNullable<ListStudentsOptions["sortBy"]>;
@@ -220,6 +258,7 @@ export async function listStudentsPaginated(
       "u.username",
       "u.display_name",
       "u.email",
+      "u.phone_no",
       "u.avatar_data_url",
       "u.created_at",
     ])
@@ -237,18 +276,10 @@ export async function listStudentsPaginated(
   }
 
   if (options.search) {
-    const cleanSearch = options.search.replace(/^@+/, "").trim();
-    if (cleanSearch) {
-      // "%", "_" and "\" in the search are matched as typed.
-      const term = `%${escapeLikePattern(cleanSearch)}%`;
-      query = query.where((eb) =>
-        eb.or([
-          eb("u.display_name", "ilike", term),
-          eb("u.username", "ilike", term),
-          eb("u.email", "ilike", term),
-        ]),
-      );
-    }
+    const search = studentSearchCondition(options.search, {
+      includePhone: options.searchPhone === true,
+    });
+    if (search) query = query.where(search);
   }
 
   if (options.courseId) {
@@ -351,18 +382,10 @@ export async function countTotalStudents(
   }
 
   if (options.search) {
-    const cleanSearch = options.search.replace(/^@+/, "").trim();
-    if (cleanSearch) {
-      // "%", "_" and "\" in the search are matched as typed.
-      const term = `%${escapeLikePattern(cleanSearch)}%`;
-      query = query.where((eb) =>
-        eb.or([
-          eb("u.display_name", "ilike", term),
-          eb("u.username", "ilike", term),
-          eb("u.email", "ilike", term),
-        ]),
-      );
-    }
+    const search = studentSearchCondition(options.search, {
+      includePhone: options.searchPhone === true,
+    });
+    if (search) query = query.where(search);
   }
 
   const courseIds = toIdList(options.courseId);
