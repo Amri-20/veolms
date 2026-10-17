@@ -8,7 +8,9 @@ import type {
 
 const loadVideoPlaybackSchemas = () =>
   import("@veolms/contracts/video-playback");
+import { getOfflineDataProvider } from "@veolms/web-core";
 import { endSessionIfUnauthorized, getApiBaseUrl } from "../lib/api-client";
+import { isNetworkFailure } from "../lib/offline-data";
 import { authStore } from "../store/auth.store";
 
 const API_BASE_URL = getApiBaseUrl();
@@ -177,12 +179,23 @@ async function requestBootstrap(
   options: VideoPlaybackBootstrapRequest,
 ): Promise<VideoPlaybackBootstrap> {
   const path = playbackPath(options, "playback-bootstrap");
-  const response = await fetch(resolveVideoPlaybackApiUrl(path), {
-    method: "GET",
-    credentials: "include",
-    headers: { Accept: "application/json" },
-    signal: options.signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(resolveVideoPlaybackApiUrl(path), {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+      signal: options.signal,
+    });
+  } catch (error) {
+    // No network: a plugin that keeps downloads may have this lesson.
+    if (options.signal?.aborted || !isNetworkFailure(error)) throw error;
+    const kept = await getOfflineDataProvider()
+      ?.playbackBootstrap(options.courseSlug, options.lessonNumber)
+      .catch(() => null);
+    if (!kept) throw error;
+    return await parseBootstrap(kept);
+  }
   const payload = await readResponsePayload(response);
   const data = unwrapResponseData(payload);
 
@@ -195,6 +208,10 @@ async function requestBootstrap(
     );
   }
 
+  return await parseBootstrap(data);
+}
+
+async function parseBootstrap(data: unknown): Promise<VideoPlaybackBootstrap> {
   const { videoPlaybackBootstrapSchema } = await loadVideoPlaybackSchemas();
   const parsed = videoPlaybackBootstrapSchema.safeParse(data);
   if (!parsed.success) {

@@ -50,6 +50,33 @@ export interface ProfileMenuLinkContribution {
   roles?: readonly string[];
 }
 
+/**
+ * A page a plugin shows inside the academy shell (see `shellRoutes` on
+ * `WebExtension`). The shell uses this for its title and description.
+ */
+export interface ShellPageContribution {
+  /** The route id the page's route was declared with. */
+  routeId: string;
+  title: string;
+  description: string;
+}
+
+/**
+ * Data a plugin can give core when the network is unreachable, so pages
+ * work offline for what the plugin kept (for example downloaded lessons).
+ * Each method returns the same data the API endpoint would, or `null`
+ * when it has nothing; core asks only after a request failed for lack of a
+ * network, never instead of the API.
+ */
+export interface OfflineDataProvider {
+  /** `GET /auth/me` */
+  currentUser(): Promise<unknown>;
+  /** `GET /courses/:idOrSlug/overview` */
+  courseOverview(idOrSlug: string): Promise<unknown>;
+  /** `GET /courses/:courseSlug/lessons/:lessonNumber/playback-bootstrap` */
+  playbackBootstrap(courseSlug: string, lessonNumber: number): Promise<unknown>;
+}
+
 export interface WebContributions {
   lessonCardActions: readonly LessonCardActionContribution[];
   profileMenuLinks: readonly ProfileMenuLinkContribution[];
@@ -60,6 +87,8 @@ type Listener = () => void;
 interface ContributionStore {
   snapshot: WebContributions;
   listeners: Set<Listener>;
+  shellPages?: Map<string, ShellPageContribution>;
+  offlineData?: OfflineDataProvider | null;
 }
 
 // One store per page, shared even when the module is bundled twice (core
@@ -135,4 +164,37 @@ export function subscribeWebContributions(listener: Listener): () => void {
   const { listeners } = getStore();
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+/** Registers the title of a plugin page shown inside the shell. */
+export function registerShellPage(page: ShellPageContribution): () => void {
+  const store = getStore();
+  store.shellPages ??= new Map();
+  store.shellPages.set(page.routeId, page);
+  return () => {
+    if (store.shellPages?.get(page.routeId) === page) {
+      store.shellPages.delete(page.routeId);
+    }
+  };
+}
+
+export function getShellPage(
+  routeId: string,
+): ShellPageContribution | undefined {
+  return getStore().shellPages?.get(routeId);
+}
+
+/** Sets the provider core asks for data when offline (one at a time). */
+export function registerOfflineDataProvider(
+  provider: OfflineDataProvider,
+): () => void {
+  const store = getStore();
+  store.offlineData = provider;
+  return () => {
+    if (store.offlineData === provider) store.offlineData = null;
+  };
+}
+
+export function getOfflineDataProvider(): OfflineDataProvider | null {
+  return getStore().offlineData ?? null;
 }

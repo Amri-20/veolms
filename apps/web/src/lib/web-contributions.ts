@@ -1,9 +1,18 @@
 import { useSyncExternalStore } from "react";
 import {
+  getShellPage,
   getWebContributions,
   subscribeWebContributions,
+  type ShellPageContribution,
   type WebContributions,
 } from "@veolms/web-core";
+
+/** A plugin page shown inside the shell, by its route id. */
+export function getShellPageContribution(
+  routeId: string,
+): ShellPageContribution | undefined {
+  return getShellPage(routeId);
+}
 
 /**
  * UI pieces plugins have added to core screens (see `contributions.ts` in

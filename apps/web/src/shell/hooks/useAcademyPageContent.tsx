@@ -10,6 +10,7 @@ import type {
   UseQueryResult,
 } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { Outlet } from "react-router";
 import type { GuestHomePageResponse, CourseSummary } from "@veolms/contracts";
 import { CircleNotchIcon as CircleNotch } from "@phosphor-icons/react/CircleNotch";
 import { CenteredLoadingSpinner } from "../../components/LoadingSpinner";
@@ -738,6 +739,10 @@ export function useAcademyPageContent({
           />
         </Suspense>
       );
+    }
+    if (surfacePage === "extension") {
+      // A plugin page: the matched child route of the academy layout.
+      return <Outlet />;
     }
     if (surfacePage === "placeholder") {
       return (
