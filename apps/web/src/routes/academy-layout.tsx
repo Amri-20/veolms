@@ -633,6 +633,23 @@ export default function AcademyLayout() {
     };
   }, []);
 
+  // The address a route change was asked for is recorded before it arrives,
+  // so a second request made meanwhile compares against it. A change can be
+  // cancelled on the way (a Back or another navigation took over); the page
+  // then stays where it was, and the recorded address must follow it, or
+  // every later request for the same page would look like "already there"
+  // and do nothing.
+  const followNavigation = useCallback(
+    (path: string, navigation: void | Promise<void>) => {
+      void Promise.resolve(navigation).then(() => {
+        if (locationPathRef.current !== path) return;
+        const { pathname, search, hash } = window.location;
+        locationPathRef.current = `${pathname}${search}${hash}`;
+      });
+    },
+    [],
+  );
+
   const navigateTo: NavigateTo = useCallback(
     (destination, options) => {
       const requestedPath = options?.exact
@@ -859,11 +876,14 @@ export default function AcademyLayout() {
         // Update synchronously so a second shortcut pressed before React's
         // route render still compares against the destination just requested.
         locationPathRef.current = path;
-        void navigate(path, {
-          preventScrollReset: true,
-          replace: options?.replace,
-          state: navigationState,
-        });
+        followNavigation(
+          path,
+          navigate(path, {
+            preventScrollReset: true,
+            replace: options?.replace,
+            state: navigationState,
+          }),
+        );
       };
 
       void autosyncManager.flushAll().then(performNavigation);
@@ -872,6 +892,7 @@ export default function AcademyLayout() {
       activeUser,
       authUserError,
       authUserFetched,
+      followNavigation,
       location.state,
       navigate,
       route.section,
@@ -917,8 +938,13 @@ export default function AcademyLayout() {
     locationPathRef.current = destination.path;
     void autosyncManager
       .flushAll()
-      .then(() => navigate(destination.path, { preventScrollReset: true }));
-  }, [navigate]);
+      .then(() =>
+        followNavigation(
+          destination.path,
+          navigate(destination.path, { preventScrollReset: true }),
+        ),
+      );
+  }, [followNavigation, navigate]);
 
   useEffect(() => {
     const navigateByNumber = (event: KeyboardEvent) => {
