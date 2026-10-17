@@ -140,6 +140,7 @@ import {
   normalizeNavigationPath,
 } from "../routing/routeDescriptors";
 import { useCourseOverviewDocumentTitle } from "../routing/useCourseDocumentTitle";
+import { showLoginDialogAhead } from "../store/loginDialogIntent";
 
 export const links: Route.LinksFunction = () => [
   { rel: "stylesheet", href: academyShellStylesheet },
@@ -684,13 +685,24 @@ export default function AcademyLayout() {
       if (requestedPathname === LOGIN_PATH) {
         const loginSearch = requestedPath.split("#", 1)[0]?.split("?")[1] ?? "";
         const loginReturnTo = new URLSearchParams(loginSearch).get("returnTo");
-        void navigate(
-          buildLoginDialogPath(
-            loginReturnTo,
-            locationPathRef.current,
-            readLoginPurpose(loginSearch),
-          ),
+        const purpose = readLoginPurpose(loginSearch);
+        const dialogPath = buildLoginDialogPath(
+          loginReturnTo,
+          locationPathRef.current,
+          purpose,
         );
+        // Over the page already shown: the pop-up goes up first and the
+        // address follows once it has painted (see loginDialogIntent).
+        // A purpose changes the pop-up's words, which it reads from the
+        // address, so that one waits for the address.
+        const overCurrentPage =
+          normalizeNavigationPath(dialogPath.split(/[?#]/, 1)[0] || "/") ===
+          normalizeNavigationPath(window.location.pathname);
+        if (overCurrentPage && !purpose) {
+          showLoginDialogAhead(dialogPath, () => void navigate(dialogPath));
+          return;
+        }
+        void navigate(dialogPath);
         return;
       }
 

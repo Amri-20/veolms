@@ -19,6 +19,11 @@ import { DEFAULT_DEBOUNCE_DELAY_MS, useDebounce } from "./hooks/useDebounce";
 import { useBackDismiss } from "./navigation/useBackDismiss";
 
 const THEMED_SELECT_MENU_MAX_WIDTH = 300;
+/**
+ * A pop-up the select is in: an open modal dialog, or one opened as a
+ * popover with this mark (the login card, see auth/authCardDialogOpening).
+ */
+const OPEN_DIALOG_SELECTOR = "dialog[open], dialog[data-dialog-open]";
 
 export interface ThemedSelectOptionExtra {
   readonly flag?: ReactNode;
@@ -263,7 +268,7 @@ export function ThemedSelect<Value extends string>({
     // is kept on screen.
     // In a pop-up the list starts where the control starts instead, so it
     // stays over the pop-up rather than hanging off its side.
-    const inDialog = Boolean(trigger.closest("dialog[open]"));
+    const inDialog = Boolean(trigger.closest(OPEN_DIALOG_SELECTOR));
     const left = inDialog
       ? Math.max(
           viewportPadding,
@@ -295,7 +300,8 @@ export function ThemedSelect<Value extends string>({
     const pos = calculatePosition();
     setPosition(pos);
     setDialogHost(
-      triggerRef.current?.closest<HTMLDialogElement>("dialog[open]") ?? null,
+      triggerRef.current?.closest<HTMLDialogElement>(OPEN_DIALOG_SELECTOR) ??
+        null,
     );
     setOpen(true);
     requestAnimationFrame(() => {

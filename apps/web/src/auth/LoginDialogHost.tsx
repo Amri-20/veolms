@@ -8,6 +8,10 @@ import {
 import { loginDialogBody } from "../routing/prerenderedBodies";
 import { removeLoginDialogSnapshot } from "./loginDialogSnapshot";
 import { useSessionAccess } from "../routing/RouteGuards";
+import {
+  clearLoginDialogIntent,
+  useLoginDialogIntent,
+} from "../store/loginDialogIntent";
 
 // The login card and its styles load only when someone asks to log in. Once
 // they have loaded the pop-up renders at once, where a bare `lazy()` would
@@ -38,19 +42,36 @@ export function LoginDialogHost() {
     () => false,
   );
 
-  const params = new URLSearchParams(location.search);
+  // A tap on Login shows the pop-up a moment before the address carries it
+  // (see loginDialogIntent); meanwhile the address it is heading for counts.
+  const intent = useLoginDialogIntent();
+  const addressAsks = new URLSearchParams(location.search).has(
+    LOGIN_DIALOG_PARAM,
+  );
+  const search =
+    intent && !addressAsks
+      ? (intent.split("#", 1)[0]?.split("?")[1] ?? "")
+      : location.search;
+  const params = new URLSearchParams(search);
   const requested = params.has(LOGIN_DIALOG_PARAM);
   const pagePath = `${location.pathname}${stripLoginDialogParams(location.search)}${location.hash}`;
+
+  // Once the address carries the pop-up, or the page changes, it rules.
+  useEffect(() => {
+    if (addressAsks) clearLoginDialogIntent();
+  }, [addressAsks]);
+  useEffect(() => clearLoginDialogIntent, [location.pathname]);
   const destination = sanitizeReturnTo(params.get("returnTo")) ?? pagePath;
 
-  const close = useCallback(
-    () => void navigate(pagePath, { replace: true }),
-    [navigate, pagePath],
-  );
-  const finish = useCallback(
-    () => void navigate(destination, { replace: true }),
-    [destination, navigate],
-  );
+  const close = useCallback(() => {
+    clearLoginDialogIntent();
+    // Closed before the address caught up: there is nothing to take back.
+    if (addressAsks) void navigate(pagePath, { replace: true });
+  }, [addressAsks, navigate, pagePath]);
+  const finish = useCallback(() => {
+    clearLoginDialogIntent();
+    void navigate(destination, { replace: true });
+  }, [destination, navigate]);
 
   // Also covers arriving on a login link while already signed in.
   useEffect(() => {

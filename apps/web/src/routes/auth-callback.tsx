@@ -6,11 +6,9 @@ import { AUTH_CARD_HEADING_ID } from "../auth/authFlow";
 import { getAuthRouteMeta, productName } from "../routing/routeDescriptors";
 import { resolvePostAuthPath } from "../auth/postAuthNavigation";
 import {
-  OAUTH_PROVIDER_STORAGE_KEY,
-  OAUTH_RETURN_TO_STORAGE_KEY,
   clearOauthHandoff,
-  isOauthProvider,
   isReturningToOauthDialog,
+  readOauthHandoff,
 } from "../auth/oauthFlow";
 import { rememberGoogleSignIn } from "../auth/lastGoogleAccount";
 import { useOauthLogin } from "../services/auth";
@@ -80,15 +78,16 @@ export default function AuthCallbackRoute() {
       }
 
       const redirectUri = `${window.location.origin}/auth/callback`;
-      const storedProvider = sessionStorage.getItem(OAUTH_PROVIDER_STORAGE_KEY);
-      if (!isOauthProvider(storedProvider)) {
+      // Usually this tab's own; in an installed app that Chrome handed the
+      // provider's answer to, the copy the sign-in's tab shared.
+      const { provider: storedProvider, returnTo } = readOauthHandoff();
+      if (!storedProvider) {
         clearOauthHandoff();
         setErrorMessage(
           "We could not identify the OAuth provider. Please restart sign-in.",
         );
         return;
       }
-      const returnTo = sessionStorage.getItem(OAUTH_RETURN_TO_STORAGE_KEY);
 
       // OAuth login is also the account-provisioning path. The API creates a
       // missing account or links an existing email account before returning the

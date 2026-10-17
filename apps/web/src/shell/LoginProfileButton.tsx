@@ -2,13 +2,22 @@ import { CaretDownIcon as CaretDown } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon as CaretRight } from "@phosphor-icons/react/CaretRight";
 import { GuestProfileIcon } from "../icons/GuestProfileIcon";
 import { ShellProfileAvatar } from "./ShellProfileAvatar";
+import { useEffect } from "react";
+import { loginDialogBody } from "../routing/prerenderedBodies";
 import type { AuthIdentityHint } from "../store/auth.store";
+
+// The login pop-up's code (and the Google Sans its Google button uses)
+// loads only when asked for; fetched on the tap, the first pop-up opened
+// 600-700 ms late on a phone. It is fetched as soon as a finger or pointer
+// reaches the button, or when the button is shown (`preloadWhenShown`).
+const preloadLoginDialog = () => void loginDialogBody.preload();
 
 export function LoginProfileButton({
   className,
   arrowSize,
   onLogin,
   remembered,
+  preloadWhenShown = false,
 }: {
   className: string;
   arrowSize: number;
@@ -19,7 +28,15 @@ export function LoginProfileButton({
    * signed-in one.
    */
   remembered?: AuthIdentityHint | null;
+  /**
+   * Fetch the login pop-up as soon as the button is shown: in the phone
+   * sheet, opened by a visitor who is about to tap it.
+   */
+  preloadWhenShown?: boolean;
 }) {
+  useEffect(() => {
+    if (preloadWhenShown) preloadLoginDialog();
+  }, [preloadWhenShown]);
   const displayName = remembered?.displayName;
   const handle = remembered?.username
     ? remembered.username.startsWith("@")
@@ -37,6 +54,8 @@ export function LoginProfileButton({
       }
       data-auth-identity-button=""
       onClick={onLogin}
+      onPointerDown={preloadLoginDialog}
+      onPointerEnter={preloadLoginDialog}
     >
       {/* The box is as large as the profile picture's frame, so the name
           beside it does not move when the picture replaces the icon. The

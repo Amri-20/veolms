@@ -572,6 +572,7 @@ export function CoursesPage({
 
   const { settingsWarmed } = useShellWarmUpEffects({
     compactNavigation,
+    isGuest: !isAuthenticated && !accountStatusUnknown,
     mobileMenuOpen,
     mobileNavigationSheetMounted,
     setMobileNavigationSheetMounted,
@@ -1513,7 +1514,6 @@ export function CoursesPage({
                   dismissProfileMenuThen={dismissProfileMenuThen}
                   dismissMobileMenuThen={dismissMobileMenuThen}
                   onNavigatePage={onNavigatePage}
-                  closeMobileMenu={closeMobileMenu}
                   setLogoutConfirmOpen={setLogoutConfirmOpen}
                 />
                 <MobileSheetAppearance

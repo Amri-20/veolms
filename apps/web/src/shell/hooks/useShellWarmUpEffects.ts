@@ -1,6 +1,7 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { SETTINGS_ROUTE_STYLESHEETS } from "../../routes/settingsRouteStylesheets";
 import {
+  loginDialogBody,
   settingsPageBody,
   workspacePageBody,
 } from "../../routing/prerenderedBodies";
@@ -13,6 +14,8 @@ import { SETTINGS_ENTRY_SELECTOR } from "../academyShellConstants";
 
 export interface UseShellWarmUpEffectsArgs {
   compactNavigation: boolean;
+  /** Known to be signed out (not while the session is still being checked). */
+  isGuest: boolean;
   mobileMenuOpen: boolean;
   mobileNavigationSheetMounted: boolean;
   setMobileNavigationSheetMounted: Dispatch<SetStateAction<boolean>>;
@@ -24,6 +27,7 @@ export interface UseShellWarmUpEffectsResult {
 
 export function useShellWarmUpEffects({
   compactNavigation,
+  isGuest,
   mobileMenuOpen,
   mobileNavigationSheetMounted,
   setMobileNavigationSheetMounted,
@@ -96,6 +100,25 @@ export function useShellWarmUpEffects({
     }
     return stop;
   }, []);
+
+  useEffect(() => {
+    if (!isGuest) return undefined;
+    // Logging in is what a visitor is most likely to do next: the login
+    // pop-up's code and the Google Sans its Google button uses are fetched
+    // once the page is idle, so the first tap on Login opens it at once.
+    // (The Login button also fetches it when shown or touched.)
+    const saveData =
+      (navigator as Navigator & { connection?: { saveData?: boolean } })
+        .connection?.saveData === true;
+    if (saveData) return undefined;
+    const warm = () => void loginDialogBody.preload().catch(() => undefined);
+    if (typeof window.requestIdleCallback === "function") {
+      const handle = window.requestIdleCallback(warm, { timeout: 2000 });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const handle = window.setTimeout(warm, 1000);
+    return () => window.clearTimeout(handle);
+  }, [isGuest]);
 
   useEffect(() => {
     // The catalogue module is behind a route-body lazy(); warm it once the

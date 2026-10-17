@@ -70,6 +70,7 @@ export function MobileSheetProfile({
           className="mobile-menu-sheet__profile courses-profile__button profile-menu__identity rounded-2xl! p-0! ps-2! pe-3! bg-[color-mix(in_srgb,var(--surface-strong)_94%,white_6%)]! hover:bg-[color-mix(in_srgb,var(--surface-strong)_90%,white_10%)]!"
           arrowSize={17}
           remembered={authUserFetched ? null : authIdentityHint}
+          preloadWhenShown
           onLogin={() => onNavigatePage("/login")}
         />
       )}
