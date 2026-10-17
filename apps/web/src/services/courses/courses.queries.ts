@@ -18,6 +18,7 @@ import type {
 import type { ApiError } from "../../lib/api-error";
 import { courseKeys } from "./courses.keys";
 import { coursesService } from "./courses.service";
+import { withOfflineFallback } from "../../lib/offline-data";
 
 export function useCourses(options?: {
   enabled?: boolean;
@@ -53,8 +54,14 @@ export function useCourseOverview(
     queryKey: idOrSlug
       ? courseKeys.overview(idOrSlug)
       : ["courses", "overview", null],
-    queryFn: () => coursesService.getOverview(idOrSlug!),
+    queryFn: () =>
+      withOfflineFallback(
+        () => coursesService.getOverview(idOrSlug!),
+        (offline) => offline.courseOverview(idOrSlug!),
+      ),
     enabled: Boolean(idOrSlug && (options?.enabled ?? true)),
+    // Offline, the course of a downloaded lesson comes from the download.
+    networkMode: "offlineFirst",
     initialData: options?.initialData,
     // Seeded data is the course as it was when the page was prerendered.
     // Dating it at zero has it checked against the API once after load, so

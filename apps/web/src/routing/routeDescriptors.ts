@@ -16,6 +16,7 @@ import {
   isCourseEditEditorPath,
 } from "../courses/courseEditorRouting";
 import { getCatalogueRouteIdFromPath } from "../courses/catalogueRoutes";
+import { getShellPageContribution } from "../lib/web-contributions";
 
 export const productName = "ProCodrr";
 
@@ -41,7 +42,9 @@ export type ShellPage =
   | "students"
   | "student-details"
   | "progress"
-  | "public-profile";
+  | "public-profile"
+  /** A plugin page (see `shellRoutes`); the route renders its content. */
+  | "extension";
 
 export interface ShellRouteDescriptor {
   kind: "shell";
@@ -661,8 +664,17 @@ export const getRouteDescriptor = (
       discussionTab: readDiscussionTab(),
     };
   }
-  return hasOwn(routeDescriptors, routeId)
-    ? routeDescriptors[routeId as StaticRouteId]
+  if (hasOwn(routeDescriptors, routeId)) {
+    return routeDescriptors[routeId as StaticRouteId];
+  }
+  const extensionPage = getShellPageContribution(routeId);
+  return extensionPage
+    ? {
+        kind: "shell",
+        page: "extension",
+        title: extensionPage.title,
+        description: extensionPage.description,
+      }
     : undefined;
 };
 

@@ -12,6 +12,7 @@ import type {
   UserAvatarListResponse,
 } from "@veolms/contracts";
 import type { ApiError } from "../../lib/api-error";
+import { withOfflineFallback } from "../../lib/offline-data";
 import { readSessionCache, writeSessionCache } from "../../lib/session-cache";
 import { authStore } from "../../store/auth.store";
 import { authKeys } from "./auth.keys";
@@ -23,7 +24,11 @@ export function currentUserQueryOptions(queryClient: QueryClient) {
     queryKey: authKeys.me(),
     queryFn: async (): Promise<CurrentUserResponse> => {
       const generation = authStore.getWriteGeneration();
-      const profile = await authService.getMe();
+      // Offline, a plugin that keeps downloads may know who was signed in.
+      const profile = await withOfflineFallback(
+        () => authService.getMe(),
+        (offline) => offline.currentUser(),
+      );
 
       if (generation !== authStore.getWriteGeneration()) {
         // A logout/login write happened while this request was in flight.
@@ -46,6 +51,9 @@ export function currentUserQueryOptions(queryClient: QueryClient) {
     },
     staleTime: 5 * 60 * 1000,
     retry: false,
+    // Run once even when the browser reports no network, so the offline
+    // fallback above can answer instead of the query waiting forever.
+    networkMode: "offlineFirst" as const,
   };
 }
 
