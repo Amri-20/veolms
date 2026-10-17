@@ -10,7 +10,11 @@ import {
 } from "react";
 import type { ToastMessage } from "../../ToastNotification";
 import type { CourseRole } from "../../courses/catalogue";
-import { useCurrentUser, useSignOut } from "../../services/auth";
+import {
+  onSignedOutHere,
+  useCurrentUser,
+  useSignOut,
+} from "../../services/auth";
 import {
   useAuthIdentityHint,
   useSessionPresentAtBoot,
@@ -227,6 +231,14 @@ export function useShellSession({
           )
         : getRoleNavigationItems(effectiveRole, isAdmin),
     [creatorViewExpected, effectiveRole, homeHint, isAdmin, isAuthenticated],
+  );
+  // Every sign-out confirmed in this tab, whichever screen started it.
+  useEffect(
+    () =>
+      onSignedOutHere(() =>
+        setNotice({ type: "success", message: "Logged out successfully." }),
+      ),
+    [setNotice],
   );
   const { isPending: isSigningOut, signOut } = useSignOut();
   const signOutAfterSync = useCallback(async () => {

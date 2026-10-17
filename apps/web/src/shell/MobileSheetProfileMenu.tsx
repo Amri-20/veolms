@@ -24,7 +24,6 @@ export interface MobileSheetProfileMenuProps {
   dismissProfileMenuThen: (afterDismiss: () => void) => void;
   dismissMobileMenuThen: (action: () => void) => void;
   onNavigatePage: NavigateTo;
-  closeMobileMenu: () => void;
   setLogoutConfirmOpen: Dispatch<SetStateAction<boolean>>;
 }
 
@@ -44,7 +43,6 @@ export function MobileSheetProfileMenu({
   dismissProfileMenuThen,
   dismissMobileMenuThen,
   onNavigatePage,
-  closeMobileMenu,
   setLogoutConfirmOpen,
 }: MobileSheetProfileMenuProps) {
   // prettier-ignore
@@ -108,8 +106,13 @@ export function MobileSheetProfileMenu({
               });
             }}
             onLogout={() => {
-              closeMobileMenu();
-              setLogoutConfirmOpen(true);
+              // Closing the sheet steps back in history. Opened at once, the
+              // question took that Back as its own and closed again (first
+              // tap did nothing on the phone), so it opens once the step lands.
+              setEdgeSidebarOpen(false);
+              dismissProfileMenuThen(() => {
+                dismissMobileMenuThen(() => setLogoutConfirmOpen(true));
+              });
             }}
           />
         </Suspense>

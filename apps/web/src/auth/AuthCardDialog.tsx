@@ -1,6 +1,7 @@
 import { XIcon as X } from "@phosphor-icons/react/X";
 import { useEffect, useRef, type ReactNode } from "react";
 import "./auth.css";
+import { canOpenAsPopover, openWithoutBlocking } from "./authCardDialogOpening";
 import {
   loginCardColumnClasses,
   loginCardCornerButtonClasses,
@@ -35,19 +36,30 @@ export function AuthCardDialog({
   // on the backdrop too; only a press that began there closes.
   const pressBeganOnBackdropRef = useRef(false);
   const onOpenedRef = useRef(onOpened);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return undefined;
-    if (!dialog.open) dialog.showModal();
-    onOpenedRef.current?.();
-    return () => dialog.close();
+    if (!canOpenAsPopover(dialog)) {
+      if (!dialog.open) dialog.showModal();
+      onOpenedRef.current?.();
+      return () => dialog.close();
+    }
+    return openWithoutBlocking(dialog, {
+      onOpened: () => onOpenedRef.current?.(),
+      onEscape: () => onCloseRef.current(),
+      onBackdropClick: () => onCloseRef.current(),
+    });
   }, []);
 
   return (
     <dialog
       ref={dialogRef}
       aria-labelledby={labelledBy}
+      aria-modal="true"
+      popover="manual"
       {...dataAttributes}
       // Escape asks to close; the owner decides.
       onCancel={(event) => {

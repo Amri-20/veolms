@@ -3,7 +3,7 @@ import { SignOutIcon as SignOut } from "@phosphor-icons/react/SignOut";
 import { ConfirmActionModal } from "./ConfirmActionModal";
 
 const LOGOUT_DESCRIPTION =
-  "This ends your session on this device. You can sign back in anytime to return to your courses and workspace.";
+  "You'll need to sign in again to get back to your courses.";
 
 export interface LogoutConfirmModalProps {
   isOpen: boolean;
@@ -30,7 +30,7 @@ export function LogoutConfirmModal({
       onConfirm={onConfirm}
       icon={SignOut}
       iconWeight="regular"
-      emphasis="cancel"
+      appearance="loginCard"
       closeOnConfirm
       title="Sign out?"
       description={
@@ -43,7 +43,7 @@ export function LogoutConfirmModal({
           LOGOUT_DESCRIPTION
         )
       }
-      cancelLabel="Stay signed in"
+      cancelLabel="Cancel"
       confirmLabel="Sign out"
       pendingLabel="Signing out…"
     />

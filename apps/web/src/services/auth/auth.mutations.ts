@@ -497,6 +497,20 @@ function isVisitorQuery(queryKey: readonly unknown[]): boolean {
 
 export type SignOutResult = "signed-out" | "still-signed-in";
 
+const signedOutListeners = new Set<() => void>();
+
+/**
+ * Calls `listener` each time a sign-out in this tab is confirmed, whichever
+ * screen started it (the shell's question, Settings or `/logout`), so the
+ * shell can tell the visitor. Returns the unsubscribe function.
+ */
+export function onSignedOutHere(listener: () => void): () => void {
+  signedOutListeners.add(listener);
+  return () => {
+    signedOutListeners.delete(listener);
+  };
+}
+
 /**
  * Signs out on screen at once and tells the server after: the page becomes
  * its signed-out version the moment the visitor confirms (a page that needs
@@ -556,6 +570,7 @@ export function useSignOut() {
     void queryClient.invalidateQueries({
       predicate: (query) => isVisitorQuery(query.queryKey),
     });
+    for (const listener of signedOutListeners) listener();
     return "signed-out";
   }, [queryClient]);
 

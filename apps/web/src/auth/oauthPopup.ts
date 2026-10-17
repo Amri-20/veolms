@@ -163,6 +163,12 @@ export function openOauthPopup(providerLabel: string): Window | null {
   try {
     const doc = popup.document;
     doc.title = `Continue with ${providerLabel}`;
+    // On a phone the window is a tab of its own, drawn at desktop width
+    // (tiny text) unless the blank document says it is a mobile page.
+    const viewport = doc.createElement("meta");
+    viewport.name = "viewport";
+    viewport.content = "width=device-width,initial-scale=1";
+    doc.head.appendChild(viewport);
     doc.body.style.cssText =
       "margin:0;display:grid;place-items:center;min-height:100vh;background:#12151a;color:#c9d1dc;font:15px system-ui,sans-serif";
     doc.body.textContent = `Opening ${providerLabel}…`;

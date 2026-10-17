@@ -150,6 +150,15 @@ export function LoginFieldError({
   );
 }
 
+/** The card's full-width buttons: the accent's fill, or the quieter surface. */
+export const loginButtonClasses = {
+  base: "inline-flex h-11.5 w-full items-center justify-center gap-2 rounded-[10px] px-4 text-[0.9375rem]! font-semibold! transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) disabled:cursor-progress",
+  primary:
+    "border-0 bg-(--accent) text-(--on-accent) hover:bg-(--accent-hover) disabled:opacity-70",
+  secondary:
+    "border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-[color-mix(in_srgb,var(--text)_5%,var(--surface))] text-(--text) hover:bg-[color-mix(in_srgb,var(--text)_9%,var(--surface))] disabled:opacity-70",
+};
+
 /**
  * The step's main button: the accent's fill, or, where another way in
  * leads (the remembered Google account), the quieter surface one. While it
@@ -181,10 +190,8 @@ export function LoginSubmitButton({
       <button
         aria-busy={busy}
         className={cn(
-          "inline-flex h-11.5 w-full items-center justify-center gap-2 rounded-[10px] px-4 text-[0.9375rem]! font-semibold! transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) disabled:cursor-progress",
-          tone === "primary"
-            ? "border-0 bg-(--accent) text-(--on-accent) hover:bg-(--accent-hover) disabled:opacity-70"
-            : "border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-[color-mix(in_srgb,var(--text)_5%,var(--surface))] text-(--text) hover:bg-[color-mix(in_srgb,var(--text)_9%,var(--surface))] disabled:opacity-70",
+          loginButtonClasses.base,
+          loginButtonClasses[tone],
           className,
         )}
         disabled={busy || disabled}
