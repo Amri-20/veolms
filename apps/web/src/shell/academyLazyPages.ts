@@ -179,9 +179,9 @@ export const PublicProfilePageRoute = lazy(() =>
     default: module.PublicProfilePage,
   })),
 );
-export const HomePageSettingsPage = lazy(() =>
-  import("../home-page-settings/HomePageSettingsPage").then((module) => ({
-    default: module.HomePageSettingsPage,
+export const PlatformPage = lazy(() =>
+  import("../platform/PlatformPage").then((module) => ({
+    default: module.PlatformPage,
   })),
 );
 export const CouponBuilderPage = lazy(() =>

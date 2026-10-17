@@ -2,10 +2,10 @@ import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { ChartBarIcon as ChartBar } from "@phosphor-icons/react/ChartBar";
 import { GearSixIcon as GearSix } from "@phosphor-icons/react/GearSix";
 import { HouseIcon as House } from "@phosphor-icons/react/House";
-import { LayoutIcon as Layout } from "@phosphor-icons/react/Layout";
 import { ToteIcon as Tote } from "@phosphor-icons/react/Tote";
 import { UsersIcon as Users } from "@phosphor-icons/react/Users";
 import { ChatCircleDotsIcon as ChatCircleDots } from "@phosphor-icons/react/ChatCircleDots";
+import { SlidersHorizontalIcon as SlidersHorizontal } from "@phosphor-icons/react/SlidersHorizontal";
 import { SquaresFourIcon as SquaresFour } from "@phosphor-icons/react/SquaresFour";
 import { TagIcon as Tag } from "@phosphor-icons/react/Tag";
 import type { Icon } from "@phosphor-icons/react";
@@ -89,7 +89,13 @@ const adminNavigation: readonly NavigationItem[] = [
     "/analytics",
   ),
   createNavigationItem("admin-coupons", "Coupons", Tag, "/coupons"),
-  createNavigationItem("admin-home-page", "Home Page", Layout, "/home-page"),
+  // Academy-wide settings, the home page among them.
+  createNavigationItem(
+    "admin-platform",
+    "Platform",
+    SlidersHorizontal,
+    "/platform",
+  ),
   createNavigationItem("creator-settings", "Settings", GearSix, "/settings"),
 ];
 
@@ -113,7 +119,7 @@ const navigationTones: Record<string, string> = {
   Dashboard: "#5da9ff",
   Courses: "#f472b6",
   Coupons: "#fbbf24",
-  "Home Page": "#38bdf8",
+  Platform: "#38bdf8",
   Students: "#2dd4bf",
   Reviews: "#f1be4b",
   "My Quiz": "#f87171",
@@ -152,6 +158,15 @@ export function getNavigationPreferenceStorageKey(
     : `veolms-navigation-${preference}-${role}`;
 }
 
+/**
+ * Menu items that took a new name, by their old one: a saved menu order keeps
+ * the item where its owner put it.
+ */
+const RENAMED_ITEMS: Readonly<Record<string, string>> = {
+  // The Home Page screen became the Platform page's first tab.
+  "Home Page": "Platform",
+};
+
 export function getInitialNavigationOrder(
   role: string,
   navigationItems: readonly NavigationItemWithMetadata[],
@@ -167,10 +182,14 @@ export function getInitialNavigationOrder(
       ) || "[]",
     );
     if (!Array.isArray(parsedOrder)) return defaultOrder;
-    const savedOrder = parsedOrder.filter(
-      (label): label is string =>
-        typeof label === "string" && defaultOrder.includes(label),
-    );
+    const savedOrder = parsedOrder
+      .map((label: unknown) =>
+        typeof label === "string" ? (RENAMED_ITEMS[label] ?? label) : label,
+      )
+      .filter(
+        (label): label is string =>
+          typeof label === "string" && defaultOrder.includes(label),
+      );
     const validSavedOrder = savedOrder.filter(
       (label, index) =>
         defaultOrder.includes(label) && savedOrder.indexOf(label) === index,

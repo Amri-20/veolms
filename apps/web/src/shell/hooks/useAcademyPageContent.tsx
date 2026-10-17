@@ -63,7 +63,7 @@ import {
   StudentDetailsPage,
   ProgressPage,
   PublicProfilePageRoute,
-  HomePageSettingsPage,
+  PlatformPage,
   CouponBuilderPage,
   CouponsAccessDenied,
 } from "../academyLazyPages";
@@ -72,6 +72,7 @@ import {
   AcademyPageFallback,
   DashboardOnItsWay,
 } from "../academyPageFallbacks";
+import { MovedPageRedirect } from "../MovedPageRedirect";
 import type { ThemePreference } from "../academyShellTypes";
 import { CourseCatalogueContent } from "../CourseCatalogueContent";
 import type { CourseOverviewResponse } from "@veolms/contracts";
@@ -101,6 +102,7 @@ export interface UseAcademyPageContentArgs {
   quizId: string | undefined;
   requestedSection: string | null;
   settingsTab: string;
+  platformTab: string | undefined;
   showPageBackButton: boolean;
   username: string | undefined;
   prepareCourseEditorEdit: (course: Course) => void;
@@ -197,6 +199,7 @@ export interface UseAcademyPageContentResult {
     surfacePage,
     surfaceSection,
     surfaceSettingsTab,
+    surfacePlatformTab,
     surfaceUsername,
   }?: {
     surfaceCourseSlug?: string;
@@ -204,6 +207,7 @@ export interface UseAcademyPageContentResult {
     surfacePage?: string;
     surfaceSection?: string | null;
     surfaceSettingsTab?: string;
+    surfacePlatformTab?: string;
     surfaceUsername?: string;
   }) => ReactNode;
 }
@@ -226,6 +230,7 @@ export function useAcademyPageContent({
   quizId,
   requestedSection,
   settingsTab,
+  platformTab,
   showPageBackButton,
   username,
   prepareCourseEditorEdit,
@@ -301,6 +306,7 @@ export function useAcademyPageContent({
     surfacePage = page,
     surfaceSection = requestedSection,
     surfaceSettingsTab = settingsTab,
+    surfacePlatformTab = platformTab,
     surfaceUsername = username,
   }: {
     surfaceCourseSlug?: string;
@@ -308,6 +314,7 @@ export function useAcademyPageContent({
     surfacePage?: string;
     surfaceSection?: string | null;
     surfaceSettingsTab?: string;
+    surfacePlatformTab?: string;
     surfaceUsername?: string;
   } = {}): ReactNode => {
     const homeIsTheRoute = surfacePage === "home" && page === "home";
@@ -595,10 +602,24 @@ export function useAcademyPageContent({
       );
     }
     if (surfacePage === "home-page-settings") {
+      // The Home Page screen moved into the Platform page. Only the route
+      // itself leads on: a lesson opened from the old address shows no
+      // page behind it rather than leaving the lesson.
+      return page === "home-page-settings" ? (
+        <MovedPageRedirect
+          to="/platform/home"
+          onNavigatePage={onNavigatePage}
+        />
+      ) : (
+        <AcademyPageFallback />
+      );
+    }
+    if (surfacePage === "platform") {
       if (!isAuthReady) return <AcademyPageFallback />;
       return (
         <Suspense fallback={<AcademyPageFallback />}>
-          <HomePageSettingsPage
+          <PlatformPage
+            tab={surfacePlatformTab}
             canManage={Boolean(activeUser) && isAdmin}
             onNavigatePage={onNavigatePage}
             setNotice={setNotice}

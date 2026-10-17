@@ -29,6 +29,7 @@ export interface ShellMainFrameProps {
     scrollTop: number;
     section?: string;
     settingsTab?: string;
+    platformTab?: string;
   } | null;
   renderPageContent: ({
     surfaceCourseSlug,
@@ -36,6 +37,7 @@ export interface ShellMainFrameProps {
     surfacePage,
     surfaceSection,
     surfaceSettingsTab,
+    surfacePlatformTab,
     surfaceUsername,
   }?: {
     surfaceCourseSlug?: string;
@@ -43,6 +45,7 @@ export interface ShellMainFrameProps {
     surfacePage?: string;
     surfaceSection?: string | null;
     surfaceSettingsTab?: string;
+    surfacePlatformTab?: string;
     surfaceUsername?: string;
   }) => ReactNode;
   routeContentHeld: boolean;
@@ -113,7 +116,9 @@ export function ShellMainFrame({
               ? "student-surface-main"
               : "",
           !renderMain && page === "courses" ? "max-[640px]:px-0!" : "",
-          !renderMain && page === "settings" ? "courses-main--settings" : "",
+          !renderMain && (page === "settings" || page === "platform")
+            ? "courses-main--settings"
+            : "",
           mobileSidebarNavigationActive
             ? renderMain
               ? "max-[640px]:pb-0!"
@@ -169,7 +174,8 @@ export function ShellMainFrame({
                 className={
                   learningBackground.page === "courses"
                     ? "max-[640px]:px-0!"
-                    : learningBackground.page === "settings"
+                    : learningBackground.page === "settings" ||
+                        learningBackground.page === "platform"
                       ? "student-surface-main courses-main--settings"
                       : "student-surface-main"
                 }
@@ -182,6 +188,7 @@ export function ShellMainFrame({
                   surfacePage: learningBackground.page,
                   surfaceSection: learningBackground.section,
                   surfaceSettingsTab: learningBackground.settingsTab,
+                  surfacePlatformTab: learningBackground.platformTab,
                 })}
               </LearningBackgroundSurface>
             ) : null

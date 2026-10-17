@@ -8,8 +8,7 @@ import { SettingsSection, TextField } from "./homePageSettingsControls";
 
 /**
  * The academy's name and logo: what its emails (the sign-in code, account
- * notices) show at the top. Saved on its own, apart from the home page's
- * settings below it.
+ * notices) show at the top. The General tab of the Platform page.
  */
 export function AcademyBrandSection({
   setNotice,

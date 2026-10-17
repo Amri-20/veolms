@@ -45,6 +45,7 @@ const RESERVED_PROFILE_PATHS = new Set([
   "/settings",
   "/coupons",
   "/home-page",
+  "/platform",
   "/logout",
   LOGIN_PATH,
   "/register",
@@ -89,6 +90,8 @@ export function isCourseAuthorPath(pathname: string): boolean {
     normalized === "/coupons" ||
     normalized.startsWith("/coupons/") ||
     normalized === "/home-page" ||
+    normalized === "/platform" ||
+    normalized.startsWith("/platform/") ||
     normalized === "/quizzes/create" ||
     (normalized.startsWith("/quizzes/") &&
       !normalized.startsWith("/quizzes/attempt/"))
@@ -174,6 +177,7 @@ const LOGIN_PROMPT_PATH_ROOTS = [
   "/notifications",
   "/coupons",
   "/home-page",
+  "/platform",
 ] as const;
 
 /**

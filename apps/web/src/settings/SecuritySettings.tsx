@@ -22,7 +22,9 @@ import { ShieldCheckIcon as ShieldCheck } from "@phosphor-icons/react/ShieldChec
 import { SignOutIcon as SignOut } from "@phosphor-icons/react/SignOut";
 import { TimerIcon as Timer } from "@phosphor-icons/react/Timer";
 import { XIcon as X } from "@phosphor-icons/react/X";
-import { RecommendedBadge, SettingRow } from "./SettingsControls";
+import { RecommendedBadge, SettingRow, StatusNote } from "./SettingsControls";
+import { usePublicPlatformSettings } from "../services/platform";
+import { isStaffRole } from "../shell/workspaceRole";
 import {
   CenteredLoadingSpinner,
   LoadingSpinnerIcon,
@@ -415,14 +417,6 @@ const SETTINGS_ERROR_TEXT =
 const SECURITY_ROW_CLASS =
   "max-[480px]:[grid-template-columns:2rem_minmax(0,1fr)] max-[480px]:[&_.settings-row__control]:col-start-2 max-[480px]:[&_.settings-row__control]:justify-stretch max-[480px]:[&_.settings-action]:w-full";
 
-function StatusNote({ children }: { children: ReactNode }) {
-  return (
-    <span className="inline-flex items-center rounded-full bg-[color-mix(in_srgb,var(--text)_8%,transparent)] px-2 py-0.5 text-[0.72rem] font-semibold whitespace-nowrap text-(--muted)">
-      {children}
-    </span>
-  );
-}
-
 export function SecuritySettings({
   isAuthenticated = true,
 }: {
@@ -450,6 +444,16 @@ export function SecuritySettings({
 
   const totpEnabled = currentUser?.totpEnabled ?? false;
   const passkeyEnabled = currentUser?.passkeyEnabled ?? false;
+  // A student on an academy that turned two-factor sign-in off for students
+  // can neither add a factor nor be asked for one (Platform > Security).
+  const { data: platformSettings } = usePublicPlatformSettings({
+    enabled: isAuthenticated,
+  });
+  const twoFactorOffForStudents = Boolean(
+    currentUser &&
+    !isStaffRole(currentUser.roles) &&
+    platformSettings?.security.studentTwoFactorEnabled === false,
+  );
   const showEnrollmentSetup = Boolean(
     isAuthenticated &&
     currentUser &&
@@ -587,7 +591,23 @@ export function SecuritySettings({
         </div>
       </header>
 
-      {showEnrollmentSetup ? (
+      {twoFactorOffForStudents ? (
+        <section
+          className="settings-section"
+          aria-labelledby="two-factor-off-heading"
+        >
+          <header className="settings-section__heading">
+            <ShieldCheck size={20} weight="duotone" />
+            <div>
+              <h3 id="two-factor-off-heading">Two-factor sign-in</h3>
+              <p>
+                Your academy has turned off two-factor sign-in for students, so
+                signing in takes no second step.
+              </p>
+            </div>
+          </header>
+        </section>
+      ) : showEnrollmentSetup ? (
         <section
           className="settings-section"
           aria-labelledby="mfa-enrollment-heading"

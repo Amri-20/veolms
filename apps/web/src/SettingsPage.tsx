@@ -8,10 +8,6 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  handleRovingTabKeyDown,
-  scrollKeyboardFocusedTabIntoView,
-} from "./accessibility/rovingTabFocus";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { LearningSettings } from "./settings/LearningSettings";
 import { SidebarSettings } from "./settings/SidebarSettings";
@@ -33,13 +29,12 @@ import {
   rememberSettingsTab,
 } from "./routing/tabSessionState";
 import type { SettingsTab } from "./routing/tabSessionState";
-import {
-  getNumberShortcutIndex,
-  isEditingShortcutTarget,
-} from "./keyboardShortcuts";
+import { isEditingShortcutTarget } from "./keyboardShortcuts";
 import { SwipeableTabPanel } from "./navigation/SwipeableTabPanel";
 import { authStore, useAuthStore } from "./store/auth.store";
 import { getSettingsTabs } from "./settings/settingsTabs";
+import { SettingsTabBar } from "./settings/SettingsTabBar";
+import { useSettingsTabShortcuts } from "./settings/useSettingsTabShortcuts";
 import { definePrerenderedBody } from "./routing/prerenderedBodies";
 import "./styles/features/settings/foundation.css";
 import "./styles/features/settings/preferences-responsive.css";
@@ -61,18 +56,6 @@ export function preloadSignedInSettings() {
     ? signedInSettingsTabBody.preload()
     : undefined;
 }
-
-const SETTINGS_ARROW_KEY_OWNER_SELECTOR = [
-  '[role="dialog"]',
-  '[role="grid"]',
-  '[role="listbox"]',
-  '[role="menu"]',
-  '[role="radio"]',
-  '[role="slider"]',
-  '[role="spinbutton"]',
-  '[role="tab"]',
-  '[role="tree"]',
-].join(",");
 
 export interface SettingsPageProps {
   tab?: string;
@@ -336,40 +319,11 @@ export function SettingsPage({
     return () => document.removeEventListener("keydown", exitSettings);
   }, [leaveSettings]);
 
-  useEffect(() => {
-    const navigateSettingsTab = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || isEditingShortcutTarget(event.target))
-        return;
-
-      let destination: (typeof visibleTabs)[number] | undefined;
-      if (event.altKey) {
-        const index = getNumberShortcutIndex(event);
-        destination = index === null ? undefined : visibleTabs[index];
-      } else if (
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.shiftKey &&
-        (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
-        !(
-          event.target instanceof Element &&
-          event.target.closest(SETTINGS_ARROW_KEY_OWNER_SELECTOR)
-        )
-      ) {
-        const offset = event.key === "ArrowRight" ? 1 : -1;
-        const currentIndex = visibleTabIds.indexOf(readSettingsTab());
-        const nextIndex =
-          (currentIndex + offset + visibleTabs.length) % visibleTabs.length;
-        destination = visibleTabs[nextIndex];
-      }
-
-      if (!destination) return;
-      event.preventDefault();
-      navigateTabShortcut(destination.id);
-    };
-
-    document.addEventListener("keydown", navigateSettingsTab);
-    return () => document.removeEventListener("keydown", navigateSettingsTab);
-  }, [navigateTabShortcut, visibleTabIds, visibleTabs]);
+  useSettingsTabShortcuts({
+    tabIds: visibleTabIds,
+    getCurrentTab: readSettingsTab,
+    onNavigate: navigateTabShortcut,
+  });
 
   return (
     <div className="settings-page" aria-labelledby="settings-page-title">
@@ -391,53 +345,21 @@ export function SettingsPage({
           </div>
         </div>
 
-        {/* The tabs stay pinned while the page scrolls under them, so they
-            have a ground of their own: exactly the page's (the main area's
-            own rule, see deepGroundClasses), so no band of another colour
-            shows. */}
-        <nav
-          ref={tabListRef}
-          className="settings-tabs page-tabs sticky! top-(--settings-page-sticky-top,0px) z-25 mx-[calc(-1*var(--settings-tab-nav-bleed))]! bg-(--main-surface) px-(--settings-tab-nav-bleed)! in-data-[content-layout=framed]:bg-(--card-ground)!"
-          aria-label="Settings sections"
-          role="tablist"
-        >
-          {visibleTabs.map(({ id, label, Icon, tone }, index) => (
-            <button
-              type="button"
-              key={id}
-              id={`settings-tab-${id}`}
-              role="tab"
-              aria-selected={activeTab === id}
-              aria-controls="settings-tab-panel"
-              aria-keyshortcuts={`Alt+${index + 1}`}
-              data-page-tab-tone={tone}
-              data-swipe-tab-id={id}
-              tabIndex={activeTab === id ? 0 : -1}
-              className={`group${activeTab === id ? " is-active" : ""}${
-                !isAuthReady && isSignedInSettingsTab(id)
-                  ? " [html:not([data-session-hint])_&]:hidden!"
-                  : ""
-              }`}
-              onPointerEnter={() => prepareTab(id)}
-              onPointerDown={() => prepareTab(id)}
-              onClick={() => navigateTab(id)}
-              onKeyDown={handleRovingTabKeyDown}
-              onFocus={(event) => {
-                prepareTab(id);
-                scrollKeyboardFocusedTabIntoView(event);
-              }}
-            >
-              <span className="settings-tab__press-content inline-flex origin-bottom items-center gap-2 transition-transform duration-150 ease-out group-active:scale-[0.985] motion-reduce:duration-[0.01ms]">
-                <Icon
-                  size={17}
-                  weight={activeTab === id ? "fill" : "regular"}
-                />
-                <span>{label}</span>
-              </span>
-            </button>
-          ))}
-          <span className="page-tabs__indicator" aria-hidden="true" />
-        </nav>
+        <SettingsTabBar
+          tabs={visibleTabs}
+          activeTab={activeTab}
+          idPrefix="settings-tab"
+          panelId="settings-tab-panel"
+          label="Settings sections"
+          navRef={tabListRef}
+          onPrepare={prepareTab}
+          onSelect={navigateTab}
+          getTabClassName={(id) =>
+            !isAuthReady && isSignedInSettingsTab(id)
+              ? "[html:not([data-session-hint])_&]:hidden!"
+              : ""
+          }
+        />
       </header>
 
       <SwipeableTabPanel

@@ -65,6 +65,7 @@ import {
 import { getLoginDialogSnapshotScript } from "./auth/loginDialogSnapshot";
 import { getOauthPopupHandoffScript } from "./auth/oauthPopup";
 import { AppLoadingScreen } from "./bootstrap/AppLoadingScreen";
+import { getAppearanceBootstrapScript } from "./store/appearanceDefaults";
 import {
   ACADEMY_THEME_VERSION,
   DEFAULT_ACADEMY_THEME,
@@ -75,7 +76,6 @@ interface LayoutProps {
   children: ReactNode;
 }
 
-const academyThemeIds = JSON.stringify(academyThemes.map(({ id }) => id));
 const videoPlaybackCdnOrigin = getVideoPlaybackCdnOrigin();
 // The API lives on its own origin in deployed builds. Opening that connection
 // while the document loads keeps the first API request (the session check)
@@ -90,8 +90,13 @@ const apiOrigin = (() => {
     return null;
   }
 })();
-const getAppearanceBootstrapScript = () =>
-  `(()=>{const r=document.documentElement,p=${academyThemeIds};try{const t=localStorage.getItem("veolms-theme")||"dark";r.dataset.theme=t==="device"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):t==="light"?"light":"dark"}catch{}try{const e=localStorage.getItem("veolms-randomize-academy-theme")==="true",s=sessionStorage.getItem("veolms-session-academy-theme"),l=localStorage.getItem("veolms-academy-theme"),c=localStorage.getItem("veolms-academy-theme-version")===${JSON.stringify(ACADEMY_THEME_VERSION)},v=e&&p.includes(s||"")?s:c&&p.includes(l||"")?l:${JSON.stringify(DEFAULT_ACADEMY_THEME)};r.dataset.palette=v}catch{}})();`;
+// The visitor's own light/dark mode and colour theme, or the academy's
+// defaults (Platform > Appearance), before the first paint.
+const appearanceBootstrapScript = getAppearanceBootstrapScript({
+  themeIds: academyThemes.map(({ id }) => id),
+  firstThemeId: DEFAULT_ACADEMY_THEME,
+  themeVersion: ACADEMY_THEME_VERSION,
+});
 
 const DEFAULT_ROOT_ATTRIBUTES: Record<string, string> = {
   lang: "en",
@@ -271,7 +276,7 @@ export function Layout({ children }: LayoutProps) {
           }}
         />
         <script
-          dangerouslySetInnerHTML={{ __html: getAppearanceBootstrapScript() }}
+          dangerouslySetInnerHTML={{ __html: appearanceBootstrapScript }}
         />
         <script
           dangerouslySetInnerHTML={{ __html: getReadingModeBootstrapScript() }}

@@ -1,4 +1,3 @@
-import { config } from "../../../config.ts";
 import { DISPLAY_NAME_MAX_LENGTH } from "../shared/auth.constants.ts";
 import type { AuthContext } from "../shared/auth.context.ts";
 import {
@@ -28,7 +27,8 @@ import type {
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 export function createAuthController(context: AuthContext) {
-  const { authService, oauthService, sessionService } = context;
+  const { authService, oauthService, sessionService, platformSettings } =
+    context;
 
   async function login(
     request: FastifyRequest<{ Body: LoginRequest }>,
@@ -89,11 +89,11 @@ export function createAuthController(context: AuthContext) {
   }
 
   async function getConfig() {
-    return {
-      ...(await oauthService.getPublicConfig()),
-      requireVerifiedPhoneForEnrollment:
-        config.REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT,
-    };
+    const [oauthConfig, requireVerifiedPhoneForEnrollment] = await Promise.all([
+      oauthService.getPublicConfig(),
+      platformSettings.requiresVerifiedPhoneForEnrollment(),
+    ]);
+    return { ...oauthConfig, requireVerifiedPhoneForEnrollment };
   }
 
   async function publicProfile(

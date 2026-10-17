@@ -19,3 +19,13 @@ export const SETTINGS_ROUTE_STYLESHEETS = [
   settingsProfileStylesheet,
   settingsLearningStylesheet,
 ] as const;
+
+/**
+ * The Platform page is laid out with the same sections, rows and tabs as
+ * Settings, without the profile and learning screens.
+ */
+export const PLATFORM_ROUTE_STYLESHEETS = [
+  settingsFoundationStylesheet,
+  settingsPreferencesStylesheet,
+  workspaceStylesheet,
+] as const;
