@@ -5,15 +5,6 @@ The public course catalogue (`/explore-courses`) and each course overview
 React Router `.data` files. Authenticated authoring and learner routes remain
 inside the academy application.
 
-Each Cloudflare Workers Build renders these pages, so a course change
-reaches them with the next build.
-
-The API still has a refresh queue (the `COURSE_STATIC_REFRESH_*` settings
-below) that started the `refresh-cloudflare-course-pages.yml` workflow after a
-course change. That workflow and the `Deploy Cloudflare static web` build
-artifact it reused were removed in October 2026, so leave those settings unset.
-What follows describes how it worked.
-
 ## Content update flow
 
 1. A successful course-related API mutation commits to the database.
