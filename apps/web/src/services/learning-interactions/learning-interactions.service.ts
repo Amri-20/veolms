@@ -18,6 +18,7 @@ import type {
   LessonDiscussionsListResponse,
   LessonDiscussionCountsResponse,
   ListLessonDiscussionsQuery,
+  LinkPreviewQuery,
   LinkPreviewResponse,
   ListLearningNotesQuery,
   ListLearningRepliesQuery,
@@ -354,7 +355,10 @@ export const learningInteractionsService = {
   },
 
   getLinkPreview(url: string): Promise<LinkPreviewResponse> {
-    return api.post<LinkPreviewResponse>("/attachments/link-preview", { url });
+    const params: LinkPreviewQuery = { url };
+    return api.get<LinkPreviewResponse>("/attachments/link-preview", {
+      params,
+    });
   },
 
   // Reporting

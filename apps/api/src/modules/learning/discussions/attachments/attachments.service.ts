@@ -95,8 +95,7 @@ function isRetryableLinkPreviewError(error: unknown): boolean {
   return (
     !(error instanceof AppError) ||
     error.code === "TIMEOUT" ||
-    error.code === "FETCH_FAILED" ||
-    error.code === "DNS_LOOKUP_FAILED"
+    error.code === "FETCH_FAILED"
   );
 }
 

@@ -23,6 +23,7 @@ import type { DiscussionAttachmentItem } from "../discussion-attachments";
 import { LinkPreviewCard } from "../LinkPreviewCard";
 import {
   extractFirstUrl,
+  normalizePreviewUrl,
   useLinkPreview,
 } from "../../services/learning-interactions";
 
@@ -572,11 +573,15 @@ function MarkdownLink({ href, children }: React.ComponentProps<"a">) {
   if (isGeneratedAttachmentMarkdown(linkedAttachments, href, linkLabel)) {
     return null;
   }
+  const isHashOrMailto =
+    href?.startsWith("#") || href?.toLowerCase().startsWith("mailto:");
+  const resolvedHref =
+    href && !isHashOrMailto ? normalizePreviewUrl(href) : href;
   return (
     <a
-      href={href}
-      target={href?.startsWith("#") ? undefined : "_blank"}
-      rel={href?.startsWith("#") ? undefined : "noopener noreferrer"}
+      href={resolvedHref}
+      target={isHashOrMailto ? undefined : "_blank"}
+      rel={isHashOrMailto ? undefined : "noopener noreferrer"}
       className="font-medium text-(--accent-ink,var(--accent)) underline decoration-[color-mix(in_srgb,var(--accent)_45%,transparent)] underline-offset-2 hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
     >
       {children}
@@ -769,6 +774,7 @@ export function DiscussionMarkdown({
   const detectedUrl = extractFirstUrl(rawText);
   const { data: linkPreview } = useLinkPreview(detectedUrl, {
     enabled: enableLinkPreview,
+    debounceMs: 0,
   });
   const renderOptions = useMemo<MarkdownRenderOptions>(
     () => ({

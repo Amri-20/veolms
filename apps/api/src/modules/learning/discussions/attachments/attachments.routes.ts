@@ -2,10 +2,10 @@ import { z } from "zod";
 import fastifyMultipart from "@fastify/multipart";
 import {
   completeAttachmentUploadRequestSchema,
-  createLinkPreviewRequestSchema,
   initiateAttachmentUploadRequestSchema,
   initiateAttachmentUploadResponseSchema,
   learningUploadResponseSchema,
+  linkPreviewQuerySchema,
   linkPreviewResponseSchema,
   uploadedAttachmentSchema,
 } from "@veolms/contracts";
@@ -138,8 +138,8 @@ const attachmentsRoutes: RoutePlugin = async (app, options) => {
     controller.uploadAttachment,
   );
 
-  // 5. POST /attachments/link-preview - External link preview
-  app.post(
+  // 5. GET /attachments/link-preview - External link preview
+  app.get(
     "/attachments/link-preview",
     {
       // Each call makes the server fetch a caller-chosen URL.
@@ -154,7 +154,7 @@ const attachmentsRoutes: RoutePlugin = async (app, options) => {
         operationId: "getLearningLinkPreview",
         tags: ["Learning Attachments"],
         summary: "Fetch metadata preview for external link",
-        body: createLinkPreviewRequestSchema,
+        querystring: linkPreviewQuerySchema,
         response: {
           200: jsonResponse("Link preview metadata", linkPreviewResponseSchema),
           400: errorResponse("Invalid URL"),

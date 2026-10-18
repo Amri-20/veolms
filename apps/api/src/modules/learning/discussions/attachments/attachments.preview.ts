@@ -4,7 +4,11 @@ import https from "node:https";
 import { isIP } from "node:net";
 import zlib from "node:zlib";
 import type { Readable } from "node:stream";
-import type { LinkPreviewResponse } from "@veolms/contracts";
+import {
+  isValidPreviewHost,
+  normalizePreviewUrl,
+  type LinkPreviewResponse,
+} from "@veolms/contracts";
 import { config } from "../../../../config.ts";
 import { httpError } from "../../../../lib/errors.ts";
 import { clampText } from "../../../../lib/text.ts";
@@ -12,7 +16,7 @@ import { clampText } from "../../../../lib/text.ts";
 export const PREVIEW_CONSTANTS = {
   MAX_REDIRECTS: 5,
   /** Budget for the WHOLE preview: every redirect hop and the body read. */
-  TIMEOUT_MS: 5000,
+  TIMEOUT_MS: 10000,
   MAX_RESPONSE_BYTES: 512 * 1024, // 512 KB
 };
 
@@ -151,9 +155,10 @@ function normalizeHost(hostname: string): string {
 }
 
 export function validateSafeUrl(urlString: string): URL {
+  const normalized = normalizePreviewUrl(urlString);
   let parsed: URL;
   try {
-    parsed = new URL(urlString);
+    parsed = new URL(normalized);
   } catch {
     throw httpError(400, "INVALID_URL", `Invalid URL: "${urlString}"`);
   }
@@ -166,7 +171,16 @@ export function validateSafeUrl(urlString: string): URL {
     );
   }
 
-  if (isPrivateOrReservedHost(normalizeHost(parsed.hostname))) {
+  const host = normalizeHost(parsed.hostname);
+  if (!isValidPreviewHost(host)) {
+    throw httpError(
+      400,
+      "INVALID_DOMAIN",
+      `The host "${parsed.hostname}" is not a valid domain name.`,
+    );
+  }
+
+  if (isPrivateOrReservedHost(host)) {
     throw ssrfProhibited();
   }
 
@@ -179,13 +193,13 @@ export function validateSafeUrl(urlString: string): URL {
  * {@link requestPinned}); resolving once for the check and letting the HTTP
  * client resolve again for the connection is what DNS rebinding exploits.
  */
-async function resolvePublicAddress(
+async function resolvePublicAddresses(
   host: string,
-): Promise<{ address: string; family: 4 | 6 }> {
+): Promise<Array<{ address: string; family: 4 | 6 }>> {
   const literal = isIP(host);
   if (literal) {
     if (isPrivateOrReservedHost(host)) throw ssrfProhibited();
-    return { address: host, family: literal as 4 | 6 };
+    return [{ address: host, family: literal as 4 | 6 }];
   }
 
   let records: Array<{ address: string; family: number }> = [];
@@ -211,8 +225,22 @@ async function resolvePublicAddress(
   for (const record of records) {
     if (isPrivateOrReservedHost(record.address)) throw ssrfProhibited();
   }
-  const first = records[0]!;
-  return { address: first.address, family: first.family === 6 ? 6 : 4 };
+
+  // Dual-stack environments frequently lack working IPv6 routing.
+  // Sort IPv4 records first so connection attempts succeed quickly,
+  // falling back to IPv6 if IPv4 is unavailable.
+  const sorted = [...records].sort((a, b) => a.family - b.family);
+  return sorted.map((record) => ({
+    address: record.address,
+    family: record.family === 6 ? 6 : 4,
+  }));
+}
+
+export async function resolvePublicAddress(
+  host: string,
+): Promise<{ address: string; family: 4 | 6 }> {
+  const addresses = await resolvePublicAddresses(host);
+  return addresses[0]!;
 }
 
 interface PinnedResponse {
@@ -310,14 +338,21 @@ export async function fetchSafeHtml(
       redirectCount++
     ) {
       const parsedUrl = validateSafeUrl(currentUrl);
-      const pinned = await resolvePublicAddress(
+      const pinnedList = await resolvePublicAddresses(
         normalizeHost(parsedUrl.hostname),
       );
 
-      let response: PinnedResponse;
-      try {
-        response = await requestPinned(parsedUrl, pinned, controller.signal);
-      } catch {
+      let response: PinnedResponse | null = null;
+      for (const pinned of pinnedList) {
+        try {
+          response = await requestPinned(parsedUrl, pinned, controller.signal);
+          break;
+        } catch {
+          if (timedOut) break;
+        }
+      }
+
+      if (!response) {
         if (timedOut) {
           throw httpError(408, "TIMEOUT", "Timed out fetching the URL.");
         }
