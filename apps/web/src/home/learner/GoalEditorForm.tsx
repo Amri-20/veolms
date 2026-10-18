@@ -1,67 +1,58 @@
 import { CheckIcon as Check } from "@phosphor-icons/react/Check";
-import { useEffect, useId, useRef } from "react";
-import type { GoalUnit } from "./goalInput";
+import { WarningCircleIcon as WarningCircle } from "@phosphor-icons/react/WarningCircle";
+import { useEffect, useId, type CSSProperties } from "react";
 import type { GoalEditor } from "./useGoalEditor";
 
 /**
- * The daily goal's figures while they are being edited: today's amount as
- * it was, then the goal as a field with its unit (minutes or hours) and the
- * check button that saves it. The check stays on screen the whole time the
- * editor is open. What is wrong with the value is said under it.
+ * The daily goal while it is being edited: a line on top in place of the
+ * heading, then one large field the goal is typed into as words ("45 min",
+ * "1.5 hr", "1h 30m"). The line says what to type; when the text cannot be
+ * saved it says what is wrong, or which formats work, in red, and the field
+ * is ringed in red. The tick that saves it is `GoalSaveButton`, which takes
+ * the edit button's place.
  *
  * The laptop's screen is laid out in its own large pixels (see
  * `LearnerGoalScreen`), the phone's card in the page's; each has its sizes.
+ * Together they are as tall as the heading and figures they stand in for,
+ * so nothing under the editor moves when it opens. On the laptop the field
+ * half the sheet's width and grows with a longer goal ("1 hour 30
+ * minutes"), below the tick in its corner, and a little shorter than the
+ * figures, with the room it gives up kept above it.
  */
 const sizes = {
   laptop: {
-    row: "mt-4 flex items-center gap-5 leading-none whitespace-nowrap @[50rem]/home:mt-3 @[50rem]/home:gap-4",
-    done: "text-[128px] font-extrabold tracking-[-0.03em] @[50rem]/home:text-[104px]",
-    slash:
-      "text-[66px] font-semibold text-(--goal-ink)/90 @[50rem]/home:text-[56px]",
+    // Kept clear of the tick in the sheet's corner.
+    line: "flex h-11 items-center gap-3 pr-24 text-[36px] leading-[1.3] font-semibold whitespace-nowrap text-(--goal-ink)/85 @[50rem]/home:h-9 @[50rem]/home:gap-2.5 @[50rem]/home:text-[30px]",
+    problem: "text-rose-300",
+    problemIcon: "size-10 shrink-0 @[50rem]/home:size-9",
+    // The field's text is set on the form: every input takes its font from
+    // around it (`font: inherit` in the base styles, which outranks these).
+    font: "text-[84px] leading-none font-semibold @[50rem]/home:text-[68px]",
     input:
-      "h-28 w-[3.6ch] rounded-3xl bg-white/14 px-5 text-[66px] font-semibold text-white outline-none ring-4 ring-white/20 focus:ring-(--goal-accent) aria-invalid:ring-rose-400 @[50rem]/home:h-24 @[50rem]/home:text-[56px]",
-    units: "flex rounded-full bg-white/12 p-2",
-    unit: "h-18 rounded-full px-6 text-[36px] font-semibold text-white/75 aria-pressed:bg-white aria-pressed:text-black @[50rem]/home:h-15 @[50rem]/home:text-[30px]",
-    save: "grid size-24 shrink-0 place-items-center rounded-full bg-white text-black hover:bg-white/85 disabled:opacity-45 @[50rem]/home:size-20",
-    saveIcon: "size-12 @[50rem]/home:size-10",
-    message:
-      "mt-4 text-[30px] leading-tight font-medium text-rose-300 @[50rem]/home:text-[26px]",
+      "mt-8 block h-28 w-[max(50%,calc(var(--goal-chars)*0.62em+88px))] max-w-full rounded-[32px] bg-white/12 px-9 text-white outline-none ring-4 ring-white/20 placeholder:text-white/35 focus:ring-(--goal-accent) aria-invalid:bg-rose-500/12 aria-invalid:ring-rose-400 @[50rem]/home:mt-6 @[50rem]/home:h-[92px] @[50rem]/home:rounded-[28px] @[50rem]/home:px-8",
   },
   card: {
-    row: "mt-2 flex items-center gap-2 leading-none whitespace-nowrap",
-    done: "text-[2.75rem] font-extrabold tracking-[-0.03em]",
-    slash: "text-2xl font-semibold text-(--muted)",
+    line: "flex min-h-5 items-center gap-1.5 text-[0.8125rem] leading-5 font-medium text-(--muted)",
+    problem: "text-rose-600 [:root:not([data-theme=light])_&]:text-rose-300",
+    problemIcon: "size-4 shrink-0",
+    font: "text-[1.75rem] leading-none font-semibold",
     input:
-      "h-11 w-[3.6ch] rounded-xl bg-current/8 px-2 text-2xl font-semibold text-(--text) outline-none ring-1 ring-current/15 focus:ring-2 focus:ring-(--accent) aria-invalid:ring-2 aria-invalid:ring-rose-500",
-    units: "flex rounded-full bg-current/8 p-0.5",
-    unit: "h-8 rounded-full px-2.5 text-sm font-semibold text-(--muted) aria-pressed:bg-(--accent) aria-pressed:text-(--on-accent,white)",
-    save: "grid size-11 shrink-0 place-items-center rounded-xl bg-(--accent) text-(--on-accent,white) hover:brightness-110 disabled:opacity-45",
-    saveIcon: "size-5",
-    message:
-      "mt-2 text-sm font-medium text-rose-500 [:root:not([data-theme=light])_&]:text-rose-300",
+      "mt-2 block h-11 w-full rounded-xl bg-current/8 px-3 text-(--text) outline-none ring-1 ring-current/15 placeholder:text-(--muted) focus:ring-2 focus:ring-(--accent) aria-invalid:bg-rose-500/10 aria-invalid:ring-2 aria-invalid:ring-rose-500",
   },
 } as const;
 
-const UNITS: Array<[GoalUnit, string, string]> = [
-  ["min", "min", "Minutes"],
-  ["hr", "hr", "Hours"],
-];
-
 export function GoalEditorForm({
   editor,
-  done,
   variant,
 }: {
   editor: GoalEditor;
-  /** Today's amount, as the figures show it. */
-  done: string;
   variant: keyof typeof sizes;
 }) {
   const size = sizes[variant];
-  const inputRef = useRef<HTMLInputElement>(null);
-  const messageId = useId();
+  const lineId = useId();
+  const { inputRef } = editor;
 
-  // The field takes the keyboard as the editor opens, with its number
+  // The field takes the keyboard as the editor opens, with its text
   // selected so it can be typed over. Held where it is: the laptop is a
   // picture drawn in perspective, and scrolling to it would move the page.
   useEffect(() => {
@@ -69,73 +60,97 @@ export function GoalEditorForm({
     if (!input) return;
     input.focus({ preventScroll: true });
     input.select();
-  }, []);
+  }, [inputRef]);
 
   return (
-    <>
-      <form
-        ref={editor.editorRef}
-        aria-label="Edit your daily goal"
-        className={size.row}
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          editor.save();
-        }}
-        onKeyDown={(event) => {
-          if (event.key !== "Escape") return;
-          event.preventDefault();
-          event.stopPropagation();
-          editor.close();
-        }}
+    <form
+      id={editor.formId}
+      ref={editor.editorRef}
+      aria-label="Edit your daily goal"
+      className={size.font}
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        editor.save();
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+        editor.close();
+      }}
+    >
+      <p
+        id={lineId}
+        role={editor.message ? "alert" : undefined}
+        className={`${size.line} ${editor.message ? size.problem : ""}`}
       >
-        <strong className={size.done}>{done}</strong>
-        <span aria-hidden="true" className={size.slash}>
-          /
-        </span>
-        <input
-          ref={inputRef}
-          type="text"
-          inputMode="decimal"
-          autoComplete="off"
-          enterKeyHint="done"
-          aria-label={`Daily goal in ${editor.unit === "hr" ? "hours" : "minutes"}`}
-          aria-invalid={editor.message ? true : undefined}
-          aria-describedby={editor.message ? messageId : undefined}
-          value={editor.value}
-          onChange={(event) => editor.setValue(event.target.value)}
-          maxLength={6}
-          className={size.input}
-        />
-        <span role="group" aria-label="Unit" className={size.units}>
-          {UNITS.map(([unit, label, name]) => (
-            <button
-              key={unit}
-              type="button"
-              aria-pressed={editor.unit === unit}
-              aria-label={name}
-              onClick={() => editor.setUnit(unit)}
-              className={`cursor-pointer transition-colors ${size.unit}`}
-            >
-              {label}
-            </button>
-          ))}
-        </span>
-        <button
-          type="submit"
-          disabled={!editor.canSave}
-          aria-label="Save your daily goal"
-          title="Save"
-          className={`cursor-pointer transition-[background-color,opacity] disabled:cursor-default ${size.save}`}
-        >
-          <Check weight="bold" aria-hidden="true" className={size.saveIcon} />
-        </button>
-      </form>
-      {editor.message ? (
-        <p id={messageId} role="alert" className={size.message}>
-          {editor.message}
-        </p>
-      ) : null}
-    </>
+        {editor.message ? (
+          <>
+            <WarningCircle
+              weight="fill"
+              aria-hidden="true"
+              className={size.problemIcon}
+            />
+            <span className="min-w-0 truncate">{editor.message}</span>
+          </>
+        ) : (
+          <span className="min-w-0 truncate">
+            Daily goal, like 45 min or 1.5 hr
+          </span>
+        )}
+      </p>
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="text"
+        autoComplete="off"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        enterKeyHint="done"
+        placeholder="45 min"
+        aria-label="Daily goal"
+        aria-invalid={editor.invalid ? true : undefined}
+        aria-describedby={lineId}
+        value={editor.value}
+        onChange={(event) => editor.setValue(event.target.value)}
+        maxLength={32}
+        style={{ "--goal-chars": editor.value.length } as CSSProperties}
+        // Its own corners, not the app's control radius.
+        data-fixed-radius=""
+        className={`transition-[box-shadow,background-color] motion-reduce:transition-none ${size.input}`}
+      />
+    </form>
+  );
+}
+
+/**
+ * The tick that saves the goal. It stands where the edit button was (the
+ * sheet's corner on the laptop, the card's corner on the phone), so it is
+ * outside the form in the page and submits it by its id.
+ */
+export function GoalSaveButton({
+  editor,
+  className,
+  iconClassName,
+}: {
+  editor: GoalEditor;
+  className: string;
+  iconClassName: string;
+}) {
+  return (
+    <button
+      ref={editor.saveRef}
+      type="submit"
+      form={editor.formId}
+      disabled={!editor.canSave}
+      aria-busy={editor.saving || undefined}
+      aria-label="Save your daily goal"
+      title="Save"
+      className={`cursor-pointer transition-[background-color,opacity,filter] disabled:cursor-default disabled:opacity-45 ${className}`}
+    >
+      <Check weight="bold" aria-hidden="true" className={iconClassName} />
+    </button>
   );
 }
