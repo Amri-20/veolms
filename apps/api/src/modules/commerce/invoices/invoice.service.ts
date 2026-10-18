@@ -48,6 +48,13 @@ export interface InvoiceService {
    * Makes and stores the PDF of each recently paid order that has none.
    * Returns how many were made, and each order that failed and why.
    */
+  /**
+   * A paid order's invoice PDF as bytes, for sending by email: the stored
+   * file, or one made (and stored) now. Throws when it cannot be had.
+   */
+  getOrderInvoicePdf(
+    orderId: string,
+  ): Promise<{ fileName: string; pdf: Buffer }>;
   issuePendingInvoicePdfs(options: {
     paidSince: Date;
     limit: number;
@@ -230,7 +237,40 @@ export function createInvoiceService({
     const key = invoicePdfKey(order.id);
     await store.putObject(key, pdf, "application/pdf", pdf.length);
     await saveInvoicePdfKey(database, order.id, key);
-    return { invoiceNumber, key };
+    return { invoiceNumber, key, pdf };
+  }
+
+  /** The stored PDF's bytes, or null when the file is not there. */
+  async function readStoredPdf(
+    store: S3StorageService,
+    key: string,
+  ): Promise<Buffer | null> {
+    const object = await store.getObject(key);
+    if (!object) return null;
+    const chunks: Buffer[] = [];
+    for await (const chunk of object.body) chunks.push(Buffer.from(chunk));
+    return Buffer.concat(chunks);
+  }
+
+  async function getOrderInvoicePdf(
+    orderId: string,
+  ): Promise<{ fileName: string; pdf: Buffer }> {
+    const order = await findPaidOrder(null, orderId);
+    if (!storage) {
+      const { invoiceNumber, pdf } = await renderPdf(order, "optional");
+      return { fileName: invoiceFileName(invoiceNumber), pdf };
+    }
+    // The very file a download serves: the stored one, or one made and
+    // stored now (the email can go out before the invoice job has run).
+    const stored =
+      order.invoice_pdf_key && order.invoice_number
+        ? await readStoredPdf(storage, order.invoice_pdf_key)
+        : null;
+    if (stored) {
+      return { fileName: invoiceFileName(order.invoice_number!), pdf: stored };
+    }
+    const { invoiceNumber, pdf } = await storePdf(storage, order);
+    return { fileName: invoiceFileName(invoiceNumber), pdf };
   }
 
   async function sendWithoutStoring(order: OrderRow): Promise<InvoiceDownload> {
@@ -306,6 +346,7 @@ export function createInvoiceService({
   return {
     generateInvoiceData,
     getInvoiceDownload,
+    getOrderInvoicePdf,
     issuePendingInvoicePdfs,
   };
 }

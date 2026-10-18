@@ -21,6 +21,7 @@ import {
   createInvoiceService,
   invoiceStorage,
 } from "./modules/commerce/invoices/invoice.service.ts";
+import { createInvoiceAttachmentResolver } from "./modules/commerce/invoices/invoice-email-attachment.ts";
 import { getDatabasePoolMetrics } from "@veolms/database";
 import * as webhookRepo from "./modules/commerce/webhooks/webhook.repository.ts";
 import * as outboxRepo from "./events/outbox.repository.ts";
@@ -396,6 +397,12 @@ function startInlineNotificationLoop(
     email: services.email,
     logger: app.log,
     config,
+    attachments: createInvoiceAttachmentResolver(
+      createInvoiceService({
+        database,
+        storage: invoiceStorage(services.storage),
+      }),
+    ),
     handlers: {
       listActiveCourseRecipientUserIds: (courseId) =>
         audience.listActiveUserIdsForCourse(courseId),

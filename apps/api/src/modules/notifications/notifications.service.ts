@@ -398,6 +398,13 @@ export function createNotificationService({
                   subject: rendered.email.subject,
                   text: rendered.email.text,
                   html: rendered.email.html,
+                  ...(intent.emailAttachments?.length
+                    ? {
+                        attachments: intent.emailAttachments.map(
+                          (attachment) => ({ ...attachment }),
+                        ),
+                      }
+                    : {}),
                 } satisfies Json,
                 sentAt: null,
               });

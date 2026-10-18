@@ -77,6 +77,8 @@ const notificationHandlers: Record<string, NotificationHandler> = {
         channels: commonChannels,
         mandatory: false,
         deepLink: "/orders",
+        // The purchase email carries the order's invoice.
+        emailAttachments: [{ kind: "order-invoice", orderId: event.orderId }],
       },
     ];
   },
