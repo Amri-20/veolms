@@ -2,8 +2,8 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { DatabaseExecutor } from "@veolms/database";
 import type {
   CompleteAttachmentUploadRequest,
-  CreateLinkPreviewRequest,
   InitiateAttachmentUploadRequest,
+  LinkPreviewQuery,
 } from "@veolms/contracts";
 import { httpError } from "../../../../lib/errors.ts";
 import { discussionActor } from "../shared/discussion.access.ts";
@@ -29,7 +29,7 @@ export interface AttachmentsController {
   uploadAttachment(request: FastifyRequest, reply: FastifyReply): Promise<void>;
 
   getLinkPreview(
-    request: FastifyRequest<{ Body: CreateLinkPreviewRequest }>,
+    request: FastifyRequest<{ Querystring: LinkPreviewQuery }>,
     reply: FastifyReply,
   ): Promise<void>;
 }
@@ -128,7 +128,7 @@ export function createAttachmentsController({
     },
 
     async getLinkPreview(request, reply) {
-      const { url } = request.body;
+      const { url } = request.query;
       const preview = await service.fetchLinkPreview(url);
       await reply.status(200).send(preview);
     },
