@@ -71,15 +71,15 @@ export function adaptOrderToOrderHistoryItem(
   const cleanOrderNumber = order.orderNumber.startsWith("#")
     ? order.orderNumber
     : `#${order.orderNumber}`;
-  // The server numbers an invoice "INV-" plus the order number, and issues
-  // one only for an order that was paid. A number made up here used to be
-  // shown, and offered for copying, on every order: it matched no invoice,
-  // and unpaid orders have none. The same went for a "transaction id" cut
-  // from the order's own id, which no payment provider would recognise; the
-  // API gives a learner no payment reference, so none is shown.
+  // The server issues the invoice number when the order is paid, and sends
+  // it with the order; an order never paid has none. A number made up here
+  // used to be shown, and offered for copying, on every order: it matched no
+  // invoice. The same went for a "transaction id" cut from the order's own
+  // id, which no payment provider would recognise; the API gives a learner
+  // no payment reference, so none is shown.
   const invoiceNumber =
     status === "completed" || status === "refunded"
-      ? `INV-${order.orderNumber}`
+      ? order.invoiceNumber
       : null;
 
   let iconColor = "#3b82f6";

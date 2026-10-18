@@ -1,8 +1,12 @@
 import {
   DEFAULT_PLATFORM_APPEARANCE_SETTINGS,
+  DEFAULT_PLATFORM_INVOICE_SETTINGS,
   platformAppearanceSettingsSchema,
+  platformInvoiceSettingsSchema,
+  type PlatformInvoiceSettings,
   type PlatformSettings,
   type PlatformSettingsResponse,
+  type PublicPlatformSettings,
   type UpdatePlatformSettingsRequest,
 } from "@veolms/contracts";
 import type { Database } from "@veolms/database";
@@ -55,6 +59,32 @@ function readDocument(value: unknown): StoredDocument {
   );
 }
 
+/** Each invoice detail as saved, or its default when it does not read. */
+function resolveInvoiceSettings(
+  saved: Record<string, unknown>,
+): PlatformInvoiceSettings {
+  const fields = platformInvoiceSettingsSchema.shape;
+  const read = <K extends keyof PlatformInvoiceSettings>(
+    key: K,
+  ): PlatformInvoiceSettings[K] => {
+    const parsed = fields[key].safeParse(saved[key]);
+    return parsed.success
+      ? (parsed.data as PlatformInvoiceSettings[K])
+      : DEFAULT_PLATFORM_INVOICE_SETTINGS[key];
+  };
+  return {
+    companyName: read("companyName"),
+    address: read("address"),
+    gstin: read("gstin"),
+    email: read("email"),
+    phone: read("phone"),
+    numberPrefix: read("numberPrefix"),
+    signatoryLabel: read("signatoryLabel"),
+    footerNote: read("footerNote"),
+    showLogo: read("showLogo"),
+  };
+}
+
 /**
  * The settings in force: each one saved by an admin, or its default. A
  * document written by another version of the contract keeps what still
@@ -80,7 +110,13 @@ function resolveSettings(document: StoredDocument): PlatformSettings {
           ? security.requireVerifiedPhoneForEnrollment
           : config.REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT,
     },
+    invoice: resolveInvoiceSettings(document.invoice ?? {}),
   };
+}
+
+/** What every visitor is sent: everything but the invoice details. */
+function toPublicSettings(settings: PlatformSettings): PublicPlatformSettings {
+  return { appearance: settings.appearance, security: settings.security };
 }
 
 function toResponse(stored: StoredSettings): PlatformSettingsResponse {
@@ -92,8 +128,10 @@ function toResponse(stored: StoredSettings): PlatformSettingsResponse {
 
 export interface PlatformSettingsService {
   getSettings(): Promise<PlatformSettingsResponse>;
-  /** The same settings, for every visitor: nothing in them is private. */
-  getPublicSettings(): Promise<PlatformSettings>;
+  /** The settings every visitor follows: nothing in them is private. */
+  getPublicSettings(): Promise<PublicPlatformSettings>;
+  /** What the academy prints on its invoices. */
+  getInvoiceSettings(): Promise<PlatformInvoiceSettings>;
   updateSettings(
     changes: UpdatePlatformSettingsRequest,
     updatedBy: string | null,
@@ -170,6 +208,9 @@ export function createPlatformSettingsService({
       ...(changes.security
         ? { security: { ...current.document.security, ...changes.security } }
         : {}),
+      ...(changes.invoice
+        ? { invoice: { ...current.document.invoice, ...changes.invoice } }
+        : {}),
     };
 
     let row: Awaited<ReturnType<typeof savePlatformSettings>>;
@@ -207,7 +248,9 @@ export function createPlatformSettingsService({
 
   return {
     getSettings: async () => toResponse(await readSettings()),
-    getPublicSettings: async () => (await readSettings()).settings,
+    getPublicSettings: async () =>
+      toPublicSettings((await readSettings()).settings),
+    getInvoiceSettings: async () => (await readSettings()).settings.invoice,
     updateSettings,
     isStudentTwoFactorEnabled: async () =>
       (await readSettings()).settings.security.studentTwoFactorEnabled,

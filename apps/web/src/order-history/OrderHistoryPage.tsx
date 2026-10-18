@@ -56,7 +56,7 @@ export function OrderHistoryPage({
   usePageSearchShortcut("order-history-search-input");
 
   const handleDownloadReceipt = (order: OrderHistoryItem) => {
-    setNotice?.(`Opening invoice for order ${order.orderNumber}...`);
+    setNotice?.(`Downloading invoice for order ${order.orderNumber}...`);
     window.open(
       ordersService.getInvoiceDownloadUrl(order.id, "student"),
       "_blank",

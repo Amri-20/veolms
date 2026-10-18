@@ -17,7 +17,10 @@ import type { RoutePlugin } from "../../../lib/route-plugin.ts";
 import { createCommerceContext } from "../shared/commerce.context.ts";
 import { createOrderService } from "./order.service.ts";
 import { createNeedsRefundService } from "./needs-refund.service.ts";
-import { createInvoiceService } from "../invoices/invoice.service.ts";
+import {
+  createInvoiceService,
+  invoiceStorage,
+} from "../invoices/invoice.service.ts";
 import { createRefundService } from "../refunds/refund.service.ts";
 import { createAuthorizationService } from "../../authorization/authorization.service.ts";
 import { createOrderController } from "./order.controller.ts";
@@ -25,7 +28,10 @@ import { createOrderController } from "./order.controller.ts";
 const orderRoutes: RoutePlugin = async (app, options) => {
   const ctx = createCommerceContext(options);
   const service = createOrderService({ database: options.database });
-  const invoiceService = createInvoiceService({ database: options.database });
+  const invoiceService = createInvoiceService({
+    database: options.database,
+    storage: invoiceStorage(options.services.storage),
+  });
   const refundService = createRefundService({
     database: options.database,
     paymentGateway: options.services.paymentGateway,
@@ -169,7 +175,7 @@ const orderRoutes: RoutePlugin = async (app, options) => {
     controller.getInvoice,
   );
 
-  // 5. GET /orders/:orderId/invoice/download - Download printable HTML invoice
+  // 5. GET /orders/:orderId/invoice/download - Download the invoice as a PDF
   app.get(
     "/orders/:orderId/invoice/download",
     {
@@ -177,8 +183,9 @@ const orderRoutes: RoutePlugin = async (app, options) => {
       schema: {
         operationId: "downloadOrderInvoice",
         tags: ["Commerce - Orders"],
-        summary: "Download printable order invoice receipt",
-        description: "Returns downloadable HTML receipt file.",
+        summary: "Download the order's invoice as a PDF",
+        description:
+          "Redirects (302) to a short-lived link to the paid order's stored invoice PDF, making and storing it first if it has not been made yet. Without object storage, returns the PDF itself.",
         params: z.object({ orderId: z.string().uuid() }),
         querystring: z.object({
           view: z.enum(["admin", "student"]).optional(),

@@ -18,6 +18,7 @@ import {
 import { SettingsTabBar } from "../settings/SettingsTabBar";
 import { useSettingsTabShortcuts } from "../settings/useSettingsTabShortcuts";
 import { PlatformAppearanceTab } from "./PlatformAppearanceTab";
+import { PlatformInvoiceTab } from "./PlatformInvoiceTab";
 import { PlatformSecurityTab } from "./PlatformSecurityTab";
 import { PLATFORM_TAB_DEFINITIONS } from "./platformTabs";
 import "../styles/features/settings/foundation.css";
@@ -70,6 +71,8 @@ const PlatformTabContent = memo(function PlatformTabContent({
           <AcademyBrandSection setNotice={setNotice} />
         </div>
       );
+    case "invoice":
+      return <PlatformInvoiceTab setNotice={setNotice} />;
   }
 });
 
@@ -95,7 +98,8 @@ function AccessDenied({ onNavigatePage }: { onNavigatePage?: NavigateTo }) {
 /**
  * The academy-wide settings an administrator manages, in tabs laid out like
  * Settings: the home page visitors see, the default look, the student sign-in
- * and enrolment rules, and the academy's name and logo.
+ * and enrolment rules, the academy's name and logo, and what its invoices
+ * print.
  */
 export function PlatformPage({
   tab,
@@ -194,7 +198,7 @@ function PlatformSettings({
           <PageHeading
             id="platform-page-title"
             title="Platform"
-            description="Settings for the whole academy: the home page, the default look and the rules every student follows."
+            description="Settings for the whole academy: the home page, the default look, the rules every student follows and its invoices."
             copyClassName="settings-page__heading-copy"
           />
           <div className="settings-page__icon" aria-hidden="true">

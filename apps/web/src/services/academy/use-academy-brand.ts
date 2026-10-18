@@ -17,6 +17,27 @@ export function useAcademyBrand() {
   });
 }
 
+/** Uploads a new logo and makes it the academy's logo. */
+export function useUploadAcademyLogo() {
+  const queryClient = useQueryClient();
+  return useMutation<AcademyBrandResponse, ApiError, File>({
+    mutationFn: (file) => academyService.uploadLogo(file),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(academyKeys.brand(), saved);
+    },
+  });
+}
+
+export function useRemoveAcademyLogo() {
+  const queryClient = useQueryClient();
+  return useMutation<AcademyBrandResponse, ApiError, void>({
+    mutationFn: () => academyService.removeLogo(),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(academyKeys.brand(), saved);
+    },
+  });
+}
+
 export function useUpdateAcademyBrand() {
   const queryClient = useQueryClient();
   return useMutation<AcademyBrandResponse, ApiError, UpdateAcademyBrandRequest>(

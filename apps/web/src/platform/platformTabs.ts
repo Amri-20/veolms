@@ -1,6 +1,7 @@
 import { IdentificationCardIcon as IdentificationCard } from "@phosphor-icons/react/IdentificationCard";
 import { LayoutIcon as Layout } from "@phosphor-icons/react/Layout";
 import { PaletteIcon as Palette } from "@phosphor-icons/react/Palette";
+import { ReceiptIcon as Receipt } from "@phosphor-icons/react/Receipt";
 import { ShieldCheckIcon as ShieldCheck } from "@phosphor-icons/react/ShieldCheck";
 import type { PlatformTab } from "../routing/tabSessionState";
 import type { PageTabDefinition } from "../settings/settingsTabs";
@@ -17,4 +18,5 @@ export const PLATFORM_TAB_DEFINITIONS: readonly PageTabDefinition<PlatformTab>[]
       Icon: IdentificationCard,
       tone: "violet",
     },
+    { id: "invoice", label: "Invoice", Icon: Receipt, tone: "green" },
   ];

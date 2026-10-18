@@ -17,6 +17,10 @@ import { createDiscussionUploadStore } from "./modules/discussion-uploads/index.
 import { createAttachmentsRepository } from "./modules/learning/discussions/attachments/attachments.repository.ts";
 import { createAttachmentsService } from "./modules/learning/discussions/attachments/attachments.service.ts";
 import { createNotificationProcessor } from "./modules/notifications/index.ts";
+import {
+  createInvoiceService,
+  invoiceStorage,
+} from "./modules/commerce/invoices/invoice.service.ts";
 import { getDatabasePoolMetrics } from "@veolms/database";
 import * as webhookRepo from "./modules/commerce/webhooks/webhook.repository.ts";
 import * as outboxRepo from "./events/outbox.repository.ts";
@@ -90,6 +94,8 @@ export function registerBackgroundJobs(
       ? startDiscussionUploadPurge(app, database, services)
       : null;
 
+  const stopInvoicePdfJob = startInvoicePdfJob(app, database, services);
+
   app.addHook("onClose", async () => {
     await paymentEventQueue.stop?.();
     // Awaited so an in-flight reconciliation cycle finishes before the
@@ -98,10 +104,114 @@ export function registerBackgroundJobs(
     await learningReminderWorker.stop();
     await stopNotificationLoop?.();
     await stopDiscussionUploadPurge?.();
+    await stopInvoicePdfJob?.();
     stopHeartbeat?.();
   });
 
   return paymentEventQueue;
+}
+
+const INVOICE_PDF_JOB = "invoice-pdf";
+const INVOICE_PDF_INTERVAL_MS = 10_000;
+/** Most PDFs one run makes; the rest wait for the next run. */
+const INVOICE_PDF_BATCH = 20;
+/**
+ * How far back the job looks. Older orders (and students brought over from
+ * another platform) get their PDF on their first download instead.
+ */
+const INVOICE_PDF_LOOKBACK_MS = 2 * 24 * 60 * 60 * 1000;
+/** The longest an order whose PDF keeps failing waits between tries. */
+const INVOICE_PDF_RETRY_MAX_MS = 60 * 60 * 1000;
+
+/**
+ * Makes each paid order's invoice PDF shortly after payment and keeps it in
+ * object storage, where downloads are served from. Payment itself never
+ * waits for, or fails on, the PDF: a run that fails leaves the order for the
+ * next run, and a download makes the PDF if it is still missing.
+ *
+ * Each API instance runs its own timer. That is safe: an order made twice
+ * at once is the same file written to the same place.
+ *
+ * Returns an async stop function that waits for a run under way, or null
+ * when there is no object storage to keep invoices in.
+ */
+function startInvoicePdfJob(
+  app: FastifyInstance,
+  database: Kysely<Database>,
+  services: AppServices,
+): (() => Promise<void>) | null {
+  const storage = invoiceStorage(services.storage);
+  if (!storage) {
+    app.log.info(
+      { job: INVOICE_PDF_JOB },
+      "Invoice PDFs are not stored: no object storage credentials; each download makes the PDF instead",
+    );
+    return null;
+  }
+  const invoices = createInvoiceService({ database, storage });
+  let stopped = false;
+  let activeCycle: Promise<void> | null = null;
+  // An order whose PDF failed waits before it is tried again, longer after
+  // each failure, so one that keeps failing neither fills the log nor takes
+  // a place in every run.
+  const retries = new Map<string, { failures: number; notBefore: number }>();
+
+  const runCycle = () => {
+    if (stopped || activeCycle) return;
+    activeCycle = (async () => {
+      try {
+        const now = Date.now();
+        for (const [orderId, retry] of retries) {
+          // Past the lookback the job no longer sees the order anyway.
+          if (retry.notBefore < now - INVOICE_PDF_LOOKBACK_MS) {
+            retries.delete(orderId);
+          }
+        }
+        const result = await invoices.issuePendingInvoicePdfs({
+          paidSince: new Date(now - INVOICE_PDF_LOOKBACK_MS),
+          limit: INVOICE_PDF_BATCH,
+          excludeOrderIds: [...retries]
+            .filter(([, retry]) => retry.notBefore > now)
+            .map(([orderId]) => orderId),
+        });
+        if (result.issued > 0) {
+          app.log.info(
+            { job: INVOICE_PDF_JOB, issued: result.issued },
+            "Invoice PDFs made",
+          );
+        }
+        for (const { orderId, error } of result.failures) {
+          const failures = (retries.get(orderId)?.failures ?? 0) + 1;
+          retries.set(orderId, {
+            failures,
+            notBefore:
+              Date.now() +
+              Math.min(INVOICE_PDF_RETRY_MAX_MS, 60_000 * 2 ** (failures - 1)),
+          });
+          app.log.warn(
+            { err: error, job: INVOICE_PDF_JOB, orderId, failures },
+            "Invoice PDF could not be made; it will be tried again",
+          );
+        }
+      } catch (error) {
+        app.log.error(
+          { err: error, job: INVOICE_PDF_JOB },
+          "Invoice PDF run failed",
+        );
+      }
+    })().finally(() => {
+      activeCycle = null;
+    });
+  };
+
+  const timer = setInterval(runCycle, INVOICE_PDF_INTERVAL_MS);
+  timer.unref();
+
+  return async () => {
+    stopped = true;
+    clearInterval(timer);
+    await activeCycle;
+  };
 }
 
 const DISCUSSION_UPLOAD_PURGE_JOB = "discussion-upload-retention";

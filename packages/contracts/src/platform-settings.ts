@@ -3,8 +3,10 @@ import {
   DEFAULT_PLATFORM_APPEARANCE_SETTINGS,
   PLATFORM_DISPLAY_MODES,
   type PlatformAppearanceSettings,
+  type PlatformInvoiceSettings,
   type PlatformSecuritySettings,
   type PlatformSettings,
+  type PublicPlatformSettings,
 } from "./platform-settings-defaults.ts";
 
 export * from "./platform-settings-defaults.ts";
@@ -26,9 +28,44 @@ export const platformSecuritySettingsSchema = z.strictObject({
   requireVerifiedPhoneForEnrollment: z.boolean(),
 }) satisfies z.ZodType<PlatformSecuritySettings>;
 
+/** A GSTIN: state code, PAN, entity number, "Z", check character. */
+const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+
+/**
+ * The invoice details, field by field. Every text field may be empty, which
+ * leaves that line off the invoice.
+ */
+export const platformInvoiceSettingsSchema = z.strictObject({
+  companyName: z.string().trim().max(120),
+  address: z.string().trim().max(400),
+  gstin: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .refine(
+      (value) => value === "" || GSTIN_PATTERN.test(value),
+      "Enter a 15-character GSTIN, such as 29ABCDE1234F1Z5",
+    ),
+  email: z.union([z.literal(""), z.email("Enter an email address").max(254)]),
+  phone: z
+    .string()
+    .trim()
+    .max(30)
+    .regex(/^[0-9+()\-\s]*$/, "Use digits, spaces, +, - and brackets only"),
+  numberPrefix: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9-]{0,12}$/, "Use up to 12 letters, digits or hyphens")
+    .meta({ example: "2e50" }),
+  signatoryLabel: z.string().trim().max(60),
+  footerNote: z.string().trim().max(200),
+  showLogo: z.boolean(),
+}) satisfies z.ZodType<PlatformInvoiceSettings>;
+
 export const platformSettingsSchema = z.strictObject({
   appearance: platformAppearanceSettingsSchema,
   security: platformSecuritySettingsSchema,
+  invoice: platformInvoiceSettingsSchema,
 }) satisfies z.ZodType<PlatformSettings>;
 
 export const platformSettingsResponseSchema = z.strictObject({
@@ -56,11 +93,13 @@ export const updatePlatformSettingsRequestSchema = z
       .partial()
       .optional(),
     security: platformSecuritySettingsSchema.partial().optional(),
+    invoice: platformInvoiceSettingsSchema.partial().optional(),
   })
   .refine(
     (value) =>
       Object.keys(value.appearance ?? {}).length > 0 ||
-      Object.keys(value.security ?? {}).length > 0,
+      Object.keys(value.security ?? {}).length > 0 ||
+      Object.keys(value.invoice ?? {}).length > 0,
     "Nothing to change",
   );
 export type UpdatePlatformSettingsRequest = z.input<
@@ -69,7 +108,10 @@ export type UpdatePlatformSettingsRequest = z.input<
 
 /**
  * What every visitor's browser needs before it shows a page: the default look
- * and the student rules the screens follow. Nothing in it is private.
+ * and the student rules the screens follow. Nothing in it is private; the
+ * invoice details are not part of it.
  */
-export const publicPlatformSettingsResponseSchema = platformSettingsSchema;
-export type PublicPlatformSettingsResponse = PlatformSettings;
+export const publicPlatformSettingsResponseSchema = platformSettingsSchema.omit(
+  { invoice: true },
+) satisfies z.ZodType<PublicPlatformSettings>;
+export type PublicPlatformSettingsResponse = PublicPlatformSettings;

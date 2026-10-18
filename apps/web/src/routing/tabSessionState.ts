@@ -8,7 +8,8 @@ export type SettingsTab =
   | "account";
 
 /** The admin's Platform page (academy-wide settings). */
-export type PlatformTab = "home" | "appearance" | "security" | "general";
+export type PlatformTab =
+  "home" | "appearance" | "security" | "general" | "invoice";
 
 export type DiscussionTab =
   "all" | "q-and-a" | "comments" | "notes" | "mentions" | "following" | "saved";
@@ -47,6 +48,7 @@ export const PLATFORM_TABS: readonly PlatformTab[] = [
   "appearance",
   "security",
   "general",
+  "invoice",
 ];
 const platformTabs = new Set<PlatformTab>(PLATFORM_TABS);
 

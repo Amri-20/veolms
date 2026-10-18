@@ -10,6 +10,7 @@ import { toMinorUnits } from "../shared/currency.ts";
 import { CHECKOUT_HAND_OUT_ATTEMPT_STATUS } from "../shared/open-orders.ts";
 import { escapeLikePattern } from "../../../lib/like-pattern.ts";
 import { SURPLUS_CAPTURE_ERROR_CODE } from "../payments/surplus-payment.ts";
+import { assignInvoiceNumber } from "../invoices/invoice.repository.ts";
 
 /**
  * Leaves out refunds of an extra payment (payments/extra-payment.ts) where
@@ -159,6 +160,8 @@ const orderColumns = [
   "o.idempotency_key",
   "o.expires_at",
   "o.paid_at",
+  "o.invoice_number",
+  "o.invoice_pdf_key",
   "o.created_at",
   "o.updated_at",
 ] as const;
@@ -218,6 +221,7 @@ export async function listOrders(
       "o.after_commission_amount",
       "o.coupon_id",
       "o.paid_at",
+      "o.invoice_number",
       "o.created_at",
     ])
     .select(
@@ -264,9 +268,8 @@ export async function listOrders(
   }
 
   // 6. Search filter. A learner's own list: order number, the invoice number
-  // shown on a paid or refunded order ("INV-" plus the order number, as the
-  // invoice service numbers it) and what was bought. Staff: order number
-  // plus student details.
+  // a paid order was issued, and what was bought. Staff: order number,
+  // invoice number plus student details.
   if (search && search.trim()) {
     // "%" and "_" mean "anything" to ILIKE, so a search for "100%" or "a_b"
     // matched far more than was typed. They are escaped, with the escape
@@ -277,10 +280,7 @@ export async function listOrders(
       query = query.where(
         sql<boolean>`(
           o.order_number ILIKE ${term}
-          OR (
-            o.status IN ('paid', 'partially_refunded', 'refunded')
-            AND ('INV-' || o.order_number) ILIKE ${term}
-          )
+          OR o.invoice_number ILIKE ${term}
           OR EXISTS (
             SELECT 1 FROM order_items oi
             WHERE oi.order_id = o.id
@@ -292,6 +292,7 @@ export async function listOrders(
       query = query.where(
         sql<boolean>`(
           o.order_number ILIKE ${term}
+          OR o.invoice_number ILIKE ${term}
           OR EXISTS (
             SELECT 1 FROM users u
             WHERE u.id = o.user_id
@@ -964,12 +965,18 @@ export async function cancelOrderWithoutPayment(
     .executeTakeFirst();
 }
 
+/**
+ * Marks the order paid and issues its invoice number. Every way an order
+ * gets paid (gateway, verified transfer, free checkout) comes through here
+ * inside its transaction, so the invoice numbers follow the order in which
+ * payments were recorded.
+ */
 export async function markOrderPaidIfPending(
   database: Executor,
   orderId: string,
   paidAt: Date,
 ) {
-  return await database
+  const paid = await database
     .updateTable("orders")
     .set({
       status: "paid",
@@ -980,6 +987,9 @@ export async function markOrderPaidIfPending(
     .where("status", "in", ["pending", "payment_processing", "expired"])
     .returningAll()
     .executeTakeFirst();
+  if (!paid) return paid;
+  const invoiceNumber = await assignInvoiceNumber(database, orderId, paidAt);
+  return { ...paid, invoice_number: invoiceNumber };
 }
 
 // Admin batch loading helpers
@@ -996,7 +1006,7 @@ export async function listUsersByIds(database: Executor, userIds: string[]) {
 export async function findInvoiceBuyer(database: Executor, userId: string) {
   return await database
     .selectFrom("users")
-    .select(["display_name", "username", "email"])
+    .select(["display_name", "username", "email", "phone_no"])
     .where("id", "=", userId)
     .where("is_deleted", "=", false)
     .executeTakeFirst();

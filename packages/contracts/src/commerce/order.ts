@@ -531,6 +531,8 @@ export type OrderItemSummary = z.infer<typeof orderItemSummarySchema>;
 export const learnerOrderSchema = z.strictObject({
   id: z.uuid(),
   orderNumber: z.string(),
+  /** Issued when the order is paid; null for an order never paid. */
+  invoiceNumber: z.string().nullable(),
   status: orderStatusSchema,
   currency: z.string().length(3),
   subtotalAmount: z.number().int().nonnegative(),
@@ -549,6 +551,8 @@ export type LearnerOrder = z.infer<typeof learnerOrderSchema>;
 export const adminOrderSchema = z.strictObject({
   id: z.uuid(),
   orderNumber: z.string(),
+  /** Issued when the order is paid; null for an order never paid. */
+  invoiceNumber: z.string().nullable(),
   status: orderStatusSchema,
   currency: z.string().length(3),
   subtotalAmount: z.number().int().nonnegative(),
@@ -637,13 +641,21 @@ export type CreatePurchaseRequest = CreateCheckoutOrderRequest;
 /** Invoice amounts are in minor units, like the order they describe. */
 export const invoiceItemSchema = z.strictObject({
   title: z.string(),
+  quantity: z.number().int().positive(),
+  /** The item's GST rate in percent; 0 when no GST was charged. */
+  taxRatePercent: z.number().nonnegative(),
   unitPrice: z.number().int().nonnegative(),
   discountAmount: z.number().int().nonnegative(),
   finalAmount: z.number().int().nonnegative(),
 });
 export type InvoiceItem = z.infer<typeof invoiceItemSchema>;
 
+/**
+ * A paid order's invoice. The seller's details are the ones set on the
+ * Platform page's Invoice tab; a detail left empty there is null here.
+ */
 export const invoiceSchema = z.strictObject({
+  /** "<prefix>/<year>/<running number>", issued when the order was paid. */
   invoiceNumber: z.string(),
   orderNumber: z.string(),
   purchaseId: z.uuid(),
@@ -651,17 +663,25 @@ export const invoiceSchema = z.strictObject({
     userId: z.uuid(),
     name: z.string(),
     email: z.string().nullable().optional(),
+    phone: z.string().nullable().optional(),
   }),
   seller: z.strictObject({
+    /** The company name from the Invoice tab, else the academy's name. */
     name: z.string(),
     logoUrl: z.string().nullable().optional(),
     customDomain: z.string().nullable().optional(),
+    address: z.string().nullable().optional(),
+    gstin: z.string().nullable().optional(),
+    email: z.string().nullable().optional(),
+    phone: z.string().nullable().optional(),
   }),
   currency: z.string().length(3),
   subtotalAmount: z.number().int().nonnegative(),
   discountAmount: z.number().int().nonnegative(),
   taxAmount: z.number().int().nonnegative(),
   totalAmount: z.number().int().nonnegative(),
+  /** The total written out, e.g. "Seven Hundred Ninety Nine INR Only". */
+  totalInWords: z.string(),
   paymentReference: z.string(),
   items: z.array(invoiceItemSchema),
   paidAt: z.string().or(z.date()).nullable().optional(),

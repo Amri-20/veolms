@@ -106,12 +106,28 @@ export interface OrderTable {
   idempotency_key: string | null;
   expires_at: Date;
   paid_at: Date | null;
+  /**
+   * "<prefix>/<year>/<running number>", issued once when the order is paid
+   * (see `assignInvoiceNumber`). Null for an order never paid.
+   */
+  invoice_number: string | null;
+  /**
+   * Where the invoice PDF is kept in object storage, once it has been made
+   * (shortly after payment, or on the first download). Null until then.
+   */
+  invoice_pdf_key: string | null;
   gstin: string | null;
   cgst_amount: Generated<number>;
   sgst_amount: Generated<number>;
   igst_amount: Generated<number>;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
+}
+
+/** The last invoice number issued in each calendar year (India time). */
+export interface InvoiceNumberCounterTable {
+  year: number;
+  last_number: number;
 }
 
 export interface OrderItemTable {

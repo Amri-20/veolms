@@ -21,6 +21,7 @@ import { toMinorUnits } from "../shared/currency.ts";
 interface OrderRowLike {
   id: string;
   order_number: string;
+  invoice_number: string | null;
   // OrderStatus is the same literal union on both the DB (@veolms/database)
   // and contract (@veolms/contracts) side, so it is assigned without a cast.
   // If the two ever drift this stops typechecking instead of silently
@@ -92,6 +93,7 @@ export function toLearnerOrder(
   return {
     id: row.id,
     orderNumber: row.order_number,
+    invoiceNumber: row.invoice_number,
     status: row.status,
     currency: row.currency,
     subtotalAmount: toMinorUnits(row.subtotal_amount, row.currency),
@@ -125,6 +127,7 @@ export function toAdminOrder(
   return {
     id: row.id,
     orderNumber: row.order_number,
+    invoiceNumber: row.invoice_number,
     status: row.status,
     currency: row.currency,
     subtotalAmount: toMinorUnits(row.subtotal_amount, row.currency),

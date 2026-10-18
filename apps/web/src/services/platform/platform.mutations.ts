@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   PlatformSettingsResponse,
+  PublicPlatformSettingsResponse,
   UpdatePlatformSettingsRequest,
 } from "@veolms/contracts";
 import type { ApiError } from "../../lib/api-error";
@@ -38,6 +39,7 @@ export function useUpdatePlatformSettings() {
                 ...changes.appearance,
               },
               security: { ...previous.settings.security, ...changes.security },
+              invoice: { ...previous.settings.invoice, ...changes.invoice },
             },
           },
         );
@@ -51,7 +53,12 @@ export function useUpdatePlatformSettings() {
     },
     onSuccess: (saved, changes) => {
       queryClient.setQueryData(platformKeys.settings(), saved);
-      queryClient.setQueryData(platformKeys.publicSettings(), saved.settings);
+      // Visitors are never sent the invoice details; neither is this copy.
+      const { appearance, security } = saved.settings;
+      queryClient.setQueryData<PublicPlatformSettingsResponse>(
+        platformKeys.publicSettings(),
+        { appearance, security },
+      );
       if (changes.security?.requireVerifiedPhoneForEnrollment !== undefined) {
         void queryClient.invalidateQueries({ queryKey: authKeys.config() });
       }

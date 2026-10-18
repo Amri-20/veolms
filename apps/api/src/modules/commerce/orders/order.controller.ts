@@ -146,17 +146,24 @@ export function createOrderController({
     reply: FastifyReply,
   ) {
     const scope = await resolveScope(request, request.query?.view);
-    const html = await invoiceService.generateInvoiceHtml(
+    const download = await invoiceService.getInvoiceDownload(
       scope,
       request.params.orderId,
     );
+    reply.header("Cache-Control", "private, no-store");
+    if (download.kind === "redirect") {
+      // The stored PDF, straight from the bucket, by a link that soon
+      // stops working.
+      await reply.redirect(download.url, 302);
+      return;
+    }
     await reply
-      .header("Content-Type", "text/html; charset=utf-8")
+      .header("Content-Type", "application/pdf")
       .header(
         "Content-Disposition",
-        `attachment; filename="invoice-${request.params.orderId}.html"`,
+        `attachment; filename="${download.fileName}"`,
       )
-      .send(html);
+      .send(download.pdf);
   }
 
   async function refundOrder(

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { DEFAULT_PLATFORM_INVOICE_SETTINGS } from "@veolms/contracts";
 import type { Database } from "@veolms/database";
 import type { Kysely, RawBuilder } from "kysely";
 
@@ -57,6 +58,7 @@ await test("before anything is saved, the defaults apply and the phone rule foll
         requireVerifiedPhoneForEnrollment:
           config.REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT,
       },
+      invoice: DEFAULT_PLATFORM_INVOICE_SETTINGS,
     },
     updatedAt: null,
   });
@@ -117,6 +119,48 @@ await test("a save writes only what was set, so the phone rule keeps following t
   // Every instance on the same database sees the save at once.
   const other = createPlatformSettingsService({ database });
   assert.equal(await other.isStudentTwoFactorEnabled(), false);
+});
+
+await test("invoice details are saved field by field, and a field that no longer reads falls back alone", async () => {
+  const { database, writes } = fakeDatabase({
+    invoice: { companyName: "PROCODRR LABS LLP", gstin: "not a gstin" },
+  });
+  const service = createPlatformSettingsService({ database });
+
+  const before = await service.getInvoiceSettings();
+  assert.equal(before.companyName, "PROCODRR LABS LLP");
+  assert.equal(before.gstin, "", "an unreadable GSTIN is left off");
+  assert.equal(before.numberPrefix, "INV");
+
+  const saved = await service.updateSettings(
+    { invoice: { numberPrefix: "2e50", showLogo: false } },
+    null,
+  );
+  assert.deepEqual(writes, [
+    {
+      invoice: {
+        companyName: "PROCODRR LABS LLP",
+        gstin: "not a gstin",
+        numberPrefix: "2e50",
+        showLogo: false,
+      },
+    },
+  ]);
+  assert.equal(saved.settings.invoice.numberPrefix, "2e50");
+  assert.equal(saved.settings.invoice.showLogo, false);
+});
+
+await test("visitors are not sent the invoice details", async () => {
+  const { database } = fakeDatabase({
+    invoice: { address: "No 235, Indiranagar, Bengaluru" },
+  });
+  const service = createPlatformSettingsService({ database });
+
+  const publicSettings = await service.getPublicSettings();
+  assert.deepEqual(Object.keys(publicSettings).sort(), [
+    "appearance",
+    "security",
+  ]);
 });
 
 await test("only a change to a security setting drops the cached sign-in answers", async () => {
