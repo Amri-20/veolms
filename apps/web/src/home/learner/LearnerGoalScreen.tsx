@@ -15,7 +15,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { GoalEditorForm } from "./GoalEditorForm";
+import { GoalEditorForm, GoalSaveButton } from "./GoalEditorForm";
 import { useLaptopWallpaper } from "./laptopWallpaper";
 import { useGoalEditor } from "./useGoalEditor";
 import {
@@ -275,8 +275,8 @@ function GoalOutcomeStat({
  * there is no screen without one. Changing it is the pencil at the sheet's
  * corner, which shows when the pointer is over the sheet; where there is no
  * pointer to hover with, the whole sheet takes the press instead. It opens
- * the goal for editing right there, in place of its figures (see
- * `useGoalEditor`).
+ * the goal for editing right there, in place of its heading and figures,
+ * and becomes the tick that saves it (see `useGoalEditor`).
  */
 export function LearnerGoalScreen({
   summary,
@@ -330,7 +330,14 @@ export function LearnerGoalScreen({
 
   return (
     <LaptopScreen>
-      {editor.editing ? null : (
+      {editor.editing ? (
+        // In the pencil's place while the goal is edited, and always shown.
+        <GoalSaveButton
+          editor={editor}
+          className="absolute top-4 right-7 grid size-16 place-items-center rounded-full bg-white text-black hover:bg-white/85 focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-white"
+          iconClassName="size-9"
+        />
+      ) : (
         <button
           type="button"
           onClick={editor.open}
@@ -348,18 +355,20 @@ export function LearnerGoalScreen({
         </button>
       )}
 
-      <GoalHeading standing={standing} />
       {editor.editing ? (
-        <GoalEditorForm editor={editor} done={today.done} variant="laptop" />
+        <GoalEditorForm editor={editor} variant="laptop" />
       ) : (
-        <p className="mt-4 flex items-baseline leading-none whitespace-nowrap @[50rem]/home:mt-3">
-          <strong className="text-[128px] font-extrabold tracking-[-0.03em] @[50rem]/home:text-[104px]">
-            {today.done}
-          </strong>
-          <span className="ml-5 text-[66px] font-semibold text-(--goal-ink)/90 @[50rem]/home:text-[56px]">
-            / {today.goal} {today.unit}
-          </span>
-        </p>
+        <>
+          <GoalHeading standing={standing} />
+          <p className="mt-4 flex items-baseline leading-none whitespace-nowrap @[50rem]/home:mt-3">
+            <strong className="text-[128px] font-extrabold tracking-[-0.03em] @[50rem]/home:text-[104px]">
+              {today.done}
+            </strong>
+            <span className="ml-5 text-[66px] font-semibold text-(--goal-ink)/90 @[50rem]/home:text-[56px]">
+              / {today.goal} {today.unit}
+            </span>
+          </p>
+        </>
       )}
 
       <div

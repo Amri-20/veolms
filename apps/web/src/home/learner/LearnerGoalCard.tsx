@@ -13,7 +13,7 @@ import {
   timeLeftParts,
   timeOverGoalParts,
 } from "./learnerGoalFormat";
-import { GoalEditorForm } from "./GoalEditorForm";
+import { GoalEditorForm, GoalSaveButton } from "./GoalEditorForm";
 import { resumePaneClasses } from "./learnerHeroLayout";
 import { useGoalEditor } from "./useGoalEditor";
 
@@ -70,7 +70,8 @@ const chipIconClasses = "size-4 shrink-0";
  * (lessons finished today, the time left, the share done). It says the
  * same as the laptop's screen does on wider pages (see `LearnerGoalScreen`),
  * meeting and passing the goal included. The target in its corner opens
- * the goal for editing in place of its figures (see `useGoalEditor`).
+ * the goal for editing in place of its title and figures, and becomes the
+ * tick that saves it (see `useGoalEditor`).
  */
 export function LearnerGoalCard({
   summary,
@@ -113,9 +114,12 @@ export function LearnerGoalCard({
     >
       <div className="relative z-10">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+          <div className={editor.editing ? "min-w-0 flex-1" : "min-w-0"}>
+            {/* Still the card's name while the editor's line stands in its
+                place. */}
             <h2
               id="learner-goal-card-title"
+              hidden={editor.editing}
               className="flex items-center gap-2 text-[0.9375rem] leading-5 font-medium"
             >
               {standing === "under" ? "Today's goal" : null}
@@ -141,11 +145,7 @@ export function LearnerGoalCard({
               ) : null}
             </h2>
             {editor.editing ? (
-              <GoalEditorForm
-                editor={editor}
-                done={today.done}
-                variant="card"
-              />
+              <GoalEditorForm editor={editor} variant="card" />
             ) : (
               <p className="mt-2 flex items-baseline leading-none whitespace-nowrap">
                 <strong className="text-[2.75rem] font-extrabold tracking-[-0.03em]">
@@ -157,18 +157,25 @@ export function LearnerGoalCard({
               </p>
             )}
           </div>
-          {/* Out of the way while the goal is edited: the field and its
-              check button take the row. */}
-          <button
-            hidden={editor.editing}
-            type="button"
-            onClick={editor.open}
-            aria-label="Edit your daily goal"
-            title="Edit your daily goal"
-            className="grid size-12 shrink-0 cursor-pointer place-items-center rounded-2xl bg-current/6 text-[color-mix(in_srgb,var(--accent)_70%,white)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,currentColor_12%,transparent)] transition-colors hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) [:root[data-theme=light]_&]:text-(--accent)"
-          >
-            <Target size={24} weight="bold" aria-hidden="true" />
-          </button>
+          {/* The tick that saves the goal takes its place while the goal
+              is edited. */}
+          {editor.editing ? (
+            <GoalSaveButton
+              editor={editor}
+              className="grid size-12 shrink-0 place-items-center rounded-2xl bg-(--accent) text-(--on-accent,white) hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
+              iconClassName="size-6"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={editor.open}
+              aria-label="Edit your daily goal"
+              title="Edit your daily goal"
+              className="grid size-12 shrink-0 cursor-pointer place-items-center rounded-2xl bg-current/6 text-[color-mix(in_srgb,var(--accent)_70%,white)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,currentColor_12%,transparent)] transition-colors hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) [:root[data-theme=light]_&]:text-(--accent)"
+            >
+              <Target size={24} weight="bold" aria-hidden="true" />
+            </button>
+          )}
         </div>
 
         <div
