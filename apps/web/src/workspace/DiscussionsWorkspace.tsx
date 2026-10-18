@@ -407,7 +407,12 @@ function getDiscussionThreadDestination(
     "itemType" in thread && thread.itemType === "reply" && thread.parentThreadId
       ? thread.parentThreadId
       : thread.id;
-  const basePath = getCoursePlayerPath(thread.courseId, 1, { threadId });
+  // The lesson shows the comment at the top of its discussion and highlights
+  // it, rather than opening it as a thread.
+  const basePath = getCoursePlayerPath(thread.courseId, 1, {
+    threadId,
+    threadFocus: "comment",
+  });
   if (!thread.lessonId) return basePath;
 
   const [pathname, query = ""] = basePath.split("?", 2);
