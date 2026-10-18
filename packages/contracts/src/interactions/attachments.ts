@@ -221,11 +221,6 @@ export const linkPreviewQuerySchema = z.object({
 });
 export type LinkPreviewQuery = z.infer<typeof linkPreviewQuerySchema>;
 
-/** @deprecated Use linkPreviewQuerySchema */
-export const createLinkPreviewRequestSchema = linkPreviewQuerySchema;
-/** @deprecated Use LinkPreviewQuery */
-export type CreateLinkPreviewRequest = LinkPreviewQuery;
-
 export const linkPreviewResponseSchema = z.object({
   url: z.string().url(),
   title: z.string().nullable().optional(),
