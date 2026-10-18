@@ -1228,5 +1228,29 @@ export function createThreadsService(
     },
   };
 
+  // Every tab of the Discussions page shows a Like button, so each item says
+  // whether the viewer liked it. Added here, in one lookup for the page,
+  // rather than in each tab's own query.
+  const getDiscussionsWorkspaceItems = service.getDiscussionsWorkspace;
+  service.getDiscussionsWorkspace = async (db, query) => {
+    const response = await getDiscussionsWorkspaceItems(db, query);
+    if (!query.currentUserId || response.items.length === 0) return response;
+    const likes = await threadsRepo.listViewerLikes(
+      db,
+      query.currentUserId,
+      response.items.map((item) => item.id),
+    );
+    const liked = new Set(
+      likes.map((like) => `${like.target_type}:${like.target_id}`),
+    );
+    return {
+      ...response,
+      items: response.items.map((item) => ({
+        ...item,
+        isLiked: liked.has(`${item.itemType}:${item.id}`),
+      })),
+    };
+  };
+
   return service;
 }

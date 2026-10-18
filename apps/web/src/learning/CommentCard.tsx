@@ -1487,6 +1487,11 @@ export function CommentActionMenu({
   className,
 }: CommentActionMenuProps) {
   const [open, setOpen] = useState(false);
+  // Admins may delete anyone's comment, Q&A, reply or note.
+  const { data: currentUser } = useCurrentUser();
+  const isAdmin = Boolean(
+    currentUser?.roles?.some((role) => role.toLowerCase() === "admin"),
+  );
   const isNote = kind === "note";
   const actionLabel = kind === "question" ? "Q&A" : isNote ? "note" : kind;
   const menuLabel =
@@ -1515,6 +1520,18 @@ export function CommentActionMenu({
   const copyIcon = (item: "share" | "text", icon: typeof CopySimple) =>
     copyResult?.item === item && copyResult.copied ? CheckCircle : icon;
 
+  const deleteOthersAction =
+    isAdmin && canDelete ? (
+      <>
+        <MenuDivider />
+        <MenuAction
+          Icon={Trash}
+          label={`Delete ${actionLabel}`}
+          destructive
+          onClick={onDelete}
+        />
+      </>
+    ) : null;
   const shareAction = (
     <MenuAction
       Icon={copyIcon("share", ShareNetwork)}
@@ -1595,6 +1612,7 @@ export function CommentActionMenu({
               label={`Report ${actionLabel}`}
               onClick={onReport}
             />
+            {deleteOthersAction}
           </>
         )
       ) : isOwn ? (
@@ -1683,6 +1701,7 @@ export function CommentActionMenu({
             label={`Report ${actionLabel}`}
             onClick={onReport}
           />
+          {deleteOthersAction}
         </>
       )}
     </CourseActionMenu>

@@ -30,6 +30,7 @@ export interface DiscussionWorkspaceCard {
   likes: number;
   isBookmarked?: boolean;
   isFollowing?: boolean;
+  isLiked?: boolean;
   activity: string;
   mentionedAt?: string;
   mentionActivity?: string;
@@ -132,6 +133,7 @@ export function adaptDiscussionWorkspaceItem(
     replies: item.repliesCount,
     likes: item.likesCount,
     isBookmarked: item.isBookmarked,
+    isLiked: item.isLiked,
     isFollowing: item.isFollowing,
     activity: formatRelativeTime(
       isFollowing ? item.updatedAt : item.updatedAt || item.createdAt,

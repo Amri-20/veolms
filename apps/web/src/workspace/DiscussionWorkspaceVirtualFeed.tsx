@@ -99,7 +99,9 @@ function useWorkspaceScrollMargin(
   return scrollMargin;
 }
 
-function getDiscussionWorkspaceItemKey(card: DiscussionWorkspaceCard): string {
+export function getDiscussionWorkspaceItemKey(
+  card: DiscussionWorkspaceCard,
+): string {
   return `${card.itemType}:${card.id}`;
 }
 
@@ -148,9 +150,6 @@ function DiscussionWorkspaceVirtualRows({
             data-discussion-workspace-virtual-row
             data-index={virtualItem.index}
             data-item-key={itemKey}
-            className={
-              virtualItem.index < cards.length - 1 ? "pb-2.5" : undefined
-            }
             style={{
               position: "absolute",
               top: 0,

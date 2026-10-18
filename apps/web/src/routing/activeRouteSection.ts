@@ -22,12 +22,15 @@ export function getNavigationMatch(
 
   for (const [label, , metadata] of items) {
     const itemPath = normalizeNavigationPath(metadata?.routeLink ?? "/");
-    // The Discussions menu resolves to the last tab visited in this session,
-    // so its tab URLs are still the menu's destination rather than a detail
-    // page that should inherit the previously selected section.
-    const isDiscussionTab =
-      itemPath === "/discussions" && path.startsWith("/discussions/");
-    const exact = path === itemPath || isDiscussionTab;
+    // The Discussions and Platform menus resolve to the last tab visited in
+    // this session, so their tab URLs are still the menu's destination rather
+    // than a detail page that should inherit the previously selected section.
+    // (Platform's tabs used to keep the section navigated from lit: arriving
+    // from Coupons left Coupons highlighted on the Platform page.)
+    const isMenuTab =
+      (itemPath === "/discussions" || itemPath === "/platform") &&
+      path.startsWith(`${itemPath}/`);
+    const exact = path === itemPath || isMenuTab;
     const isChild =
       itemPath !== "/" && path.startsWith(`${itemPath.replace(/\/$/, "")}/`);
     if (!exact && !isChild) continue;
