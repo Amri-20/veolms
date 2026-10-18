@@ -12,6 +12,7 @@ import type {
 } from "@veolms/contracts";
 import type { S3StorageService } from "@veolms/storage";
 import { httpError } from "../../../../lib/errors.ts";
+import { ADMIN_ROLE } from "../../../auth/index.ts";
 import {
   decodeDiscussionCursor,
   encodeDiscussionCursor,
@@ -592,7 +593,11 @@ export function createNotesService(
 
     async deleteNote(db, noteId, actor) {
       const note = await notesRepo.findNoteAccessTarget(db, noteId);
-      assertOwnNote(note, actor.userId);
+      // Admins may delete anyone's note; everyone else only their own.
+      if (!actor.roles.includes(ADMIN_ROLE)) assertOwnNote(note, actor.userId);
+      if (!note) {
+        throw httpError(404, "NOTE_NOT_FOUND", "Learning note not found");
+      }
       await courseAccess.assertCanParticipateInCourse(db, actor, note.courseId);
       await notesRepo.deleteNote(db, noteId);
     },
