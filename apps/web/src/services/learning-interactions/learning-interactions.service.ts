@@ -136,6 +136,17 @@ export const learningInteractionsService = {
     return api.delete<{ message: string }>(`/threads/${serverId}`);
   },
 
+  // Admin moderation: takes a thread or reply out of view for everyone.
+  hideThread(threadId: string): Promise<unknown> {
+    const serverId = requireServerEntityId(threadId);
+    return api.post(`/moderation/threads/${serverId}`, { action: "hide" });
+  },
+
+  hideReply(replyId: string): Promise<unknown> {
+    const serverId = requireServerEntityId(replyId);
+    return api.post(`/moderation/replies/${serverId}`, { action: "hide" });
+  },
+
   // Replies
   listReplies(
     threadId: string,

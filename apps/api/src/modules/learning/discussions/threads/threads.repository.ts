@@ -513,6 +513,13 @@ export interface ThreadsRepository {
     threadIds: readonly string[],
   ): Promise<Array<{ thread_id: string | null }>>;
 
+  /** The viewer's likes among threads, replies and notes, in one lookup. */
+  listViewerLikes(
+    db: DatabaseExecutor,
+    userId: string,
+    targetIds: readonly string[],
+  ): Promise<Array<{ target_type: string; target_id: string }>>;
+
   listThreadFollows(
     db: DatabaseExecutor,
     userId: string,
@@ -1285,6 +1292,16 @@ export function createThreadsRepository(): ThreadsRepository {
         .where("user_id", "=", userId)
         .where("target_type", "=", "thread")
         .where("target_id", "in", [...threadIds])
+        .execute();
+    },
+
+    async listViewerLikes(db, userId, targetIds) {
+      return db
+        .selectFrom("learning_likes")
+        .select(["target_type", "target_id"])
+        .where("user_id", "=", userId)
+        .where("target_type", "in", ["thread", "reply", "note"])
+        .where("target_id", "in", [...targetIds])
         .execute();
     },
 

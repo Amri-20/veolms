@@ -1,11 +1,14 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useCurrentUser } from "../services/auth";
 import {
   desiredStateCoordinator,
   learningInteractionKeys,
   learningInteractionsService,
   optimisticallyUpdateDiscussionsWorkspaceMembership,
+  removeFromDiscussionsWorkspaceCache,
   restoreDiscussionsWorkspaceCacheSnapshot,
+  updateDiscussionsWorkspaceItem,
 } from "../services/learning-interactions";
 import { copyTextToClipboard } from "../lib/clipboard";
 import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
@@ -31,6 +34,24 @@ export function useDiscussionWorkspaceCardActions({
   const bookmarkLabel = card.isBookmarked ? "Remove bookmark" : "Bookmark";
   const followLabel = card.isFollowing ? "Unfollow" : "Follow";
   const copyTextValue = card.content || card.plainText;
+  // Authors may delete their own posts; admins may delete anyone's.
+  const { data: currentUser } = useCurrentUser();
+  const isAdmin = Boolean(
+    currentUser?.roles?.some((role) => role.toLowerCase() === "admin"),
+  );
+  const canDelete =
+    Boolean(card.id) &&
+    !card.id.startsWith("client-") &&
+    (Boolean(card.isOwn) || isAdmin);
+  const deleteNoun = isNote
+    ? "note"
+    : isReply
+      ? "reply"
+      : card.kind === "question" || card.kind === "qna"
+        ? "Q&A"
+        : "comment";
+  // There is no undo on this page, so Delete asks to be pressed again.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const bookmark = () => {
     if (!sourceId) return;
@@ -153,14 +174,125 @@ export function useDiscussionWorkspaceCardActions({
     await copyTextToClipboard(copyTextValue, setNotice);
   };
 
+  const likeTargetType = isNote ? "note" : isReply ? "reply" : "thread";
+  const canLike = Boolean(card.id) && !card.id.startsWith("client-");
+  const like = () => {
+    if (!canLike) return;
+    const desiredLiked = !card.isLiked;
+    const target = { itemType: likeTargetType, id: card.id } as const;
+    const snapshot = updateDiscussionsWorkspaceItem(
+      queryClient,
+      target,
+      (item) => ({
+        ...item,
+        isLiked: desiredLiked,
+        likesCount: Math.max(0, item.likesCount + (desiredLiked ? 1 : -1)),
+      }),
+    );
+    void learningInteractionsService
+      .toggleLike({ targetType: likeTargetType, targetId: card.id })
+      .then((response) => {
+        if (response.liked !== desiredLiked) {
+          restoreDiscussionsWorkspaceCacheSnapshot(queryClient, snapshot);
+        }
+        // The lesson's own lists show likes too; they fetch again when
+        // next shown.
+        void queryClient.invalidateQueries({
+          queryKey: learningInteractionKeys.all,
+          refetchType: "none",
+        });
+      })
+      .catch(() => {
+        restoreDiscussionsWorkspaceCacheSnapshot(queryClient, snapshot);
+        setNotice?.("Couldn't update like");
+      });
+  };
+
+  // Admins can take a comment, Q&A or reply out of view (it can be shown
+  // again from moderation, so this asks for no confirmation).
+  const canHide = isAdmin && !isNote && canDelete;
+  const hide = () => {
+    if (!canHide) return;
+    const itemType = isReply ? "reply" : "thread";
+    const snapshot = removeFromDiscussionsWorkspaceCache(queryClient, {
+      itemType,
+      id: card.id,
+    });
+    const request =
+      itemType === "reply"
+        ? learningInteractionsService.hideReply(card.id)
+        : learningInteractionsService.hideThread(card.id);
+    void request
+      .then(() => {
+        setNotice?.(
+          `${deleteNoun === "Q&A" ? deleteNoun : deleteNoun[0]!.toUpperCase() + deleteNoun.slice(1)} hidden`,
+        );
+        void queryClient.invalidateQueries({
+          queryKey: learningInteractionKeys.all,
+          refetchType: "none",
+        });
+      })
+      .catch(() => {
+        restoreDiscussionsWorkspaceCacheSnapshot(queryClient, snapshot);
+        setNotice?.(`Couldn't hide ${deleteNoun}`);
+      });
+  };
+
+  const deleteItem = () => {
+    if (!canDelete) return;
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    setConfirmingDelete(false);
+
+    const itemType = isNote ? "note" : isReply ? "reply" : "thread";
+    const snapshot = removeFromDiscussionsWorkspaceCache(queryClient, {
+      itemType,
+      id: card.id,
+    });
+    const request =
+      itemType === "note"
+        ? learningInteractionsService.deleteNote(card.id)
+        : itemType === "reply"
+          ? learningInteractionsService.deleteReply(card.id)
+          : learningInteractionsService.deleteThread(card.id);
+    void request
+      .then(() => {
+        setNotice?.(
+          `${deleteNoun === "Q&A" ? deleteNoun : deleteNoun[0]!.toUpperCase() + deleteNoun.slice(1)} deleted`,
+        );
+        // Lesson discussions, counts and the dashboard fetch again when next
+        // shown; the feed here has already dropped the item.
+        void queryClient.invalidateQueries({
+          queryKey: learningInteractionKeys.all,
+          refetchType: "none",
+        });
+      })
+      .catch(() => {
+        restoreDiscussionsWorkspaceCacheSnapshot(queryClient, snapshot);
+        setNotice?.(`Couldn't delete ${deleteNoun}`);
+      });
+  };
+
   return {
     bookmark,
     bookmarkLabel,
     canBookmark: canUseSourceActions,
     canCopyLink: Boolean(destination),
     canCopyText: Boolean(copyTextValue.trim()),
+    canDelete,
     canFollow,
+    canHide,
+    canLike,
+    hide,
+    hideLabel: `Hide ${deleteNoun}`,
+    like,
+    confirmingDelete,
     copyLink,
+    deleteItem,
+    deleteLabel: confirmingDelete ? "Confirm delete" : `Delete ${deleteNoun}`,
+    resetDelete: () => setConfirmingDelete(false),
     copyText,
     follow,
     followLabel,

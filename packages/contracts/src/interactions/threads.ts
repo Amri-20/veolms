@@ -273,6 +273,8 @@ export const workspaceDiscussionItemSchema = z.object({
   isBookmarked: z.boolean().optional(),
   isFollowing: z.boolean().optional(),
   isOwn: z.boolean().optional(),
+  /** Whether the viewer has liked this thread, reply or note. */
+  isLiked: z.boolean().optional(),
   mentionedAt: z.string().optional(),
   attachmentSummary: discussionAttachmentSummarySchema,
   createdAt: z.string(),
