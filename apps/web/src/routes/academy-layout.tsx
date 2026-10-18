@@ -93,9 +93,11 @@ import {
 } from "../learning/player/learningMiniPlayerStore";
 import type { NavigateTo, NavigationOptions } from "../routing/navigation";
 import { AcademyRouteGuard } from "../routing/RouteGuards";
+import { ProfileNavigationProvider } from "../profiles/ProfileLink";
 import {
   buildLoginDialogPath,
   buildLoginPath,
+  isPublicProfilePath,
   LOGIN_PATH,
   readLoginPurpose,
 } from "../routing/routeAccess";
@@ -133,6 +135,7 @@ import {
   resolveActiveRouteSection,
 } from "../routing/activeRouteSection";
 import { NO_VIDEO_NOTICE } from "../learning/lessonWithoutVideo";
+import { videoPlaybackFailureNotice } from "../learning/videoPlaybackFailure";
 import {
   getDestinationPath,
   getMatchedRouteDescriptor,
@@ -155,6 +158,8 @@ export interface AcademyOutletContext {
   ) => void;
   onMiniPlayerRestoreReady: () => void;
   openLearningMiniPlayer: (session: LearningMiniPlayerSession) => void;
+  /** See `openCourseToUnlock`. */
+  openCourseToUnlock: (courseSlug: string) => void;
   persistentPlayerMounted: boolean;
   registerPersistentPlayer: RegisterPersistentLearningPlayer;
 }
@@ -182,15 +187,16 @@ const getApplicationScrollStorageKey = (
 const ACADEMY_NAVIGATION_ORIGIN_PATH = "academyNavigationOriginPath";
 const ACADEMY_NAVIGATION_ORIGIN_SECTION = "academyNavigationOriginSection";
 /**
- * The lesson a course's page was opened from (the course picture in the
- * lesson page's content panel leads there). The origin above is a menu page
- * and is carried through the lesson unchanged, so "back" on the course's
- * page used to skip the lesson and return to that menu page; with this the
- * course's page goes back to the lesson it came from, and says so.
+ * The lesson a course's page or a member's profile was opened from (the
+ * course picture in the lesson page's content panel, or a name or picture in
+ * its discussion, leads there). The origin above is a menu page and is
+ * carried through the lesson unchanged, so "back" on the course's page used
+ * to skip the lesson and return to that menu page; with this the page goes
+ * back to the lesson it came from, and says so.
  */
 const ACADEMY_NAVIGATION_LESSON_RETURN_PATH =
   "academyNavigationLessonReturnPath";
-/** What the course page's back link is called when it returns to a lesson. */
+/** What the back link is called when it returns to a lesson. */
 const LESSON_RETURN_LABEL = "Learning page";
 
 function readAcademyNavigationState(value: unknown): Record<string, unknown> {
@@ -420,6 +426,9 @@ export default function AcademyLayout() {
   >(() => {});
   const playerPresentationRef = useRef<LearningPlayerPresentation>("full");
   const persistentRegistrationTokenRef = useRef<symbol | null>(null);
+  // Set when the lesson page is left to unlock its course: the player it
+  // leaves behind is closed then, not minimized. See `openCourseToUnlock`.
+  const closePlayerOnLeaveRef = useRef(false);
   const playerRestoreVersionRef = useRef(0);
   const learningBackgroundMountedRef = useRef(false);
   const learningMotionStageRef = useRef<HTMLDivElement>(null);
@@ -473,9 +482,11 @@ export default function AcademyLayout() {
     workspaceNavigationItems.some(([label]) => label === originSectionValue);
   const lessonReturnPathValue =
     currentNavigationState[ACADEMY_NAVIGATION_LESSON_RETURN_PATH];
-  // Only a course's page returns to a lesson, and only to a lesson address.
+  // Only a course's page or a profile returns to a lesson, and only to a
+  // lesson address.
   const lessonReturnPath =
-    route.kind === "course-overview" &&
+    (route.kind === "course-overview" ||
+      (route.kind === "shell" && route.page === "public-profile")) &&
     typeof lessonReturnPathValue === "string" &&
     isLearningRoutePath(lessonReturnPathValue)
       ? lessonReturnPathValue
@@ -757,12 +768,12 @@ export default function AcademyLayout() {
             navigationState[ACADEMY_NAVIGATION_ORIGIN_SECTION] = originSection;
           }
         }
-        // A course's page opened from a lesson remembers the lesson, and
-        // keeps it while the page only changes its own address. Any other
-        // move forgets it.
+        // A course's page or a profile opened from a lesson remembers the
+        // lesson, and a course's page keeps it while it only changes its own
+        // address. Any other move forgets it.
         const targetCourseOverviewKey = getCourseOverviewRouteKey(path);
         if (
-          targetCourseOverviewKey &&
+          (targetCourseOverviewKey || isPublicProfilePath(path)) &&
           isLearningRoutePath(activeLocationPath)
         ) {
           navigationState[ACADEMY_NAVIGATION_LESSON_RETURN_PATH] =
@@ -1103,6 +1114,7 @@ export default function AcademyLayout() {
       const token = Symbol("persistent-learning-player-registration");
       const restoreVersionAtRegistration = playerRestoreVersionRef.current;
       persistentRegistrationTokenRef.current = token;
+      closePlayerOnLeaveRef.current = false;
       const existing = persistentPlayerRef.current;
       const resolvedRegistration =
         registration.playerProps.playbackBootstrap == null &&
@@ -1154,6 +1166,14 @@ export default function AcademyLayout() {
           if (persistentRegistrationTokenRef.current !== token) return;
           const current = persistentPlayerRef.current;
           if (!current) return;
+          if (closePlayerOnLeaveRef.current) {
+            closePlayerOnLeaveRef.current = false;
+            persistentRegistrationTokenRef.current = null;
+            persistentPlayerRef.current = null;
+            setPersistentPlayer(null);
+            closeLearningMiniPlayerSession();
+            return;
+          }
           const detachedPlayer = { ...current, anchor: null };
           persistentPlayerRef.current = detachedPlayer;
           setPersistentPlayer(detachedPlayer);
@@ -1232,6 +1252,36 @@ export default function AcademyLayout() {
     persistentPlayer?.courseRouteKey,
     persistentPlayer?.courseSlug,
   ]);
+
+  /**
+   * "Unlock the course" on a locked lesson: the course page, where it is
+   * bought, with no player left behind. Leaving a lesson otherwise keeps it
+   * on in the corner, but a locked lesson has nothing to play, and the mini
+   * player would sit over the page's pay button. From the lesson page the
+   * player is closed as that page goes, so its video area is not emptied
+   * before the course page arrives; from the mini player it is closed now.
+   */
+  const openCourseToUnlock = useCallback(
+    (courseSlug: string) => {
+      if (playerPresentationRef.current === "mini") {
+        persistentRegistrationTokenRef.current = null;
+        persistentPlayerRef.current = null;
+        setPersistentPlayer(null);
+        closeLearningMiniPlayerSession();
+      } else if (persistentPlayerRef.current) {
+        closePlayerOnLeaveRef.current = true;
+      }
+      navigateTo(`/courses/${encodeURIComponent(courseSlug)}/overview`);
+    },
+    [navigateTo],
+  );
+
+  const unlockPersistentPlayerCourse = useCallback(() => {
+    const slug =
+      persistentPlayerRef.current?.courseSlug ??
+      persistentPlayerRef.current?.courseRouteKey;
+    if (slug) openCourseToUnlock(slug);
+  }, [openCourseToUnlock]);
 
   const openPersistentPlayerLogin = useCallback(() => {
     const returnPath =
@@ -1352,7 +1402,7 @@ export default function AcademyLayout() {
                   message:
                     "Join the course to unlock this lesson and all the rest.",
                   actionLabel: "Unlock the course",
-                  onAction: openPersistentPlayerCourseOverview,
+                  onAction: unlockPersistentPlayerCourse,
                 }
               : bootstrapError?.code === "MEDIA_NOT_FOUND"
                 ? // The lesson has no video (its quiz was removed, say).
@@ -1360,9 +1410,7 @@ export default function AcademyLayout() {
                   // the lesson page says the same.
                   NO_VIDEO_NOTICE
                 : {
-                    kind: "retry" as const,
-                    message: "We couldn't prepare this video.",
-                    actionLabel: "Retry",
+                    ...videoPlaybackFailureNotice(error),
                     onAction: () =>
                       selectPersistentMiniPlayerLessonRef.current(
                         lessonNumber,
@@ -1888,97 +1936,102 @@ export default function AcademyLayout() {
 
   return (
     <AcademyRouteGuard>
-      <CoursesPage
-        cataloguePathname={location.pathname}
-        routeCatalogueEnrollmentFilter={getStudentCatalogueEnrollmentFilterFromPath(
-          learningBackground?.pathname ?? location.pathname,
-        )}
-        initialPublishedCoursePage={staticCourseRouteData?.publishedCoursePage}
-        initialPublishedCoursePageNeedsRefresh={
-          staticCourseRouteData?.publishedCoursePageNeedsRefresh
-        }
-        initialCourseOverview={staticCourseRouteData?.courseOverview}
-        initialGuestHomePage={staticCourseRouteData?.guestHomePage}
-        initialGuestHomeCopy={staticCourseRouteData?.guestHomeCopy}
-        page={route.page}
-        section={activeRouteSection}
-        settingsTab={route.settingsTab}
-        platformTab={route.platformTab}
-        showPageBackButton={showRouteBackButton}
-        discussionTab={route.discussionTab}
-        courseSlug={courseSlug}
-        quizId={quizId}
-        assignmentId={assignmentId}
-        username={username}
-        couponId={couponId}
-        miniPlayerCourseId={resolveMiniPlayerCourseId({
-          presentation: playerPresentation,
-          persistentCourseRouteKey: persistentPlayer?.courseRouteKey,
-          persistentCourseSlug: persistentPlayer?.courseSlug,
-          persistentLessonPath: persistentPlayer?.lessonPath,
-          miniPlayerCourseSlug: learningMiniPlayer?.courseSlug,
-          miniPlayerLessonPath: learningMiniPlayer?.lessonPath,
-        })}
-        learningBackground={learningBackground}
-        learningOriginPage={learningOriginPage}
-        learningOriginSection={learningOriginSection}
-        learningMotionStageRef={learningMotionStageRef}
-        onNavigatePage={navigateTo}
-        onNavigateBack={navigateBackToOrigin}
-        navigateBackSection={
-          lessonReturnPath
-            ? LESSON_RETURN_LABEL
-            : hasValidNavigationOrigin
-              ? (originSectionValue as string)
-              : undefined
-        }
-        onExitSettings={exitSettings}
-        onOpenCourse={openCourse}
-        renderMain={
-          route.kind === "learning"
-            ? ({ mobileBottomNavigation, mobileBottomNavigationHidden }) => (
-                <Outlet
-                  context={
-                    {
-                      mobileBottomNavigation,
-                      mobileBottomNavigationHidden,
-                      navigateTo,
-                      onLearningPlayerMinimizeGestureChange:
-                        handleLearningPlayerMinimizeGestureChange,
-                      onMiniPlayerRestoreReady: closeLearningMiniPlayer,
-                      openLearningMiniPlayer,
-                      persistentPlayerMounted: Boolean(persistentPlayer),
-                      registerPersistentPlayer,
-                    } satisfies AcademyOutletContext
-                  }
-                />
-              )
-            : null
-        }
-      />
-      {persistentPlayer ? (
-        <Suspense fallback={null}>
-          <PersistentLearningPlayerHost
-            player={persistentPlayer}
-            presentation={playerPresentation}
-            onClose={closeLearningMiniPlayer}
-            onRestore={restoreLearningMiniPlayer}
-            onSelectMiniPlayerLesson={selectPersistentMiniPlayerLesson}
-            onRetryMiniPlayerPlayback={retryPersistentMiniPlayerPlayback}
-            onOpenCourseOverview={openPersistentPlayerCourseOverview}
-          />
-        </Suspense>
-      ) : learningMiniPlayer ? (
-        <Suspense fallback={null}>
-          <LearningMiniPlayer
-            session={learningMiniPlayer}
-            onClose={closeLearningMiniPlayer}
-            onRestore={restoreLearningMiniPlayer}
-            onOpenCourseOverview={openStandaloneMiniPlayerCourseOverview}
-          />
-        </Suspense>
-      ) : null}
-      <LoginDialogHost />
+      <ProfileNavigationProvider value={navigateTo}>
+        <CoursesPage
+          cataloguePathname={location.pathname}
+          routeCatalogueEnrollmentFilter={getStudentCatalogueEnrollmentFilterFromPath(
+            learningBackground?.pathname ?? location.pathname,
+          )}
+          initialPublishedCoursePage={
+            staticCourseRouteData?.publishedCoursePage
+          }
+          initialPublishedCoursePageNeedsRefresh={
+            staticCourseRouteData?.publishedCoursePageNeedsRefresh
+          }
+          initialCourseOverview={staticCourseRouteData?.courseOverview}
+          initialGuestHomePage={staticCourseRouteData?.guestHomePage}
+          initialGuestHomeCopy={staticCourseRouteData?.guestHomeCopy}
+          page={route.page}
+          section={activeRouteSection}
+          settingsTab={route.settingsTab}
+          platformTab={route.platformTab}
+          showPageBackButton={showRouteBackButton}
+          discussionTab={route.discussionTab}
+          courseSlug={courseSlug}
+          quizId={quizId}
+          assignmentId={assignmentId}
+          username={username}
+          couponId={couponId}
+          miniPlayerCourseId={resolveMiniPlayerCourseId({
+            presentation: playerPresentation,
+            persistentCourseRouteKey: persistentPlayer?.courseRouteKey,
+            persistentCourseSlug: persistentPlayer?.courseSlug,
+            persistentLessonPath: persistentPlayer?.lessonPath,
+            miniPlayerCourseSlug: learningMiniPlayer?.courseSlug,
+            miniPlayerLessonPath: learningMiniPlayer?.lessonPath,
+          })}
+          learningBackground={learningBackground}
+          learningOriginPage={learningOriginPage}
+          learningOriginSection={learningOriginSection}
+          learningMotionStageRef={learningMotionStageRef}
+          onNavigatePage={navigateTo}
+          onNavigateBack={navigateBackToOrigin}
+          navigateBackSection={
+            lessonReturnPath
+              ? LESSON_RETURN_LABEL
+              : hasValidNavigationOrigin
+                ? (originSectionValue as string)
+                : undefined
+          }
+          onExitSettings={exitSettings}
+          onOpenCourse={openCourse}
+          renderMain={
+            route.kind === "learning"
+              ? ({ mobileBottomNavigation, mobileBottomNavigationHidden }) => (
+                  <Outlet
+                    context={
+                      {
+                        mobileBottomNavigation,
+                        mobileBottomNavigationHidden,
+                        navigateTo,
+                        onLearningPlayerMinimizeGestureChange:
+                          handleLearningPlayerMinimizeGestureChange,
+                        onMiniPlayerRestoreReady: closeLearningMiniPlayer,
+                        openLearningMiniPlayer,
+                        openCourseToUnlock,
+                        persistentPlayerMounted: Boolean(persistentPlayer),
+                        registerPersistentPlayer,
+                      } satisfies AcademyOutletContext
+                    }
+                  />
+                )
+              : null
+          }
+        />
+        {persistentPlayer ? (
+          <Suspense fallback={null}>
+            <PersistentLearningPlayerHost
+              player={persistentPlayer}
+              presentation={playerPresentation}
+              onClose={closeLearningMiniPlayer}
+              onRestore={restoreLearningMiniPlayer}
+              onSelectMiniPlayerLesson={selectPersistentMiniPlayerLesson}
+              onRetryMiniPlayerPlayback={retryPersistentMiniPlayerPlayback}
+              onOpenCourseOverview={openPersistentPlayerCourseOverview}
+            />
+          </Suspense>
+        ) : learningMiniPlayer ? (
+          <Suspense fallback={null}>
+            <LearningMiniPlayer
+              session={learningMiniPlayer}
+              onClose={closeLearningMiniPlayer}
+              onRestore={restoreLearningMiniPlayer}
+              onOpenCourseOverview={openStandaloneMiniPlayerCourseOverview}
+            />
+          </Suspense>
+        ) : null}
+        <LoginDialogHost />
+      </ProfileNavigationProvider>
     </AcademyRouteGuard>
   );
 }

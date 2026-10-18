@@ -629,7 +629,10 @@ export function createCurriculumService({
     return await curriculumRepo.findLessonById(database, lessonId, courseId);
   }
 
-  /** A live lesson of a live section: its description and publish state. */
+  /**
+   * A live lesson of a live section: its description, publish state and
+   * whether it is a preview.
+   */
   async function findLiveLessonDescription(lessonId: string, courseId: string) {
     return await curriculumRepo.findLiveLessonDescription(
       database,

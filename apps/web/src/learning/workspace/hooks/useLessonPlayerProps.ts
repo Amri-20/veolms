@@ -177,17 +177,26 @@ export function useLessonPlayerProps({
   const currentLessonTitle = currentLesson[1];
   const selectedLessonDurationSeconds = selectedLessonRecord?.durationSeconds;
   const selectedLessonMediaId = selectedLessonRecord?.contentMediaId;
+  // A locked lesson (one waiting for the learner to sign in or to get the
+  // course) shows the course's picture behind its lock, a video lesson as
+  // much as a reading: the course is what is being unlocked, and a locked
+  // video's own still is not served to whoever may not watch it.
+  const lessonLocked =
+    playbackAccessError?.kind === "login" ||
+    playbackAccessError?.kind === "access";
   const currentLessonMedia = useMemo(
     () =>
       createLessonVideo(currentLessonTitle, {
         durationSeconds: selectedLessonDurationSeconds,
-        thumbnailSrc: selectedLessonMediaId
-          ? mediaService.getVideoThumbnailUrl(selectedLessonMediaId)
-          : courseThumbnail,
+        thumbnailSrc:
+          selectedLessonMediaId && !lessonLocked
+            ? mediaService.getVideoThumbnailUrl(selectedLessonMediaId)
+            : courseThumbnail,
       }),
     [
       courseThumbnail,
       currentLessonTitle,
+      lessonLocked,
       selectedLessonDurationSeconds,
       selectedLessonMediaId,
     ],

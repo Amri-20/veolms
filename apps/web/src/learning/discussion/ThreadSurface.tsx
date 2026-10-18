@@ -112,6 +112,7 @@ interface ThreadSurfaceProps {
   participationState: LessonParticipationState;
   participationActionLabel?: string;
   onParticipationAction?: () => void;
+  loginToParticipate?: boolean;
   isAllDisabled: boolean;
   availableFilters: readonly (readonly [DiscussionEntryFilter, string])[];
   enabledKinds: DiscussionEntryKind[];
@@ -272,6 +273,7 @@ export function ThreadSurface({
   participationState,
   participationActionLabel,
   onParticipationAction,
+  loginToParticipate = false,
   isAllDisabled,
   availableFilters,
   enabledKinds,
@@ -336,6 +338,15 @@ export function ThreadSurface({
   const compactComposerScrollHidden =
     mobileBottomNavigation && mobileBottomNavigationHidden;
   const [composerMode, setComposerMode] = useState<ComposerMode>("collapsed");
+  // A signed-out visitor sees the same composer, so they can tell they could
+  // join in; pressing it asks them to log in. It is in the prerendered page,
+  // hidden from the first paint in a browser that remembers a session.
+  const guestComposerShown =
+    loginToParticipate &&
+    !canParticipate &&
+    enabledKinds.length > 0 &&
+    Boolean(onParticipationAction);
+  const openLoginToParticipate = () => onParticipationAction?.();
   // The empty list offers to start what its filter shows: a question under
   // Q&As, a note under Notes. It offers nothing to someone who cannot post
   // here, or cannot post that kind.
@@ -995,8 +1006,9 @@ export function ThreadSurface({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {!isPhone && discussionDescription}
-      {/* Someone who cannot post (signed out, or without access) gets no
-          composer and no prompt in its place: just the discussion. */}
+      {/* Someone signed in without access gets no composer and no prompt in
+          its place: just the discussion. Someone signed out gets one that
+          asks them to log in. */}
       {!isPhone && enabledKinds.length > 0 && canParticipate && (
         <div
           ref={composerHostRef}
@@ -1042,6 +1054,24 @@ export function ThreadSurface({
           )}
         </div>
       )}
+      {!isPhone && guestComposerShown && (
+        <div
+          data-comment-composer-container
+          className={`${
+            hasDescriptionSurface ? "mt-3 scroll-mt-4 sm:mt-4" : "scroll-mt-4"
+          } [:root[data-session-hint=signed-in]_&]:hidden!`}
+        >
+          <CompactComposer
+            draft={draft}
+            attachmentCount={0}
+            promptText={promptText}
+            avatar={null}
+            label="Log in to join the discussion"
+            opensOnTyping
+            onOpen={openLoginToParticipate}
+          />
+        </div>
+      )}
 
       <p role="status" className="sr-only">
         {notice}
@@ -1084,7 +1114,10 @@ export function ThreadSurface({
             {sizedDiscussionContent}
             {/* Someone who cannot post gets no composer and no prompt in its
                 place. The list still ends clear of the bottom navigation. */}
-            {isPhone && !canParticipate && mobileBottomNavigation ? (
+            {isPhone &&
+            !canParticipate &&
+            !guestComposerShown &&
+            mobileBottomNavigation ? (
               <div
                 aria-hidden="true"
                 className="h-[calc(58px+var(--app-viewport-safe-area-bottom))] shrink-0"
@@ -1110,6 +1143,19 @@ export function ThreadSurface({
             onOpen={openMobileComposer}
           />
         )}
+      {isPhone && guestComposerShown && (
+        <MobileCompactComposerPortal
+          draft={draft}
+          attachmentCount={0}
+          promptText={promptText}
+          avatar={null}
+          label="Log in to join the discussion"
+          opensOnTyping
+          mobileBottomNavigation={mobileBottomNavigation}
+          scrollHidden={compactComposerScrollHidden}
+          onOpen={openLoginToParticipate}
+        />
+      )}
 
       {isPhone && enabledKinds.length > 0 && canParticipate && (
         <Drawer

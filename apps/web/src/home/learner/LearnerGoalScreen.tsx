@@ -15,7 +15,9 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { GoalEditorForm } from "./GoalEditorForm";
 import { useLaptopWallpaper } from "./laptopWallpaper";
+import { useGoalEditor } from "./useGoalEditor";
 import {
   describeGoalDay,
   timeLeftParts,
@@ -272,17 +274,21 @@ function GoalOutcomeStat({
  * Every learner has a goal (an hour a day until they choose their own), so
  * there is no screen without one. Changing it is the pencil at the sheet's
  * corner, which shows when the pointer is over the sheet; where there is no
- * pointer to hover with, the whole sheet takes the press instead.
+ * pointer to hover with, the whole sheet takes the press instead. It opens
+ * the goal for editing right there, in place of its figures (see
+ * `useGoalEditor`).
  */
 export function LearnerGoalScreen({
   summary,
   isLoading,
-  onEditGoal,
 }: {
   summary: LearningSummaryResponse | undefined;
   isLoading: boolean;
-  onEditGoal: () => void;
 }) {
+  // An API that predates the default goal answers with none; the figures
+  // are worked out here either way, so the two cannot disagree.
+  const goalMinutes = summary?.dailyGoalMinutes ?? DEFAULT_DAILY_GOAL_MINUTES;
+  const editor = useGoalEditor(goalMinutes);
   if (!summary) {
     return (
       <LaptopScreen busy={isLoading}>
@@ -314,9 +320,6 @@ export function LearnerGoalScreen({
     );
   }
 
-  // An API that predates the default goal answers with none; the figures
-  // are worked out here either way, so the two cannot disagree.
-  const goalMinutes = summary.dailyGoalMinutes ?? DEFAULT_DAILY_GOAL_MINUTES;
   const { today, percent, standing, barShare } = describeGoalDay(
     summary.todaySeconds,
     goalMinutes,
@@ -327,31 +330,37 @@ export function LearnerGoalScreen({
 
   return (
     <LaptopScreen>
-      <button
-        type="button"
-        onClick={onEditGoal}
-        aria-label="Edit your daily goal"
-        title="Edit your daily goal"
-        // Shown while the pointer is over the sheet, and whenever it has
-        // the keyboard's focus. Without a pointer that can hover (a phone,
-        // a tablet) it is always there, and its `after` layer makes the
-        // whole sheet the target (the sheet's blur makes it what a fixed
-        // layer is held to): drawn that small, the pencil alone is too
-        // little to press.
-        className="absolute top-6 right-7 grid size-18 cursor-pointer place-items-center rounded-full bg-white/14 text-white opacity-0 transition-[opacity,background-color] duration-150 group-hover/sheet:opacity-100 hover:bg-white/26 focus-visible:opacity-100 focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-white motion-reduce:transition-none [@media(hover:none)]:opacity-100 [@media(hover:none)]:after:fixed [@media(hover:none)]:after:inset-0"
-      >
-        <PencilSimple weight="bold" aria-hidden="true" className="size-9" />
-      </button>
+      {editor.editing ? null : (
+        <button
+          type="button"
+          onClick={editor.open}
+          aria-label="Edit your daily goal"
+          title="Edit your daily goal"
+          // Shown while the pointer is over the sheet, and whenever it has
+          // the keyboard's focus. Without a pointer that can hover (a phone,
+          // a tablet) it is always there, and its `after` layer makes the
+          // whole sheet the target (the sheet's blur makes it what a fixed
+          // layer is held to): drawn that small, the pencil alone is too
+          // little to press.
+          className="absolute top-6 right-7 grid size-18 cursor-pointer place-items-center rounded-full bg-white/14 text-white opacity-0 transition-[opacity,background-color] duration-150 group-hover/sheet:opacity-100 hover:bg-white/26 focus-visible:opacity-100 focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-white motion-reduce:transition-none [@media(hover:none)]:opacity-100 [@media(hover:none)]:after:fixed [@media(hover:none)]:after:inset-0"
+        >
+          <PencilSimple weight="bold" aria-hidden="true" className="size-9" />
+        </button>
+      )}
 
       <GoalHeading standing={standing} />
-      <p className="mt-4 flex items-baseline leading-none whitespace-nowrap @[50rem]/home:mt-3">
-        <strong className="text-[128px] font-extrabold tracking-[-0.03em] @[50rem]/home:text-[104px]">
-          {today.done}
-        </strong>
-        <span className="ml-5 text-[66px] font-semibold text-(--goal-ink)/90 @[50rem]/home:text-[56px]">
-          / {today.goal} {today.unit}
-        </span>
-      </p>
+      {editor.editing ? (
+        <GoalEditorForm editor={editor} done={today.done} variant="laptop" />
+      ) : (
+        <p className="mt-4 flex items-baseline leading-none whitespace-nowrap @[50rem]/home:mt-3">
+          <strong className="text-[128px] font-extrabold tracking-[-0.03em] @[50rem]/home:text-[104px]">
+            {today.done}
+          </strong>
+          <span className="ml-5 text-[66px] font-semibold text-(--goal-ink)/90 @[50rem]/home:text-[56px]">
+            / {today.goal} {today.unit}
+          </span>
+        </p>
+      )}
 
       <div
         role="progressbar"

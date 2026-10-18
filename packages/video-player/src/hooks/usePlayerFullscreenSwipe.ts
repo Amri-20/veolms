@@ -67,6 +67,28 @@ function isFullscreenSwipeIgnored(target: EventTarget | null): boolean {
   );
 }
 
+/**
+ * Marks the controls along the player's top edge. In full screen a swipe
+ * that starts above the bottom of any of them (the edge itself and any
+ * safe area included) is left alone: on a phone that is where a finger
+ * pulls down the system's notification shade, not the video. Measured
+ * where the controls are laid out, so it holds while they are hidden too.
+ */
+const FULLSCREEN_SWIPE_TOP_ZONE_SELECTOR =
+  "[data-player-fullscreen-swipe-top-zone]";
+
+function startsInFullscreenTopZone(root: HTMLElement, y: number): boolean {
+  const top = root.getBoundingClientRect().top;
+  let zoneBottom = top;
+  for (const element of root.querySelectorAll<HTMLElement>(
+    FULLSCREEN_SWIPE_TOP_ZONE_SELECTOR,
+  )) {
+    const bounds = element.getBoundingClientRect();
+    if (bounds.height > 0) zoneBottom = Math.max(zoneBottom, bounds.bottom);
+  }
+  return y < zoneBottom;
+}
+
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
@@ -124,8 +146,10 @@ export function usePlayerFullscreenSwipe(
       if (!enabled) return;
       const { ui } = controller.getSnapshot();
       if (!ui.fullscreen && ui.zoom.scale > 1.001) return;
-      const bounds = getPlayerRoot(element).getBoundingClientRect();
+      const root = getPlayerRoot(element);
+      const bounds = root.getBoundingClientRect();
       if (bounds.height <= 0) return;
+      if (ui.fullscreen && startsInFullscreenTopZone(root, point.y)) return;
       swipeRef.current = {
         active: false,
         fullscreen: ui.fullscreen,

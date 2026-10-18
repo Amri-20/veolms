@@ -19,6 +19,15 @@ import type { CourseLesson } from "@veolms/contracts";
  */
 
 type LessonContent = Pick<CourseLesson, "contentType" | "contentMediaId">;
+
+/**
+ * What a lesson that is not a video is called where a video's length would
+ * stand: in the lessons list, and on the end screen's "Up next".
+ */
+export const NON_VIDEO_LESSON_LABELS: Partial<Record<string, string>> = {
+  document: "Reading",
+  quiz: "Quiz",
+};
 type LessonReadingContent = LessonContent & Pick<CourseLesson, "description">;
 
 /**
@@ -37,27 +46,33 @@ export function lessonHasNoVideo(
 /**
  * Whether the open lesson's description is known. A lesson with no video is
  * its description: until that is known the page can neither say "there is
- * nothing here" nor count the lesson as read.
+ * nothing here" nor count the lesson as read. `login` and `locked` are the
+ * server refusing it, as it refuses the video of a lesson the viewer may not
+ * open: a visitor has to sign in, a learner has to get the course.
  */
-export type LessonDescriptionState = "known" | "loading" | "failed";
+export type LessonDescriptionState =
+  "known" | "loading" | "failed" | "login" | "locked";
 
 /**
  * The description comes with the course overview, or from the lesson's own
- * request once the overview stops carrying descriptions. An overview with a
- * description on any lesson is one that carries them, and its word on this
- * lesson is final. One with none on any lesson may no longer carry them, so
- * the lesson's own request decides.
+ * request. The overview leaves it out of a lesson the viewer may not open,
+ * and may leave out every lesson's, so a lesson it gives no text for waits
+ * for its own request. A refusal from that request is final whatever the
+ * overview held, as it is the server's word on this viewer now.
  */
 export function resolveLessonDescriptionState(input: {
-  /** Some lesson of the course has a description in the overview. */
-  overviewCarriesDescriptions: boolean;
+  /** The overview gives this lesson a description. */
+  overviewHasDescription: boolean;
   /**
    * The lesson's own request: `idle` when none is made (no lesson yet),
-   * `answered` once it has come back, with or without a text.
+   * `answered` once it has come back, with or without a text, `login` or
+   * `locked` when the server refused it (401 or 403).
    */
-  request: "idle" | "loading" | "answered" | "failed";
+  request: "idle" | "loading" | "answered" | "failed" | "login" | "locked";
 }): LessonDescriptionState {
-  if (input.overviewCarriesDescriptions) return "known";
+  if (input.request === "login") return "login";
+  if (input.request === "locked") return "locked";
+  if (input.overviewHasDescription) return "known";
   if (input.request === "loading") return "loading";
   if (input.request === "failed") return "failed";
   return "known";
@@ -74,7 +89,8 @@ export interface LessonStagePlan {
     | "video"
     | "no-video-notice"
     | "description-loading"
-    | "description-failed";
+    | "description-failed"
+    | "description-locked";
   /** Whether the page asks the server for the lesson's video. */
   requestsPlayback: boolean;
   /** Whether opening the lesson is all there is to finishing it. */
@@ -114,7 +130,9 @@ export function planLessonStage({
           ? "description-loading"
           : descriptionState === "failed"
             ? "description-failed"
-            : "no-video-notice",
+            : descriptionState === "login" || descriptionState === "locked"
+              ? "description-locked"
+              : "no-video-notice",
     // A lesson with no media has nothing to play whichever view is open, a
     // quiz lesson included: the request could only come back "not found".
     requestsPlayback: !noVideo,
@@ -215,8 +233,9 @@ export function noVideoNoticeFor(
 /**
  * What stands where the video would be for a lesson with none, by what is
  * known of its description: a loader while it is on its way, the failure
- * with a retry when it did not arrive, and `noVideoNoticeFor` once it is
- * known.
+ * with a retry when it did not arrive, the server's refusal (`locked`, for
+ * the page to ask the viewer to sign in or get the course, as for a locked
+ * video), and `noVideoNoticeFor` once it is known.
  */
 export function noVideoStageFor(
   lesson: LessonReadingContent | null | undefined,
@@ -224,5 +243,8 @@ export function noVideoStageFor(
 ) {
   if (descriptionState === "loading") return { kind: "pending" } as const;
   if (descriptionState === "failed") return LESSON_TEXT_FAILED_NOTICE;
+  if (descriptionState === "login" || descriptionState === "locked") {
+    return { kind: "locked", reason: descriptionState } as const;
+  }
   return noVideoNoticeFor(lesson);
 }

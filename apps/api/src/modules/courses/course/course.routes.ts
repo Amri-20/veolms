@@ -234,15 +234,18 @@ const courseRoutes: RoutePlugin = async (app, options) => {
         tags: ["Courses"],
         summary: "Get one lesson's description",
         description:
-          "Returns the description of a lesson the course overview lists for this viewer: a published lesson of a published course for anyone, and any lesson for the course's creator or an admin. Any other lesson is not found.",
+          "Returns the description of a lesson the course overview lists for this viewer: a published lesson of a published course for anyone, and any lesson for the course's creator or an admin. Any other lesson is not found. A listed lesson is read by whoever may play it: a visitor who must sign in first gets 401, a learner without the course 403.",
         params: lessonDescriptionParamsSchema,
         response: {
           200: jsonResponse(
             "The lesson's description.",
             lessonDescriptionResponseSchema,
           ),
+          401: errorResponse("Sign in to read this lesson."),
           404: errorResponse("No such course or lesson for this viewer."),
-          403: errorResponse("MFA step-up required."),
+          403: errorResponse(
+            "MFA step-up required, or the viewer does not have the course.",
+          ),
         },
       },
       // The same optional session as the overview.

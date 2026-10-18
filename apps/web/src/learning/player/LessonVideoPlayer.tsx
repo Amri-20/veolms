@@ -351,12 +351,14 @@ function LessonPictureBackdrop({
             src={src}
             alt=""
             decoding="async"
-            className="size-full scale-110 object-cover opacity-45 blur-md"
+            // Lightly softened, so the course stays recognisable behind the
+            // message; the shade below keeps the message readable.
+            className="size-full scale-105 object-cover opacity-70 blur-[3px]"
             onError={(event) => {
               event.currentTarget.hidden = true;
             }}
           />
-          <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgb(0_0_0/0.72)_0,rgb(0_0_0/0.4)_55%,rgb(0_0_0/0.68)_100%)] [img[hidden]+&]:hidden" />
+          <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgb(0_0_0/0.62)_0,rgb(0_0_0/0.32)_55%,rgb(0_0_0/0.6)_100%)] [img[hidden]+&]:hidden" />
         </>
       ) : null}
     </div>
@@ -853,6 +855,16 @@ export function LessonVideoPlayer({
     clearResumePosition(activeMediaKeyRef.current);
     player.seekTo(0);
     void player.play().catch(() => undefined);
+  }, []);
+
+  const dismissEndScreen = useCallback(() => setShowEndScreen(false), []);
+
+  // Cancelling the countdown closes the end screen altogether: the video is
+  // left as it is, paused where it ended, with its controls. The next ending
+  // counts down again.
+  const cancelEndScreenAutoplay = useCallback(() => {
+    setAutoplayCancelled(true);
+    setShowEndScreen(false);
   }, []);
 
   const handleGoNextFromEndScreen = useCallback(() => {
@@ -1483,17 +1495,17 @@ export function LessonVideoPlayer({
   }
 
   // The end screen is a dialog over the video, drawn inside the player. The
-  // timeline and the corner controls are drawn in the shell around it, a
-  // layer no z-index inside the player can reach, so they were painted
-  // across the dialog and its buttons. While it is up the chrome stands
-  // down; closing it, restarting or seeking back brings the chrome back.
+  // timeline and the controls are drawn in the shell around it, a layer
+  // above anything inside the player. The timeline and the bottom row stay
+  // up over it, and its words and buttons sit above them (`controlsInset`),
+  // so the learner can scrub back or press play from it; the top row stands
+  // down for its close button. Dragging the timeline closes it.
   const endScreenVisible =
     presentation === "full" &&
     !minimizeGesture.controlsSuppressed &&
     showCompletionOverlay &&
     showEndScreen;
-  const chromeSuppressed =
-    minimizeGesture.controlsSuppressed || endScreenVisible;
+  const chromeSuppressed = minimizeGesture.controlsSuppressed;
 
   return (
     <VeoVideoPlayer
@@ -1657,6 +1669,8 @@ export function LessonVideoPlayer({
             canGoNext={canGoNext}
             canGoPrevious={canGoPrevious}
             controlsSuppressed={chromeSuppressed}
+            endScreenOpen={endScreenVisible}
+            onEndScreenDismiss={dismissEndScreen}
             courseLessonsOpen={courseLessonsOpen}
             courseLessonsDrawerOpen={courseLessonsDrawerOpen}
             courseLessonsPanel={courseLessonsPanel}
@@ -1686,15 +1700,16 @@ export function LessonVideoPlayer({
               <LessonEndScreenOverlay
                 nextLesson={
                   canGoNext
-                    ? (nextLessonInfo ?? { id: 0, title: "Next Lecture" })
+                    ? (nextLessonInfo ?? { id: 0, title: "Next lesson" })
                     : undefined
                 }
                 autoplayEnabled={autoplayEnabled && !autoplayCancelled}
                 courseComplete={courseComplete}
                 onGoNext={handleGoNextFromEndScreen}
                 onRestart={handleRestart}
-                onCancelAutoplay={() => setAutoplayCancelled(true)}
-                onClose={() => setShowEndScreen(false)}
+                onCancelAutoplay={cancelEndScreenAutoplay}
+                onClose={dismissEndScreen}
+                controlsInset
               />
             ) : null}
           </>

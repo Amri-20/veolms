@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import widths from "../assets/octopus/widths.json";
 
 /**
@@ -118,7 +118,12 @@ function OctopusImage({
   const [small, medium, large] = HEIGHTS.map(
     (height) => files[`../assets/octopus/${name}-${tone}-${height}.webp`],
   );
+  // A drawing is downloaded only when it is shown, which is often when
+  // something has failed: with no connection its file cannot come either,
+  // and a broken picture is worse than none.
+  const [failed, setFailed] = useState(false);
   const lead = wireToTop ? leadFromAbove[name] : undefined;
+  if (failed) return null;
   const placing = `${shownClasses[shown]} ${className ?? ""} ${fittedToOctopus[name] ?? ""}`;
   const image = (
     <img
@@ -132,6 +137,14 @@ function OctopusImage({
       loading="lazy"
       decoding="async"
       draggable={false}
+      onError={() => setFailed(true)}
+      // A file that failed before the page took over the picture (a page
+      // built ahead of time) fired its error unheard.
+      ref={(image) => {
+        if (image?.complete && image.currentSrc && !image.naturalWidth) {
+          setFailed(true);
+        }
+      }}
       className={lead ? "block h-full w-auto max-w-none" : placing}
     />
   );

@@ -13,7 +13,9 @@ import {
   timeLeftParts,
   timeOverGoalParts,
 } from "./learnerGoalFormat";
+import { GoalEditorForm } from "./GoalEditorForm";
 import { resumePaneClasses } from "./learnerHeroLayout";
+import { useGoalEditor } from "./useGoalEditor";
 
 /**
  * The light of the hero's glow (see `phoneBackdropClasses`), which comes
@@ -68,17 +70,18 @@ const chipIconClasses = "size-4 shrink-0";
  * (lessons finished today, the time left, the share done). It says the
  * same as the laptop's screen does on wider pages (see `LearnerGoalScreen`),
  * meeting and passing the goal included. The target in its corner opens
- * the goal's settings.
+ * the goal for editing in place of its figures (see `useGoalEditor`).
  */
 export function LearnerGoalCard({
   summary,
   isLoading,
-  onEditGoal,
 }: {
   summary: LearningSummaryResponse | undefined;
   isLoading: boolean;
-  onEditGoal: () => void;
 }) {
+  // An API that predates the default goal answers with none.
+  const goalMinutes = summary?.dailyGoalMinutes ?? DEFAULT_DAILY_GOAL_MINUTES;
+  const editor = useGoalEditor(goalMinutes);
   if (!summary) {
     return isLoading ? (
       <LearnerGoalCardSkeleton />
@@ -90,8 +93,6 @@ export function LearnerGoalCard({
     );
   }
 
-  // An API that predates the default goal answers with none.
-  const goalMinutes = summary.dailyGoalMinutes ?? DEFAULT_DAILY_GOAL_MINUTES;
   const { today, percent, standing, barShare } = describeGoalDay(
     summary.todaySeconds,
     goalMinutes,
@@ -139,18 +140,29 @@ export function LearnerGoalCard({
                 </>
               ) : null}
             </h2>
-            <p className="mt-2 flex items-baseline leading-none whitespace-nowrap">
-              <strong className="text-[2.75rem] font-extrabold tracking-[-0.03em]">
-                {today.done}
-              </strong>
-              <span className="ml-2.5 text-2xl font-semibold text-(--muted)">
-                / {today.goal} {today.unit}
-              </span>
-            </p>
+            {editor.editing ? (
+              <GoalEditorForm
+                editor={editor}
+                done={today.done}
+                variant="card"
+              />
+            ) : (
+              <p className="mt-2 flex items-baseline leading-none whitespace-nowrap">
+                <strong className="text-[2.75rem] font-extrabold tracking-[-0.03em]">
+                  {today.done}
+                </strong>
+                <span className="ml-2.5 text-2xl font-semibold text-(--muted)">
+                  / {today.goal} {today.unit}
+                </span>
+              </p>
+            )}
           </div>
+          {/* Out of the way while the goal is edited: the field and its
+              check button take the row. */}
           <button
+            hidden={editor.editing}
             type="button"
-            onClick={onEditGoal}
+            onClick={editor.open}
             aria-label="Edit your daily goal"
             title="Edit your daily goal"
             className="grid size-12 shrink-0 cursor-pointer place-items-center rounded-2xl bg-current/6 text-[color-mix(in_srgb,var(--accent)_70%,white)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,currentColor_12%,transparent)] transition-colors hover:bg-current/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) [:root[data-theme=light]_&]:text-(--accent)"

@@ -7,16 +7,12 @@ import type { LessonResource } from "@veolms/contracts";
 import type { Lesson } from "./courseContent";
 import { LessonResourcesMenu } from "./LessonResourcesMenu";
 import { LESSON_CARD_ACTION_CLASS } from "./lessonCardAction";
+import { NON_VIDEO_LESSON_LABELS } from "./lessonWithoutVideo";
 import { useLessonHoverPreload } from "./useLessonHoverPreload";
 import { useWebContributions } from "../lib/web-contributions";
 import "./curriculum-lesson-card.css";
 
 const LESSON_PROGRESS_COMPLETE_THRESHOLD = 99.5;
-
-const NON_VIDEO_LESSON_LABELS: Partial<Record<string, string>> = {
-  document: "Reading",
-  quiz: "Quiz",
-};
 
 /**
  * Bars of the "now playing" glyph. Each has its own resting height, so the
@@ -273,6 +269,22 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
               <Exam size={17} weight="fill" aria-hidden="true" />
             </button>
           ) : null}
+          {showResources && resources && resourceCourseKey ? (
+            // Shown while the card is hovered, focused or the menu is open,
+            // so a list of lessons is not a column of buttons. A screen with
+            // no hover (touch) always shows it. The space stays taken, so the
+            // actions to its right never move.
+            <span className="flex opacity-0 transition-opacity duration-150 pointer-events-none group-hover/lesson:pointer-events-auto group-hover/lesson:opacity-100 focus-within:opacity-100 has-data-popup-open:pointer-events-auto has-data-popup-open:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
+              <LessonResourcesMenu
+                courseKey={resourceCourseKey}
+                lessonNumber={number}
+                lessonTitle={title}
+                resources={resources}
+                portalContainer={portalContainer}
+              />
+            </span>
+          ) : null}
+          {/* Last, so a download stays at the card's right edge. */}
           {showContributed && resourceCourseKey
             ? lessonCardActions.map(({ id, component: Action }) => (
                 <Action
@@ -287,15 +299,6 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
                 />
               ))
             : null}
-          {showResources && resources && resourceCourseKey ? (
-            <LessonResourcesMenu
-              courseKey={resourceCourseKey}
-              lessonNumber={number}
-              lessonTitle={title}
-              resources={resources}
-              portalContainer={portalContainer}
-            />
-          ) : null}
         </div>
       ) : null}
     </div>

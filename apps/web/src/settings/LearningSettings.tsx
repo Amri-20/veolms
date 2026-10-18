@@ -4,10 +4,10 @@ import { CheckCircleIcon as CheckCircle } from "@phosphor-icons/react/CheckCircl
 import { ClosedCaptioningIcon as ClosedCaptioning } from "@phosphor-icons/react/ClosedCaptioning";
 import { PlayCircleIcon as PlayCircle } from "@phosphor-icons/react/PlayCircle";
 import { AppSlider } from "../AppSlider";
-import { CurriculumTestControls } from "./CurriculumTestControls";
 import { LaptopWallpaperSettingsCard } from "./LaptopWallpaperSettingsCard";
 import { LearningGoalSettingsCard } from "./LearningGoalSettingsCard";
 import { PlayerThemePicker } from "./PlayerThemePicker";
+import { useAdminOnlySettings } from "./useAdminOnlySettings";
 import { LearningSelectRow, LearningToggleRow } from "./SettingsControls";
 import "../styles/features/settings/learning.css";
 import {
@@ -30,6 +30,14 @@ export function LearningSettings({
   const [preferences, setPreferences] = useState({
     ...LEARNING_PREFERENCE_DEFAULTS,
   });
+  // Shown to admins alone (see `useAdminOnlySettings`): the player theme,
+  // which learners are not offered yet (see `useLearningPlayerTheme`), and
+  // the settings below that nothing reads yet, so changing them did nothing:
+  // default quality and speed (the player keeps its own), theatre mode on
+  // opening, captions by default and their language, the transcript (there
+  // is none), four course navigation choices, and the two scrollbars (with
+  // scrollbars hidden by default they changed nothing either).
+  const showAdminSettings = useAdminOnlySettings();
   const [storageReady, setStorageReady] = useState(false);
   const [customSeekInterval, setCustomSeekInterval] = useState(false);
   const update = (next: Partial<LearningPreferences>) =>
@@ -107,37 +115,41 @@ export function LearningSettings({
             <h3 id="playback-preferences-heading">Playback preferences</h3>
           </header>
           <div className="settings-learning-card__rows">
-            <PlayerThemePicker
-              value={preferences.videoPlayerTheme}
-              onChange={(videoPlayerTheme) => update({ videoPlayerTheme })}
-            />
-            <LearningSelectRow
-              id="learning-video-quality"
-              label="Default video quality"
-              note="Select quality for all videos."
-              value={preferences.videoQuality}
-              onChange={(videoQuality) => update({ videoQuality })}
-              options={[
-                ["auto", "Auto (Recommended)"],
-                ["1080", "1080p"],
-                ["720", "720p"],
-                ["480", "480p"],
-              ]}
-            />
-            <LearningSelectRow
-              id="learning-playback-speed"
-              label="Default playback speed"
-              note="Select the default speed for videos."
-              value={preferences.playbackSpeed}
-              onChange={(playbackSpeed) => update({ playbackSpeed })}
-              options={[
-                ["0.75", "0.75×"],
-                ["1", "1×"],
-                ["1.25", "1.25×"],
-                ["1.5", "1.5×"],
-                ["2", "2×"],
-              ]}
-            />
+            {showAdminSettings ? (
+              <>
+                <PlayerThemePicker
+                  value={preferences.videoPlayerTheme}
+                  onChange={(videoPlayerTheme) => update({ videoPlayerTheme })}
+                />
+                <LearningSelectRow
+                  id="learning-video-quality"
+                  label="Default video quality"
+                  note="Select quality for all videos."
+                  value={preferences.videoQuality}
+                  onChange={(videoQuality) => update({ videoQuality })}
+                  options={[
+                    ["auto", "Auto (Recommended)"],
+                    ["1080", "1080p"],
+                    ["720", "720p"],
+                    ["480", "480p"],
+                  ]}
+                />
+                <LearningSelectRow
+                  id="learning-playback-speed"
+                  label="Default playback speed"
+                  note="Select the default speed for videos."
+                  value={preferences.playbackSpeed}
+                  onChange={(playbackSpeed) => update({ playbackSpeed })}
+                  options={[
+                    ["0.75", "0.75×"],
+                    ["1", "1×"],
+                    ["1.25", "1.25×"],
+                    ["1.5", "1.5×"],
+                    ["2", "2×"],
+                  ]}
+                />
+              </>
+            ) : null}
             <LearningSelectRow
               id="learning-seek-interval"
               label="Skip interval"
@@ -194,28 +206,34 @@ export function LearningSettings({
                 update({ resumeFromLastPosition: !startFromBeginning })
               }
             />
-            <LearningToggleRow
-              label="Start lessons in theatre mode"
-              note="Open the learning workspace with an expanded player."
-              checked={preferences.startInTheaterMode}
-              onChange={(startInTheaterMode) => update({ startInTheaterMode })}
-            />
-            <LearningToggleRow
-              label="Show lesson page scrollbar"
-              note="Drag vertically to scroll or sideways to resize course content."
-              checked={preferences.showLessonPageScrollbar}
-              onChange={(showLessonPageScrollbar) =>
-                update({ showLessonPageScrollbar })
-              }
-            />
-            <LearningToggleRow
-              label="Show course content scrollbar"
-              note="Display the scrollbar inside the course content panel."
-              checked={preferences.showCurriculumScrollbar}
-              onChange={(showCurriculumScrollbar) =>
-                update({ showCurriculumScrollbar })
-              }
-            />
+            {showAdminSettings ? (
+              <>
+                <LearningToggleRow
+                  label="Start lessons in theatre mode"
+                  note="Open the learning workspace with an expanded player."
+                  checked={preferences.startInTheaterMode}
+                  onChange={(startInTheaterMode) =>
+                    update({ startInTheaterMode })
+                  }
+                />
+                <LearningToggleRow
+                  label="Show lesson page scrollbar"
+                  note="Drag vertically to scroll or sideways to resize course content."
+                  checked={preferences.showLessonPageScrollbar}
+                  onChange={(showLessonPageScrollbar) =>
+                    update({ showLessonPageScrollbar })
+                  }
+                />
+                <LearningToggleRow
+                  label="Show course content scrollbar"
+                  note="Display the scrollbar inside the course content panel."
+                  checked={preferences.showCurriculumScrollbar}
+                  onChange={(showCurriculumScrollbar) =>
+                    update({ showCurriculumScrollbar })
+                  }
+                />
+              </>
+            ) : null}
           </div>
         </section>
 
@@ -223,52 +241,54 @@ export function LearningSettings({
 
         <LaptopWallpaperSettingsCard />
 
-        <section
-          className="settings-learning-card"
-          aria-labelledby="captions-heading"
-        >
-          <header className="settings-learning-card__heading">
-            <ClosedCaptioning size={21} weight="duotone" />
-            <h3 id="captions-heading">Captions &amp; transcript</h3>
-          </header>
-          <div className="settings-learning-card__rows">
-            <LearningToggleRow
-              label="Show captions by default"
-              note="Automatically enable captions when available."
-              checked={preferences.captionsByDefault}
-              onChange={(captionsByDefault) => update({ captionsByDefault })}
-            />
-            <LearningSelectRow
-              id="learning-caption-language"
-              label="Preferred caption language"
-              note="Select your preferred caption language."
-              value={preferences.captionLanguage}
-              onChange={(captionLanguage) => update({ captionLanguage })}
-              options={[
-                ["English", "English"],
-                ["Hindi", "Hindi"],
-                ["Spanish", "Spanish"],
-                ["French", "French"],
-              ]}
-            />
-            <LearningToggleRow
-              label="Auto-scroll transcript"
-              note="Keep the currently spoken sentence visible."
-              checked={preferences.autoScrollTranscript}
-              onChange={(autoScrollTranscript) =>
-                update({ autoScrollTranscript })
-              }
-            />
-            <LearningToggleRow
-              label="Highlight current transcript line"
-              note="Highlight the sentence currently being spoken."
-              checked={preferences.highlightTranscriptLine}
-              onChange={(highlightTranscriptLine) =>
-                update({ highlightTranscriptLine })
-              }
-            />
-          </div>
-        </section>
+        {showAdminSettings ? (
+          <section
+            className="settings-learning-card"
+            aria-labelledby="captions-heading"
+          >
+            <header className="settings-learning-card__heading">
+              <ClosedCaptioning size={21} weight="duotone" />
+              <h3 id="captions-heading">Captions &amp; transcript</h3>
+            </header>
+            <div className="settings-learning-card__rows">
+              <LearningToggleRow
+                label="Show captions by default"
+                note="Automatically enable captions when available."
+                checked={preferences.captionsByDefault}
+                onChange={(captionsByDefault) => update({ captionsByDefault })}
+              />
+              <LearningSelectRow
+                id="learning-caption-language"
+                label="Preferred caption language"
+                note="Select your preferred caption language."
+                value={preferences.captionLanguage}
+                onChange={(captionLanguage) => update({ captionLanguage })}
+                options={[
+                  ["English", "English"],
+                  ["Hindi", "Hindi"],
+                  ["Spanish", "Spanish"],
+                  ["French", "French"],
+                ]}
+              />
+              <LearningToggleRow
+                label="Auto-scroll transcript"
+                note="Keep the currently spoken sentence visible."
+                checked={preferences.autoScrollTranscript}
+                onChange={(autoScrollTranscript) =>
+                  update({ autoScrollTranscript })
+                }
+              />
+              <LearningToggleRow
+                label="Highlight current transcript line"
+                note="Highlight the sentence currently being spoken."
+                checked={preferences.highlightTranscriptLine}
+                onChange={(highlightTranscriptLine) =>
+                  update({ highlightTranscriptLine })
+                }
+              />
+            </div>
+          </section>
+        ) : null}
 
         <section
           className="settings-learning-card"
@@ -279,36 +299,42 @@ export function LearningSettings({
             <h3 id="course-navigation-heading">Course navigation</h3>
           </header>
           <div className="settings-learning-card__rows">
-            <LearningToggleRow
-              label="Open current section automatically"
-              note="Automatically expand the section containing the active lecture."
-              checked={preferences.openCurrentSection}
-              onChange={(openCurrentSection) => update({ openCurrentSection })}
-            />
-            <LearningToggleRow
-              label="Continue with next incomplete lecture"
-              note="Resume a course from the next lecture that is not completed."
-              checked={preferences.continueWithNextIncomplete}
-              onChange={(continueWithNextIncomplete) =>
-                update({ continueWithNextIncomplete })
-              }
-            />
-            <LearningToggleRow
-              label="Automatically move to the next section"
-              note="Open the next section after completing the last lecture."
-              checked={preferences.automaticallyMoveNextSection}
-              onChange={(automaticallyMoveNextSection) =>
-                update({ automaticallyMoveNextSection })
-              }
-            />
-            <LearningToggleRow
-              label="Keep completed lectures visible"
-              note="Continue showing completed lectures in the course outline."
-              checked={preferences.keepCompletedLecturesVisible}
-              onChange={(keepCompletedLecturesVisible) =>
-                update({ keepCompletedLecturesVisible })
-              }
-            />
+            {showAdminSettings ? (
+              <>
+                <LearningToggleRow
+                  label="Open current section automatically"
+                  note="Automatically expand the section containing the active lecture."
+                  checked={preferences.openCurrentSection}
+                  onChange={(openCurrentSection) =>
+                    update({ openCurrentSection })
+                  }
+                />
+                <LearningToggleRow
+                  label="Continue with next incomplete lecture"
+                  note="Resume a course from the next lecture that is not completed."
+                  checked={preferences.continueWithNextIncomplete}
+                  onChange={(continueWithNextIncomplete) =>
+                    update({ continueWithNextIncomplete })
+                  }
+                />
+                <LearningToggleRow
+                  label="Automatically move to the next section"
+                  note="Open the next section after completing the last lecture."
+                  checked={preferences.automaticallyMoveNextSection}
+                  onChange={(automaticallyMoveNextSection) =>
+                    update({ automaticallyMoveNextSection })
+                  }
+                />
+                <LearningToggleRow
+                  label="Keep completed lectures visible"
+                  note="Continue showing completed lectures in the course outline."
+                  checked={preferences.keepCompletedLecturesVisible}
+                  onChange={(keepCompletedLecturesVisible) =>
+                    update({ keepCompletedLecturesVisible })
+                  }
+                />
+              </>
+            ) : null}
             <LearningToggleRow
               label="Number lessons across the whole course"
               note="Keep counting from one section into the next instead of starting every section at 1."
@@ -319,8 +345,6 @@ export function LearningSettings({
             />
           </div>
         </section>
-
-        <CurriculumTestControls />
       </div>
     </div>
   );

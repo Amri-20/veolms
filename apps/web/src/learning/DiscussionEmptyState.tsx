@@ -1,4 +1,8 @@
+import type { Icon } from "@phosphor-icons/react";
+import { ChatCenteredDotsIcon as ChatCenteredDots } from "@phosphor-icons/react/ChatCenteredDots";
 import { ChatsCircle } from "@phosphor-icons/react/ChatsCircle";
+import { NotepadIcon as Notepad } from "@phosphor-icons/react/Notepad";
+import { QuestionIcon as Question } from "@phosphor-icons/react/Question";
 import { PencilSimpleLine } from "@phosphor-icons/react/PencilSimpleLine";
 import { Button } from "../components/Button";
 import type { DiscussionEntryFilter } from "./discussionFeed";
@@ -63,6 +67,17 @@ const mineCopyByFilter: Record<DiscussionEntryFilter, EmptyStateCopy> = {
   },
 };
 
+/**
+ * The picture over each kind's empty list: the same one each post of that
+ * kind carries (`CommentCard`) and the kind picker shows.
+ */
+const iconByFilter: Record<DiscussionEntryFilter, Icon> = {
+  all: ChatsCircle,
+  comment: ChatCenteredDots,
+  question: Question,
+  note: Notepad,
+};
+
 const pencilFade =
   "transition-opacity duration-150 motion-reduce:transition-none";
 
@@ -87,6 +102,7 @@ export function DiscussionEmptyState({
   onStart?: () => void;
 }) {
   const copy = (mine ? mineCopyByFilter : copyByFilter)[filter];
+  const EmptyIcon = iconByFilter[filter];
   const hint = onStart
     ? copy.invitation
     : canReturnToAll
@@ -99,7 +115,7 @@ export function DiscussionEmptyState({
         className="mb-3 grid size-12 place-items-center rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-(--accent-ink,var(--accent))"
         aria-hidden="true"
       >
-        <ChatsCircle size={24} weight="duotone" />
+        <EmptyIcon size={24} weight="duotone" />
       </span>
       <p className="font-semibold text-(--text)">{copy.title}</p>
       {hint ? (

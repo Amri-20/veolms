@@ -443,6 +443,13 @@ export interface LessonPlayerControlsProps {
   canGoNext: boolean;
   canGoPrevious: boolean;
   controlsSuppressed?: boolean;
+  /**
+   * The end screen is over the video. The controls stay up over it, so the
+   * learner can still scrub or press play. Starting to drag the timeline
+   * closes the end screen (`onEndScreenDismiss`).
+   */
+  endScreenOpen?: boolean;
+  onEndScreenDismiss?: () => void;
   courseLessonsOpen?: boolean;
   courseLessonsDrawerOpen?: boolean;
   courseLessonsPanel?: ReactNode;
@@ -479,6 +486,7 @@ export function LessonPlayerMinimizeControl({
   return (
     <div
       className={`pointer-events-auto absolute left-2 top-2 ${mobileFullscreen ? "!left-3 sm:!left-3" : ""}`}
+      data-player-fullscreen-swipe-top-zone=""
     >
       <PlayerIconButton
         label={LEARNING_PLAYER_MINIMIZE_LABEL}
@@ -871,6 +879,8 @@ export function LessonPlayerControls({
   canGoNext,
   canGoPrevious,
   controlsSuppressed = false,
+  endScreenOpen = false,
+  onEndScreenDismiss,
   courseLessonsOpen = false,
   courseLessonsDrawerOpen = false,
   courseLessonsPanel,
@@ -950,7 +960,13 @@ export function LessonPlayerControls({
   const ready = lifecycle === "ready";
   const hasError = lifecycle === "error" || Boolean(error);
   const loading = lifecycle !== "ready" || buffering;
-  const visible = !controlsSuppressed && (controlsVisible || settingsOpen);
+  const visible =
+    !controlsSuppressed && (controlsVisible || settingsOpen || endScreenOpen);
+  // Moving the timeline means the learner is going back into the video:
+  // the end screen goes as the drag starts, not once it is let go.
+  useEffect(() => {
+    if (endScreenOpen && scrubbing) onEndScreenDismiss?.();
+  }, [endScreenOpen, onEndScreenDismiss, scrubbing]);
   const minimizeVisible =
     !controlsSuppressed && (visible || loading || hasError);
   const mobileFullscreen = mobileInteraction && fullscreen;
@@ -1497,6 +1513,7 @@ export function LessonPlayerControls({
 
           <div
             className={`pointer-events-auto absolute right-2 top-2 flex items-center gap-2 ${mobileFullscreen ? "!left-auto !right-3 sm:!left-auto sm:!right-3" : ""}`}
+            data-player-fullscreen-swipe-top-zone=""
           >
             {/* The zoom the picture is at, when it is zoomed: always in the
                 video's top right corner, and first in the row when other

@@ -48,6 +48,8 @@ interface LearningWorkspaceProps {
   mobileBottomNavigationHidden?: boolean;
   onSelectLesson: (lessonId: number, view?: "video" | "quiz") => void;
   onOpenCourseOverview: () => void;
+  /** "Unlock the course" on a locked lesson. */
+  onUnlockCourse: () => void;
   onOpenLogin: () => void;
   onMinimizePlayer?: (request: LearningMiniPlayerRequest) => void;
   onMinimizeGestureChange?: (state: LessonPlayerMinimizeGestureState) => void;
@@ -76,6 +78,7 @@ export function LearningWorkspace({
   mobileBottomNavigationHidden = false,
   onSelectLesson,
   onOpenCourseOverview,
+  onUnlockCourse,
   onOpenLogin,
   onMinimizePlayer,
   onMinimizeGestureChange,
@@ -292,7 +295,7 @@ export function LearningWorkspace({
     playbackBootstrapPending,
   } = useLessonStagePlan({
     courseSlug,
-    onOpenCourseOverview,
+    onUnlockCourse,
     onOpenLogin,
     isAuthenticated,
     resolvedAuthUser,

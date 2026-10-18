@@ -79,6 +79,7 @@ import {
 } from "./discussion-attachments";
 import { CommentFormattingToolbar } from "./CommentFormattingToolbar";
 import { DiscussionAvatar } from "./DiscussionAvatar";
+import { ProfileLink } from "../profiles/ProfileLink";
 import {
   DiscussionEditor,
   preloadDiscussionEditor,
@@ -1348,12 +1349,16 @@ function ThreadRootEntry({
   return (
     <article className="mx-auto mb-1 max-w-4xl pt-3 pb-4">
       <div className="flex gap-3 sm:gap-3.5">
-        <DiscussionAvatar src={entry.avatar} className="size-10 sm:size-11" />
+        <ProfileLink username={entry.authorUsername} variant="picture">
+          <DiscussionAvatar src={entry.avatar} className="size-10 sm:size-11" />
+        </ProfileLink>
         <div className="min-w-0 flex-1">
           <div className="relative flex items-start gap-2 pr-9">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
               <h2 className="text-sm font-semibold text-(--text) sm:text-[15px]">
-                {entry.name}
+                <ProfileLink username={entry.authorUsername} variant="name">
+                  {entry.name}
+                </ProfileLink>
               </h2>
               {entry.role === "Instructor" && (
                 <span className="rounded-md bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-sky-600 dark:text-sky-400">
@@ -1621,18 +1626,22 @@ function ThreadReplyEntry({
       >
         <div className="min-h-0 overflow-hidden">
           <div className="flex gap-3.5">
-            <DiscussionAvatar
-              src={reply.avatar}
-              className="size-9 sm:size-10"
-              loading="lazy"
-              width={40}
-              height={40}
-            />
+            <ProfileLink username={reply.authorUsername} variant="picture">
+              <DiscussionAvatar
+                src={reply.avatar}
+                className="size-9 sm:size-10"
+                loading="lazy"
+                width={40}
+                height={40}
+              />
+            </ProfileLink>
             <div className="min-w-0 flex-1">
               <div className="relative flex items-start gap-2 pr-9">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
                   <h3 className="text-sm font-semibold text-(--text) sm:text-[15px]">
-                    {reply.name}
+                    <ProfileLink username={reply.authorUsername} variant="name">
+                      {reply.name}
+                    </ProfileLink>
                   </h3>
                   {reply.role === "Instructor" && (
                     <span className="rounded-md bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-sky-600 dark:text-sky-400">

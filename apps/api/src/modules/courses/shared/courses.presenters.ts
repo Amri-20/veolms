@@ -129,6 +129,7 @@ export function presentCurriculum({
   mediaById,
   omitResourceMedia = false,
   omitLessonDescriptions = false,
+  withheldDescriptionLessonIds,
 }: {
   sections: readonly SectionRow[];
   lessons: readonly LessonRow[];
@@ -141,6 +142,11 @@ export function presentCurriculum({
    * that still reads it from here must go on parsing the response.
    */
   omitLessonDescriptions?: boolean;
+  /**
+   * Lessons whose description is sent as null because the viewer may not
+   * read them: see `createLessonContentAccess`.
+   */
+  withheldDescriptionLessonIds?: ReadonlySet<string>;
 }): CourseSection[] {
   return sections.map((section) => ({
     id: section.id,
@@ -151,7 +157,10 @@ export function presentCurriculum({
       .map((lesson) => ({
         id: lesson.id,
         title: lesson.title,
-        description: omitLessonDescriptions ? null : lesson.description,
+        description:
+          omitLessonDescriptions || withheldDescriptionLessonIds?.has(lesson.id)
+            ? null
+            : lesson.description,
         contentType: lesson.content_type,
         contentMediaId: lesson.content_media_id,
         durationSeconds: getLessonDurationSeconds(lesson, mediaById),

@@ -7,14 +7,24 @@ export function HeroPicture({
   position,
   className,
   priority = false,
+  warmUp = false,
   imageRef,
+  onLoad,
+  onError,
 }: {
   picture: GuestHeroPicture;
   position: string;
   className: string;
   /** The picture the page is first painted with. */
   priority?: boolean;
+  /**
+   * A copy loaded ahead of need, behind everything else: fetched now (not
+   * when it comes into view) and after what the page itself is loading.
+   */
+  warmUp?: boolean;
   imageRef?: Ref<HTMLImageElement>;
+  onLoad?: (image: HTMLImageElement) => void;
+  onError?: () => void;
 }) {
   return (
     <picture>
@@ -33,9 +43,11 @@ export function HeroPicture({
         width={picture.wide.width}
         height={picture.wide.height}
         alt=""
-        loading={priority ? "eager" : "lazy"}
-        fetchPriority={priority ? "high" : undefined}
+        loading={priority || warmUp ? "eager" : "lazy"}
+        fetchPriority={priority ? "high" : warmUp ? "low" : undefined}
         decoding="async"
+        onLoad={onLoad ? (event) => onLoad(event.currentTarget) : undefined}
+        onError={onError}
         className={`absolute inset-x-0 top-0 h-full w-full object-cover ${position} ${className}`}
       />
     </picture>

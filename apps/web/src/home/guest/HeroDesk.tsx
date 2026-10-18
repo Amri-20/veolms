@@ -33,6 +33,11 @@ import { useHeroLaptopScreen } from "./useHeroLaptopScreen";
 /** How long the mute button stays once it has been called up. */
 const SOUND_TOGGLE_VISIBLE_MS = 2000;
 /**
+ * The longest a press waits for the picture it switches to. A picture that
+ * has not arrived by then is switched to all the same.
+ */
+const LAMP_PICTURE_WAIT_MS = 3000;
+/**
  * The pace of the lamp while Shift+L is held: slow enough for each fade to
  * finish and well under three flashes a second.
  */
@@ -239,12 +244,71 @@ export function HeroDesk({
     if (!muted) playLampSwitchSound(true);
   };
 
-  const toggleLamp = () => {
+  // The theme's other picture (lamp off by night, on by day) is only shown
+  // once the lamp is switched, and was only downloaded then: the picture in
+  // front went away while it was still on its way, and the hero stood black
+  // (or bare cream) until it came. A copy of it is now loaded, out of sight,
+  // once the page has finished loading and the browser is idle, and a press
+  // that comes before it has arrived waits for it (see `toggleLamp`).
+  const [warmPictures, setWarmPictures] = useState(false);
+  const warmPictureRef = useRef<HTMLImageElement>(null);
+  const pendingSwitchRef = useRef(false);
+  const pendingSwitchTimerRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    let idleHandle: number | undefined;
+    let timer: number | undefined;
+    const warm = () => setWarmPictures(true);
+    const whenIdle = () => {
+      if (typeof window.requestIdleCallback === "function") {
+        idleHandle = window.requestIdleCallback(warm, { timeout: 4000 });
+      } else {
+        timer = window.setTimeout(warm, 1500);
+      }
+    };
+    if (document.readyState === "complete") whenIdle();
+    else window.addEventListener("load", whenIdle, { once: true });
+    return () => {
+      window.removeEventListener("load", whenIdle);
+      if (idleHandle !== undefined) window.cancelIdleCallback(idleHandle);
+      window.clearTimeout(timer);
+      window.clearTimeout(pendingSwitchTimerRef.current);
+    };
+  }, []);
+
+  const switchLamp = () => {
+    pendingSwitchRef.current = false;
+    window.clearTimeout(pendingSwitchTimerRef.current);
     const isOn = lampOverride
       ? lampOverride === "on"
       : document.documentElement.dataset.theme !== "light";
     if (!soundMuted) playLampSwitchSound(!isOn);
     setLampOverride(isOn ? "off" : "on");
+  };
+  const switchLampRef = useRef(switchLamp);
+  useEffect(() => {
+    switchLampRef.current = switchLamp;
+  });
+  const finishPendingSwitch = () => {
+    if (pendingSwitchRef.current) switchLampRef.current();
+  };
+
+  const toggleLamp = () => {
+    // A press while one is waiting for its picture is the same press.
+    if (pendingSwitchRef.current) return;
+    const nightTheme = document.documentElement.dataset.theme !== "light";
+    const isOn = lampOverride ? lampOverride === "on" : nightTheme;
+    const showsOtherPicture = nightTheme ? isOn : !isOn;
+    if (showsOtherPicture && !warmPictureRef.current?.complete) {
+      // The switch, its sound with it, waits for the picture it brings.
+      pendingSwitchRef.current = true;
+      setWarmPictures(true);
+      pendingSwitchTimerRef.current = window.setTimeout(
+        () => switchLampRef.current(),
+        LAMP_PICTURE_WAIT_MS,
+      );
+      return;
+    }
+    switchLamp();
   };
   const showSoundToggle = () => {
     setSoundToggleVisible(true);
@@ -321,8 +385,44 @@ export function HeroDesk({
     };
   }, []);
 
+  // The theme's other picture, as `warmPictures` describes; `themeLampIsOn`
+  // follows the theme, so a theme switch loads that theme's.
+  const otherPicture =
+    themeLampIsOn === undefined
+      ? undefined
+      : themeLampIsOn
+        ? guestHeroLampOffImage
+        : guestHeroDayLampOnImage;
+
   const pictures = (
     <>
+      {warmPictures && otherPicture ? (
+        // Out of sight, but laid out (`invisible`, not `hidden`), so the
+        // browser downloads it; and the same picture, crops and sizes as the
+        // one it stands in for, so that one is answered from the cache. Not
+        // faded out instead: an invisible layer still costs a tablet's
+        // compositor.
+        <div
+          aria-hidden="true"
+          className="pointer-events-none invisible absolute inset-0 -z-50 overflow-hidden"
+        >
+          <HeroPicture
+            key={themeLampIsOn ? "night" : "day"}
+            picture={otherPicture}
+            position={picturePosition}
+            className=""
+            warmUp
+            imageRef={warmPictureRef}
+            onLoad={(image) => {
+              void image
+                .decode()
+                .catch(() => undefined)
+                .finally(finishPendingSwitch);
+            }}
+            onError={finishPendingSwitch}
+          />
+        </div>
+      ) : null}
       <HeroPicture
         picture={guestHeroImage}
         position={picturePosition}
