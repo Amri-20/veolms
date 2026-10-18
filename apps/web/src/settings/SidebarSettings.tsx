@@ -23,6 +23,7 @@ import {
   SettingsToggle,
 } from "./SettingsControls";
 import { MiniSurface, SidebarIconPreview } from "./SettingsPreviews";
+import { useAdminOnlySettings } from "./useAdminOnlySettings";
 import {
   normalizeSidebarMaxWidth,
   normalizeSidebarGlow,
@@ -191,6 +192,11 @@ export function SidebarSettings({
     !showResizeDimensions &&
     sidebarWidthIsDefault;
   const shortcutPlatform = useShortcutPlatform();
+  // Shown to admins alone (see `useAdminOnlySettings`): the resize
+  // measurements, a tool for building the layout, and two switches whose
+  // rules are only loaded on the settings pages, so they did nothing
+  // anywhere else.
+  const showAdminSettings = useAdminOnlySettings();
   const sidebarHidden = sidebarMode === "hidden";
   const [colorDraft, setColorDraft] = useState(displayColor);
   const [sidebarWidthDraft, setSidebarWidthDraft] = useState(
@@ -738,19 +744,21 @@ export function SidebarSettings({
               />
             </label>
           </div>
-          <div className="settings-row-list mt-4">
-            <SettingRow
-              icon={Ruler}
-              label="Show sizes while resizing"
-              note="Display the sidebar width and the main content width in the sidebar's empty space while you drag to resize"
-            >
-              <SettingsToggle
-                checked={showResizeDimensions}
-                onChange={(value) => update({ showResizeDimensions: value })}
+          {showAdminSettings ? (
+            <div className="settings-row-list mt-4">
+              <SettingRow
+                icon={Ruler}
                 label="Show sizes while resizing"
-              />
-            </SettingRow>
-          </div>
+                note="Display the sidebar width and the main content width in the sidebar's empty space while you drag to resize"
+              >
+                <SettingsToggle
+                  checked={showResizeDimensions}
+                  onChange={(value) => update({ showResizeDimensions: value })}
+                  label="Show sizes while resizing"
+                />
+              </SettingRow>
+            </div>
+          ) : null}
         </section>
 
         <section className="settings-section">
@@ -767,28 +775,32 @@ export function SidebarSettings({
                 label="Show keyboard shortcuts"
               />
             </SettingRow>
-            <SettingRow
-              icon={TextT}
-              label="Show labels in collapsed mode"
-              note="Display text labels on hover in collapsed state"
-            >
-              <SettingsToggle
-                checked={showLabels}
-                onChange={(value) => update({ showCollapsedLabels: value })}
-                label="Show labels in collapsed mode"
-              />
-            </SettingRow>
-            <SettingRow
-              icon={CircleHalf}
-              label="Highlight active item with filled background"
-              note="Use a filled background for the active menu item"
-            >
-              <SettingsToggle
-                checked={highlightActive}
-                onChange={(value) => update({ highlightActive: value })}
-                label="Highlight active item with filled background"
-              />
-            </SettingRow>
+            {showAdminSettings ? (
+              <>
+                <SettingRow
+                  icon={TextT}
+                  label="Show labels in collapsed mode"
+                  note="Display text labels on hover in collapsed state"
+                >
+                  <SettingsToggle
+                    checked={showLabels}
+                    onChange={(value) => update({ showCollapsedLabels: value })}
+                    label="Show labels in collapsed mode"
+                  />
+                </SettingRow>
+                <SettingRow
+                  icon={CircleHalf}
+                  label="Highlight active item with filled background"
+                  note="Use a filled background for the active menu item"
+                >
+                  <SettingsToggle
+                    checked={highlightActive}
+                    onChange={(value) => update({ highlightActive: value })}
+                    label="Highlight active item with filled background"
+                  />
+                </SettingRow>
+              </>
+            ) : null}
             <SettingRow
               icon={Stack}
               label="Elevate sidebar menus"

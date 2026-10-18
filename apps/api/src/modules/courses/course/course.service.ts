@@ -62,6 +62,10 @@ import {
   type OverviewViewer,
 } from "./overview-visibility.ts";
 import {
+  createLessonContentAccess,
+  findFirstPublishedLessonId,
+} from "./lesson-content-access.ts";
+import {
   getLessonDurationSeconds,
   presentAccessRule,
   presentCourse,
@@ -1144,19 +1148,45 @@ export function createCourseService({
     // whoever manages the course, a signed-in learner on a free unrestricted
     // course, or a learner who holds access. Everyone else sees that a
     // lesson has resources and how many, nothing about the files.
+    // Asked once, by whichever of the two rules below needs it first.
+    let viewerHoldsCourse: Promise<boolean> | undefined;
+    const holdsCourse = () =>
+      (viewerHoldsCourse ??= user
+        ? viewerHasCourse(
+            user.id,
+            courseId,
+            pricing?.pricing_type,
+            accessRule?.access_type,
+          )
+        : Promise.resolve(false));
     const viewerMayDownloadResources =
       viewerManagesCourse ||
-      (user !== undefined &&
-        resources.length > 0 &&
-        (await viewerHasCourse(
-          user.id,
-          courseId,
-          pricing?.pricing_type,
-          accessRule?.access_type,
-        )));
+      (user !== undefined && resources.length > 0 && (await holdsCourse()));
     const visibleResources = viewerMayDownloadResources
       ? resources
       : redactLockedResources(resources);
+
+    // A lesson's description is its content (all of it, for a reading
+    // lesson), so a lesson the viewer may not open goes out without one, by
+    // the rule its video is played by. The lesson page asks for it on its
+    // own and is told to sign in or to get the course.
+    const lessonContentAccess = createLessonContentAccess({
+      viewer: user,
+      course,
+      pricingType: pricing?.pricing_type,
+      accessType: accessRule?.access_type,
+      holdsCourse,
+    });
+    const firstLessonId = findFirstPublishedLessonId(sections, lessons);
+    const withheldDescriptionLessonIds = new Set<string>();
+    for (const lesson of lessons) {
+      if (!lesson.description) continue;
+      const access = await lessonContentAccess({
+        is_preview: lesson.is_preview,
+        isFirstLesson: lesson.id === firstLessonId,
+      });
+      if (access !== "open") withheldDescriptionLessonIds.add(lesson.id);
+    }
 
     // "Show instructor name" is the instructor's choice, so it is applied
     // here rather than left to each client to honour.
@@ -1210,6 +1240,7 @@ export function createCourseService({
         // point at one of those.
         omitResourceMedia: !viewerMayDownloadResources,
         omitLessonDescriptions: !overviewLessonDescriptions,
+        withheldDescriptionLessonIds,
       }),
       pricing: pricing
         ? {
@@ -1252,7 +1283,9 @@ export function createCourseService({
   /**
    * One lesson's description, for the viewers the overview lists that lesson
    * for and nobody else: the overview is where the lesson page used to read
-   * it, so the two must agree.
+   * it, so the two must agree. A listed lesson the viewer may not open (see
+   * `createLessonContentAccess`) is refused as its video is: 401 for a
+   * visitor who is not signed in, 403 for a learner without the course.
    */
   async function getLessonDescription(
     courseId: string,
@@ -1283,6 +1316,56 @@ export function createCourseService({
     );
     if (!lesson || !isLessonListedInOverview(lesson, visibility)) {
       throw new AppError(404, "LESSON_NOT_FOUND", "Lesson not found.");
+    }
+
+    const [accessRule, pricing] = await Promise.all([
+      configurationService.findAccessRuleByCourseId(course.id),
+      configurationService.findPricingByCourseId(course.id),
+    ]);
+    const lessonContentAccess = createLessonContentAccess({
+      viewer: user,
+      course,
+      pricingType: pricing?.pricing_type,
+      accessType: accessRule?.access_type,
+      holdsCourse: () =>
+        user
+          ? viewerHasCourse(
+              user.id,
+              course.id,
+              pricing?.pricing_type,
+              accessRule?.access_type,
+            )
+          : Promise.resolve(false),
+    });
+    const access = await lessonContentAccess({
+      is_preview: lesson.is_preview,
+      // Only a visitor on an open free course is let in by this, so the
+      // course's lessons are read for nobody else.
+      isFirstLesson:
+        !user &&
+        isOpenFreeCourse({
+          pricing_type: pricing?.pricing_type,
+          access_type: accessRule?.access_type,
+        }) &&
+        (await curriculumService.listOrderedLessonsByCourseId(course.id)).find(
+          (ordered) => ordered.is_published,
+        )?.id === lesson.id,
+    });
+    if (access === "login") {
+      // Not `UNAUTHORIZED`: the web client reads that as a session that has
+      // ended, and this visitor has none.
+      throw new AppError(
+        401,
+        "LESSON_LOGIN_REQUIRED",
+        "Sign in to read this lesson.",
+      );
+    }
+    if (access === "access") {
+      throw new AppError(
+        403,
+        "COURSE_ACCESS_DENIED",
+        "You do not have access to this course.",
+      );
     }
 
     return { lessonId: lesson.id, description: lesson.description };

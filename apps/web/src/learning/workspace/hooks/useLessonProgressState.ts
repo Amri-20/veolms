@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import type { NextLessonInfo } from "../../player";
 import type { Lesson } from "../../courseContent";
 import { mediaService } from "../../../services/media";
+import { NON_VIDEO_LESSON_LABELS } from "../../lessonWithoutVideo";
 import {
   getCourseThumbnail,
   getCourseThumbnailSrcSet,
@@ -183,7 +184,8 @@ export function useLessonProgressState({
     return {
       id: nextLessonId,
       title: lesson[1],
-      duration: lesson[2],
+      // A reading or a quiz has no length to show; it is named instead.
+      duration: (lesson[5] && NON_VIDEO_LESSON_LABELS[lesson[5]]) || lesson[2],
       sectionTitle: section?.title,
       thumbnailSrc: nextLessonMediaId
         ? mediaService.getVideoThumbnailUrl(nextLessonMediaId)

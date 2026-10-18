@@ -252,8 +252,9 @@ export async function listOrderedLessonsByCourseId(
 }
 
 /**
- * One live lesson's description, and whether the lesson is published. A
- * lesson whose section has been deleted is not found, as it is in no list.
+ * One live lesson's description, whether the lesson is published, and
+ * whether it is a preview. A lesson whose section has been deleted is not
+ * found, as it is in no list.
  */
 export async function findLiveLessonDescription(
   database: DatabaseExecutor,
@@ -271,6 +272,7 @@ export async function findLiveLessonDescription(
       "course_lessons.id",
       "course_lessons.description",
       "course_lessons.is_published",
+      "course_lessons.is_preview",
     ])
     .where("course_lessons.id", "=", lessonId)
     .where("course_lessons.course_id", "=", courseId)

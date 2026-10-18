@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, RefObject } from "react";
 
-/** How long the control is held still before it can be moved. */
-const HOLD_TO_MOVE_MS = 450;
+/**
+ * How long the control is held still before it can be moved. Long on
+ * purpose: at under half a second a learner who pressed to pull the page
+ * found they were moving the control instead.
+ */
+const HOLD_TO_MOVE_MS = 3000;
 /**
  * A press that travels further than this before then is a scroll drag. A
  * thumb is given more room than a mouse: it rolls a little as it settles on

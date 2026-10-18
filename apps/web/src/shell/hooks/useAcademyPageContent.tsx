@@ -361,6 +361,14 @@ export function useAcademyPageContent({
 
     const surfaceActiveSection =
       surfaceSection ?? (surfacePage === "courses" ? "Courses" : activeSection);
+    // The section is the sidebar entry kept highlighted, and a page outside
+    // the menu (Notifications, a quiz) keeps the one it was opened from. So
+    // only the catalogue may be turned into another page by its section: any
+    // other page is its own, or Notifications opened from Orders showed
+    // Orders, and kept showing it on reload (the section rides in the
+    // history entry).
+    const isSectionPage = (section: string) =>
+      surfacePage === "courses" && surfaceActiveSection === section;
     if (surfacePage === "public-profile") {
       return (
         <Suspense fallback={<AcademyPageFallback />}>
@@ -564,7 +572,7 @@ export function useAcademyPageContent({
         </Suspense>
       );
     }
-    if (surfacePage === "reviews" || surfaceActiveSection === "Reviews") {
+    if (surfacePage === "reviews" || isSectionPage("Reviews")) {
       return (
         <Suspense fallback={<AcademyPageFallback />}>
           <ReviewsPage onNavigatePage={onNavigatePage} setNotice={setNotice} />
@@ -628,14 +636,14 @@ export function useAcademyPageContent({
         </Suspense>
       );
     }
-    if (surfacePage === "coupons" || surfaceActiveSection === "Coupons") {
+    if (surfacePage === "coupons" || isSectionPage("Coupons")) {
       return (
         <Suspense fallback={<AcademyRouteSkeleton page="coupons" />}>
           <CouponsPage onNavigatePage={onNavigatePage} setNotice={setNotice} />
         </Suspense>
       );
     }
-    if (surfacePage === "orders" || surfaceActiveSection === "Orders") {
+    if (surfacePage === "orders" || isSectionPage("Orders")) {
       return (
         <Suspense
           fallback={
@@ -656,7 +664,7 @@ export function useAcademyPageContent({
     }
     if (
       surfacePage === "purchase-history" ||
-      surfaceActiveSection === "Purchase History"
+      isSectionPage("Purchase History")
     ) {
       return (
         <Suspense
@@ -679,8 +687,8 @@ export function useAcademyPageContent({
     }
     if (
       surfacePage === "notifications" ||
-      surfaceActiveSection === "Notifications" ||
-      surfaceActiveSection === "Notification"
+      isSectionPage("Notifications") ||
+      isSectionPage("Notification")
     ) {
       return (
         <Suspense fallback={<AcademyPageFallback />}>
@@ -737,7 +745,7 @@ export function useAcademyPageContent({
         </Suspense>
       );
     }
-    if (surfacePage === "students" || surfaceActiveSection === "Students") {
+    if (surfacePage === "students" || isSectionPage("Students")) {
       if (effectiveRole !== "creator") {
         return null;
       }
@@ -747,7 +755,7 @@ export function useAcademyPageContent({
         </Suspense>
       );
     }
-    if (surfacePage === "analytics" || surfaceActiveSection === "Analytics") {
+    if (surfacePage === "analytics" || isSectionPage("Analytics")) {
       if (effectiveRole !== "creator") {
         return null;
       }

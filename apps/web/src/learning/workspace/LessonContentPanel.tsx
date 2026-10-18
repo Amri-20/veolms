@@ -134,6 +134,7 @@ export function LessonContentPanel({
             onParticipationAction={
               isAuthenticated ? onOpenCourseOverview : onOpenLogin
             }
+            loginToParticipate={!isAuthenticated}
             onSeekToTimestamp={seekCurrentLessonToTimestamp}
           />
         ) : isLearningDeepLinkError ? (

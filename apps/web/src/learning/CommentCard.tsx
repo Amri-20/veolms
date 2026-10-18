@@ -49,6 +49,7 @@ import { optimisticEditCoordinator } from "../services/learning-interactions/opt
 import { adaptLearningReplyToCommentReply } from "./learning-replies.adapter";
 import { useCurrentUser } from "../services/auth";
 import { DiscussionAvatar } from "./DiscussionAvatar";
+import { ProfileLink } from "../profiles/ProfileLink";
 import {
   DiscussionAttachmentsList,
   type DiscussionAttachmentItem,
@@ -68,6 +69,8 @@ export interface CommentReply {
   serverId?: string;
   creationStatus?: "pending" | "confirmed";
   name: string;
+  /** Opens their profile from the name and picture when present. */
+  authorUsername?: string;
   time: string;
   avatar: string;
   text: string;
@@ -86,6 +89,8 @@ export interface Comment {
   serverId?: string;
   creationStatus?: "pending" | "confirmed";
   name: string;
+  /** Opens their profile from the name and picture when present. */
+  authorUsername?: string;
   time: string;
   avatar: string;
   text: string;
@@ -564,10 +569,16 @@ export const CommentCard = React.memo(function CommentCard({
       >
         <div className="min-h-0 overflow-hidden">
           <div className="relative flex gap-3 sm:gap-3.5">
-            <DiscussionAvatar
-              src={comment.avatar}
-              className="relative z-10 size-10 sm:size-11"
-            />
+            <ProfileLink
+              username={comment.authorUsername}
+              variant="picture"
+              className="relative z-10"
+            >
+              <DiscussionAvatar
+                src={comment.avatar}
+                className="relative z-10 size-10 sm:size-11"
+              />
+            </ProfileLink>
 
             <div className="min-w-0 flex-1">
               <div
@@ -576,7 +587,12 @@ export const CommentCard = React.memo(function CommentCard({
               >
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
                   <h2 className="text-sm font-semibold text-(--text) sm:text-[15px]">
-                    {comment.name}
+                    <ProfileLink
+                      username={comment.authorUsername}
+                      variant="name"
+                    >
+                      {comment.name}
+                    </ProfileLink>
                   </h2>
                   {comment.role === "Instructor" && (
                     <span className="rounded-md bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-sky-600 dark:text-sky-400">
@@ -1103,13 +1119,19 @@ function ReplyCard({
       >
         <div className="min-h-0 overflow-hidden">
           <div className="relative flex gap-3">
-            <DiscussionAvatar
-              src={reply.avatar}
-              className="relative z-10 size-9 sm:size-10"
-              loading="lazy"
-              width={40}
-              height={40}
-            />
+            <ProfileLink
+              username={reply.authorUsername}
+              variant="picture"
+              className="relative z-10"
+            >
+              <DiscussionAvatar
+                src={reply.avatar}
+                className="relative z-10 size-9 sm:size-10"
+                loading="lazy"
+                width={40}
+                height={40}
+              />
+            </ProfileLink>
 
             <div className="min-w-0 flex-1">
               <div
@@ -1118,7 +1140,9 @@ function ReplyCard({
               >
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
                   <h3 className="text-sm font-semibold text-(--text) sm:text-[15px]">
-                    {reply.name}
+                    <ProfileLink username={reply.authorUsername} variant="name">
+                      {reply.name}
+                    </ProfileLink>
                   </h3>
                   {reply.role === "Instructor" && (
                     <span className="rounded-md bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-sky-600 dark:text-sky-400">

@@ -112,26 +112,33 @@ export function useLessonDescriptionState({
       description: fetchedLessonDescription.description,
     };
   }, [fetchedLessonDescription, overviewLesson]);
-  // An overview with no description on any lesson may be one that no longer
-  // carries them, so the open lesson's is not known until its request ends.
-  const overviewCarriesLessonDescriptions = useMemo(() => {
-    for (const lesson of adaptedCurriculum?.lessonsByNumber.values() ?? []) {
-      if (lesson.description) return true;
-    }
-    return false;
-  }, [adaptedCurriculum]);
+  // The overview leaves out the description of a lesson the viewer may not
+  // open, and may leave out every lesson's, so a lesson it gives none is not
+  // known until its own request ends.
+  const overviewHasLessonDescription = Boolean(overviewLesson?.description);
   const isLessonDescriptionPending =
-    lessonDescriptionQuery.isLoading && !overviewCarriesLessonDescriptions;
+    lessonDescriptionQuery.isLoading && !overviewHasLessonDescription;
+  // The server refuses the description of a lesson the viewer may not open
+  // as it refuses its video: 401 to sign in, 403 to get the course. A
+  // two-factor step that is still owed is a sign-in too, as for the video.
+  const lessonDescriptionError = lessonDescriptionQuery.error;
+  const lessonDescriptionRefusal =
+    lessonDescriptionError?.status === 401 ||
+    lessonDescriptionError?.code === "MFA_REQUIRED"
+      ? "login"
+      : lessonDescriptionError?.status === 403
+        ? "locked"
+        : null;
   // Whether the open lesson's description is known. A lesson with no video
   // is its description, so its stage and its completion wait for this.
   const lessonDescriptionState = resolveLessonDescriptionState({
-    overviewCarriesDescriptions: overviewCarriesLessonDescriptions,
+    overviewHasDescription: overviewHasLessonDescription,
     request: !(courseOverview?.course.id && overviewLesson?.id)
       ? "idle"
       : fetchedLessonDescription !== undefined
         ? "answered"
         : lessonDescriptionQuery.isError && !lessonDescriptionQuery.isFetching
-          ? "failed"
+          ? (lessonDescriptionRefusal ?? "failed")
           : "loading",
   });
   const refetchLessonDescription = lessonDescriptionQuery.refetch;

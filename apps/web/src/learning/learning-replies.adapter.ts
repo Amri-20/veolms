@@ -23,6 +23,7 @@ export function adaptLearningReplyToCommentReply(
     serverId: getServerEntityId(reply),
     creationStatus: isPendingClientEntity(reply) ? "pending" : "confirmed",
     name: reply.author.displayName || reply.author.username || "Learner",
+    authorUsername: reply.author.username ?? undefined,
     time: formatRelativeTime(reply.createdAt),
     avatar: reply.author.avatarUrl || "",
     text: reply.plainText || reply.content,

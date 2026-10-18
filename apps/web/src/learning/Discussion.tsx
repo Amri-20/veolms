@@ -188,6 +188,7 @@ function DiscussionInner({
   participationState = "granted",
   participationActionLabel,
   onParticipationAction,
+  loginToParticipate = false,
   isThreadDeepLinkReady = true,
   noteDeepLinkId = null,
   onSeekToTimestamp,
@@ -2499,6 +2500,7 @@ function DiscussionInner({
         participationState={participationState}
         participationActionLabel={participationActionLabel}
         onParticipationAction={onParticipationAction}
+        loginToParticipate={loginToParticipate}
         onDraftChange={(value) => {
           if (editingEntry) {
             setEditingEntry((current) =>

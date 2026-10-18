@@ -44,6 +44,7 @@ export function adaptLearningThreadToComment(
     serverId: getServerEntityId(thread),
     creationStatus: isPendingClientEntity(thread) ? "pending" : "confirmed",
     name: thread.author.displayName || thread.author.username || "Learner",
+    authorUsername: thread.author.username ?? undefined,
     time: formatRelativeTime(thread.createdAt),
     avatar: thread.author.avatarUrl || "",
     text: thread.plainText || thread.content,

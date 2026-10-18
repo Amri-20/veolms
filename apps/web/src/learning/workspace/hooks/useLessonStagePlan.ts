@@ -22,6 +22,10 @@ import {
   type LessonDescriptionState,
   type LessonStagePlan,
 } from "../../lessonWithoutVideo";
+import {
+  toVideoPlaybackBootstrapError,
+  videoPlaybackFailureNotice,
+} from "../../videoPlaybackFailure";
 import type { AuthUser } from "../../../store/auth.store";
 import type { useEnrolledCourses } from "../../../services/enrollments";
 import type { useCourseOverview } from "../../../services/courses";
@@ -31,7 +35,7 @@ import type { OctopusKind } from "../../../components/OctopusIllustration";
 
 export interface UseLessonStagePlanArgs {
   courseSlug: string | undefined;
-  onOpenCourseOverview: () => void;
+  onUnlockCourse: () => void;
   onOpenLogin: () => void;
   isAuthenticated: boolean;
   resolvedAuthUser: AuthUser | null;
@@ -81,7 +85,7 @@ export interface UseLessonStagePlanResult {
 
 export function useLessonStagePlan({
   courseSlug,
-  onOpenCourseOverview,
+  onUnlockCourse,
   onOpenLogin,
   isAuthenticated,
   resolvedAuthUser,
@@ -215,15 +219,7 @@ export function useLessonStagePlan({
         if (!active) return;
         settled = true;
         setPlaybackBootstrap(null);
-        setPlaybackBootstrapError(
-          error instanceof VideoPlaybackBootstrapError
-            ? error
-            : new VideoPlaybackBootstrapError(
-                0,
-                "PLAYBACK_BOOTSTRAP_FAILED",
-                "Unable to prepare this video.",
-              ),
-        );
+        setPlaybackBootstrapError(toVideoPlaybackBootstrapError(error));
       });
 
     return () => {
@@ -286,10 +282,29 @@ export function useLessonStagePlan({
     // A lesson the course lists with no video says so, whatever a request
     // made before the course had loaded came back with. Not before its
     // description is known, though: the description may be all its content.
+    // A locked lesson asks the same of the viewer whether it is a video or
+    // a reading: the server refuses either until they sign in or get the
+    // course.
+    const loginPrompt = {
+      kind: "login",
+      message: "Log in to dive in",
+      actionLabel: "Log in",
+      onAction: onOpenLogin,
+    } as const;
+    const accessPrompt = {
+      kind: "access",
+      message: "Join the course to unlock this lesson and all the rest.",
+      actionLabel: "Unlock the course",
+      onAction: onUnlockCourse,
+    } as const;
+
     if (!courseNotFound && !requestsLessonPlayback) {
       const stage = noVideoStageFor(stageLesson, lessonDescriptionState);
       // The loader stands in meanwhile; see `lessonTextPending`.
       if (stage.kind === "pending") return null;
+      if (stage.kind === "locked") {
+        return stage.reason === "login" ? loginPrompt : accessPrompt;
+      }
       return stage.kind === "retry"
         ? { ...stage, onAction: retryLessonDescription }
         : stage;
@@ -304,24 +319,12 @@ export function useLessonStagePlan({
       playbackBootstrapError.code === "UNAUTHORIZED" ||
       playbackBootstrapError.code === "MFA_REQUIRED"
     ) {
-      return {
-        kind: "login",
-        message: "Log in to dive in",
-        actionLabel: "Log in",
-        onAction: onOpenLogin,
-      };
+      return loginPrompt;
     }
 
     if (courseNotFound) return courseNotFound;
 
-    if (playbackBootstrapError.status === 403) {
-      return {
-        kind: "access",
-        message: "Join the course to unlock this lesson and all the rest.",
-        actionLabel: "Unlock the course",
-        onAction: onOpenCourseOverview,
-      };
-    }
+    if (playbackBootstrapError.status === 403) return accessPrompt;
 
     // A video that is still being processed, and a lesson with no video,
     // used to get the same "couldn't prepare" message as a real failure. The
@@ -345,16 +348,13 @@ export function useLessonStagePlan({
     }
 
     return {
-      kind: "retry",
-      illustration: "went-wrong",
-      message: "We couldn't prepare this video.",
-      actionLabel: "Try again",
+      ...videoPlaybackFailureNotice(playbackBootstrapError),
       onAction: retryPlaybackBootstrap,
     };
   }, [
     courseUnavailable,
     lessonDescriptionState,
-    onOpenCourseOverview,
+    onUnlockCourse,
     onOpenLogin,
     playbackBootstrapError,
     requestsLessonPlayback,

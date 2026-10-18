@@ -170,7 +170,6 @@ export function LearnerHome({
   const goalProps = {
     summary: summaryQuery.data,
     isLoading: sessionPending || summaryQuery.isLoading,
-    onEditGoal: () => onNavigatePage("/settings/learning"),
   };
   const laptopScreen = isPhone ? undefined : (
     <LearnerGoalScreen {...goalProps} />

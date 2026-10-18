@@ -1411,7 +1411,9 @@ export function CoursesPage({
               initialFocus={mobileSheetRef}
               finalFocus={mobileMoreRef}
               tabIndex={-1}
-              className="mobile-menu-sheet [--mobile-menu-sheet-top-space:3px] data-expanded:rounded-none data-[swipe-axis=y]:[--drawer-content-max-height:100dvh] rounded-t-[22px] px-3 pb-[max(14px,var(--app-safe-area-bottom))]"
+              className="mobile-menu-sheet [--mobile-menu-sheet-top-space:3px] data-expanded:rounded-none data-[swipe-axis=y]:[--drawer-content-max-height:100dvh] rounded-t-[22px] px-3 pb-[max(14px,var(--app-safe-area-bottom))] [&>[data-slot=drawer-content]]:-mb-[max(14px,var(--app-safe-area-bottom))]"
+              // The content box clips its overflow; reaching into the bottom
+              // padding keeps the dock tiles' shadows whole at full height.
               floatingContent={
                 <>
                   {mobilePaletteMenu && (

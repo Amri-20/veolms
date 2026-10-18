@@ -14,6 +14,13 @@ interface CompactComposerProps {
   promptText?: string;
   avatar?: string | null;
   disabled?: boolean;
+  /** What the box is announced as; it opens the composer by default. */
+  label?: string;
+  /**
+   * A key that would type a character opens it too. For a box that leads
+   * somewhere else (logging in), where nothing typed could be kept.
+   */
+  opensOnTyping?: boolean;
   onOpen: () => void;
 }
 
@@ -30,6 +37,8 @@ interface MobileCompactComposerPortalProps {
   attachmentCount: number;
   promptText?: string;
   avatar?: string | null;
+  label?: string;
+  opensOnTyping?: boolean;
   mobileBottomNavigation: boolean;
   scrollHidden: boolean;
   onOpen: () => void;
@@ -40,6 +49,8 @@ export function MobileCompactComposerPortal({
   attachmentCount,
   promptText,
   avatar,
+  label,
+  opensOnTyping,
   mobileBottomNavigation,
   scrollHidden,
   onOpen,
@@ -74,6 +85,8 @@ export function MobileCompactComposerPortal({
           attachmentCount={attachmentCount}
           promptText={promptText}
           avatar={avatar}
+          label={label}
+          opensOnTyping={opensOnTyping}
           onOpen={onOpen}
         />
       </div>
@@ -110,6 +123,8 @@ export function CompactComposer({
   promptText = "Write something…",
   avatar,
   disabled = false,
+  label = "Open discussion composer",
+  opensOnTyping = false,
   onOpen,
 }: CompactComposerProps) {
   const preview =
@@ -123,13 +138,22 @@ export function CompactComposer({
     <div
       role="button"
       data-compact-comment-composer
-      aria-label="Open discussion composer"
+      aria-label={label}
       aria-disabled={disabled || undefined}
       tabIndex={disabled ? -1 : 0}
       onClick={disabled ? undefined : onOpen}
       onKeyDown={(event) => {
         if (disabled) return;
-        if (event.key === "Enter" || event.key === " ") {
+        const typesCharacter =
+          event.key.length === 1 &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey;
+        if (
+          event.key === "Enter" ||
+          event.key === " " ||
+          (opensOnTyping && typesCharacter)
+        ) {
           event.preventDefault();
           onOpen();
         }

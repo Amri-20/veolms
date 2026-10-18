@@ -114,6 +114,7 @@ export default function LearningRoute() {
     onLearningPlayerMinimizeGestureChange,
     onMiniPlayerRestoreReady,
     openLearningMiniPlayer = () => {},
+    openCourseToUnlock,
     persistentPlayerMounted = false,
     registerPersistentPlayer,
   } = outletContext;
@@ -336,6 +337,16 @@ export default function LearningRoute() {
     }
     navigateTo(`/courses/${encodeURIComponent(courseSlug)}/overview`);
   }, [courseSlug, hasDiscussionReturnPath, navigateTo, playerReturnPath]);
+  // A locked lesson's "Unlock the course": the course page with the player
+  // closed rather than minimized (see `openCourseToUnlock`).
+  const unlockCourse = useCallback(() => {
+    if (!courseSlug) return;
+    if (openCourseToUnlock) {
+      openCourseToUnlock(courseSlug);
+      return;
+    }
+    navigateTo(`/courses/${encodeURIComponent(courseSlug)}/overview`);
+  }, [courseSlug, navigateTo, openCourseToUnlock]);
   const openLogin = useCallback(() => {
     navigateTo(
       buildLoginPath(
@@ -375,6 +386,7 @@ export default function LearningRoute() {
         mobileBottomNavigationHidden={mobileBottomNavigationHidden}
         onSelectLesson={selectLesson}
         onOpenCourseOverview={openCourseOverview}
+        onUnlockCourse={unlockCourse}
         onOpenLogin={openLogin}
         onMinimizeGestureChange={onLearningPlayerMinimizeGestureChange}
         onMiniPlayerRestoreReady={onMiniPlayerRestoreReady}

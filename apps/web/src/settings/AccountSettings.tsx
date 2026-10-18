@@ -15,6 +15,7 @@ import { LogoutConfirmModal } from "../shell/LogoutConfirmModal";
 import { AutosyncSyncError, autosyncManager } from "../lib/autosync";
 import type { ProfileRole } from "./profileTypes";
 import { getRoleDisplayName } from "../shell/workspaceRole";
+import { useAdminOnlySettings } from "./useAdminOnlySettings";
 
 export interface AccountSettingsProps {
   role: ProfileRole;
@@ -54,6 +55,9 @@ export function AccountSettings({
   const { isPending: isSigningOut, signOut } = useSignOut();
   const deactivateMutation = useDeactivateAccount();
   const { data: currentUser } = useCurrentUser();
+  // Data export is not built yet: its section, a disabled button, is shown
+  // to admins alone (see `useAdminOnlySettings`).
+  const showAdminSettings = useAdminOnlySettings();
   const [deactivatePhrase, setDeactivatePhrase] = useState("");
   const deactivatePhraseMatches =
     deactivatePhrase.trim().toUpperCase() === DEACTIVATE_PHRASE;
@@ -155,33 +159,36 @@ export function AccountSettings({
         </div>
       </section>
 
-      <section className="settings-section" aria-labelledby="data-heading">
-        <header className="settings-section__heading">
-          <Archive size={20} weight="duotone" />
-          <div>
-            <h3 id="data-heading">Your data</h3>
-            <p>
-              Keep a portable copy of the information connected to this account.
-            </p>
+      {showAdminSettings ? (
+        <section className="settings-section" aria-labelledby="data-heading">
+          <header className="settings-section__heading">
+            <Archive size={20} weight="duotone" />
+            <div>
+              <h3 id="data-heading">Your data</h3>
+              <p>
+                Keep a portable copy of the information connected to this
+                account.
+              </p>
+            </div>
+          </header>
+          <div className="settings-account-plan">
+            <div>
+              <strong>Export your data</strong>
+              <small id="account-export-availability">
+                Data export isn&apos;t available yet.
+              </small>
+            </div>
+            <button
+              type="button"
+              className="settings-action"
+              aria-describedby="account-export-availability"
+              disabled
+            >
+              <DownloadSimple size={16} /> Export unavailable
+            </button>
           </div>
-        </header>
-        <div className="settings-account-plan">
-          <div>
-            <strong>Export your data</strong>
-            <small id="account-export-availability">
-              Data export isn&apos;t available yet.
-            </small>
-          </div>
-          <button
-            type="button"
-            className="settings-action"
-            aria-describedby="account-export-availability"
-            disabled
-          >
-            <DownloadSimple size={16} /> Export unavailable
-          </button>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       {isAuthenticated && (
         <section

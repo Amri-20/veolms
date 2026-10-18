@@ -10,9 +10,21 @@ import {
   LEARNING_PREFERENCES_KEY,
   readLearningPreferences,
 } from "../../settings/settingsPreferences";
+import { useCurrentUser } from "../../services/auth";
+import { hasAdminRole } from "../../shell/workspaceRole";
+
+const DEFAULT_PLAYER_THEME: BuiltInPlayerThemeId = "youtube";
 
 export function useLearningPlayerTheme(): PlayerThemeDefinition {
-  const [theme, setTheme] = useState<BuiltInPlayerThemeId>("youtube");
+  const [storedTheme, setTheme] =
+    useState<BuiltInPlayerThemeId>(DEFAULT_PLAYER_THEME);
+  // Only admins choose a player theme for now (Settings shows them alone the
+  // picker); everyone else plays in the default one, whatever was chosen
+  // before the picker was taken away.
+  const { data: currentUser } = useCurrentUser();
+  const theme = hasAdminRole(currentUser?.roles)
+    ? storedTheme
+    : DEFAULT_PLAYER_THEME;
 
   useEffect(() => {
     const syncTheme = () =>

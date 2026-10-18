@@ -25,6 +25,12 @@ export interface DiscussionProps {
   participationState?: LessonParticipationState;
   participationActionLabel?: string;
   onParticipationAction?: () => void;
+  /**
+   * The visitor is not signed in (or not yet known to be). They still see
+   * the composer, and pressing it calls `onParticipationAction` (log in)
+   * instead of opening the editor.
+   */
+  loginToParticipate?: boolean;
   isThreadDeepLinkReady?: boolean;
   noteDeepLinkId?: string | null;
   onSeekToTimestamp?: (seconds: number) => void;
