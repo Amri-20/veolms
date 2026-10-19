@@ -4,6 +4,7 @@ import { BookmarkSimpleIcon as BookmarkSimple } from "@phosphor-icons/react/Book
 import { CopySimpleIcon as CopySimple } from "@phosphor-icons/react/CopySimple";
 import { LinkSimpleIcon as LinkSimple } from "@phosphor-icons/react/LinkSimple";
 import { TrashIcon as Trash } from "@phosphor-icons/react/Trash";
+import { EyeIcon as Eye } from "@phosphor-icons/react/Eye";
 import { EyeSlashIcon as EyeSlash } from "@phosphor-icons/react/EyeSlash";
 import { FlagIcon as Flag } from "@phosphor-icons/react/Flag";
 import { PencilSimpleIcon as PencilSimple } from "@phosphor-icons/react/PencilSimple";
@@ -221,9 +222,15 @@ export function DiscussionWorkspaceMobileActionSheet({
               <button
                 type="button"
                 className="flex min-h-12 w-full items-center gap-3 border-t border-(--border) px-4 text-left text-sm font-medium text-(--text) transition-colors hover:bg-(--hover) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--accent)"
-                onClick={() => runAndClose(actions.hide)}
+                onClick={() =>
+                  runAndClose(actions.isHidden ? actions.unhide : actions.hide)
+                }
               >
-                <EyeSlash size={19} weight="regular" aria-hidden="true" />
+                {actions.isHidden ? (
+                  <Eye size={19} weight="regular" aria-hidden="true" />
+                ) : (
+                  <EyeSlash size={19} weight="regular" aria-hidden="true" />
+                )}
                 <span>{actions.hideLabel}</span>
               </button>
             )}

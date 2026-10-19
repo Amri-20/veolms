@@ -6,11 +6,16 @@ import {
   learningInteractionKeys,
   learningInteractionsService,
   optimisticallyUpdateDiscussionsWorkspaceMembership,
+  refetchDiscussionsWorkspace,
   removeFromDiscussionsWorkspaceCache,
   restoreDiscussionsWorkspaceCacheSnapshot,
   updateDiscussionsWorkspaceItem,
 } from "../services/learning-interactions";
 import { copyTextToClipboard } from "../lib/clipboard";
+import {
+  markDiscussionPostHidden,
+  useDiscussionPostHidden,
+} from "./discussionHiddenPosts";
 import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
 
 interface UseDiscussionWorkspaceCardActionsOptions {
@@ -217,6 +222,11 @@ export function useDiscussionWorkspaceCardActions({
   // Admins can take a comment, Q&A or reply out of view (it can be shown
   // again from moderation, so this asks for no confirmation).
   const canHide = isAdmin && !isNote && canDelete;
+  const isHidden = useDiscussionPostHidden(card.id);
+  const capitalNoun =
+    deleteNoun === "Q&A"
+      ? deleteNoun
+      : deleteNoun[0]!.toUpperCase() + deleteNoun.slice(1);
   const hide = () => {
     if (!canHide) return;
     const itemType = isReply ? "reply" : "thread";
@@ -230,9 +240,8 @@ export function useDiscussionWorkspaceCardActions({
         : learningInteractionsService.hideThread(card.id);
     void request
       .then(() => {
-        setNotice?.(
-          `${deleteNoun === "Q&A" ? deleteNoun : deleteNoun[0]!.toUpperCase() + deleteNoun.slice(1)} hidden`,
-        );
+        markDiscussionPostHidden(card.id, true);
+        setNotice?.(`${capitalNoun} hidden`);
         void queryClient.invalidateQueries({
           queryKey: learningInteractionKeys.all,
           refetchType: "none",
@@ -241,6 +250,27 @@ export function useDiscussionWorkspaceCardActions({
       .catch(() => {
         restoreDiscussionsWorkspaceCacheSnapshot(queryClient, snapshot);
         setNotice?.(`Couldn't hide ${deleteNoun}`);
+      });
+  };
+
+  // Shows a post hidden in this visit again; it returns to the lists.
+  const unhide = () => {
+    if (!canHide || !isHidden) return;
+    const request = isReply
+      ? learningInteractionsService.unhideReply(card.id)
+      : learningInteractionsService.unhideThread(card.id);
+    void request
+      .then(() => {
+        markDiscussionPostHidden(card.id, false);
+        setNotice?.(`${capitalNoun} shown again`);
+        refetchDiscussionsWorkspace(queryClient);
+        void queryClient.invalidateQueries({
+          queryKey: learningInteractionKeys.all,
+          refetchType: "none",
+        });
+      })
+      .catch(() => {
+        setNotice?.(`Couldn't show the ${deleteNoun} again`);
       });
   };
 
@@ -296,7 +326,9 @@ export function useDiscussionWorkspaceCardActions({
     editLabel: `Edit ${deleteNoun}`,
     reportLabel: `Report ${deleteNoun}`,
     hide,
-    hideLabel: `Hide ${deleteNoun}`,
+    unhide,
+    isHidden,
+    hideLabel: isHidden ? `Unhide ${deleteNoun}` : `Hide ${deleteNoun}`,
     like,
     confirmingDelete,
     copyLink,
