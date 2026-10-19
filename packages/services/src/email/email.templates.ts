@@ -307,3 +307,119 @@ export function teamMemberAddedEmail({
     }),
   };
 }
+
+function quotedMessage(message: string): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 18px"><tr><td style="border-left:3px solid ${colors.panelBorder};padding:4px 0 4px 14px;font-size:15px;line-height:22px;color:${colors.text};white-space:pre-line">${escapeHtml(message)}</td></tr></table>`;
+}
+
+export interface TeamInvitationInput {
+  academyName: string;
+  logoUrl?: string | null;
+  invitedByName: string | null;
+  roleNames: readonly string[];
+  /** The inviter's own words, shown as typed. */
+  message: string | null;
+  acceptUrl: string;
+  expiresInDays: number;
+}
+
+/** An invitation to join the team; the link opens the Accept page. */
+export function teamInvitationEmail({
+  academyName,
+  logoUrl = null,
+  invitedByName,
+  roleNames,
+  message,
+  acceptUrl,
+  expiresInDays,
+}: TeamInvitationInput): EmailContent {
+  const title = `Join the ${academyName} team`;
+  const who = invitedByName
+    ? `${invitedByName} invited you`
+    : "You have been invited";
+  const intro = `${who} to join the ${academyName} team as ${roleList(roleNames)}.`;
+  const validity = `This invitation expires in ${expiresInDays} day${expiresInDays === 1 ? "" : "s"}. Sign in with this email address to accept it.`;
+
+  return {
+    subject: invitedByName
+      ? `${invitedByName} invited you to the ${academyName} team`
+      : title,
+    text:
+      `${intro}\n\n` +
+      (message ? `"${message}"\n\n` : "") +
+      `Accept the invitation: ${acceptUrl}\n\n${validity}\n\n` +
+      "If you did not expect this, you can ignore this email.",
+    html: layout({
+      academyName,
+      logoUrl,
+      title,
+      preheader: intro,
+      bodyHtml: [
+        heading(title),
+        paragraph(escapeHtml(intro)),
+        message ? quotedMessage(message) : "",
+        button(acceptUrl, "Accept invitation"),
+        paragraph(escapeHtml(validity), { last: true }),
+        divider(),
+        smallPrint("If you did not expect this, you can ignore this email."),
+      ].join(""),
+      footer: `Sent by ${escapeHtml(academyName)} because someone on its team invited this address.`,
+    }),
+  };
+}
+
+export interface TeamPreapprovedInput {
+  academyName: string;
+  logoUrl?: string | null;
+  addedByName: string | null;
+  roleNames: readonly string[];
+  message: string | null;
+  signInUrl: string;
+  email: string;
+  expiresInDays: number;
+}
+
+/**
+ * Sent when someone is added by email before they have an account (or
+ * before they have signed in with it). Nothing to accept: signing in with
+ * this address is enough.
+ */
+export function teamPreapprovedEmail({
+  academyName,
+  logoUrl = null,
+  addedByName,
+  roleNames,
+  message,
+  signInUrl,
+  email,
+  expiresInDays,
+}: TeamPreapprovedInput): EmailContent {
+  const title = `You've been added to the ${academyName} team`;
+  const who = addedByName ? `${addedByName} added you` : "You were added";
+  const intro = `${who} to the ${academyName} team as ${roleList(roleNames)}.`;
+  const next = `Sign in with ${email} within ${expiresInDays} day${expiresInDays === 1 ? "" : "s"} and your access is ready. Team members sign in with two-factor verification, so you will be asked to set it up.`;
+
+  return {
+    subject: title,
+    text:
+      `${intro}\n\n` +
+      (message ? `"${message}"\n\n` : "") +
+      `${next}\n\nSign in: ${signInUrl}\n\nIf you did not expect this, you can ignore this email.`,
+    html: layout({
+      academyName,
+      logoUrl,
+      title,
+      preheader: intro,
+      bodyHtml: [
+        heading(title),
+        paragraph(escapeHtml(intro)),
+        message ? quotedMessage(message) : "",
+        paragraph(escapeHtml(next), { last: true }),
+        button(signInUrl, `Sign in to ${academyName}`),
+        divider(),
+        smallPrint("If you did not expect this, you can ignore this email."),
+      ].join(""),
+      footer: `Sent by ${escapeHtml(academyName)} because someone on its team added this address.`,
+    }),
+  };
+}

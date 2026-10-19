@@ -34,7 +34,7 @@ const messageSchema = z.object({ message: z.string() });
 
 /**
  * Team management: roles built from permissions, and the people holding
- * them. Invitations live in invitations.routes.ts.
+ * them. Invitations live in invitations/invitations.routes.ts.
  */
 const teamRoutes: RoutePlugin = async (app, options) => {
   const sessionService = createSessionService({ database: options.database });

@@ -35,6 +35,7 @@ import {
 import { createOutboxService } from "../../../events/outbox.service.ts";
 import { createPlatformSettingsService } from "../../platform/index.ts";
 import type { Executor } from "../shared/repository.types.ts";
+import { runSignInClaim } from "../shared/sign-in-claim.ts";
 
 export interface SessionServiceOptions {
   database: Kysely<Database>;
@@ -179,8 +180,12 @@ export function createSessionService({ database }: SessionServiceOptions) {
       );
     }
 
+    // Team access added for this verified email becomes the person's now,
+    // before roles load, so this very session carries it (and its
+    // two-factor rule). Prerequisites read earlier are stale once it does.
+    const claimed = await runSignInClaim(database, user);
     const { roles, existingTokenHash, existingSession, ...factors } =
-      prerequisites ??
+      (claimed === 0 ? prerequisites : undefined) ??
       (await loadSessionPrerequisites(user.id, request.existingSessionToken));
     const mfa = buildMfaState(
       isMfaMandatoryAccount(Boolean(user.mfa_mandatory), roles, {
