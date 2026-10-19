@@ -56,13 +56,13 @@ const duplicateRow: DuplicatePurchaseRow = {
   currency: "INR",
   order_id: "66666666-6666-4666-8666-666666666666",
   order_number: "ORD-20261013-LATER1",
-  final_amount: 600,
-  total_amount: 850,
+  final_amount: 60000,
+  total_amount: 85000,
   paid_at: new Date("2026-10-13T09:00:00.000Z"),
   paid_at_cursor: "2026-10-13T09:00:00.000000Z",
   earlier_order_id: "77777777-7777-4777-8777-777777777777",
   earlier_order_number: "ORD-20261013-EARLY1",
-  earlier_final_amount: 499,
+  earlier_final_amount: 49900,
   earlier_paid_at: new Date("2026-10-13T08:30:00.000Z"),
   refunded_amount: "10000",
   gateway_provider: "razorpay",
@@ -76,8 +76,8 @@ const courseInBundleRow: DuplicatePurchaseRow = {
   id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   order_item_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
   bundle_title: "Backend pack",
-  final_amount: 900,
-  total_amount: 900,
+  final_amount: 90000,
+  total_amount: 90000,
   refunded_amount: "0",
   order_level_refunded_amount: "0",
 };
@@ -90,13 +90,13 @@ const duplicateBundleRow: DuplicateBundlePurchaseRow = {
   currency: "INR",
   order_id: "66666666-6666-4666-8666-666666666666",
   order_number: "ORD-20261013-LATER1",
-  final_amount: 900,
-  total_amount: 1150,
+  final_amount: 90000,
+  total_amount: 115000,
   paid_at: new Date("2026-10-13T09:30:00.000Z"),
   paid_at_cursor: "2026-10-13T09:30:00.000000Z",
   earlier_order_id: "77777777-7777-4777-8777-777777777777",
   earlier_order_number: "ORD-20261013-EARLY1",
-  earlier_final_amount: 1000,
+  earlier_final_amount: 100000,
   earlier_paid_at: new Date("2026-10-13T08:30:00.000Z"),
   refunded_amount: "0",
   gateway_provider: "razorpay",
@@ -109,7 +109,7 @@ const transferRow: StuckManualTransferRow = {
   order_number: "ORD-20261013-PAID01",
   order_status: "paid",
   user_id: "33333333-3333-4333-8333-333333333333",
-  total_amount: 499,
+  total_amount: 49900,
   currency: "INR",
   payment_method: "bank_transfer",
   transaction_reference: "utr 4411 9020",
@@ -152,14 +152,13 @@ await test("a surplus payment never reports more returned than was taken", () =>
   assert.equal(entry.refundedAmount, 49900);
 });
 
-await test("a duplicate purchase converts order and item amounts to minor units and leaves refunds as they are", () => {
+await test("a duplicate purchase carries order, item and refund amounts in minor units, as stored", () => {
   const entry = toDuplicatePurchaseEntry(duplicateRow, buyer);
   assert.equal(entry.kind, "duplicate_purchase");
-  // 600 rupees on the item, 850 on the order: major units in storage.
+  // ₹600 on the item, ₹850 on the order: minor units in storage.
   assert.equal(entry.amount, 60000);
   assert.equal(entry.orderTotalAmount, 85000);
   assert.equal(entry.earlierOrder.amount, 49900);
-  // Refunds are stored in minor units already.
   assert.equal(entry.refundedAmount, 10000);
   assert.deepEqual(entry.order, {
     id: duplicateRow.order_id,
@@ -237,7 +236,7 @@ await test("the courses of a bundle that is itself listed as paid twice are not 
 
 await test("a zero-decimal currency is not multiplied by 100", () => {
   const entry = toDuplicatePurchaseEntry(
-    { ...duplicateRow, currency: "JPY" },
+    { ...duplicateRow, final_amount: 600, total_amount: 850, currency: "JPY" },
     buyer,
   );
   assert.equal(entry.amount, 600);
@@ -249,7 +248,7 @@ await test("a reported transfer claims the order's total in minor units and keep
   assert.equal(entry.kind, "manual_transfer_for_paid_order");
   assert.equal("orderStatus" in entry, false);
   assert.equal(entry.id, transferRow.id);
-  // 499 rupees on the order: major units in storage.
+  // ₹499 on the order: minor units in storage.
   assert.equal(entry.amount, 49900);
   assert.equal(entry.currency, "INR");
   assert.equal(entry.paymentMethod, "bank_transfer");
@@ -266,9 +265,13 @@ await test("a reported transfer claims the order's total in minor units and keep
     username: "asha",
   });
 
-  // Zero-decimal currency: 499 yen is 499 minor units.
+  // Zero-decimal currency: 499 yen is stored, and sent, as 499.
   assert.equal(
-    toStuckManualTransferEntry({ ...transferRow, currency: "JPY" }).amount,
+    toStuckManualTransferEntry({
+      ...transferRow,
+      total_amount: 499,
+      currency: "JPY",
+    }).amount,
     499,
   );
 });
@@ -395,7 +398,7 @@ await test("entries of both kinds sort newest first, ties broken by id", () => {
 });
 
 await test("a duplicate is owed until the later order has been refunded the course's price", () => {
-  const item = { final_amount: 499, currency: "INR" };
+  const item = { final_amount: 49900, currency: "INR" };
   assert.equal(isDuplicateStillOwed({ ...item, refunded_amount: "0" }), true);
   // A smaller part refund: still listed, with what has gone back.
   assert.equal(
@@ -424,7 +427,7 @@ await test("a duplicate is owed until the later order has been refunded the cour
 
 await test("a course inside a later bundle is owed until staff refund something on the order as a whole", () => {
   const inBundle = {
-    final_amount: 900,
+    final_amount: 90000,
     currency: "INR",
     bundle_title: "Backend pack",
   };
@@ -457,7 +460,7 @@ await test("a course inside a later bundle is owed until staff refund something 
   );
   // A course item keeps the rule it had: owed until its price is back.
   const asCourseItem = {
-    final_amount: 499,
+    final_amount: 49900,
     currency: "INR",
     bundle_title: null,
   };
