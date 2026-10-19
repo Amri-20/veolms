@@ -27,7 +27,11 @@ import {
 } from "../shared/discussion.utils.ts";
 import { discussionVisibilityPredicate } from "../shared/discussion.visibility.ts";
 import { publicLessonDiscussionPredicate } from "../shared/lesson-discussion-access.ts";
-import { containsPattern } from "../shared/discussion.utils.ts";
+import {
+  authorMatchesSql,
+  containsPattern,
+  threadRepliesMatchSql,
+} from "../shared/discussion.utils.ts";
 import { exactCursorTimestamp } from "../../../../lib/keyset.ts";
 
 // Kysely represents a `"learning_threads as t"` aliased query with the alias
@@ -293,17 +297,23 @@ function applyMentionFilters<O>(
           and (
             lower(coalesce(t.title, '')) like ${pattern}
             or lower(t.plain_text) like ${pattern}
+            or ${authorMatchesSql("t.user_id", pattern)}
+            or ${threadRepliesMatchSql("t.id", pattern)}
           )
         )
         or (
           m.source_type = 'reply'
-          and lower(r.plain_text) like ${pattern}
+          and (
+            lower(r.plain_text) like ${pattern}
+            or ${authorMatchesSql("r.user_id", pattern)}
+          )
         )
         or (
           m.source_type = 'note'
           and (
             lower(coalesce(n.title, '')) like ${pattern}
             or lower(n.plain_text) like ${pattern}
+            or ${authorMatchesSql("n.user_id", pattern)}
           )
         )
       )`,
@@ -512,6 +522,13 @@ export interface ThreadsRepository {
     userId: string,
     threadIds: readonly string[],
   ): Promise<Array<{ thread_id: string | null }>>;
+
+  /** Each lesson's number in its course, counted from 1 across all its
+   * sections in curriculum order (published lessons only). */
+  listLessonNumbers(
+    db: DatabaseExecutor,
+    lessonIds: readonly string[],
+  ): Promise<Array<{ id: string; lessonNumber: number }>>;
 
   /** The viewer's likes among threads, replies and notes, in one lookup. */
   listViewerLikes(
@@ -733,6 +750,9 @@ function applyThreadFilters<O>(
       eb.or([
         eb(sql`lower(t.title)`, "like", searchPattern),
         eb(sql`lower(t.plain_text)`, "like", searchPattern),
+        // The author, and anyone who replied (or what they wrote).
+        authorMatchesSql("t.user_id", searchPattern),
+        threadRepliesMatchSql("t.id", searchPattern),
       ]),
     );
   }
@@ -1295,6 +1315,31 @@ export function createThreadsRepository(): ThreadsRepository {
         .execute();
     },
 
+    async listLessonNumbers(db, lessonIds) {
+      const result = await sql<{ id: string; lessonNumber: number }>`
+        select numbered.id, numbered.lesson_number::int as "lessonNumber"
+        from (
+          select
+            l.id,
+            row_number() over (
+              partition by l.course_id
+              order by s.position, l.position, l.id
+            ) as lesson_number
+          from course_lessons l
+          join course_sections s on s.id = l.section_id
+          where l.deleted_at is null
+            and s.deleted_at is null
+            and l.is_published = true
+            and l.course_id in (
+              select course_id from course_lessons
+              where id in (${sql.join([...lessonIds])})
+            )
+        ) numbered
+        where numbered.id in (${sql.join([...lessonIds])})
+      `.execute(db);
+      return result.rows;
+    },
+
     async listViewerLikes(db, userId, targetIds) {
       return db
         .selectFrom("learning_likes")
@@ -1427,6 +1472,7 @@ export function createThreadsRepository(): ThreadsRepository {
           eb.or([
             eb(sql`lower(n.title)`, "like", pattern),
             eb(sql`lower(n.plain_text)`, "like", pattern),
+            authorMatchesSql("n.user_id", pattern),
           ]),
         );
       }

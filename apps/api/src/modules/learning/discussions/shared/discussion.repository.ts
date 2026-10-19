@@ -139,7 +139,12 @@ export interface DiscussionRepository {
     db: DatabaseExecutor,
     courseIds: readonly string[] | "all",
   ): Promise<
-    Array<{ id: string; title: string; thumbnailMediaId: string | null }>
+    Array<{
+      id: string;
+      title: string;
+      thumbnailUrl: string | null;
+      thumbnailMediaId: string | null;
+    }>
   >;
 
   /** The course a lesson belongs to, unless the lesson has been removed. */
@@ -309,7 +314,12 @@ export function createDiscussionRepository(): DiscussionRepository {
     async listPublishedCourseTitles(db, courseIds) {
       let coursesQuery = db
         .selectFrom("courses")
-        .select(["id", "title", "thumbnail_media_id as thumbnailMediaId"])
+        .select([
+          "id",
+          "title",
+          "thumbnail_url as thumbnailUrl",
+          "thumbnail_media_id as thumbnailMediaId",
+        ])
         .where("status", "=", "published")
         .where("deleted_at", "is", null);
 

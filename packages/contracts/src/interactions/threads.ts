@@ -245,7 +245,9 @@ export type UserMentionsListResponse = z.infer<
 export const discussionsWorkspaceCourseOptionSchema = z.object({
   id: z.uuid(),
   title: z.string().min(1),
-  /** The course's thumbnail, for the small picture beside a discussion. */
+  /** The course's thumbnail, for the small picture beside a discussion:
+   * its stored address, and its media id for the CDN's sized copies. */
+  thumbnailUrl: z.string().nullable().optional(),
   thumbnailMediaId: z.string().nullable().optional(),
 });
 export type DiscussionsWorkspaceCourseOption = z.infer<
@@ -265,6 +267,8 @@ export const workspaceDiscussionItemSchema = z.object({
   courseTitle: z.string().nullable().optional(),
   lessonId: z.uuid().nullable().optional(),
   lessonTitle: z.string().nullable().optional(),
+  /** The lesson's number in its course, 1 to the last, across sections. */
+  lessonNumber: z.number().int().positive().nullable().optional(),
   timestampSeconds: z.number().int().nonnegative().nullable().optional(),
   author: workspaceDiscussionAuthorSchema,
   status: questionFilterStatusSchema.optional(),

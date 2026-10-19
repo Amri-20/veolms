@@ -1234,20 +1234,38 @@ export function createThreadsService(
   const getDiscussionsWorkspaceItems = service.getDiscussionsWorkspace;
   service.getDiscussionsWorkspace = async (db, query) => {
     const response = await getDiscussionsWorkspaceItems(db, query);
-    if (!query.currentUserId || response.items.length === 0) return response;
-    const likes = await threadsRepo.listViewerLikes(
-      db,
-      query.currentUserId,
-      response.items.map((item) => item.id),
-    );
+    if (response.items.length === 0) return response;
+    const lessonIds = [
+      ...new Set(
+        response.items.flatMap((item) =>
+          item.lessonId ? [item.lessonId] : [],
+        ),
+      ),
+    ];
+    const [likes, lessonNumbers] = await Promise.all([
+      query.currentUserId
+        ? threadsRepo.listViewerLikes(
+            db,
+            query.currentUserId,
+            response.items.map((item) => item.id),
+          )
+        : null,
+      lessonIds.length > 0 ? threadsRepo.listLessonNumbers(db, lessonIds) : [],
+    ]);
     const liked = new Set(
-      likes.map((like) => `${like.target_type}:${like.target_id}`),
+      (likes ?? []).map((like) => `${like.target_type}:${like.target_id}`),
+    );
+    const numberByLesson = new Map(
+      lessonNumbers.map((row) => [row.id, row.lessonNumber]),
     );
     return {
       ...response,
       items: response.items.map((item) => ({
         ...item,
-        isLiked: liked.has(`${item.itemType}:${item.id}`),
+        ...(likes ? { isLiked: liked.has(`${item.itemType}:${item.id}`) } : {}),
+        lessonNumber: item.lessonId
+          ? (numberByLesson.get(item.lessonId) ?? null)
+          : null,
       })),
     };
   };

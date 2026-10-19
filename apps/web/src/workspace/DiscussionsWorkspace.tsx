@@ -89,6 +89,8 @@ import {
 import { DiscussionWorkspaceListRow } from "./DiscussionWorkspaceRow";
 import { isRightPanelShortcut } from "../keyboardShortcuts";
 import { DiscussionWorkspacePanel } from "./DiscussionWorkspacePanel";
+import { useSettingsTabShortcuts } from "../settings/useSettingsTabShortcuts";
+import { DiscussionCourseThumbnailsContext } from "./DiscussionCourseThumbnail";
 import { useDiscussionWorkspaceReport } from "./useDiscussionWorkspaceReport";
 import { useDiscussionWorkspaceCardLongPress } from "./useDiscussionWorkspaceCardLongPress";
 import {
@@ -2048,6 +2050,14 @@ export function DiscussionsWorkspace({
       sourceScrollRestorationKey: discussionRestorationKey,
     });
   };
+  // As in Settings: the left and right arrows move between the tabs, unless
+  // the focus is in the open discussion's panel, where they step through
+  // the list instead.
+  useSettingsTabShortcuts({
+    tabIds: discussionTabIds,
+    getCurrentTab: () => activeTab,
+    onNavigate: navigateTab,
+  });
   const workspaceDatasetKey = JSON.stringify(workspaceQuery);
   const workspaceQueryResult = useDiscussionsWorkspace(workspaceQuery, {
     enabled: !sessionPending,
@@ -2111,11 +2121,17 @@ export function DiscussionsWorkspace({
   const courses = new Map(Object.entries(knownCourseOptions));
   // Thumbnails of the courses, for the small picture in the open
   // discussion's panel.
-  const courseThumbnails = new Map<string, string | null>();
+  const courseThumbnails = new Map<
+    string,
+    { url?: string | null; mediaId?: string | null }
+  >();
   workspaceData?.pages.forEach((page) => {
     page.courses.forEach((courseOption) => {
-      if (courseOption.thumbnailMediaId !== undefined) {
-        courseThumbnails.set(courseOption.id, courseOption.thumbnailMediaId);
+      if (courseOption.thumbnailUrl || courseOption.thumbnailMediaId) {
+        courseThumbnails.set(courseOption.id, {
+          url: courseOption.thumbnailUrl,
+          mediaId: courseOption.thumbnailMediaId,
+        });
       }
     });
   });
@@ -3023,208 +3039,215 @@ export function DiscussionsWorkspace({
           />
         )}
 
-        <SwipeableTabPanel
-          tabs={discussionTabIds}
-          activeTab={activeTab}
-          onTabChange={navigateTab}
-          tabListRef={tablistRef}
-          id="discussion-panel"
-          labelledBy={`discussion-tab-${activeTab}`}
-          slideClassName="pb-8"
-          // At least a screen below the sticky tabs and filters: switching
-          // to a short or empty tab while scrolled down then leaves the page
-          // where it is, instead of the browser pulling it back to the new,
-          // nearer bottom.
-          // The swiper fills that height too, so a sideways swipe on the
-          // empty space under a short or empty tab changes tabs as well.
-          className="min-h-[calc(100dvh-var(--shell-frame-block-space,22px)-var(--discussion-sticky-height,0px))] [&>.swipeable-tab-panel\_\_swiper]:min-h-[inherit]"
-          stateAttribute="data-discussion-tab"
-          spaceBetweenOffset={14}
-        >
-          {(panelTab, preview) => {
-            const isActivePanel = panelTab === activeTab;
-            const isAdjacentPanel =
-              preview &&
-              showDiscussionSwipePreviews &&
-              Math.abs(discussionTabIds.indexOf(panelTab) - activeTabIndex) ===
-                1;
+        <DiscussionCourseThumbnailsContext.Provider value={courseThumbnails}>
+          <SwipeableTabPanel
+            tabs={discussionTabIds}
+            activeTab={activeTab}
+            onTabChange={navigateTab}
+            tabListRef={tablistRef}
+            id="discussion-panel"
+            labelledBy={`discussion-tab-${activeTab}`}
+            slideClassName="pb-8"
+            // At least a screen below the sticky tabs and filters: switching
+            // to a short or empty tab while scrolled down then leaves the page
+            // where it is, instead of the browser pulling it back to the new,
+            // nearer bottom.
+            // The swiper fills that height too, so a sideways swipe on the
+            // empty space under a short or empty tab changes tabs as well.
+            className="min-h-[calc(100dvh-var(--shell-frame-block-space,22px)-var(--discussion-sticky-height,0px))] [&>.swipeable-tab-panel\_\_swiper]:min-h-[inherit]"
+            stateAttribute="data-discussion-tab"
+            spaceBetweenOffset={14}
+          >
+            {(panelTab, preview) => {
+              const isActivePanel = panelTab === activeTab;
+              const isAdjacentPanel =
+                preview &&
+                showDiscussionSwipePreviews &&
+                Math.abs(
+                  discussionTabIds.indexOf(panelTab) - activeTabIndex,
+                ) === 1;
 
-            if (!isActivePanel) {
-              return isAdjacentPanel ? (
-                <DiscussionWorkspaceSkeletonList
-                  mode="preview"
-                  variant={panelTab}
-                  previewCount={cards.length}
-                />
-              ) : (
-                <div className="discussion-hub__layout" aria-hidden="true" />
-              );
-            }
-
-            return (
-              <>
-                {composer && !preview && isQnaTab && (
-                  <DiscussionComposer
-                    kind={composer}
-                    onCancel={() => setComposer(null)}
-                    onPublish={publish}
+              if (!isActivePanel) {
+                return isAdjacentPanel ? (
+                  <DiscussionWorkspaceSkeletonList
+                    mode="preview"
+                    variant={panelTab}
+                    previewCount={cards.length}
                   />
-                )}
+                ) : (
+                  <div className="discussion-hub__layout" aria-hidden="true" />
+                );
+              }
 
-                <div className="discussion-hub__layout">
-                  <main className="discussion-hub__feed">
-                    <div
-                      className="discussion-hub__thread-list"
-                      aria-live="polite"
-                    >
-                      {isWorkspacePending ? (
-                        <DiscussionWorkspaceSkeletonList
-                          mode="loading"
-                          variant={activeTab}
-                          label={activeLoadingLabel}
-                          withinFeed
-                        />
-                      ) : isLoadingError ? (
-                        <div className="discussion-hub__empty" role="alert">
-                          <h2>
-                            {isNotesTab
-                              ? "Unable to load notes"
-                              : isCommentsTab
-                                ? "Unable to load comments"
-                                : isMentionsTab
-                                  ? "Unable to load mentions"
-                                  : isFollowingTab
-                                    ? "Failed to load followed discussions"
-                                    : isBookmarksTab
-                                      ? "Unable to load bookmarks"
-                                      : "Unable to load discussions"}
-                          </h2>
-                          <p>
-                            {isNotesTab
-                              ? "There was a problem loading notes."
-                              : isCommentsTab
-                                ? "There was a problem loading comments."
-                                : isMentionsTab
-                                  ? "There was a problem loading mentions."
-                                  : isFollowingTab
-                                    ? "There was a problem loading followed discussions."
-                                    : isBookmarksTab
-                                      ? "There was a problem loading bookmarks."
-                                      : "There was a problem loading discussions."}
-                          </p>
-                          <button type="button" onClick={() => void refetch()}>
-                            Retry
-                          </button>
-                        </div>
-                      ) : cards.length > 0 ? (
-                        <DiscussionWorkspaceVirtualFeed
-                          cards={cards}
-                          datasetKey={workspaceDatasetKey}
-                          focusKey={
-                            steppedPanelKey === openPanelUrlKey
-                              ? steppedPanelKey
-                              : null
-                          }
-                          renderCard={renderDiscussionCard}
-                        />
-                      ) : (
-                        <div className="discussion-hub__empty">
-                          <UsersThree size={30} weight="duotone" />
-                          <h2>
-                            {isNotesTab
-                              ? query.trim() || selectedCourseId !== "all"
-                                ? "No notes found"
-                                : "No notes yet"
-                              : isCommentsTab
-                                ? hasClearableDiscussionFilters
-                                  ? "No comments match these filters"
-                                  : "No comments yet"
-                                : isMentionsTab
-                                  ? hasClearableDiscussionFilters
-                                    ? "No mentions match these filters"
-                                    : "No mentions yet"
-                                  : isFollowingTab
-                                    ? query.trim() || selectedCourseId !== "all"
-                                      ? "No followed discussions found"
-                                      : "No followed discussions yet"
-                                    : isBookmarksTab
-                                      ? query.trim() ||
-                                        selectedCourseId !== "all"
-                                        ? "No bookmarks found"
-                                        : "No bookmarks yet"
-                                      : hasClearableDiscussionFilters ||
-                                          effectiveOwnership === "mine"
-                                        ? "No discussions match these filters"
-                                        : "No discussions yet"}
-                          </h2>
-                          <p>
-                            {isNotesTab
-                              ? "Try clearing a filter or choosing another course."
-                              : isCommentsTab
-                                ? hasClearableDiscussionFilters
-                                  ? "Try clearing a filter or choosing another course."
-                                  : "Comments on lessons will appear here."
-                                : isMentionsTab
-                                  ? hasClearableDiscussionFilters
-                                    ? "Try clearing a filter or choosing another course."
-                                    : "Mentions of you will appear here."
-                                  : isFollowingTab
-                                    ? "Try clearing a filter or choosing another course."
-                                    : isBookmarksTab
-                                      ? "Bookmarked discussions and notes will appear here."
-                                      : hasClearableDiscussionFilters ||
-                                          effectiveOwnership === "mine"
-                                        ? "Try clearing a filter or start a new question for the course."
-                                        : "Questions asked in your courses will appear here."}
-                          </p>
-                          {/* Offered only when there is something to clear.
-                            With no search, course or status chosen it sat
-                            under "match these filters" and did nothing. */}
-                          {hasClearableDiscussionFilters ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setQuery("");
-                                resetDiscussionFilters();
-                              }}
-                            >
-                              Clear filters
-                            </button>
-                          ) : null}
-                        </div>
-                      )}
+              return (
+                <>
+                  {composer && !preview && isQnaTab && (
+                    <DiscussionComposer
+                      kind={composer}
+                      onCancel={() => setComposer(null)}
+                      onPublish={publish}
+                    />
+                  )}
+
+                  <div className="discussion-hub__layout">
+                    <main className="discussion-hub__feed">
                       <div
-                        ref={loadMoreRef}
-                        className="min-h-px"
+                        className="discussion-hub__thread-list"
                         aria-live="polite"
                       >
-                        {isFetchingNextPage && (
-                          <div
-                            className="grid min-h-12 place-items-center"
-                            role="status"
-                            aria-label={activeLoadingLabel.replace(
-                              "Loading ",
-                              "Loading more ",
-                            )}
-                          >
-                            <LoadingSpinnerIcon size={18} />
-                          </div>
-                        )}
-                        {isFetchNextPageError && (
-                          <div className="flex justify-center py-3">
-                            <button type="button" onClick={loadMore}>
-                              Retry loading more
+                        {isWorkspacePending ? (
+                          <DiscussionWorkspaceSkeletonList
+                            mode="loading"
+                            variant={activeTab}
+                            label={activeLoadingLabel}
+                            withinFeed
+                          />
+                        ) : isLoadingError ? (
+                          <div className="discussion-hub__empty" role="alert">
+                            <h2>
+                              {isNotesTab
+                                ? "Unable to load notes"
+                                : isCommentsTab
+                                  ? "Unable to load comments"
+                                  : isMentionsTab
+                                    ? "Unable to load mentions"
+                                    : isFollowingTab
+                                      ? "Failed to load followed discussions"
+                                      : isBookmarksTab
+                                        ? "Unable to load bookmarks"
+                                        : "Unable to load discussions"}
+                            </h2>
+                            <p>
+                              {isNotesTab
+                                ? "There was a problem loading notes."
+                                : isCommentsTab
+                                  ? "There was a problem loading comments."
+                                  : isMentionsTab
+                                    ? "There was a problem loading mentions."
+                                    : isFollowingTab
+                                      ? "There was a problem loading followed discussions."
+                                      : isBookmarksTab
+                                        ? "There was a problem loading bookmarks."
+                                        : "There was a problem loading discussions."}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => void refetch()}
+                            >
+                              Retry
                             </button>
                           </div>
+                        ) : cards.length > 0 ? (
+                          <DiscussionWorkspaceVirtualFeed
+                            cards={cards}
+                            datasetKey={workspaceDatasetKey}
+                            focusKey={
+                              steppedPanelKey === openPanelUrlKey
+                                ? steppedPanelKey
+                                : null
+                            }
+                            renderCard={renderDiscussionCard}
+                          />
+                        ) : (
+                          <div className="discussion-hub__empty">
+                            <UsersThree size={30} weight="duotone" />
+                            <h2>
+                              {isNotesTab
+                                ? query.trim() || selectedCourseId !== "all"
+                                  ? "No notes found"
+                                  : "No notes yet"
+                                : isCommentsTab
+                                  ? hasClearableDiscussionFilters
+                                    ? "No comments match these filters"
+                                    : "No comments yet"
+                                  : isMentionsTab
+                                    ? hasClearableDiscussionFilters
+                                      ? "No mentions match these filters"
+                                      : "No mentions yet"
+                                    : isFollowingTab
+                                      ? query.trim() ||
+                                        selectedCourseId !== "all"
+                                        ? "No followed discussions found"
+                                        : "No followed discussions yet"
+                                      : isBookmarksTab
+                                        ? query.trim() ||
+                                          selectedCourseId !== "all"
+                                          ? "No bookmarks found"
+                                          : "No bookmarks yet"
+                                        : hasClearableDiscussionFilters ||
+                                            effectiveOwnership === "mine"
+                                          ? "No discussions match these filters"
+                                          : "No discussions yet"}
+                            </h2>
+                            <p>
+                              {isNotesTab
+                                ? "Try clearing a filter or choosing another course."
+                                : isCommentsTab
+                                  ? hasClearableDiscussionFilters
+                                    ? "Try clearing a filter or choosing another course."
+                                    : "Comments on lessons will appear here."
+                                  : isMentionsTab
+                                    ? hasClearableDiscussionFilters
+                                      ? "Try clearing a filter or choosing another course."
+                                      : "Mentions of you will appear here."
+                                    : isFollowingTab
+                                      ? "Try clearing a filter or choosing another course."
+                                      : isBookmarksTab
+                                        ? "Bookmarked discussions and notes will appear here."
+                                        : hasClearableDiscussionFilters ||
+                                            effectiveOwnership === "mine"
+                                          ? "Try clearing a filter or start a new question for the course."
+                                          : "Questions asked in your courses will appear here."}
+                            </p>
+                            {/* Offered only when there is something to clear.
+                            With no search, course or status chosen it sat
+                            under "match these filters" and did nothing. */}
+                            {hasClearableDiscussionFilters ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuery("");
+                                  resetDiscussionFilters();
+                                }}
+                              >
+                                Clear filters
+                              </button>
+                            ) : null}
+                          </div>
                         )}
+                        <div
+                          ref={loadMoreRef}
+                          className="min-h-px"
+                          aria-live="polite"
+                        >
+                          {isFetchingNextPage && (
+                            <div
+                              className="grid min-h-12 place-items-center"
+                              role="status"
+                              aria-label={activeLoadingLabel.replace(
+                                "Loading ",
+                                "Loading more ",
+                              )}
+                            >
+                              <LoadingSpinnerIcon size={18} />
+                            </div>
+                          )}
+                          {isFetchNextPageError && (
+                            <div className="flex justify-center py-3">
+                              <button type="button" onClick={loadMore}>
+                                Retry loading more
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </main>
-                </div>
-              </>
-            );
-          }}
-        </SwipeableTabPanel>
+                    </main>
+                  </div>
+                </>
+              );
+            }}
+          </SwipeableTabPanel>
+        </DiscussionCourseThumbnailsContext.Provider>
       </div>
       {/* Always there, so that a tab with nothing in it, or a closed
           panel on a desktop (its gutter at the frame's edge), does not take
@@ -3250,8 +3273,8 @@ export function DiscussionsWorkspace({
           onEditingChange={setIsEditingPanelCard}
           onClose={closePanel}
           onNavigatePage={onNavigatePage}
-          courseThumbnailMediaId={
-            panelCard ? courseThumbnails.get(panelCard.courseId) : null
+          courseThumbnail={
+            panelCard ? courseThumbnails.get(panelCard.courseId) : undefined
           }
           onReport={openReport}
           setNotice={setNotice}

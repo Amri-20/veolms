@@ -308,7 +308,7 @@ function DiscussionWorkspaceVirtualRows({
               top: 0,
               left: 0,
               width: "100%",
-              transform: `translateY(${virtualItem.start - scrollMargin}px)`,
+              transform: `translateY(${Math.round(virtualItem.start - scrollMargin)}px)`,
             }}
           >
             {renderCard(card)}

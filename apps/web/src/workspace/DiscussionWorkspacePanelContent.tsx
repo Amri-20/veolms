@@ -11,7 +11,6 @@ import { CaretLeftIcon as CaretLeft } from "@phosphor-icons/react/CaretLeft";
 import { ChatsCircleIcon as ChatsCircle } from "@phosphor-icons/react/ChatsCircle";
 import { CaretRightIcon as CaretRight } from "@phosphor-icons/react/CaretRight";
 import { LockSimpleIcon as LockSimple } from "@phosphor-icons/react/LockSimple";
-import { PlayIcon as Play } from "@phosphor-icons/react/Play";
 import { XIcon as X } from "@phosphor-icons/react/X";
 import type { LearningReply } from "@veolms/contracts";
 import { DiscussionAvatar } from "../learning/DiscussionAvatar";
@@ -45,7 +44,8 @@ import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
 import { useDiscussionWorkspaceCardActions } from "./useDiscussionWorkspaceCardActions";
 import { useDiscussionReplyFocus } from "./discussionReplyFocus";
 import { TimeAgo } from "../components/TimeAgo";
-import { getCourseThumbnailCdnUrl } from "../courses/courseMedia";
+import { DiscussionCourseThumbnail } from "./DiscussionCourseThumbnail";
+import { DiscussionAttachmentsList } from "../learning/discussion-attachments/DiscussionAttachmentsList";
 
 const DiscussionMarkdown = lazy(() =>
   import("../learning/discussion-editor/DiscussionMarkdown").then((module) => ({
@@ -240,7 +240,9 @@ function PanelReply({
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="text-sm font-bold text-(--text)">
-            {reply.isOwn ? "You" : reply.author.displayName}
+            {reply.isOwn
+              ? `${reply.author.displayName || "You"} (You)`
+              : reply.author.displayName}
           </span>
           <RoleBadge role={reply.author.role} />
           <TimeAgo value={reply.createdAt} className="text-xs text-(--muted)" />
@@ -254,6 +256,9 @@ function PanelReply({
           />
         ) : (
           <PostBody content={reply.content} label="Reply" size="sm" />
+        )}
+        {!edit && reply.attachments && reply.attachments.length > 0 && (
+          <DiscussionAttachmentsList attachments={reply.attachments} />
         )}
         <div className="-ml-2.5">
           <DiscussionLikeButton
@@ -345,7 +350,7 @@ export interface DiscussionPanelContentProps {
   setNotice?: (message: string) => void;
   step?: DiscussionPanelStep;
   /** The course's thumbnail, shown small beside the course and lesson. */
-  courseThumbnailMediaId?: string | null;
+  courseThumbnail?: { url?: string | null; mediaId?: string | null };
 }
 
 /**
@@ -365,7 +370,7 @@ export function DiscussionPanelContent({
   onReport,
   setNotice,
   step,
-  courseThumbnailMediaId,
+  courseThumbnail,
 }: DiscussionPanelContentProps) {
   const queryClient = useQueryClient();
   const { data: currentUser } = useCurrentUser();
@@ -437,13 +442,13 @@ export function DiscussionPanelContent({
   const replyList = replies.data?.pages.flatMap((page) => page.replies) ?? [];
   const post = isNote ? note.data : thread.data;
   const author = thread.data?.author;
-  const authorName = isNote
-    ? card.isOwn
-      ? "You"
-      : card.author
-    : thread.data?.isOwn
-      ? "You"
-      : (author?.displayName ?? card.author);
+  const isOwnPost = isNote ? card.isOwn : Boolean(thread.data?.isOwn);
+  const baseAuthorName = isNote
+    ? card.author
+    : (author?.displayName ?? card.author);
+  const authorName = isOwnPost
+    ? `${baseAuthorName || "You"} (You)`
+    : baseAuthorName;
   const postContent = post?.content ?? card.content;
 
   // The editor's code is fetched while the reader reads, not when they
@@ -499,6 +504,13 @@ export function DiscussionPanelContent({
         onOpenInCourse(destination);
         return;
       }
+      // Only while the focus is in this panel; elsewhere on the page the
+      // arrows move between the tabs (useSettingsTabShortcuts).
+      if (
+        (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
+        !panelRef.current?.contains(document.activeElement)
+      )
+        return;
       if (event.key === "ArrowLeft" && step && step.index > 0) step.onPrev();
       else if (
         event.key === "ArrowRight" &&
@@ -652,17 +664,17 @@ export function DiscussionPanelContent({
   const lessonInBar = variant === "phone" && hasLessonInfo;
   // The course and lesson are the way to the lesson (Enter does the same);
   // there is no separate button for it.
-  const thumbnailUrl = getCourseThumbnailCdnUrl(courseThumbnailMediaId, 160);
   const renderLessonLink = (className: string) => {
     if (!hasLessonInfo) return null;
     const lessonInfo = (
       <>
-        <span
-          className="grid size-9 shrink-0 place-items-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-(--accent)"
-          aria-hidden="true"
-        >
-          <Play size={18} weight="fill" />
-        </span>
+        {/* The course's picture first (none when it has none), then the
+            course and lesson, and the play mark at the end: the row opens
+            the lesson. */}
+        <DiscussionCourseThumbnail
+          thumbnail={courseThumbnail}
+          className="aspect-video h-9 w-auto shrink-0 rounded-md object-cover"
+        />
         <div className="min-w-0 flex-1">
           {card.course && (
             <p className="m-0 truncate text-xs font-semibold text-(--muted)">
@@ -675,19 +687,6 @@ export function DiscussionPanelContent({
             </p>
           )}
         </div>
-        {/* The course's picture, small, as the home page's pinned course
-            has it; only when the row is wide enough to spare the room. */}
-        {thumbnailUrl && (
-          <img
-            src={thumbnailUrl}
-            alt=""
-            width={160}
-            height={90}
-            loading="lazy"
-            decoding="async"
-            className="hidden aspect-video h-9 w-auto shrink-0 rounded-md object-cover @min-[22rem]:block"
-          />
-        )}
       </>
     );
     return destination ? (
@@ -729,6 +728,7 @@ export function DiscussionPanelContent({
     <div
       ref={panelRef}
       tabIndex={-1}
+      data-arrow-keys-owner
       className="flex min-h-0 flex-1 flex-col outline-none"
     >
       {lessonInBar ? (
@@ -858,6 +858,13 @@ export function DiscussionPanelContent({
             ) : (
               <PostBody content={postContent} label={kindName} />
             )}
+            {/* The images and files posted with it, as under the video. */}
+            {!editing && post?.attachments && post.attachments.length > 0 && (
+              <DiscussionAttachmentsList
+                attachments={post.attachments}
+                className="mt-3"
+              />
+            )}
           </div>
 
           {!isReplyCard && postActions.canLike && (
@@ -888,7 +895,7 @@ export function DiscussionPanelContent({
                 No replies yet.
                 {canReply &&
                   !isLocked &&
-                  authorName !== "You" &&
+                  !isOwnPost &&
                   ` Be the first to reply to ${firstName}.`}
               </p>
             )}

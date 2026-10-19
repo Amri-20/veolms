@@ -11,6 +11,10 @@ import { useDiscussionWorkspaceCardLongPress } from "./useDiscussionWorkspaceCar
 import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
 import { useDiscussionWorkspaceCardActions } from "./useDiscussionWorkspaceCardActions";
 import { TimeAgo } from "../components/TimeAgo";
+import {
+  DiscussionCourseThumbnail,
+  useDiscussionCourseThumbnail,
+} from "./DiscussionCourseThumbnail";
 import { renderContentWithMentions } from "../learning/discussion-editor/MentionLink";
 import { requestDiscussionReplyFocus } from "./discussionReplyFocus";
 
@@ -54,9 +58,12 @@ export function DiscussionWorkspaceRow({
   menu,
   setNotice,
   onLongPressHandlers,
+  onNavigatePage,
 }: {
   card: DiscussionWorkspaceCard;
   destination: string | null;
+  /** Opens the lesson from the course box. */
+  onNavigatePage?: NavigateTo;
   selected: boolean;
   onOpen: (card: DiscussionWorkspaceCard) => void;
   /** Closes the panel when the selected row is pressed again. */
@@ -67,6 +74,7 @@ export function DiscussionWorkspaceRow({
   /** Touch long-press, which opens the phone action sheet. */
   onLongPressHandlers?: Record<string, unknown>;
 }) {
+  const courseThumbnail = useDiscussionCourseThumbnail(card.courseId);
   const actions = useDiscussionWorkspaceCardActions({
     card,
     destination,
@@ -126,38 +134,45 @@ export function DiscussionWorkspaceRow({
           width, as in DiscussionWorkspaceVirtualFeed). */}
       <div className="flex min-w-0 flex-1 flex-col gap-2 max-[48.75rem]:contents max-[48.75rem]:[&>*:not(:first-child)]:col-span-2">
         <div
-          className={`flex flex-wrap items-baseline gap-x-2 gap-y-0.5 max-[48.75rem]:self-center ${menu ? "pr-10" : ""}`}
+          className={`flex min-w-0 flex-col max-[48.75rem]:self-center ${menu ? "pr-10" : ""}`}
         >
-          {/* The row's own keyboard target: the name opens it. */}
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              if (event.detail > 1) return;
-              select();
-            }}
-            onKeyDown={openFromKey}
-            className="rounded text-[0.9375rem] font-bold text-(--text) focus-visible:outline-2 focus-visible:outline-(--accent)"
-            aria-label={`Open ${isNote ? "note" : "discussion"} by ${
-              card.isOwn ? "you" : card.author
-            }`}
-          >
-            {card.isOwn ? "You" : card.author}
-          </button>
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            {/* The row's own keyboard target: the name opens it. */}
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                if (event.detail > 1) return;
+                select();
+              }}
+              onKeyDown={openFromKey}
+              className="rounded text-[0.9375rem] font-bold text-(--text) focus-visible:outline-2 focus-visible:outline-(--accent)"
+              aria-label={`Open ${isNote ? "note" : "discussion"} by ${
+                card.isOwn ? "you" : card.author
+              }`}
+            >
+              {card.isOwn ? `${card.author || "You"} (You)` : card.author}
+            </button>
+            <span
+              className="text-[0.8125rem] text-(--muted)"
+              aria-hidden="true"
+            >
+              ·
+            </span>
+            <TimeAgo
+              value={card.activityAt}
+              label={card.activity}
+              className="text-[0.8125rem] text-(--muted)"
+            />
+            {kindLabel && (
+              <span className="self-center rounded-md bg-[color-mix(in_srgb,var(--text)_7%,transparent)] px-1.5 py-0.5 text-[0.6875rem] font-bold tracking-wide text-(--muted) uppercase">
+                {kindLabel}
+              </span>
+            )}
+          </div>
           {username && (
-            <span className="text-[0.8125rem] text-(--muted)">@{username}</span>
-          )}
-          <span className="text-[0.8125rem] text-(--muted)" aria-hidden="true">
-            ·
-          </span>
-          <TimeAgo
-            value={card.activityAt}
-            label={card.activity}
-            className="text-[0.8125rem] text-(--muted)"
-          />
-          {kindLabel && (
-            <span className="self-center rounded-md bg-[color-mix(in_srgb,var(--text)_7%,transparent)] px-1.5 py-0.5 text-[0.6875rem] font-bold tracking-wide text-(--muted) uppercase">
-              {kindLabel}
+            <span className="truncate text-[0.8125rem] text-(--muted)">
+              @{username}
             </span>
           )}
         </div>
@@ -181,30 +196,68 @@ export function DiscussionWorkspaceRow({
           </span>
         )}
 
-        {(card.course || card.lesson) && (
-          // Course above, lecture below, beside a square book tile as tall
-          // as the two lines.
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span
-              className="grid size-9 shrink-0 place-items-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-(--accent)"
-              aria-hidden="true"
-            >
-              <BookOpen size={22} weight="duotone" />
-            </span>
-            <div className="min-w-0 flex-1 leading-snug">
-              {card.course && (
-                <p className="m-0 truncate text-xs font-semibold text-(--muted)">
-                  {card.course}
-                </p>
-              )}
-              {card.lesson && (
-                <p className="m-0 truncate text-sm font-semibold text-(--text)">
-                  {card.lesson}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
+        {(card.course || card.lesson) &&
+          (() => {
+            // Course above, lecture below, beside the course's picture (the
+            // book while there is none), in a box that opens the lesson with
+            // this comment highlighted.
+            const lessonInfo = (
+              <>
+                <DiscussionCourseThumbnail
+                  thumbnail={courseThumbnail}
+                  className="aspect-video h-11 w-auto shrink-0 rounded-md object-cover"
+                  fallback={
+                    <span
+                      className="grid size-11 shrink-0 place-items-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-(--accent)"
+                      aria-hidden="true"
+                    >
+                      <BookOpen size={22} weight="duotone" />
+                    </span>
+                  }
+                />
+                <div className="min-w-0 flex-1 leading-snug">
+                  {card.course && (
+                    <p className="m-0 truncate text-[0.8125rem] font-semibold text-(--muted)">
+                      {card.course}
+                    </p>
+                  )}
+                  {card.lesson && (
+                    <p className="m-0 truncate text-[0.9375rem] font-semibold text-(--text)">
+                      {card.lesson}
+                    </p>
+                  )}
+                </div>
+              </>
+            );
+            const boxClass =
+              "flex max-w-120 min-w-0 items-center gap-3 self-start rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-[color-mix(in_srgb,var(--text)_3%,transparent)] p-2 pr-4 no-underline";
+            return destination ? (
+              <a
+                href={destination}
+                draggable={false}
+                title="Open lesson"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (
+                    !onNavigatePage ||
+                    event.button !== 0 ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  )
+                    return;
+                  event.preventDefault();
+                  onNavigatePage(destination, { exact: true });
+                }}
+                className={`${boxClass} transition-colors hover:bg-[color-mix(in_srgb,var(--text)_7%,transparent)] focus-visible:outline-2 focus-visible:outline-(--accent)`}
+              >
+                {lessonInfo}
+              </a>
+            ) : (
+              <div className={boxClass}>{lessonInfo}</div>
+            );
+          })()}
 
         <div className="-ml-2.5 flex items-center gap-1">
           {actions.canLike && (
@@ -290,6 +343,7 @@ export function DiscussionWorkspaceListRow({
       onOpen={onOpen}
       onClose={onClose}
       setNotice={setNotice}
+      onNavigatePage={onNavigatePage}
       onLongPressHandlers={longPressHandlers}
       menu={
         showActions ? (

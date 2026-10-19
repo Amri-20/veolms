@@ -15,6 +15,9 @@ const ARROW_KEY_OWNER_SELECTOR = [
   '[role="spinbutton"]',
   '[role="tab"]',
   '[role="tree"]',
+  // A part of the page with arrow keys of its own (the Discussions panel,
+  // which steps through discussions with them).
+  "[data-arrow-keys-owner]",
 ].join(",");
 
 /**

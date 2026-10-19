@@ -225,3 +225,40 @@ export async function resolveAcademyId(db: DatabaseExecutor): Promise<string> {
   cachedAcademyId = academy.id;
   return academy.id;
 }
+
+/**
+ * A search pattern (containsPattern) matching the member whose id is in
+ * `userIdColumn`: their display name, username or email. Active accounts
+ * only.
+ */
+export function authorMatchesSql(userIdColumn: string, pattern: string) {
+  return sql<boolean>`exists (
+    select 1 from users su
+    where su.id = ${sql.ref(userIdColumn)}
+      and su.is_deleted = false
+      and (
+        lower(su.display_name) like ${pattern}
+        or lower(su.username) like ${pattern}
+        or lower(coalesce(su.email, '')) like ${pattern}
+      )
+  )`;
+}
+
+/**
+ * The thread in `threadIdColumn` has a reply (at any depth) whose text, or
+ * whose author's name, username or email, matches the pattern.
+ */
+export function threadRepliesMatchSql(threadIdColumn: string, pattern: string) {
+  return sql<boolean>`exists (
+    select 1 from learning_replies sr
+    left join users sru on sru.id = sr.user_id and sru.is_deleted = false
+    where sr.thread_id = ${sql.ref(threadIdColumn)}
+      and sr.status = 'active'
+      and (
+        lower(sr.plain_text) like ${pattern}
+        or lower(coalesce(sru.display_name, '')) like ${pattern}
+        or lower(coalesce(sru.username, '')) like ${pattern}
+        or lower(coalesce(sru.email, '')) like ${pattern}
+      )
+  )`;
+}

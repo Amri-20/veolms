@@ -590,12 +590,12 @@ export const CommentCard = React.memo(function CommentCard({
                 className="relative flex items-start gap-2 pr-9"
               >
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-                  <h2 className="text-sm font-semibold text-(--text) sm:text-[15px]">
+                  <h2 className="text-[0.9375rem] font-bold text-(--text)">
                     <ProfileLink
                       username={comment.authorUsername}
                       variant="name"
                     >
-                      {comment.name}
+                      {comment.isOwn ? `${comment.name} (You)` : comment.name}
                     </ProfileLink>
                   </h2>
                   {comment.role === "Instructor" && (
@@ -611,7 +611,7 @@ export const CommentCard = React.memo(function CommentCard({
                   <span
                     data-comment-time-separator
                     aria-hidden="true"
-                    className="text-xs text-(--muted) sm:text-sm"
+                    className="text-[0.8125rem] text-(--muted)"
                   >
                     ·
                   </span>
@@ -620,7 +620,7 @@ export const CommentCard = React.memo(function CommentCard({
                   <TimeAgo
                     value={comment.createdAt}
                     label={comment.time}
-                    className="text-xs text-(--muted) sm:text-sm"
+                    className="text-[0.8125rem] text-(--muted)"
                   />
                   <span
                     role="img"
@@ -689,6 +689,13 @@ export const CommentCard = React.memo(function CommentCard({
                     >
                       <BellSimple size={12} weight="bold" aria-hidden="true" />
                       <span>Following</span>
+                    </span>
+                  )}
+                  {/* As on the Discussions page: the username on its own
+                      line under the name. */}
+                  {comment.authorUsername && (
+                    <span className="-mt-1 basis-full truncate text-[0.8125rem] text-(--muted)">
+                      @{comment.authorUsername.replace(/^@+/, "")}
                     </span>
                   )}
                 </div>
@@ -768,7 +775,7 @@ export const CommentCard = React.memo(function CommentCard({
                 enableInlineTimestamps={Boolean(onSeekToTimestamp)}
                 onSeekToTimestamp={onSeekToTimestamp}
                 preserveSoftBreaks
-                className="mt-0.5 pr-9 sm:pr-10"
+                className="mt-1 pr-9 text-[0.9375rem]! leading-relaxed! text-(--text)! sm:pr-10 sm:text-base!"
               />
 
               {comment.attachments && comment.attachments.length > 0 ? (
@@ -1149,9 +1156,9 @@ function ReplyCard({
                 className="relative flex items-start gap-2 pr-9"
               >
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-                  <h3 className="text-sm font-semibold text-(--text) sm:text-[15px]">
+                  <h3 className="text-[0.9375rem] font-bold text-(--text)">
                     <ProfileLink username={reply.authorUsername} variant="name">
-                      {reply.name}
+                      {reply.isOwn ? `${reply.name} (You)` : reply.name}
                     </ProfileLink>
                   </h3>
                   {reply.role === "Instructor" && (
@@ -1171,15 +1178,20 @@ function ReplyCard({
                   <span
                     data-reply-time-separator
                     aria-hidden="true"
-                    className="text-xs text-(--muted) sm:text-sm"
+                    className="text-[0.8125rem] text-(--muted)"
                   >
                     ·
                   </span>
                   <TimeAgo
                     value={reply.createdAt}
                     label={reply.time}
-                    className="text-xs text-(--muted) sm:text-sm"
+                    className="text-[0.8125rem] text-(--muted)"
                   />
+                  {reply.authorUsername && (
+                    <span className="-mt-1 basis-full truncate text-[0.8125rem] text-(--muted)">
+                      @{reply.authorUsername.replace(/^@+/, "")}
+                    </span>
+                  )}
                 </div>
                 <CommentActionMenu
                   name={reply.name}
@@ -1267,7 +1279,7 @@ function ReplyCard({
                   enableInlineTimestamps={Boolean(onSeekToTimestamp)}
                   onSeekToTimestamp={onSeekToTimestamp}
                   preserveSoftBreaks
-                  className="mt-0.5 pr-9 sm:pr-10"
+                  className="mt-1 pr-9 text-[0.9375rem]! leading-relaxed! text-(--text)! sm:pr-10 sm:text-base!"
                 />
               )}
 

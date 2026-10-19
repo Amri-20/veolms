@@ -101,7 +101,11 @@ export function adaptDiscussionWorkspaceItem(
     course: item.courseTitle?.trim() || "",
     courseTitle: item.courseTitle ?? null,
     lessonId: item.lessonId,
-    lesson: item.lessonTitle?.trim() || "",
+    // "12 · Lesson name": the lesson's number across the whole course.
+    lesson:
+      item.lessonTitle?.trim() && item.lessonNumber
+        ? `${item.lessonNumber} · ${item.lessonTitle.trim()}`
+        : item.lessonTitle?.trim() || "",
     lessonTitle: item.lessonTitle ?? null,
     parentThreadId: item.parentThreadId ?? null,
     parentThreadTitle: item.parentThreadTitle?.trim() || null,
