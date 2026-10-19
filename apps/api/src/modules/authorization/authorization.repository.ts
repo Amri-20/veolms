@@ -6,6 +6,11 @@ export interface PermissionCheckContext {
   userId: string;
   permissionKey: Permission;
   courseId?: string | null;
+  /**
+   * Leave out roles limited to their holder's own courses (instructor).
+   * Set when the course belongs to someone else.
+   */
+  excludeOwnCoursesOnlyRoles?: boolean;
 }
 
 export interface ScopeCheckContext {
@@ -25,16 +30,21 @@ export async function checkUserPermission(
   database: Executor,
   context: PermissionCheckContext,
 ): Promise<{ allowed: boolean; reason?: string }> {
-  const { userId, permissionKey, courseId } = context;
+  const { userId, permissionKey, courseId, excludeOwnCoursesOnlyRoles } =
+    context;
 
   // Build query to find all applicable role assignments and their effects
   let query = database
     .selectFrom("role_assignments as ra")
+    .innerJoin("roles as r", "r.id", "ra.role_id")
     .innerJoin("role_permissions as rp", "rp.role_id", "ra.role_id")
     .innerJoin("permissions as p", "p.id", "rp.permission_id")
     .select(["rp.effect", "ra.scope_type", "ra.course_id"])
     .where("ra.user_id", "=", userId)
     .where("p.permission_key", "=", permissionKey)
+    .$if(Boolean(excludeOwnCoursesOnlyRoles), (qb) =>
+      qb.where("r.own_courses_only", "=", false),
+    )
     .where((eb) =>
       eb.or([
         eb("ra.expires_at", "is", null),
@@ -63,6 +73,7 @@ export async function checkUserPermission(
   // Query platform user_roles for platform-scoped role compatibility
   const userRolesQuery = database
     .selectFrom("user_roles as ur")
+    .innerJoin("roles as r", "r.id", "ur.role_id")
     .innerJoin("role_permissions as rp", "rp.role_id", "ur.role_id")
     .innerJoin("permissions as p", "p.id", "rp.permission_id")
     .select([
@@ -71,7 +82,10 @@ export async function checkUserPermission(
       sql<string | null>`null`.as("course_id"),
     ])
     .where("ur.user_id", "=", userId)
-    .where("p.permission_key", "=", permissionKey);
+    .where("p.permission_key", "=", permissionKey)
+    .$if(Boolean(excludeOwnCoursesOnlyRoles), (qb) =>
+      qb.where("r.own_courses_only", "=", false),
+    );
 
   const [scopedAssignments, directRoleAssignments] = await Promise.all([
     query.execute(),

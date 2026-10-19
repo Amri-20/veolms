@@ -720,6 +720,7 @@ export async function seedRolesAndPermissions(
     .execute();
 
   for (const role of Object.values(SYSTEM_ROLES)) {
+    const ownCoursesOnly = role.id === SYSTEM_ROLES.instructor.id;
     await database
       .insertInto("roles")
       .values({
@@ -727,12 +728,14 @@ export async function seedRolesAndPermissions(
         name: role.name,
         description: role.description,
         is_system: true,
+        own_courses_only: ownCoursesOnly,
       })
       .onConflict((conflict) =>
         conflict.column("id").doUpdateSet({
           name: role.name,
           description: role.description,
           is_system: true,
+          own_courses_only: ownCoursesOnly,
           updated_at: new Date(),
         }),
       )

@@ -16,6 +16,8 @@ export interface RoleTable {
   name: string;
   description: string | null;
   is_system: Generated<boolean>;
+  /** Course permissions apply only to courses the holder created. */
+  own_courses_only: Generated<boolean>;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }

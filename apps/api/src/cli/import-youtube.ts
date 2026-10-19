@@ -9,7 +9,11 @@ import os from "node:os";
 import { spawn } from "node:child_process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { createDatabase, enqueueImageJob } from "@veolms/database";
+import {
+  createDatabase,
+  enqueueImageJob,
+  grantPlatformRole,
+} from "@veolms/database";
 import { config } from "../config.ts";
 import { createServices } from "../services/index.ts";
 import { createMediaService } from "../modules/media/index.ts";
@@ -1105,14 +1109,10 @@ async function resolveInstructor(
     .executeTakeFirstOrThrow();
 
   if (instructorRole) {
-    await database
-      .insertInto("user_roles")
-      .values({
-        user_id: user.id,
-        role_id: instructorRole.id,
-      })
-      .onConflict((oc) => oc.doNothing())
-      .execute();
+    await grantPlatformRole(database, {
+      userId: user.id,
+      roleId: instructorRole.id,
+    });
   }
 
   return user;
