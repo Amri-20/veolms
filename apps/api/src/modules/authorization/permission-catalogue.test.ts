@@ -6,7 +6,7 @@ import {
   withImpliedPermissions,
 } from "@veolms/contracts";
 
-test("every permission belongs to exactly one catalogue group", () => {
+await test("every permission belongs to exactly one catalogue group", () => {
   const seen = new Map<string, string>();
   for (const group of permissionCatalogue) {
     for (const { key } of group.entries) {
@@ -21,7 +21,7 @@ test("every permission belongs to exactly one catalogue group", () => {
   assert.deepEqual(missing, [], "permissions missing from the catalogue");
 });
 
-test("implies only names known keys, never the key itself", () => {
+await test("implies only names known keys, never the key itself", () => {
   const known = new Set<string>(permissions);
   for (const group of permissionCatalogue) {
     for (const item of group.entries) {
@@ -33,7 +33,7 @@ test("implies only names known keys, never the key itself", () => {
   }
 });
 
-test("withImpliedPermissions follows implies transitively", () => {
+await test("withImpliedPermissions follows implies transitively", () => {
   assert.deepEqual(
     [...withImpliedPermissions(["submission.grade.override"])].sort(),
     ["submission.grade", "submission.grade.override", "submission.read"],
@@ -45,6 +45,6 @@ test("withImpliedPermissions follows implies transitively", () => {
   ]);
 });
 
-test("permission keys are unique", () => {
+await test("permission keys are unique", () => {
   assert.equal(new Set(permissions).size, permissions.length);
 });

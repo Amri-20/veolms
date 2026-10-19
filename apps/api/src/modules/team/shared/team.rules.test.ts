@@ -29,7 +29,7 @@ const couponManager = {
   permissions: ["coupon.read", "coupon.manage"],
 };
 
-test("an admin may hand out any role, admin included", () => {
+await test("an admin may hand out any role, admin included", () => {
   const admin = actor(["admin"], []);
   assertCanHandleRoles(admin, [
     couponManager,
@@ -37,7 +37,7 @@ test("an admin may hand out any role, admin included", () => {
   ]);
 });
 
-test("a member may hand out a role whose permissions they all hold", () => {
+await test("a member may hand out a role whose permissions they all hold", () => {
   const manager = actor(
     ["team_lead"],
     ["coupon.read", "coupon.manage", "role.assign"],
@@ -45,26 +45,26 @@ test("a member may hand out a role whose permissions they all hold", () => {
   assertCanHandleRoles(manager, [couponManager]);
 });
 
-test("a member may not hand out a permission they lack", () => {
+await test("a member may not hand out a permission they lack", () => {
   const manager = actor(["team_lead"], ["coupon.read", "role.assign"]);
   rejectsWith("PRIVILEGE_ESCALATION", () =>
     assertCanHandleRoles(manager, [couponManager]),
   );
 });
 
-test("only an admin hands out or takes away admin", () => {
+await test("only an admin hands out or takes away admin", () => {
   const everything = actor(["team_lead"], ["coupon.read", "role.assign"]);
   rejectsWith("PRIVILEGE_ESCALATION", () =>
     assertCanHandleRoles(everything, [{ name: "Admin", permissions: [] }]),
   );
 });
 
-test("the last admin cannot go", () => {
+await test("the last admin cannot go", () => {
   rejectsWith("LAST_ADMIN", () => assertKeepsAnAdmin(0));
   assertKeepsAnAdmin(1);
 });
 
-test("you cannot take away your own team or role permissions", () => {
+await test("you cannot take away your own team or role permissions", () => {
   const now = new Set(["team.read", "role.assign", "coupon.read"]);
   rejectsWith("SELF_LOCKOUT", () =>
     assertNoSelfLockout(now, new Set(["team.read", "coupon.read"])),
@@ -73,24 +73,24 @@ test("you cannot take away your own team or role permissions", () => {
   assertNoSelfLockout(now, new Set(["team.read", "role.assign"]));
 });
 
-test("built-in roles cannot be changed", () => {
+await test("built-in roles cannot be changed", () => {
   rejectsWith("ROLE_IS_SYSTEM", () => assertEditableRole({ isSystem: true }));
   assertEditableRole({ isSystem: false });
 });
 
-test("a role in use cannot be deleted", () => {
+await test("a role in use cannot be deleted", () => {
   rejectsWith("ROLE_IN_USE", () => assertRoleUnused(2));
   assertRoleUnused(0);
 });
 
-test("custom roles cannot take an admin-looking name", () => {
+await test("custom roles cannot take an admin-looking name", () => {
   for (const name of ["admin", " Admin ", "Administrator", "student"]) {
     assert.equal(isReservedRoleName(name), true, name);
   }
   assert.equal(isReservedRoleName("Support"), false);
 });
 
-test("diffRoleIds splits a full replace", () => {
+await test("diffRoleIds splits a full replace", () => {
   assert.deepEqual(diffRoleIds(["a", "b"], ["b", "c", "c"]), {
     added: ["c"],
     removed: ["a"],

@@ -14,7 +14,7 @@ function recordingChecker(allowed: boolean) {
   return { calls, check };
 }
 
-test("an owner's own-course roles count on their course", async () => {
+await test("an owner's own-course roles count on their course", async () => {
   const { calls, check } = recordingChecker(true);
   const allowed = await canActOnCourseWith(check, {
     userId: "owner",
@@ -26,7 +26,7 @@ test("an owner's own-course roles count on their course", async () => {
   assert.equal(calls[0]?.courseId, "course-1");
 });
 
-test("on someone else's course own-course roles are left out", async () => {
+await test("on someone else's course own-course roles are left out", async () => {
   const { calls, check } = recordingChecker(false);
   const allowed = await canActOnCourseWith(check, {
     userId: "other-instructor",
@@ -37,7 +37,7 @@ test("on someone else's course own-course roles are left out", async () => {
   assert.equal(calls[0]?.excludeOwnCoursesOnlyRoles, true);
 });
 
-test("an owner without the permission is refused", async () => {
+await test("an owner without the permission is refused", async () => {
   const { check } = recordingChecker(false);
   assert.equal(
     await canActOnCourseWith(check, {
@@ -49,7 +49,7 @@ test("an owner without the permission is refused", async () => {
   );
 });
 
-test("a course with no creator is never treated as owned", async () => {
+await test("a course with no creator is never treated as owned", async () => {
   const { calls, check } = recordingChecker(true);
   await canActOnCourseWith(check, {
     userId: "someone",
@@ -59,7 +59,7 @@ test("a course with no creator is never treated as owned", async () => {
   assert.equal(calls[0]?.excludeOwnCoursesOnlyRoles, true);
 });
 
-test("signed-out users are refused without a lookup", async () => {
+await test("signed-out users are refused without a lookup", async () => {
   const { calls, check } = recordingChecker(true);
   assert.equal(
     await canActOnCourseWith(check, {
