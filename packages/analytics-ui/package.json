@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./skeletons": "./src/skeletons.tsx"
   },
   "scripts": {
     "build": "tsc --noEmit",
@@ -12,6 +13,7 @@
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
     "@veolms/contracts": "workspace:*",
+    "@veolms/web-core": "workspace:*",
     "recharts": "^2.15.4"
   },
   "peerDependencies": {

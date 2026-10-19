@@ -28,6 +28,7 @@ import {
 import type { ReactNode } from "react";
 import { useAnalyticsCourses } from "../../services/analytics";
 import { percentCell, useTabExport } from "../analyticsShared";
+import { COURSES_PLACEHOLDER } from "../analyticsPlaceholders";
 import { TabState } from "./TabState";
 
 type Courses = AnalyticsCoursesResponse["courses"];
@@ -218,6 +219,7 @@ export default function CoursesTab({
         isLoading={query.isLoading}
         isError={query.isError}
         onRetry={() => void query.refetch()}
+        placeholder={COURSES_PLACEHOLDER}
       />
     );
   }

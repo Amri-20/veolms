@@ -6,6 +6,11 @@ import type {
   AnalyticsTabContribution,
   AnalyticsTabProps,
 } from "@veolms/web-core";
+import {
+  COURSES_PLACEHOLDER,
+  OVERVIEW_PLACEHOLDER,
+  REVENUE_PLACEHOLDER,
+} from "./analyticsPlaceholders";
 
 /**
  * The page's own tabs. Plugins add theirs through `registerAnalyticsTab`
@@ -25,6 +30,7 @@ export const CORE_ANALYTICS_TABS: readonly AnalyticsTabContribution[] = [
     Icon: ChartPieSlice,
     tone: "blue",
     component: lazyTab(() => import("./tabs/OverviewTab")),
+    placeholder: OVERVIEW_PLACEHOLDER,
   },
   {
     id: "revenue",
@@ -33,6 +39,7 @@ export const CORE_ANALYTICS_TABS: readonly AnalyticsTabContribution[] = [
     Icon: CurrencyInr,
     tone: "green",
     component: lazyTab(() => import("./tabs/RevenueTab")),
+    placeholder: REVENUE_PLACEHOLDER,
   },
   {
     id: "courses",
@@ -41,5 +48,6 @@ export const CORE_ANALYTICS_TABS: readonly AnalyticsTabContribution[] = [
     Icon: Books,
     tone: "violet",
     component: lazyTab(() => import("./tabs/CoursesTab")),
+    placeholder: COURSES_PLACEHOLDER,
   },
 ];

@@ -19,6 +19,9 @@ export interface ShellMainFrameProps {
   keepLessonPageBoxes: boolean;
   routeContentBlocked: boolean;
   effectiveRole: CourseRole;
+  /** For the analytics page's loading frame: which sections, which one open. */
+  isAdmin?: boolean;
+  analyticsTab?: string;
   quizId: string | undefined;
   learningBackground: {
     courseSlug?: string;
@@ -30,6 +33,7 @@ export interface ShellMainFrameProps {
     section?: string;
     settingsTab?: string;
     platformTab?: string;
+    analyticsTab?: string;
   } | null;
   renderPageContent: ({
     surfaceCourseSlug,
@@ -46,6 +50,7 @@ export interface ShellMainFrameProps {
     surfaceSection?: string | null;
     surfaceSettingsTab?: string;
     surfacePlatformTab?: string;
+    surfaceAnalyticsTab?: string;
     surfaceUsername?: string;
   }) => ReactNode;
   routeContentHeld: boolean;
@@ -64,6 +69,8 @@ export function ShellMainFrame({
   keepLessonPageBoxes,
   routeContentBlocked,
   effectiveRole,
+  isAdmin = false,
+  analyticsTab,
   quizId,
   learningBackground,
   renderPageContent,
@@ -168,6 +175,8 @@ export function ShellMainFrame({
                 page={page}
                 role={effectiveRole}
                 quizId={quizId}
+                isAdmin={isAdmin}
+                analyticsTab={analyticsTab}
               />
             ) : learningBackground ? (
               <LearningBackgroundSurface
@@ -191,6 +200,7 @@ export function ShellMainFrame({
                   surfaceSection: learningBackground.section,
                   surfaceSettingsTab: learningBackground.settingsTab,
                   surfacePlatformTab: learningBackground.platformTab,
+                  surfaceAnalyticsTab: learningBackground.analyticsTab,
                 })}
               </LearningBackgroundSurface>
             ) : null
@@ -199,6 +209,8 @@ export function ShellMainFrame({
               page={page}
               role={effectiveRole}
               quizId={quizId}
+              isAdmin={isAdmin}
+              analyticsTab={analyticsTab}
             />
           ) : (
             // The same element as the page behind the lesson above, so a

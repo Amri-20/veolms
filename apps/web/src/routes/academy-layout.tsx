@@ -172,6 +172,7 @@ interface LearningBackgroundSurface {
   section?: string;
   settingsTab?: string;
   platformTab?: string;
+  analyticsTab?: string;
 }
 
 interface ApplicationScrollRestorationEntry {
@@ -319,6 +320,7 @@ const resolveLearningBackgroundSurface = (
         (descriptor.page === "courses" ? "Courses" : undefined),
       settingsTab: descriptor.settingsTab,
       platformTab: descriptor.platformTab,
+      analyticsTab: descriptor.analyticsTab,
     };
   } catch {
     return null;
@@ -1960,6 +1962,7 @@ export default function AcademyLayout() {
           section={activeRouteSection}
           settingsTab={route.settingsTab}
           platformTab={route.platformTab}
+          analyticsTab={route.analyticsTab}
           showPageBackButton={showRouteBackButton}
           discussionTab={route.discussionTab}
           courseSlug={courseSlug}

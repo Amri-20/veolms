@@ -27,6 +27,7 @@ import {
 } from "@veolms/analytics-ui";
 import { useAnalyticsOverview } from "../../services/analytics";
 import { percentCell, useTabExport } from "../analyticsShared";
+import { OVERVIEW_PLACEHOLDER } from "../analyticsPlaceholders";
 import { TabState } from "./TabState";
 
 type CourseRow =
@@ -174,6 +175,7 @@ export default function OverviewTab({
         isLoading={query.isLoading}
         isError={query.isError}
         onRetry={() => void query.refetch()}
+        placeholder={OVERVIEW_PLACEHOLDER}
       />
     );
   }

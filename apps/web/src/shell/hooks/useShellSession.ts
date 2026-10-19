@@ -61,6 +61,8 @@ export interface UseShellSessionResult {
   allowedWorkspaceRoles: CourseRole[];
   canSwitchWorkspace: boolean;
   effectiveRole: CourseRole;
+  /** The account is in its creator view, as far as can be told before `effectiveRole` says so. */
+  creatorViewExpected: boolean;
   canAccessDashboard: boolean;
   dashboardCapabilitiesResolved: boolean;
   routeContentBlocked: boolean;
@@ -277,6 +279,7 @@ export function useShellSession({
     shownSignedOut,
     discussionsWhileSessionPending,
     isWorkspaceRoleHydrated,
+    creatorViewExpected,
     dashboardHomeExpected,
     routeContentHeld,
     isDashboardRoute,

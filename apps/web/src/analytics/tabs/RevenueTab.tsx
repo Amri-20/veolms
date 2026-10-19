@@ -29,6 +29,7 @@ import {
 } from "@veolms/analytics-ui";
 import { useAnalyticsRevenue } from "../../services/analytics";
 import { percentCell, useTabExport } from "../analyticsShared";
+import { REVENUE_PLACEHOLDER } from "../analyticsPlaceholders";
 import { TabState } from "./TabState";
 
 type Revenue = AnalyticsRevenueResponse["revenue"];
@@ -285,6 +286,7 @@ export default function RevenueTab({
         isLoading={query.isLoading}
         isError={query.isError}
         onRetry={() => void query.refetch()}
+        placeholder={REVENUE_PLACEHOLDER}
       />
     );
   }

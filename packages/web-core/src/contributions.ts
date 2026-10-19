@@ -95,6 +95,42 @@ export interface AnalyticsExportSection {
   rows: Array<Array<string | number | null | undefined>>;
 }
 
+/** One tile of a section's loading state: its label, drawn before its number. */
+export interface AnalyticsPlaceholderKpi {
+  label: string;
+  tone?:
+    | "accent"
+    | "violet"
+    | "blue"
+    | "emerald"
+    | "amber"
+    | "teal"
+    | "rose"
+    | "pink"
+    | "slate";
+  Icon?: ComponentType<{ size?: number; weight?: "bold" | "regular" }>;
+}
+
+/** One card of a section's loading state: its title, with a shimmer inside. */
+export interface AnalyticsPlaceholderSection {
+  title: string;
+  description?: string;
+  kind: "chart" | "list" | "table";
+  /** Half-width cards sit two to a row; the default is the full width. */
+  span?: "full" | "half";
+  /** A chart's height, a list's or table's row count. */
+  size?: number;
+}
+
+/**
+ * What a section looks like before its numbers are in, so the page can
+ * draw its real tiles and cards at once and fill them as data arrives.
+ */
+export interface AnalyticsTabPlaceholderSpec {
+  kpis: ReadonlyArray<AnalyticsPlaceholderKpi>;
+  sections: ReadonlyArray<AnalyticsPlaceholderSection>;
+}
+
 export interface AnalyticsTabProps {
   filters: AnalyticsTabFilters;
   /** The viewer sees the whole academy (admin), or their own courses. */
@@ -126,6 +162,8 @@ export interface AnalyticsTabContribution {
   component: ComponentType<AnalyticsTabProps>;
   /** Shown to admins only when true (an instructor never sees it). */
   adminOnly?: boolean;
+  /** Drawn while the section's code and data load; grey blocks without it. */
+  placeholder?: AnalyticsTabPlaceholderSpec;
 }
 
 export interface WebContributions {

@@ -1,4 +1,8 @@
-import { LoadingTab } from "@veolms/analytics-ui";
+import {
+  AnalyticsTabPlaceholder,
+  LoadingTab,
+  type AnalyticsTabPlaceholderSpec,
+} from "@veolms/analytics-ui";
 import { Button } from "../../components/Button";
 
 /** The loading and failed states every tab shows the same way. */
@@ -6,10 +10,13 @@ export function TabState({
   isLoading,
   isError,
   onRetry,
+  placeholder,
 }: {
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
+  /** The tab's own tiles and cards, drawn with shimmers while it loads. */
+  placeholder?: AnalyticsTabPlaceholderSpec;
 }) {
   if (isError) {
     // Without this a failed load left the loading cards up for good.
@@ -30,6 +37,12 @@ export function TabState({
       </div>
     );
   }
-  if (isLoading) return <LoadingTab />;
+  if (isLoading) {
+    return placeholder ? (
+      <AnalyticsTabPlaceholder spec={placeholder} />
+    ) : (
+      <LoadingTab />
+    );
+  }
   return null;
 }
