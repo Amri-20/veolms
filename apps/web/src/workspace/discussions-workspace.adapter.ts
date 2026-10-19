@@ -1,4 +1,5 @@
 import type { WorkspaceDiscussionItem } from "@veolms/contracts";
+import { formatTimeAgo } from "../lib/timeAgo";
 
 export type DiscussionWorkspaceStatus =
   "answered" | "mentioned" | "solved" | "open";
@@ -31,6 +32,8 @@ export interface DiscussionWorkspaceCard {
   isBookmarked?: boolean;
   isFollowing?: boolean;
   isLiked?: boolean;
+  /** When `activity` happened, for its exact-time tooltip. */
+  activityAt: string;
   activity: string;
   mentionedAt?: string;
   mentionActivity?: string;
@@ -44,27 +47,7 @@ export interface DiscussionWorkspaceCard {
 }
 
 function formatRelativeTime(dateValue: string): string {
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return "Recently";
-
-  const diffSeconds = Math.max(
-    0,
-    Math.floor((Date.now() - date.getTime()) / 1000),
-  );
-  if (diffSeconds < 60) return "Just now";
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  if (diffMinutes < 60) {
-    return `${diffMinutes}${diffMinutes === 1 ? " minute" : " minutes"} ago`;
-  }
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) {
-    return `${diffHours}${diffHours === 1 ? " hour" : " hours"} ago`;
-  }
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) {
-    return `${diffDays}${diffDays === 1 ? " day" : " days"} ago`;
-  }
-  return date.toLocaleDateString();
+  return formatTimeAgo(dateValue) || "Recently";
 }
 
 function getExcerpt(item: WorkspaceDiscussionItem): string {
@@ -135,6 +118,7 @@ export function adaptDiscussionWorkspaceItem(
     isBookmarked: item.isBookmarked,
     isLiked: item.isLiked,
     isFollowing: item.isFollowing,
+    activityAt: isFollowing ? item.updatedAt : item.updatedAt || item.createdAt,
     activity: formatRelativeTime(
       isFollowing ? item.updatedAt : item.updatedAt || item.createdAt,
     ),

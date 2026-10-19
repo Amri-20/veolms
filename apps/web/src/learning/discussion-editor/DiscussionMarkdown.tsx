@@ -25,51 +25,13 @@ import {
   extractFirstUrl,
   normalizePreviewUrl,
   useLinkPreview,
+  useUrlLinkPreview,
+  extractFirstWrittenUrl,
 } from "../../services/learning-interactions";
 
-const MENTION_PATTERN =
-  /(^|[^A-Za-z0-9_])@([A-Za-z0-9_]{3,30})(?=[^A-Za-z0-9_]|$)/g;
+import { renderContentWithMentions } from "./MentionLink";
 
-export function renderContentWithMentions(text: string): React.ReactNode {
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  const regex = new RegExp(MENTION_PATTERN.source, "g");
-  let match: RegExpExecArray | null;
-
-  while ((match = regex.exec(text)) !== null) {
-    const prefix = match[1] ?? "";
-    const username = match[2];
-    const matchStart = match.index;
-    const mentionStart = matchStart + prefix.length;
-    const matchEnd = match.index + match[0].length;
-
-    if (mentionStart > lastIndex) {
-      parts.push(text.slice(lastIndex, mentionStart));
-    }
-
-    parts.push(
-      <span
-        key={`mention-${mentionStart}-${username}`}
-        data-mention={username}
-        className="inline-flex items-center rounded bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-1 py-0.5 font-medium text-(--accent)"
-      >
-        @{username}
-      </span>,
-    );
-
-    lastIndex = matchEnd;
-  }
-
-  if (lastIndex === 0) {
-    return text;
-  }
-
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
-  }
-
-  return parts;
-}
+export { renderContentWithMentions };
 
 export function highlightMentionsInNode(
   node: React.ReactNode,
@@ -254,6 +216,12 @@ interface DiscussionMarkdownProps {
   linkedAttachments?: readonly DiscussionAttachmentItem[];
   /** Controls metadata lookups while keeping Markdown links visible. */
   enableLinkPreview?: boolean;
+  /**
+   * Where the link card's details come from: "api" asks the server for the
+   * page's title and image; "url" makes them from the link alone, with no
+   * request (comments and replies).
+   */
+  linkPreviewSource?: "api" | "url";
   /** Enables Learning Space-only inline video timestamp controls. */
   enableInlineTimestamps?: boolean;
   /** Seeks the current lesson player when an inline timestamp is activated. */
@@ -756,6 +724,7 @@ export function DiscussionMarkdown({
   label,
   linkedAttachments,
   enableLinkPreview = true,
+  linkPreviewSource = "api",
   enableInlineTimestamps = false,
   onSeekToTimestamp,
   chapterDeclarations,
@@ -772,10 +741,18 @@ export function DiscussionMarkdown({
     ? preparePlainChapterMarkdown(markdown, chapterDeclarations)
     : markdown;
   const detectedUrl = extractFirstUrl(rawText);
-  const { data: linkPreview } = useLinkPreview(detectedUrl, {
-    enabled: enableLinkPreview,
+  const { data: fetchedLinkPreview } = useLinkPreview(detectedUrl, {
+    enabled: enableLinkPreview && linkPreviewSource === "api",
     debounceMs: 0,
   });
+  const { data: urlLinkPreview } = useUrlLinkPreview(
+    linkPreviewSource === "url" ? extractFirstWrittenUrl(rawText) : null,
+    {
+      enabled: enableLinkPreview && linkPreviewSource === "url",
+    },
+  );
+  const linkPreview =
+    linkPreviewSource === "url" ? urlLinkPreview : fetchedLinkPreview;
   const renderOptions = useMemo<MarkdownRenderOptions>(
     () => ({
       enableInlineTimestamps,

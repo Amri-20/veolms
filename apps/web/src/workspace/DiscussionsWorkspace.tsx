@@ -762,6 +762,7 @@ function DiscussionWorkspaceCardContent({
             }
           >
             <DiscussionMarkdown
+              linkPreviewSource="url"
               content={content}
               label={`${label} by ${thread.author}`}
               enableLinkPreview={!isMobileOrCoarsePointer}
@@ -2108,6 +2109,16 @@ export function DiscussionsWorkspace({
   }, [workspaceData]);
 
   const courses = new Map(Object.entries(knownCourseOptions));
+  // Thumbnails of the courses, for the small picture in the open
+  // discussion's panel.
+  const courseThumbnails = new Map<string, string | null>();
+  workspaceData?.pages.forEach((page) => {
+    page.courses.forEach((courseOption) => {
+      if (courseOption.thumbnailMediaId !== undefined) {
+        courseThumbnails.set(courseOption.id, courseOption.thumbnailMediaId);
+      }
+    });
+  });
   workspaceData?.pages.forEach((page) => {
     page.courses.forEach((courseOption) => {
       courses.set(courseOption.id, courseOption.title);
@@ -2811,7 +2822,9 @@ export function DiscussionsWorkspace({
         <button
           ref={mobileFiltersTriggerRef}
           type="button"
-          className="discussion-hub__mobile-filter-trigger"
+          // An icon alone on a phone, the search field keeping the room.
+          className="discussion-hub__mobile-filter-trigger aspect-square w-11 px-0!"
+          title="Filter"
           aria-controls="discussion-filters-sheet"
           aria-expanded={mobileFiltersOpen}
           aria-haspopup="dialog"
@@ -2819,8 +2832,8 @@ export function DiscussionsWorkspace({
           onMouseDown={captureMobileFiltersScrollPosition}
           onClick={openMobileFilters}
         >
-          <Funnel size={17} aria-hidden="true" />
-          <span>Filter</span>
+          <Funnel size={18} aria-hidden="true" />
+          <span className="sr-only">Filter</span>
         </button>
         <div className="discussion-hub__filter-controls">
           {renderDiscussionFilterControls()}
@@ -2881,7 +2894,7 @@ export function DiscussionsWorkspace({
         <header className="discussion-hub__header">
           <div>
             <h1 id="discussions-title">Discussions</h1>
-            <p>Bring course conversations, questions, and replies together.</p>
+            <p>All your discussions in one place.</p>
           </div>
           <span className="discussion-hub__header-icon" aria-hidden="true">
             <ChatCircleDots size={28} weight="duotone" />
@@ -3022,7 +3035,9 @@ export function DiscussionsWorkspace({
           // to a short or empty tab while scrolled down then leaves the page
           // where it is, instead of the browser pulling it back to the new,
           // nearer bottom.
-          className="min-h-[calc(100dvh-var(--shell-frame-block-space,22px)-var(--discussion-sticky-height,0px))]"
+          // The swiper fills that height too, so a sideways swipe on the
+          // empty space under a short or empty tab changes tabs as well.
+          className="min-h-[calc(100dvh-var(--shell-frame-block-space,22px)-var(--discussion-sticky-height,0px))] [&>.swipeable-tab-panel\_\_swiper]:min-h-[inherit]"
           stateAttribute="data-discussion-tab"
           spaceBetweenOffset={14}
         >
@@ -3235,6 +3250,9 @@ export function DiscussionsWorkspace({
           onEditingChange={setIsEditingPanelCard}
           onClose={closePanel}
           onNavigatePage={onNavigatePage}
+          courseThumbnailMediaId={
+            panelCard ? courseThumbnails.get(panelCard.courseId) : null
+          }
           onReport={openReport}
           setNotice={setNotice}
           step={

@@ -245,6 +245,8 @@ export type UserMentionsListResponse = z.infer<
 export const discussionsWorkspaceCourseOptionSchema = z.object({
   id: z.uuid(),
   title: z.string().min(1),
+  /** The course's thumbnail, for the small picture beside a discussion. */
+  thumbnailMediaId: z.string().nullable().optional(),
 });
 export type DiscussionsWorkspaceCourseOption = z.infer<
   typeof discussionsWorkspaceCourseOptionSchema

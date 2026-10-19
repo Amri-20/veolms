@@ -95,7 +95,7 @@ const discussionsRouteBase = {
   page: "workspace",
   section: "Discussions",
   title: "Discussions",
-  description: "Bring course conversations, questions, and replies together.",
+  description: "All your discussions in one place.",
 } as const;
 
 export const NOT_FOUND_SECTION = "Not Found";

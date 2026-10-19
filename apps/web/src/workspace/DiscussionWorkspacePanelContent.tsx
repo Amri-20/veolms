@@ -7,7 +7,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { CaretLeftIcon as CaretLeft } from "@phosphor-icons/react/CaretLeft";
 import { ChatsCircleIcon as ChatsCircle } from "@phosphor-icons/react/ChatsCircle";
 import { CaretRightIcon as CaretRight } from "@phosphor-icons/react/CaretRight";
@@ -41,10 +40,12 @@ import {
 import type { LocalComposerAttachment } from "../services/learning-interactions/attachment-model";
 import { DiscussionWorkspaceActionMenu } from "./DiscussionWorkspaceActionMenu";
 import { DiscussionLikeButton } from "./DiscussionLikeButton";
-import { DiscussionTextSizeControl } from "./DiscussionTextSizeControl";
 import { useDiscussionTextScale } from "./discussionTextScale";
 import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
 import { useDiscussionWorkspaceCardActions } from "./useDiscussionWorkspaceCardActions";
+import { useDiscussionReplyFocus } from "./discussionReplyFocus";
+import { TimeAgo } from "../components/TimeAgo";
+import { getCourseThumbnailCdnUrl } from "../courses/courseMedia";
 
 const DiscussionMarkdown = lazy(() =>
   import("../learning/discussion-editor/DiscussionMarkdown").then((module) => ({
@@ -60,23 +61,6 @@ const LINE = "border-[color-mix(in_srgb,var(--text)_8%,transparent)]";
 
 const ghostIconButtonClasses =
   "grid size-8 shrink-0 place-items-center rounded-lg text-(--muted) transition-colors hover:bg-(--hover) hover:text-(--text) disabled:pointer-events-none disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-(--accent)";
-
-function formatPostTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const minutes = Math.floor((Date.now() - date.getTime()) / 60_000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 // Instructors are marked beside their name; admins are not.
 function RoleBadge({ role }: { role?: string }) {
@@ -106,9 +90,12 @@ function PostBody({
   size?: "base" | "sm";
 }) {
   const [textScale] = useDiscussionTextScale();
+  // The post: marked important, as the renderer's own size (14px on phones, 15px wider)
+  // otherwise wins. 15px on every screen, the size the list's comment text
+  // has on a phone.
   const textClass =
     size === "base"
-      ? "text-base leading-relaxed"
+      ? "text-[0.9375rem]! leading-relaxed"
       : "text-[0.9375rem] leading-relaxed";
   return (
     // The viewer's text size ("Aa" beside the author) scales the post as a
@@ -125,6 +112,7 @@ function PostBody({
         }
       >
         <DiscussionMarkdown
+          linkPreviewSource="url"
           content={{
             format: "markdown",
             markdown: content,
@@ -255,9 +243,7 @@ function PanelReply({
             {reply.isOwn ? "You" : reply.author.displayName}
           </span>
           <RoleBadge role={reply.author.role} />
-          <time className="text-xs text-(--muted)">
-            {formatPostTime(reply.createdAt)}
-          </time>
+          <TimeAgo value={reply.createdAt} className="text-xs text-(--muted)" />
         </div>
         {edit ? (
           <PanelEditForm
@@ -358,6 +344,8 @@ export interface DiscussionPanelContentProps {
   onReport?: (card: DiscussionWorkspaceCard) => void;
   setNotice?: (message: string) => void;
   step?: DiscussionPanelStep;
+  /** The course's thumbnail, shown small beside the course and lesson. */
+  courseThumbnailMediaId?: string | null;
 }
 
 /**
@@ -377,6 +365,7 @@ export function DiscussionPanelContent({
   onReport,
   setNotice,
   step,
+  courseThumbnailMediaId,
 }: DiscussionPanelContentProps) {
   const queryClient = useQueryClient();
   const { data: currentUser } = useCurrentUser();
@@ -408,6 +397,31 @@ export function DiscussionPanelContent({
   const panelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [composerFocusRequest, setComposerFocusRequest] = useState(0);
+  // "Reply" on the row: the box takes focus; pressed again while this is
+  // open, the reply area also pulses once, softly, as a linked comment
+  // under a lesson video does.
+  const [replyFlash, setReplyFlash] = useState(false);
+  const replyFlashTimers = useRef<number[]>([]);
+  useEffect(
+    () => () => replyFlashTimers.current.forEach(window.clearTimeout),
+    [],
+  );
+  // Once the thread's request has finished, so a locked one (no reply
+  // box) is known; a thread that could not be loaded still shows the box.
+  const replyBoxShown =
+    !isNote && Boolean(threadId) && !thread.isPending && !thread.data?.isLocked;
+  useDiscussionReplyFocus(card.id, replyBoxShown, ({ pulse }) => {
+    setComposerFocusRequest((request) => request + 1);
+    replyFlashTimers.current.forEach(window.clearTimeout);
+    if (!pulse) {
+      setReplyFlash(false);
+      return;
+    }
+    setReplyFlash(true);
+    replyFlashTimers.current = [
+      window.setTimeout(() => setReplyFlash(false), 450),
+    ];
+  });
 
   const kindName = isNote
     ? "Note"
@@ -623,122 +637,174 @@ export function DiscussionPanelContent({
   const canReply = !isNote && Boolean(threadId);
   const isLocked = Boolean(thread.data?.isLocked);
 
+  const actionMenu = (
+    <DiscussionWorkspaceActionMenu
+      card={card}
+      destination={destination}
+      textSize
+      setNotice={setNotice}
+      onEdit={() => onEditingChange(true)}
+      onReport={onReport}
+    />
+  );
+  const hasLessonInfo = Boolean(card.course || card.lesson);
+  const lessonPressRef = useRef<{ x: number; y: number } | null>(null);
+  const lessonInBar = variant === "phone" && hasLessonInfo;
+  // The course and lesson are the way to the lesson (Enter does the same);
+  // there is no separate button for it.
+  const thumbnailUrl = getCourseThumbnailCdnUrl(courseThumbnailMediaId, 160);
+  const renderLessonLink = (className: string) => {
+    if (!hasLessonInfo) return null;
+    const lessonInfo = (
+      <>
+        <span
+          className="grid size-9 shrink-0 place-items-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-(--accent)"
+          aria-hidden="true"
+        >
+          <Play size={18} weight="fill" />
+        </span>
+        <div className="min-w-0 flex-1">
+          {card.course && (
+            <p className="m-0 truncate text-xs font-semibold text-(--muted)">
+              {card.course}
+            </p>
+          )}
+          {card.lesson && (
+            <p className="m-0 truncate text-sm font-semibold text-(--text)">
+              {card.lesson}
+            </p>
+          )}
+        </div>
+        {/* The course's picture, small, as the home page's pinned course
+            has it; only when the row is wide enough to spare the room. */}
+        {thumbnailUrl && (
+          <img
+            src={thumbnailUrl}
+            alt=""
+            width={160}
+            height={90}
+            loading="lazy"
+            decoding="async"
+            className="hidden aspect-video h-9 w-auto shrink-0 rounded-md object-cover @min-[22rem]:block"
+          />
+        )}
+      </>
+    );
+    return destination ? (
+      <a
+        href={destination}
+        // A drag here moves the sheet (or nothing), not the link itself.
+        draggable={false}
+        aria-keyshortcuts="Enter"
+        title="Open lesson (Enter)"
+        onPointerDown={(event) => {
+          lessonPressRef.current = { x: event.clientX, y: event.clientY };
+        }}
+        onClick={(event) => {
+          event.preventDefault();
+          // The end of a drag of the sheet is not a press of the link.
+          const press = lessonPressRef.current;
+          lessonPressRef.current = null;
+          if (
+            press &&
+            Math.hypot(event.clientX - press.x, event.clientY - press.y) > 6
+          )
+            return;
+          onOpenInCourse(destination);
+        }}
+        className={`@container flex items-center gap-3 px-5 py-3 no-underline transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-(--accent) ${className}`}
+      >
+        {lessonInfo}
+      </a>
+    ) : (
+      <div
+        className={`@container flex items-center gap-3 px-5 py-3 ${className}`}
+      >
+        {lessonInfo}
+      </div>
+    );
+  };
+
   return (
     <div
       ref={panelRef}
       tabIndex={-1}
       className="flex min-h-0 flex-1 flex-col outline-none"
     >
-      {/* The bar: out and through the list on the left, the menu alone on
-          the right, so neither is pressed for the other. */}
-      <div
-        // Sized so "Open lesson" fits in full down to the panel's 300px
-        // minimum. A container all the same: should it ever be narrower,
-        // the button keeps only its icon rather than slide under the menu
-        // (which stays at the right edge while the gutter moves the rest).
-        className={`@container flex h-14 shrink-0 items-center justify-between gap-2 border-b ${LINE} px-2.5`}
-      >
-        <div className="flex min-w-0 items-center gap-1">
-          {onClose && (
-            <>
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close panel"
-                title="Close (Esc)"
-                className={ghostIconButtonClasses}
-              >
-                <X size={17} weight="bold" aria-hidden="true" />
-              </button>
-              {showStepButtons && (
-                <span
-                  className="mx-1 h-5 w-px bg-[color-mix(in_srgb,var(--text)_10%,transparent)]"
-                  aria-hidden="true"
-                />
-              )}
-            </>
-          )}
-          {showStepButtons && (
-            <>
-              <button
-                type="button"
-                onClick={step.onPrev}
-                disabled={step.index <= 0}
-                aria-label="Previous discussion"
-                title="Previous (←)"
-                className={ghostIconButtonClasses}
-              >
-                <CaretLeft size={15} weight="bold" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                onClick={step.onNext}
-                disabled={step.index >= step.count - 1}
-                aria-label="Next discussion"
-                title="Next (→)"
-                className={ghostIconButtonClasses}
-              >
-                <CaretRight size={15} weight="bold" aria-hidden="true" />
-              </button>
-            </>
-          )}
-          {destination && (
-            <a
-              href={destination}
-              aria-label="Open lesson"
-              aria-keyshortcuts="Enter"
-              title="Open lesson (Enter)"
-              onClick={(event) => {
-                event.preventDefault();
-                onOpenInCourse(destination);
-              }}
-              // Goes to the lesson in this tab, so it reads as a button
-              // rather than a link out.
-              className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-2.5 text-xs font-semibold text-(--accent) no-underline transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] focus-visible:outline-2 focus-visible:outline-(--accent) ${
-                onClose || showStepButtons ? "ml-1.5" : ""
-              }`}
-            >
-              <Play size={12} weight="fill" aria-hidden="true" />
-              <span className="hidden @min-[17.5rem]:inline">Open lesson</span>
-            </a>
-          )}
+      {lessonInBar ? (
+        // A phone has no ✕ and no steps (a swipe steps, the sheet closes
+        // itself), so the course and lesson are the top row, the menu on
+        // their right.
+        <div
+          // Pointing at the course and lesson lights the whole row, behind
+          // the menu too; the menu keeps its own hover.
+          className={`flex shrink-0 items-center gap-1 border-b ${LINE} rounded-t-[inherit] pt-0 pr-2.5 transition-colors has-[>a:hover]:bg-(--hover) [&>div:last-child]:mt-2`}
+        >
+          {renderLessonLink("min-w-0 flex-1 pt-5")}
+          {actionMenu}
         </div>
-        <DiscussionWorkspaceActionMenu
-          card={card}
-          destination={destination}
-          setNotice={setNotice}
-          onEdit={() => onEditingChange(true)}
-          onReport={onReport}
-        />
-      </div>
+      ) : (
+        // The bar: out and through the list on the left, the menu alone on
+        // the right, so neither is pressed for the other.
+        <div
+          className={`flex h-14 shrink-0 items-center justify-between gap-2 border-b ${LINE} px-2.5`}
+        >
+          <div className="flex min-w-0 items-center gap-1">
+            {onClose && (
+              <>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close panel"
+                  title="Close (Esc)"
+                  className={ghostIconButtonClasses}
+                >
+                  <X size={17} weight="bold" aria-hidden="true" />
+                </button>
+                {showStepButtons && (
+                  <span
+                    className="mx-1 h-5 w-px bg-[color-mix(in_srgb,var(--text)_10%,transparent)]"
+                    aria-hidden="true"
+                  />
+                )}
+              </>
+            )}
+            {showStepButtons && (
+              <>
+                <button
+                  type="button"
+                  onClick={step.onPrev}
+                  disabled={step.index <= 0}
+                  aria-label="Previous discussion"
+                  title="Previous (←)"
+                  className={ghostIconButtonClasses}
+                >
+                  <CaretLeft size={15} weight="bold" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={step.onNext}
+                  disabled={step.index >= step.count - 1}
+                  aria-label="Next discussion"
+                  title="Next (→)"
+                  className={ghostIconButtonClasses}
+                >
+                  <CaretRight size={15} weight="bold" aria-hidden="true" />
+                </button>
+              </>
+            )}
+          </div>
+          {actionMenu}
+        </div>
+      )}
 
       <div
         ref={scrollRef}
         // pan-y: a sideways swipe on a phone moves through the list.
         className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain"
       >
-        {(card.course || card.lesson) && (
-          <div className={`flex items-center gap-3 border-b ${LINE} px-5 py-3`}>
-            <span
-              className="grid size-9 shrink-0 place-items-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-(--accent)"
-              aria-hidden="true"
-            >
-              <BookOpen size={18} weight="duotone" />
-            </span>
-            <div className="min-w-0 flex-1">
-              {card.course && (
-                <p className="m-0 truncate text-xs font-semibold text-(--muted)">
-                  {card.course}
-                </p>
-              )}
-              {card.lesson && (
-                <p className="m-0 truncate text-sm font-semibold text-(--text)">
-                  {card.lesson}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
+        {!lessonInBar &&
+          renderLessonLink(`border-b ${LINE} hover:bg-(--hover)`)}
 
         <article className="px-5 pt-5 pb-4">
           <div className="flex items-center gap-3">
@@ -760,11 +826,19 @@ export function DiscussionPanelContent({
                 <RoleBadge role={author?.role} />
                 <KindBadge label={kindLabel} />
               </div>
-              <time className="text-xs text-(--muted)">
-                {post ? formatPostTime(post.createdAt) : card.activity}
-              </time>
+              {post ? (
+                <TimeAgo
+                  value={post.createdAt}
+                  className="text-xs text-(--muted)"
+                />
+              ) : (
+                <TimeAgo
+                  value={card.activityAt}
+                  label={card.activity}
+                  className="text-xs text-(--muted)"
+                />
+              )}
             </div>
-            <DiscussionTextSizeControl />
           </div>
 
           {post?.title && (
@@ -851,7 +925,13 @@ export function DiscussionPanelContent({
 
       {canReply && threadId && (
         <div
-          className={`shrink-0 border-t ${LINE} ${
+          // The flash is a tinted layer over the whole area below the
+          // line, the box and its toolbar alike, so their own colours stay.
+          className={`relative shrink-0 border-t ${LINE} after:pointer-events-none after:absolute after:inset-0 after:z-10 after:bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] after:transition-opacity after:ease-out after:content-[""] ${
+            replyFlash
+              ? "after:opacity-100 after:duration-200"
+              : "after:opacity-0 after:duration-700"
+          } ${
             variant === "phone" ? "pb-[var(--app-safe-area-bottom,0px)]" : ""
           }`}
         >

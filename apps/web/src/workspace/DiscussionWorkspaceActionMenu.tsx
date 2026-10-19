@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BellSimpleIcon as BellSimple } from "@phosphor-icons/react/BellSimple";
 import { BookmarkSimpleIcon as BookmarkSimple } from "@phosphor-icons/react/BookmarkSimple";
 import { CopySimpleIcon as CopySimple } from "@phosphor-icons/react/CopySimple";
+import { EyeIcon as Eye } from "@phosphor-icons/react/Eye";
 import { EyeSlashIcon as EyeSlash } from "@phosphor-icons/react/EyeSlash";
 import { FlagIcon as Flag } from "@phosphor-icons/react/Flag";
 import { PencilSimpleIcon as PencilSimple } from "@phosphor-icons/react/PencilSimple";
@@ -12,6 +13,7 @@ import { CourseActionMenu, MenuAction, MenuDivider } from "../courses";
 import type { NavigateTo } from "../routing/navigation";
 import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
 import { useDiscussionWorkspaceCardActions } from "./useDiscussionWorkspaceCardActions";
+import { DiscussionTextSizeMenuItem } from "./DiscussionTextSizeControl";
 
 interface DiscussionWorkspaceActionMenuProps {
   card: DiscussionWorkspaceCard;
@@ -22,6 +24,8 @@ interface DiscussionWorkspaceActionMenuProps {
   /** Opens the post in the side panel with its text being edited. */
   onEdit?: (card: DiscussionWorkspaceCard) => void;
   onReport?: (card: DiscussionWorkspaceCard) => void;
+  /** The side panel's menu also sets the size of the text it shows. */
+  textSize?: boolean;
 }
 
 export function DiscussionWorkspaceActionMenu({
@@ -31,6 +35,7 @@ export function DiscussionWorkspaceActionMenu({
   onNavigatePage,
   onEdit,
   onReport,
+  textSize = false,
 }: DiscussionWorkspaceActionMenuProps) {
   const [open, setOpen] = useState(false);
   const actions = useDiscussionWorkspaceCardActions({
@@ -103,6 +108,7 @@ export function DiscussionWorkspaceActionMenu({
           }}
         />
       )}
+      {textSize && <DiscussionTextSizeMenuItem />}
       {(canReport || actions.canHide || actions.canDelete) && <MenuDivider />}
       {canReport && (
         <MenuAction
@@ -113,9 +119,9 @@ export function DiscussionWorkspaceActionMenu({
       )}
       {actions.canHide && (
         <MenuAction
-          Icon={EyeSlash}
+          Icon={actions.isHidden ? Eye : EyeSlash}
           label={actions.hideLabel}
-          onClick={actions.hide}
+          onClick={actions.isHidden ? actions.unhide : actions.hide}
         />
       )}
       {actions.canDelete && (

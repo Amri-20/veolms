@@ -90,6 +90,8 @@ import { SurfaceTopRightAccentGlow } from "./SurfaceTopRightAccentGlow";
 import { ThreadReplyComposer } from "./ThreadReplyComposer";
 import { useCapabilities } from "../services/authorization/authorization.queries";
 import type { LessonParticipationState } from "./Discussion";
+import { TimeAgo } from "../components/TimeAgo";
+import { cheerLike } from "../components/likeFeedback";
 
 const THREAD_PANEL_MIN_HEIGHT = 360;
 const THREAD_PANEL_PHONE_QUERY = "(max-width: 639px)";
@@ -1406,9 +1408,11 @@ function ThreadRootEntry({
               <span aria-hidden="true" className="text-(--muted)">
                 ·
               </span>
-              <span className="text-xs text-(--muted) sm:text-sm">
-                {entry.time}
-              </span>
+              <TimeAgo
+                value={entry.createdAt}
+                label={entry.time}
+                className="text-xs text-(--muted) sm:text-sm"
+              />
             </div>
             <CommentActionMenu
               name={entry.name}
@@ -1461,6 +1465,7 @@ function ThreadRootEntry({
             />
           </div>
           <DiscussionMarkdown
+            linkPreviewSource="url"
             content={entry.content ?? createDiscussionDraft(entry.text)}
             label={`Discussion entry by ${entry.name}`}
             linkedAttachments={entry.attachments}
@@ -1490,15 +1495,21 @@ function ThreadRootEntry({
                 type="button"
                 aria-pressed={isEntryLiked}
                 aria-label={isEntryLiked ? "Unlike" : "Like"}
-                onClick={() => {
+                onClick={(event) => {
+                  if (!isEntryLiked) cheerLike(event.currentTarget);
                   onLike(entry.id, !isEntryLiked);
                 }}
                 className={`inline-flex min-h-9 items-center gap-2 rounded-lg px-1.5 transition-colors hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--accent) ${isEntryLiked ? "text-(--accent-ink,var(--accent))" : ""}`}
               >
-                <ThumbsUp
-                  size={19}
-                  weight={isEntryLiked ? "fill" : "regular"}
-                />
+                <span
+                  data-like-icon
+                  className="relative inline-grid place-items-center"
+                >
+                  <ThumbsUp
+                    size={19}
+                    weight={isEntryLiked ? "fill" : "regular"}
+                  />
+                </span>
                 {entry.likes}
               </button>
             )}
@@ -1660,9 +1671,11 @@ function ThreadReplyEntry({
                   <span aria-hidden="true" className="text-(--muted)">
                     ·
                   </span>
-                  <span className="text-xs text-(--muted) sm:text-sm">
-                    {reply.time}
-                  </span>
+                  <TimeAgo
+                    value={reply.createdAt}
+                    label={reply.time}
+                    className="text-xs text-(--muted) sm:text-sm"
+                  />
                 </div>
                 <CommentActionMenu
                   name={reply.name}
@@ -1748,6 +1761,7 @@ function ThreadReplyEntry({
                 </div>
               ) : (
                 <DiscussionMarkdown
+                  linkPreviewSource="url"
                   content={reply.content ?? createDiscussionDraft(reply.text)}
                   label={`Reply by ${reply.name}`}
                   linkedAttachments={reply.attachments}
@@ -1766,13 +1780,21 @@ function ThreadReplyEntry({
                     type="button"
                     aria-pressed={Boolean(reply.liked)}
                     aria-label={reply.liked ? "Unlike reply" : "Like reply"}
-                    onClick={() => onLikeReply(reply.id)}
+                    onClick={(event) => {
+                      if (!reply.liked) cheerLike(event.currentTarget);
+                      onLikeReply(reply.id);
+                    }}
                     className={`inline-flex min-h-9 items-center gap-2 rounded-lg px-1.5 transition-colors hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--accent) ${reply.liked ? "text-(--accent-ink,var(--accent))" : ""}`}
                   >
-                    <ThumbsUp
-                      size={18}
-                      weight={reply.liked ? "fill" : "regular"}
-                    />
+                    <span
+                      data-like-icon
+                      className="relative inline-grid place-items-center"
+                    >
+                      <ThumbsUp
+                        size={18}
+                        weight={reply.liked ? "fill" : "regular"}
+                      />
+                    </span>
                     <span>{reply.likes}</span>
                   </button>
                 )}

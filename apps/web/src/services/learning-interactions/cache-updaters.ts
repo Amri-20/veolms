@@ -412,6 +412,13 @@ export function restoreDiscussionsWorkspaceCacheSnapshot(
   }
 }
 
+/** Fetches the Discussions page's lists again (a post shown again). */
+export function refetchDiscussionsWorkspace(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({
+    predicate: (query) => isDiscussionsWorkspaceQuery(query.queryKey),
+  });
+}
+
 function updateDiscussionsWorkspaceSource(
   queryClient: QueryClient,
   sourceType: DiscussionWorkspaceSourceType,
