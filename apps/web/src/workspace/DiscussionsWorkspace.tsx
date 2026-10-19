@@ -87,6 +87,7 @@ import {
 } from "./DiscussionWorkspaceVirtualFeed";
 import { DiscussionWorkspaceListRow } from "./DiscussionWorkspaceRow";
 import { DiscussionWorkspacePanel } from "./DiscussionWorkspacePanel";
+import { useDiscussionWorkspaceReport } from "./useDiscussionWorkspaceReport";
 import { useDiscussionWorkspaceCardLongPress } from "./useDiscussionWorkspaceCardLongPress";
 import {
   getApplicationScrollElement,
@@ -2347,9 +2348,29 @@ export function DiscussionsWorkspace({
   // The discussion open in the panel beside the list, if any.
   const [openPanelCard, setOpenPanelCard] =
     useState<DiscussionWorkspaceCard | null>(null);
-  const closePanel = useCallback(() => setOpenPanelCard(null), []);
+  // Whether the open discussion's own text is being edited ("Edit").
+  const [isEditingPanelCard, setIsEditingPanelCard] = useState(false);
+  const openPanel = useCallback(
+    (card: DiscussionWorkspaceCard) => {
+      setOpenPanelCard(card);
+      setIsEditingPanelCard(false);
+    },
+    [setIsEditingPanelCard, setOpenPanelCard],
+  );
+  const editInPanel = useCallback(
+    (card: DiscussionWorkspaceCard) => {
+      setOpenPanelCard(card);
+      setIsEditingPanelCard(true);
+    },
+    [setIsEditingPanelCard, setOpenPanelCard],
+  );
+  const closePanel = useCallback(() => {
+    setOpenPanelCard(null);
+    setIsEditingPanelCard(false);
+  }, [setIsEditingPanelCard, setOpenPanelCard]);
   // Another tab is another list; the open discussion closes with it.
-  useEffect(() => setOpenPanelCard(null), [activeTab]);
+  useEffect(() => closePanel(), [activeTab, closePanel]);
+  const { openReport, reportDialog } = useDiscussionWorkspaceReport(setNotice);
   const openMobileActions = useCallback(
     (card: DiscussionWorkspaceCard, destination: string | null) => {
       setMobileActionTarget({ card, destination });
@@ -2375,8 +2396,10 @@ export function DiscussionsWorkspace({
             getDiscussionWorkspaceItemKey(openPanelCard) ===
               getDiscussionWorkspaceItemKey(card)
           }
-          onOpen={setOpenPanelCard}
+          onOpen={openPanel}
           onNavigatePage={onNavigatePage}
+          onEdit={editInPanel}
+          onReport={openReport}
           showActions={!showDiscussionSwipePreviews}
           onRequestMobileActions={
             showDiscussionSwipePreviews ? openMobileActions : undefined
@@ -2386,9 +2409,12 @@ export function DiscussionsWorkspace({
       );
     },
     [
+      editInPanel,
       onNavigatePage,
       openMobileActions,
+      openPanel,
       openPanelCard,
+      openReport,
       setNotice,
       showDiscussionSwipePreviews,
     ],
@@ -2743,6 +2769,8 @@ export function DiscussionsWorkspace({
             destination={mobileActionTarget.destination}
             onClose={closeMobileActions}
             setNotice={setNotice}
+            onEdit={editInPanel}
+            onReport={openReport}
           />
         )}
 
@@ -2756,6 +2784,7 @@ export function DiscussionsWorkspace({
           slideClassName="pb-8"
           stateAttribute="data-discussion-tab"
           spaceBetweenOffset={14}
+          layoutKey={openPanelCard ? "with-panel" : "full"}
         >
           {(panelTab, preview) => {
             const isActivePanel = panelTab === activeTab;
@@ -2945,11 +2974,15 @@ export function DiscussionsWorkspace({
               ? getDiscussionNoteDestination(openPanelCard)
               : getDiscussionThreadDestination(openPanelCard)
           }
+          editing={isEditingPanelCard}
+          onEditingChange={setIsEditingPanelCard}
           onClose={closePanel}
           onNavigatePage={onNavigatePage}
+          onReport={openReport}
           setNotice={setNotice}
         />
       )}
+      {reportDialog}
     </div>
   );
 }

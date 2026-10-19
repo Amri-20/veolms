@@ -270,12 +270,16 @@ export function DiscussionWorkspaceListRow({
   showActions,
   onRequestMobileActions,
   setNotice,
+  onEdit,
+  onReport,
 }: {
   card: DiscussionWorkspaceCard;
   destination: string | null;
   selected: boolean;
   onOpen: (card: DiscussionWorkspaceCard) => void;
   onNavigatePage?: NavigateTo;
+  onEdit?: (card: DiscussionWorkspaceCard) => void;
+  onReport?: (card: DiscussionWorkspaceCard) => void;
   showActions: boolean;
   onRequestMobileActions?: (
     card: DiscussionWorkspaceCard,
@@ -304,6 +308,8 @@ export function DiscussionWorkspaceListRow({
             destination={destination}
             setNotice={setNotice}
             onNavigatePage={onNavigatePage}
+            onEdit={onEdit}
+            onReport={onReport}
           />
         ) : undefined
       }

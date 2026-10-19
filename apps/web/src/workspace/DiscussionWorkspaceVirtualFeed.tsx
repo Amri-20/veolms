@@ -1,10 +1,12 @@
 import {
   useEffect,
   useLayoutEffect,
+  useReducer,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
+import { flushSync } from "react-dom";
 import type { ReactNode, RefObject } from "react";
 import { useVirtualizer, useWindowVirtualizer } from "@tanstack/react-virtual";
 import { getApplicationScrollElement } from "../shell/applicationScroll";
@@ -118,6 +120,37 @@ interface DiscussionWorkspaceVirtualRowsProps {
   feedRef: RefObject<HTMLDivElement | null>;
   scrollMargin: number;
   virtualizer: DiscussionWorkspaceVirtualizer;
+}
+
+/**
+ * Measures the rows on screen again, and draws them, in the same frame the
+ * list changes width (the side panel opening or closing, a window resize).
+ * The virtualizer's own observer measures them too, but redraws in a later
+ * task, so taller rows were painted over the next ones for a frame or more.
+ */
+function useRemeasureRowsOnWidthChange(
+  virtualizer: DiscussionWorkspaceVirtualizer,
+  feedRef: RefObject<HTMLDivElement | null>,
+) {
+  const [, redraw] = useReducer((count: number) => count + 1, 0);
+  useLayoutEffect(() => {
+    const feed = feedRef.current;
+    if (!feed || typeof ResizeObserver === "undefined") return undefined;
+    let width = feed.getBoundingClientRect().width;
+    const observer = new ResizeObserver(([entry]) => {
+      const nextWidth = entry?.contentRect.width ?? width;
+      if (Math.abs(nextWidth - width) < 0.5) return;
+      width = nextWidth;
+      flushSync(() => {
+        feed
+          .querySelectorAll("[data-discussion-workspace-virtual-row]")
+          .forEach((row) => virtualizer.measureElement(row));
+        redraw();
+      });
+    });
+    observer.observe(feed);
+    return () => observer.disconnect();
+  }, [feedRef, virtualizer]);
 }
 
 function DiscussionWorkspaceVirtualRows({
@@ -251,6 +284,7 @@ function DiscussionWorkspaceWindowVirtualFeed({
   useEffect(() => {
     virtualizer.measure();
   }, [datasetKey, estimateSize, virtualizer]);
+  useRemeasureRowsOnWidthChange(virtualizer, feedRef);
 
   return (
     <DiscussionWorkspaceVirtualRows
@@ -284,6 +318,7 @@ function DiscussionWorkspaceScrollportVirtualFeed({
   useEffect(() => {
     virtualizer.measure();
   }, [datasetKey, estimateSize, virtualizer]);
+  useRemeasureRowsOnWidthChange(virtualizer, feedRef);
 
   return (
     <DiscussionWorkspaceVirtualRows

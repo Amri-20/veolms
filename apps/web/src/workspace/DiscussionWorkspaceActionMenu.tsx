@@ -3,6 +3,8 @@ import { BellSimpleIcon as BellSimple } from "@phosphor-icons/react/BellSimple";
 import { BookmarkSimpleIcon as BookmarkSimple } from "@phosphor-icons/react/BookmarkSimple";
 import { CopySimpleIcon as CopySimple } from "@phosphor-icons/react/CopySimple";
 import { EyeSlashIcon as EyeSlash } from "@phosphor-icons/react/EyeSlash";
+import { FlagIcon as Flag } from "@phosphor-icons/react/Flag";
+import { PencilSimpleIcon as PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { PlayIcon as Play } from "@phosphor-icons/react/Play";
 import { LinkSimpleIcon as LinkSimple } from "@phosphor-icons/react/LinkSimple";
 import { TrashIcon as Trash } from "@phosphor-icons/react/Trash";
@@ -17,6 +19,9 @@ interface DiscussionWorkspaceActionMenuProps {
   setNotice?: (message: string) => void;
   /** Given, the menu starts with "Open in course". */
   onNavigatePage?: NavigateTo;
+  /** Opens the post in the side panel with its text being edited. */
+  onEdit?: (card: DiscussionWorkspaceCard) => void;
+  onReport?: (card: DiscussionWorkspaceCard) => void;
 }
 
 export function DiscussionWorkspaceActionMenu({
@@ -24,6 +29,8 @@ export function DiscussionWorkspaceActionMenu({
   destination,
   setNotice,
   onNavigatePage,
+  onEdit,
+  onReport,
 }: DiscussionWorkspaceActionMenuProps) {
   const [open, setOpen] = useState(false);
   const actions = useDiscussionWorkspaceCardActions({
@@ -33,6 +40,8 @@ export function DiscussionWorkspaceActionMenu({
   });
 
   const sourceLabel = actions.isNote ? "note" : "discussion";
+  const canEdit = actions.canEdit && Boolean(onEdit);
+  const canReport = actions.canReport && Boolean(onReport);
 
   return (
     <CourseActionMenu
@@ -53,6 +62,13 @@ export function DiscussionWorkspaceActionMenu({
           Icon={Play}
           label="Open in course"
           onClick={() => onNavigatePage(destination, { exact: true })}
+        />
+      )}
+      {canEdit && (
+        <MenuAction
+          Icon={PencilSimple}
+          label={actions.editLabel}
+          onClick={() => onEdit?.(card)}
         />
       )}
       {actions.canCopyLink && (
@@ -87,7 +103,14 @@ export function DiscussionWorkspaceActionMenu({
           }}
         />
       )}
-      {(actions.canHide || actions.canDelete) && <MenuDivider />}
+      {(canReport || actions.canHide || actions.canDelete) && <MenuDivider />}
+      {canReport && (
+        <MenuAction
+          Icon={Flag}
+          label={actions.reportLabel}
+          onClick={() => onReport?.(card)}
+        />
+      )}
       {actions.canHide && (
         <MenuAction
           Icon={EyeSlash}

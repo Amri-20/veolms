@@ -503,6 +503,7 @@ export default function AcademyLayout() {
     originSection: hasValidNavigationOrigin ? originSectionValue : undefined,
     navigationMatch: currentNavigationMatch,
     navigationItems: workspaceNavigationItems,
+    menuKnown: authUserFetched || Boolean(storeUser),
   });
   const showRouteBackButton = !currentNavigationMatch?.exact;
 

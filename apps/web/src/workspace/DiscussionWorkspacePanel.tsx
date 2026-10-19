@@ -5,6 +5,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -15,6 +16,7 @@ import { XIcon as X } from "@phosphor-icons/react/X";
 import type { LearningReply } from "@veolms/contracts";
 import { DiscussionAvatar } from "../learning/DiscussionAvatar";
 import type { NavigateTo } from "../routing/navigation";
+import { useBackDismiss } from "../navigation/useBackDismiss";
 import { getApplicationScrollElement } from "../shell/applicationScroll";
 import { useCurrentUser } from "../services/auth";
 import {
@@ -24,6 +26,9 @@ import {
   useNoteDetails,
   useThreadDetails,
   useThreadReplies,
+  useUpdateNote,
+  useUpdateReply,
+  useUpdateThread,
 } from "../services/learning-interactions";
 import { DiscussionWorkspaceActionMenu } from "./DiscussionWorkspaceActionMenu";
 import { DiscussionRowAction } from "./DiscussionWorkspaceRow";
@@ -75,12 +80,96 @@ function PostBody({ content, label }: { content: string; label: string }) {
   );
 }
 
+interface PanelEditHandlers {
+  saving: boolean;
+  onCancel: () => void;
+  onSave: (content: string) => void;
+}
+
+/** The post's text in a box to change it, in place of the text itself. */
+function PanelEditForm({
+  initialContent,
+  label,
+  saving,
+  onCancel,
+  onSave,
+}: PanelEditHandlers & { initialContent: string; label: string }) {
+  const [draft, setDraft] = useState(initialContent);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // The box opens because its author asked to edit: the caret goes to the
+  // end of the text, before the panel would otherwise focus its Close.
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.focus({ preventScroll: true });
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  }, []);
+  const save = () => {
+    const content = draft.trim();
+    if (!content || saving) return;
+    if (content === initialContent.trim()) onCancel();
+    else onSave(content);
+  };
+
+  return (
+    <form
+      className="flex flex-col rounded-xl border border-(--accent) bg-(--surface-strong,var(--surface))"
+      onSubmit={(event) => {
+        event.preventDefault();
+        save();
+      }}
+    >
+      <textarea
+        aria-label={label}
+        rows={4}
+        value={draft}
+        ref={textareaRef}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            // Leaves the edit, not the panel.
+            event.preventDefault();
+            onCancel();
+          } else if (
+            event.key === "Enter" &&
+            (event.metaKey || event.ctrlKey)
+          ) {
+            event.preventDefault();
+            save();
+          }
+        }}
+        className="field-sizing-content max-h-[50dvh] min-h-24 resize-none border-0 bg-transparent px-3.5 pt-3 pb-1 text-base leading-relaxed text-(--text) outline-0"
+      />
+      <div className="flex justify-end gap-1.5 px-2 pt-1.5 pb-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="inline-flex h-8.5 items-center rounded-lg px-3.5 text-[0.84rem] font-bold text-(--muted) transition-colors hover:bg-(--hover) hover:text-(--text)"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={!draft.trim() || saving}
+          className="inline-flex h-8.5 items-center rounded-lg bg-(--accent) px-3.5 text-[0.84rem] font-extrabold text-(--on-accent) transition-opacity disabled:opacity-40"
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function PanelReply({
   reply,
   onLike,
+  edit,
 }: {
   reply: LearningReply;
   onLike: (reply: LearningReply) => void;
+  /** Given, the reply's text is shown in a box to change it. */
+  edit?: PanelEditHandlers;
 }) {
   return (
     <article className="flex gap-3 pl-5">
@@ -101,7 +190,15 @@ function PanelReply({
             {formatPostTime(reply.createdAt)}
           </time>
         </div>
-        <PostBody content={reply.content} label="Reply" />
+        {edit ? (
+          <PanelEditForm
+            {...edit}
+            initialContent={reply.content}
+            label="Edit reply"
+          />
+        ) : (
+          <PostBody content={reply.content} label="Reply" />
+        )}
         <div className="-ml-2.5">
           <DiscussionRowAction
             icon={
@@ -119,6 +216,23 @@ function PanelReply({
         </div>
       </div>
     </article>
+  );
+}
+
+// Below Tailwind's `lg` the panel covers the whole screen (see its classes).
+const FULL_SCREEN_PANEL_QUERY = "(width < 64rem)";
+
+const subscribeToFullScreenPanel = (listener: () => void) => {
+  const media = window.matchMedia(FULL_SCREEN_PANEL_QUERY);
+  media.addEventListener("change", listener);
+  return () => media.removeEventListener("change", listener);
+};
+
+function useFullScreenPanel(): boolean {
+  return useSyncExternalStore(
+    subscribeToFullScreenPanel,
+    () => window.matchMedia(FULL_SCREEN_PANEL_QUERY).matches,
+    () => false,
   );
 }
 
@@ -161,14 +275,21 @@ function usePanelFrameBox(): CSSProperties | undefined {
 export function DiscussionWorkspacePanel({
   card,
   destination,
+  editing = false,
+  onEditingChange,
   onClose,
   onNavigatePage,
+  onReport,
   setNotice,
 }: {
   card: DiscussionWorkspaceCard;
   destination: string | null;
+  /** Whether the card's own text is being edited. */
+  editing?: boolean;
+  onEditingChange?: (editing: boolean) => void;
   onClose: () => void;
   onNavigatePage?: NavigateTo;
+  onReport?: (card: DiscussionWorkspaceCard) => void;
   setNotice?: (message: string) => void;
 }) {
   const queryClient = useQueryClient();
@@ -184,9 +305,26 @@ export function DiscussionWorkspacePanel({
   const note = useNoteDetails(isNote ? card.id : undefined);
   const replies = useThreadReplies(threadId);
   const createReply = useCreateReply(threadId);
+  const updateThread = useUpdateThread(threadId);
+  const updateReply = useUpdateReply(threadId);
+  const updateNote = useUpdateNote(isNote ? card.id : undefined);
   const [draft, setDraft] = useState("");
   const closeRef = useRef<HTMLButtonElement>(null);
   const frameBox = usePanelFrameBox();
+  // On a phone the panel is a page of its own, so Back closes it rather than
+  // leaving the Discussions page.
+  const isFullScreen = useFullScreenPanel();
+  const dismissThroughHistory = useBackDismiss({
+    enabled: isFullScreen,
+    open: true,
+    onDismiss: onClose,
+  });
+  const openInCourse = (path: string) => {
+    if (!onNavigatePage) return;
+    // The panel's Back entry is taken off first, so Back from the lesson
+    // returns to the list and not to a panel that is no longer there.
+    dismissThroughHistory(() => onNavigatePage(path, { exact: true }));
+  };
 
   const kindName = isNote
     ? "Note"
@@ -205,8 +343,11 @@ export function DiscussionWorkspacePanel({
       : (author?.displayName ?? card.author);
 
   // Keyboard users land in the panel when it opens and leave it with Escape.
+  // A panel opened by "Edit" has already put them in the edit box.
   useEffect(() => {
-    closeRef.current?.focus({ preventScroll: true });
+    const closeButton = closeRef.current;
+    if (closeButton?.closest("aside")?.contains(document.activeElement)) return;
+    closeButton?.focus({ preventScroll: true });
   }, [card.id]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -221,6 +362,53 @@ export function DiscussionWorkspacePanel({
     void queryClient.invalidateQueries({
       queryKey: learningInteractionKeys.threadReplies(threadId),
     });
+  };
+
+  const isEditingReply = editing && card.itemType === "reply";
+  const isEditingPost = editing && !isEditingReply;
+  const stopEditing = () => onEditingChange?.(false);
+  const afterEdit = {
+    onSuccess: () => {
+      stopEditing();
+      setNotice?.("Changes saved");
+      if (threadId) {
+        void queryClient.invalidateQueries({
+          queryKey: learningInteractionKeys.threadDetails(threadId),
+        });
+      }
+      if (isNote) {
+        void queryClient.invalidateQueries({
+          queryKey: learningInteractionKeys.noteDetails(card.id),
+        });
+      }
+      refreshReplies();
+      // The list's row, and the lesson's own lists when next shown.
+      void queryClient.invalidateQueries({
+        queryKey: learningInteractionKeys.all,
+        refetchType: "none",
+      });
+      void queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[1] === "discussions-workspace",
+      });
+    },
+    onError: () => setNotice?.("Couldn't save your changes"),
+  };
+  const editHandlers: PanelEditHandlers = {
+    saving:
+      updateThread.isPending || updateReply.isPending || updateNote.isPending,
+    onCancel: stopEditing,
+    onSave: (content) => {
+      if (isEditingReply) {
+        updateReply.mutate(
+          { replyId: card.id, payload: { content } },
+          afterEdit,
+        );
+      } else if (isNote) {
+        updateNote.mutate({ content }, afterEdit);
+      } else {
+        updateThread.mutate({ content }, afterEdit);
+      }
+    },
   };
 
   const likeReply = (reply: LearningReply) => {
@@ -280,7 +468,7 @@ export function DiscussionWorkspacePanel({
               href={destination}
               onClick={(event) => {
                 event.preventDefault();
-                onNavigatePage(destination, { exact: true });
+                openInCourse(destination);
               }}
               className="inline-flex h-9 items-center gap-2 rounded-lg bg-[color-mix(in_srgb,var(--text)_7%,transparent)] px-3 text-[0.84rem] font-bold text-(--text) transition-colors hover:bg-[color-mix(in_srgb,var(--text)_11%,transparent)] focus-visible:outline-2 focus-visible:outline-(--accent)"
             >
@@ -292,6 +480,8 @@ export function DiscussionWorkspacePanel({
             card={card}
             destination={destination}
             setNotice={setNotice}
+            onEdit={onEditingChange ? () => onEditingChange(true) : undefined}
+            onReport={onReport}
           />
         </div>
       </header>
@@ -339,10 +529,19 @@ export function DiscussionWorkspacePanel({
                   {post.title}
                 </h2>
               )}
-              <PostBody
-                content={post?.content ?? card.content}
-                label={kindName}
-              />
+              {isEditingPost ? (
+                <PanelEditForm
+                  key={card.id}
+                  {...editHandlers}
+                  initialContent={post?.content ?? card.content}
+                  label={`Edit ${kindName === "Q&A" ? "question" : kindName.toLowerCase()}`}
+                />
+              ) : (
+                <PostBody
+                  content={post?.content ?? card.content}
+                  label={kindName}
+                />
+              )}
             </div>
           </article>
 
@@ -362,7 +561,16 @@ export function DiscussionWorkspacePanel({
                 />
               </div>
               {replyList.map((reply) => (
-                <PanelReply key={reply.id} reply={reply} onLike={likeReply} />
+                <PanelReply
+                  key={reply.id}
+                  reply={reply}
+                  onLike={likeReply}
+                  edit={
+                    isEditingReply && reply.id === card.id
+                      ? editHandlers
+                      : undefined
+                  }
+                />
               ))}
               {replies.hasNextPage && (
                 <button

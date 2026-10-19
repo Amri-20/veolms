@@ -133,6 +133,13 @@ interface SwipeableTabPanelProps<T extends string> {
   disabled?: boolean;
   spaceBetween?: number;
   spaceBetweenOffset?: number;
+  /**
+   * Changes when the panel's width changes with no window resize (a side
+   * panel opening beside it). Swiper sizes its slides from a resize observer
+   * and a frame later, so for a frame or two the slides kept their old width;
+   * a new value resizes them before the browser paints.
+   */
+  layoutKey?: string;
   onSwipeStart?: () => void;
   nativeOnFinePointer?: boolean;
   focusable?: boolean;
@@ -251,6 +258,7 @@ export function SwipeableTabPanel<T extends string>({
   disabled = false,
   spaceBetween,
   spaceBetweenOffset = 0,
+  layoutKey,
   onSwipeStart,
   nativeOnFinePointer = false,
   focusable = true,
@@ -367,6 +375,14 @@ export function SwipeableTabPanel<T extends string>({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [activeTab, tabs]);
+
+  const lastLayoutKeyRef = useRef(layoutKey);
+  useLayoutEffect(() => {
+    if (lastLayoutKeyRef.current === layoutKey) return;
+    lastLayoutKeyRef.current = layoutKey;
+    const swiper = swiperRef.current;
+    if (isUsableSwiper(swiper)) swiper.update();
+  }, [layoutKey]);
 
   useEffect(() => {
     const swiper = swiperRef.current;
