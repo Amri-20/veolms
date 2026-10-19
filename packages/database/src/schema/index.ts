@@ -55,6 +55,7 @@ import type {
   CoursePricingTable,
   CourseSettingsTable,
   CourseIncludeTable,
+  CourseLinkTable,
   CourseDeletionJobTable,
   CourseDeletionStorageItemTable,
 } from "./courses.schema.ts";
@@ -168,6 +169,7 @@ export interface Database {
   course_pricing: CoursePricingTable;
   course_settings: CourseSettingsTable;
   course_includes: CourseIncludeTable;
+  course_links: CourseLinkTable;
   course_deletion_jobs: CourseDeletionJobTable;
   course_deletion_storage_items: CourseDeletionStorageItemTable;
 

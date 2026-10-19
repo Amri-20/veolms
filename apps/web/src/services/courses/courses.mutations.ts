@@ -14,6 +14,7 @@ import type {
   CourseSettings,
   CourseStatusResponse,
   CourseIncludeItem,
+  LinkedCoursesListResponse,
   CreateCategoryRequest,
   CreateCourseIncludeRequest,
   CreateCourseLessonRequest,
@@ -723,6 +724,28 @@ export function useReorderCourseIncludes() {
         queryKey: courseKeys.preview(variables.courseId),
       });
       invalidateCoursePublicViews(queryClient, variables.courseId);
+    },
+  });
+}
+
+/** Links or unlinks a course; the response is the course's new list. */
+export function useSetLinkedCourse() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    LinkedCoursesListResponse,
+    ApiError,
+    { courseId: string; linkedCourseId: string; linked: boolean }
+  >({
+    mutationFn: ({ courseId, linkedCourseId, linked }) =>
+      linked
+        ? coursesService.addLinkedCourse(courseId, linkedCourseId)
+        : coursesService.removeLinkedCourse(courseId, linkedCourseId),
+    onSuccess: (data, variables) => {
+      queryClient.setQueryData(
+        courseKeys.linkedCourses(variables.courseId),
+        data,
+      );
     },
   });
 }

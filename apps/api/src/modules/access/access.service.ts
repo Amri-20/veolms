@@ -9,6 +9,7 @@ import type { Kysely } from "kysely";
 import { AppError } from "../../lib/errors.ts";
 import * as accessRepo from "./access.repository.ts";
 import { learnerCourseGate } from "./course-openness.ts";
+import { syncLinkedCourseAccess } from "./linked-course-access.ts";
 // access.repository.ts is the module's canonical source for this type — see
 // the comment there for the full history of it having been separately (and,
 // in auth's case, incorrectly) redefined in 4 places.
@@ -221,6 +222,7 @@ export function createAccessService(): AccessService {
         updateSource: grant.source !== "purchase",
         createdAt: now,
       });
+      await syncLinkedCourseAccess(database, [params.userId]);
 
       return grant;
     });
@@ -249,6 +251,7 @@ export function createAccessService(): AccessService {
         grant.user_id,
         grant.course_id,
       );
+      await syncLinkedCourseAccess(database, [grant.user_id]);
     });
   }
 
@@ -278,6 +281,7 @@ export function createAccessService(): AccessService {
         await accessRepo.updateAccessGrantStatus(database, grant.id, "revoked");
       }
       await accessRepo.revokeEnrollment(database, userId, courseId);
+      await syncLinkedCourseAccess(database, [userId]);
     });
   }
 
@@ -308,6 +312,7 @@ export function createAccessService(): AccessService {
       }
 
       await accessRepo.restoreRevokedCourseAccess(database, userId, courseId);
+      await syncLinkedCourseAccess(database, [userId]);
     });
   }
 

@@ -127,6 +127,15 @@ export interface CourseIncludeTable {
   updated_at: Generated<Date>;
 }
 
+/** Whoever holds `course_id` also holds `linked_course_id`. */
+export interface CourseLinkTable {
+  id: Generated<string>;
+  course_id: string;
+  linked_course_id: string;
+  position: Generated<number>;
+  created_at: Generated<Date>;
+}
+
 export interface CourseDeletionJobTable {
   id: string;
   course_id: string;

@@ -1,5 +1,6 @@
 import { Checkbox } from "../../components/Checkbox";
 import { CourseQuizPricingCard } from "../CourseQuizPricingCard";
+import { CourseLinkedCoursesCard } from "../CourseLinkedCoursesCard";
 import { ArrowUpRightIcon as ArrowUpRight } from "@phosphor-icons/react/ArrowUpRight";
 import { InfoIcon as Info } from "@phosphor-icons/react/Info";
 import { TagIcon as Tag } from "@phosphor-icons/react/Tag";
@@ -275,6 +276,9 @@ export function PricingStepPanel({
           </div>
         </div>
       </div>
+
+      {/* Courses that come free with this one */}
+      <CourseLinkedCoursesCard courseId={currentCourseId} />
 
       {/* Card 3: Quiz Pricing */}
       <CourseQuizPricingCard
