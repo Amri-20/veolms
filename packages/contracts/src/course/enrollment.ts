@@ -13,6 +13,7 @@ export const accessGrantSourceSchema = z.enum([
   "bundle_purchase",
   "free_grant",
   "admin_grant",
+  "linked_course",
 ]);
 export type AccessGrantSource = z.infer<typeof accessGrantSourceSchema>;
 
@@ -29,6 +30,7 @@ export const enrollmentSourceSchema = z.enum([
   "bundle_purchase",
   "free_grant",
   "admin_grant",
+  "linked_course",
 ]);
 export type EnrollmentSource = z.infer<typeof enrollmentSourceSchema>;
 

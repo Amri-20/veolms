@@ -8,3 +8,7 @@ export {
   learnerCourseGate,
   type LearnerCourseGate,
 } from "./course-openness.ts";
+export {
+  listUserIdsAffectedByLink,
+  syncLinkedCourseAccess,
+} from "./linked-course-access.ts";

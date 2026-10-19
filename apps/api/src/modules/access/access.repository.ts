@@ -5,6 +5,7 @@
 import { sql } from "kysely";
 import type {
   DatabaseExecutor as Executor,
+  AccessGrantTable,
   EnrollmentTable,
 } from "@veolms/database";
 export type { Executor };
@@ -149,7 +150,7 @@ export async function insertAccessGrant(
     course_id: string;
     order_id?: string | null;
     status: "active" | "suspended" | "revoked" | "expired";
-    source: "purchase" | "bundle_purchase" | "free_grant" | "admin_grant";
+    source: AccessGrantTable["source"];
     valid_from?: Date;
     valid_until?: Date | null;
     created_at?: Date;

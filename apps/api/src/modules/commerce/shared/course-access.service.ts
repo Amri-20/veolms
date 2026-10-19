@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import * as quizPricingRepo from "../../quizzes/shared/quiz-pricing.repository.ts";
 import type { AccessService } from "../../access/access.service.ts";
 import { createAccessService } from "../../access/access.service.ts";
+import { syncLinkedCourseAccess } from "../../access/linked-course-access.ts";
 import type { Executor } from "./repository.types.ts";
 import * as courseConfigRepo from "../../courses/configuration/configuration.repository.ts";
 import * as bundleRepo from "../bundles/bundle.repository.ts";
@@ -285,6 +286,9 @@ export function createCourseAccessService({
     }
 
     await orderItemCoursesRepo.recordOrderItemCourses(database, granted);
+    // Linked courses come with the courses bought; the order names only
+    // what was bought.
+    await syncLinkedCourseAccess(database, [order.user_id]);
 
     return enrolledCourseIds;
   }
@@ -310,6 +314,7 @@ export function createCourseAccessService({
     await accessService.revokeAccessForOrder(database, order.id);
     await enrollmentRepo.revokeEnrollmentsByOrderId(database, order.id);
     await quizPricingRepo.revokeGrantsByOrderId(database, order.id);
+    await syncLinkedCourseAccess(database, [order.user_id]);
   }
 
   async function revokeAccessForOrderItem(
@@ -347,6 +352,7 @@ export function createCourseAccessService({
         });
       }
     }
+    await syncLinkedCourseAccess(database, [order.user_id]);
   }
 
   async function withdrawCourseFromOrder(
@@ -364,6 +370,7 @@ export function createCourseAccessService({
       order.id,
       courseId,
     );
+    await syncLinkedCourseAccess(database, [order.user_id]);
   }
 
   return {

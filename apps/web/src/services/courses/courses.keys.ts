@@ -26,4 +26,6 @@ export const courseKeys = {
   categories: () => [...courseKeys.all, "categories"] as const,
   options: () => [...courseKeys.lists(), "options"] as const,
   bin: () => [...courseKeys.all, "bin"] as const,
+  linkedCourses: (id: string) =>
+    [...courseKeys.all, "linked-courses", id] as const,
 };

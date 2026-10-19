@@ -21,7 +21,11 @@ export type PaymentAttemptStatus =
 export type RefundStatus = "pending" | "processed" | "failed";
 export type EnrollmentStatus = "active" | "suspended" | "revoked" | "expired";
 export type EnrollmentSource =
-  "direct_purchase" | "bundle_purchase" | "free_grant" | "admin_grant";
+  | "direct_purchase"
+  | "bundle_purchase"
+  | "free_grant"
+  | "admin_grant"
+  | "linked_course";
 
 export interface CourseBundleTable {
   id: string;
@@ -222,7 +226,12 @@ export interface AccessGrantTable {
   course_id: string;
   order_id: string | null;
   status: "active" | "suspended" | "revoked" | "expired";
-  source: "purchase" | "bundle_purchase" | "free_grant" | "admin_grant";
+  source:
+    | "purchase"
+    | "bundle_purchase"
+    | "free_grant"
+    | "admin_grant"
+    | "linked_course";
   valid_from: Generated<Date>;
   valid_until: Date | null;
   created_at: Generated<Date>;

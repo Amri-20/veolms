@@ -326,6 +326,30 @@ export type CourseIncludesListResponse = z.infer<
   typeof courseIncludesListResponseSchema
 >;
 
+/** A course that comes free with the course it is linked to. */
+export const linkedCourseItemSchema = z.object({
+  courseId: z.uuid(),
+  title: z.string(),
+  slug: z.string(),
+  status: z.string(),
+});
+
+export const linkedCoursesListResponseSchema = z.object({
+  items: z.array(linkedCourseItemSchema),
+});
+
+export const addLinkedCourseRequestSchema = z.strictObject({
+  linkedCourseId: z.uuid(),
+});
+
+export type LinkedCourseItem = z.infer<typeof linkedCourseItemSchema>;
+export type LinkedCoursesListResponse = z.infer<
+  typeof linkedCoursesListResponseSchema
+>;
+export type AddLinkedCourseRequest = z.infer<
+  typeof addLinkedCourseRequestSchema
+>;
+
 export const createLessonResourceRequestSchema = z.object({
   mediaAssetId: z.uuid(),
   title: z.string().min(1).max(100),

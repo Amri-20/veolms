@@ -12,6 +12,7 @@ import type {
   DeletedCoursesListResponse,
   DeletedCoursesQuery,
   LessonDescriptionResponse,
+  LinkedCoursesListResponse,
   MyCoursesListResponse,
   PublicCourse,
 } from "@veolms/contracts";
@@ -94,6 +95,15 @@ export function useLessonDescription(
     // request is asked again. "Not found" and "forbidden" are final.
     retry: (failureCount, error) =>
       failureCount < 2 && !(error.status >= 400 && error.status < 500),
+  });
+}
+
+/** The courses that come free with a course (editor only). */
+export function useLinkedCourses(courseId: string | null) {
+  return useQuery<LinkedCoursesListResponse, ApiError>({
+    queryKey: courseKeys.linkedCourses(courseId ?? ""),
+    queryFn: () => coursesService.listLinkedCourses(courseId!),
+    enabled: Boolean(courseId),
   });
 }
 

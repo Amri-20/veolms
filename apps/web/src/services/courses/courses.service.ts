@@ -27,6 +27,7 @@ import type {
   CreateCourseSectionRequest,
   DeletedCoursesListResponse,
   DeletedCoursesQuery,
+  LinkedCoursesListResponse,
   MyCoursesListResponse,
   PublicCourse,
   LessonResource,
@@ -361,6 +362,31 @@ export const coursesService = {
     return api.post<{ success: boolean }>(
       `/courses/${courseId}/includes/reorder`,
       payload,
+    );
+  },
+
+  listLinkedCourses: (courseId: string): Promise<LinkedCoursesListResponse> => {
+    return api.get<LinkedCoursesListResponse>(
+      `/courses/${courseId}/linked-courses`,
+    );
+  },
+
+  addLinkedCourse: (
+    courseId: string,
+    linkedCourseId: string,
+  ): Promise<LinkedCoursesListResponse> => {
+    return api.post<LinkedCoursesListResponse>(
+      `/courses/${courseId}/linked-courses`,
+      { linkedCourseId },
+    );
+  },
+
+  removeLinkedCourse: (
+    courseId: string,
+    linkedCourseId: string,
+  ): Promise<LinkedCoursesListResponse> => {
+    return api.delete<LinkedCoursesListResponse>(
+      `/courses/${courseId}/linked-courses/${linkedCourseId}`,
     );
   },
 };
