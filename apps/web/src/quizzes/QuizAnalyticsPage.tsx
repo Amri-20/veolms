@@ -27,6 +27,7 @@ import { LoadingSpinnerIcon } from "../components/LoadingSpinner";
 import { ThemedSelect, type ThemedSelectOption } from "../ThemedSelect";
 import { useMyCourses } from "../services/courses";
 import { useStudents } from "../services/students";
+import { useCapabilities } from "../services/authorization/authorization.queries";
 import {
   quizKeys,
   quizzesService,
@@ -158,7 +159,12 @@ function InfiniteScrollSentinel({
 }
 
 export function QuizAnalyticsPage({ role, onNavigatePage }: Props) {
-  if (role === "creator") {
+  const capabilities = useCapabilities({ enabled: role === "creator" });
+  // A team member without quiz.read (a thumbnail editor) sees the quizzes
+  // they take, as a learner does, not an authoring hub they cannot use.
+  // Nothing is asked for until that is known.
+  if (role === "creator" && !capabilities.isFetched) return null;
+  if (role === "creator" && capabilities.can("quiz.read")) {
     return <InstructorQuizHub onNavigatePage={onNavigatePage} />;
   }
   return <LearnerQuizDashboard onNavigatePage={onNavigatePage} />;
@@ -232,8 +238,12 @@ function InstructorQuizHub({ onNavigatePage }: Pick<Props, "onNavigatePage">) {
   const [view, setView] = useState<InstructorView>("overview");
   const [isSelectCourseModalOpen, setSelectCourseModalOpen] = useState(false);
   const quizzes = useMyQuizzes();
+  const { can } = useCapabilities();
 
-  const handleOpenCreateQuiz = () => setSelectCourseModalOpen(true);
+  // Without quiz.create no button offers to start one.
+  const handleOpenCreateQuiz = can("quiz.create")
+    ? () => setSelectCourseModalOpen(true)
+    : undefined;
 
   return (
     <main
@@ -245,13 +255,15 @@ function InstructorQuizHub({ onNavigatePage }: Pick<Props, "onNavigatePage">) {
         title="Quiz command centre"
         description="Build assessments, configure course delivery, and understand exactly where learners are succeeding or getting stuck."
         action={
-          <Button
-            onClick={handleOpenCreateQuiz}
-            className="inline-flex items-center gap-2"
-          >
-            <Plus size={18} weight="bold" aria-hidden="true" />
-            <span>Create quiz</span>
-          </Button>
+          handleOpenCreateQuiz ? (
+            <Button
+              onClick={handleOpenCreateQuiz}
+              className="inline-flex items-center gap-2"
+            >
+              <Plus size={18} weight="bold" aria-hidden="true" />
+              <span>Create quiz</span>
+            </Button>
+          ) : undefined
         }
       />
       <HubTabs value={view} onChange={setView} />
@@ -294,10 +306,18 @@ function InstructorOverview({
   onOpenCreateQuiz?: () => void;
 }) {
   const courses = useMyCourses();
+  const { can } = useCapabilities();
+  // Learner results need submission.read, the learner count student.read.
+  const readsResults = can("submission.read");
   const [courseId, setCourseId] = useState<string | null>(null);
-  const courseAnalytics = useCourseQuizAnalytics(courseId);
+  const courseAnalytics = useCourseQuizAnalytics(
+    readsResults ? courseId : null,
+  );
   const assignments = useCourseQuizAssignments(courseId);
-  const studentsQuery = useStudents({ limit: 1 });
+  const studentsQuery = useStudents(
+    { limit: 1 },
+    { enabled: can("student.read") },
+  );
 
   const courseList = useMemo(
     () => courses.data?.courses ?? [],
@@ -309,6 +329,7 @@ function InstructorOverview({
       queryKey: quizKeys.courseAnalytics(course.id),
       queryFn: () => quizzesService.courseAnalytics(course.id),
       staleTime: 30_000,
+      enabled: readsResults,
     })),
   });
 
@@ -618,16 +639,12 @@ function InstructorOverview({
                 title="No quizzes yet"
                 message="Create your first assessment to start measuring learning outcomes."
                 action={
-                  <Button
-                    onClick={() =>
-                      onOpenCreateQuiz
-                        ? onOpenCreateQuiz()
-                        : onNavigatePage?.("/quizzes/create")
-                    }
-                  >
-                    <Plus size={17} weight="bold" />
-                    <span>Create quiz</span>
-                  </Button>
+                  onOpenCreateQuiz ? (
+                    <Button onClick={onOpenCreateQuiz}>
+                      <Plus size={17} weight="bold" />
+                      <span>Create quiz</span>
+                    </Button>
+                  ) : undefined
                 }
               />
             ) : null}
@@ -721,17 +738,15 @@ function QuizLibrary({
               Draft, publish, and maintain versioned assessment content.
             </p>
           </div>
-          <Button
-            onClick={() =>
-              onOpenCreateQuiz
-                ? onOpenCreateQuiz()
-                : onNavigatePage?.("/quizzes/create")
-            }
-            className="h-9 sm:h-10 text-xs sm:text-sm"
-          >
-            <Plus size={16} weight="bold" />
-            <span>New quiz</span>
-          </Button>
+          {onOpenCreateQuiz ? (
+            <Button
+              onClick={onOpenCreateQuiz}
+              className="h-9 sm:h-10 text-xs sm:text-sm"
+            >
+              <Plus size={16} weight="bold" />
+              <span>New quiz</span>
+            </Button>
+          ) : null}
         </div>
         <div className="mt-4 sm:mt-6 grid gap-2.5 sm:gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
           <label className="relative flex items-center">
@@ -787,14 +802,8 @@ function QuizLibrary({
                 : "Create your first quiz to build your assessment library."
             }
             action={
-              !quizzes.length ? (
-                <Button
-                  onClick={() =>
-                    onOpenCreateQuiz
-                      ? onOpenCreateQuiz()
-                      : onNavigatePage?.("/quizzes/create")
-                  }
-                >
+              !quizzes.length && onOpenCreateQuiz ? (
+                <Button onClick={onOpenCreateQuiz}>
                   <Plus size={17} weight="bold" />
                   <span>Create quiz</span>
                 </Button>
@@ -809,13 +818,18 @@ function QuizLibrary({
 
 function InstructorAnalytics() {
   const courses = useMyCourses();
+  const readsResults = useCapabilities().can("submission.read");
   const [courseId, setCourseId] = useState<string | null>(null);
   const [assignmentId, setAssignmentId] = useState<string | null>(null);
   const [studentId, setStudentId] = useState<string | null>(null);
   const assignments = useCourseQuizAssignments(courseId);
-  const courseAnalytics = useCourseQuizAnalytics(courseId);
-  const assignmentAnalytics = useQuizAnalytics(assignmentId);
-  const studentReport = useStudentQuizReport(studentId);
+  const courseAnalytics = useCourseQuizAnalytics(
+    readsResults ? courseId : null,
+  );
+  const assignmentAnalytics = useQuizAnalytics(
+    readsResults ? assignmentId : null,
+  );
+  const studentReport = useStudentQuizReport(readsResults ? studentId : null);
   const studentsContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

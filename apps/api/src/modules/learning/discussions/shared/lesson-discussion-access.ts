@@ -1,7 +1,7 @@
 import type { DatabaseExecutor } from "@veolms/database";
 import { sql } from "kysely";
 import type { RawBuilder } from "kysely";
-import { ADMIN_ROLE } from "../../../auth/index.ts";
+import { hasAcademyPermission } from "../../../authorization/index.ts";
 import {
   createAccessService,
   type AccessService,
@@ -98,13 +98,13 @@ export function createLessonDiscussionAccess(options?: {
         throw DiscussionErrors.notFound("Lesson discussion");
       }
 
-      const isAdmin = Boolean(
-        actor?.roles.some((role) => role.toLowerCase() === ADMIN_ROLE),
-      );
       const isCourseOwner = Boolean(
         actor && lesson.courseCreatorId === actor.userId,
       );
-      if (isAdmin || isCourseOwner) {
+      if (
+        isCourseOwner ||
+        (await hasAcademyPermission(db, actor?.userId, "discussion.moderate"))
+      ) {
         return { canReadPrivateState: true, canModerate: true };
       }
 

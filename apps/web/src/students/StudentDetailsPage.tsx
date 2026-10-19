@@ -12,6 +12,7 @@ import { LinkedinLogoIcon as LinkedinLogo } from "@phosphor-icons/react/Linkedin
 import { PencilSimpleIcon as PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { PhoneIcon as Phone } from "@phosphor-icons/react/Phone";
 import { TrendUpIcon as TrendUp } from "@phosphor-icons/react/TrendUp";
+import { UserPlusIcon as UserPlus } from "@phosphor-icons/react/UserPlus";
 import { WarningCircleIcon as WarningCircle } from "@phosphor-icons/react/WarningCircle";
 import { lazy, Suspense, useState } from "react";
 import type { AdminOrder, StudentCourseDetail } from "@veolms/contracts";
@@ -21,6 +22,7 @@ import type { NavigateTo } from "../routing/navigation";
 import { useCurrentUser } from "../services/auth";
 import { useFetchOrder } from "../services/orders";
 import { useStudent } from "../services/students";
+import { useCapabilities } from "../services/authorization";
 import { hasAdminRole } from "../shell/workspaceRole";
 import {
   StudentCourseAccessModal,
@@ -43,6 +45,13 @@ const StudentContactModal = lazy(() =>
   })),
 );
 
+// The Team page's add-member panel, opened with this student chosen.
+const AddMemberPanel = lazy(() =>
+  import("../team/members/AddMemberPanel").then((module) => ({
+    default: module.AddMemberPanel,
+  })),
+);
+
 export function StudentDetailsPage({
   username,
   onNavigatePage,
@@ -53,6 +62,12 @@ export function StudentDetailsPage({
   // it either way. Anyone else here would only be told it is private.
   const isAdmin = hasAdminRole(useCurrentUser().data?.roles);
   const canOpenProgress = isAdmin;
+  const { can } = useCapabilities();
+  const canEditContact = can("student.contact.update");
+  const canManageAccess = can("student.access.manage");
+  const canIssueRefunds = can("billing.manage");
+  const canAssignRoles = can("role.assign");
+  const [makingTeamMember, setMakingTeamMember] = useState(false);
 
   // The refund dialog is the one the Orders screen uses, so it needs the
   // whole order; it is read when "Issue refund" is picked on a course.
@@ -292,7 +307,7 @@ export function StudentDetailsPage({
                       </a>
                     )}
 
-                    {isAdmin ? (
+                    {canEditContact ? (
                       <button
                         type="button"
                         onClick={() => setEditingContact(true)}
@@ -301,6 +316,18 @@ export function StudentDetailsPage({
                       >
                         <PencilSimple size={14} className="shrink-0" />
                         <span>Edit contact</span>
+                      </button>
+                    ) : null}
+
+                    {canAssignRoles && student.email ? (
+                      <button
+                        type="button"
+                        onClick={() => setMakingTeamMember(true)}
+                        aria-haspopup="dialog"
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--surface)_70%,transparent)] px-2.5 py-1 font-medium text-(--muted) transition-colors hover:border-(--accent) hover:text-(--accent)"
+                      >
+                        <UserPlus size={14} className="shrink-0" />
+                        <span>Make team member</span>
                       </button>
                     ) : null}
                   </div>
@@ -486,7 +513,8 @@ export function StudentDetailsPage({
                   <StudentCourseCard
                     key={course.courseId}
                     course={course}
-                    canManageAccess={isAdmin}
+                    canManageAccess={canManageAccess}
+                    canIssueRefunds={canIssueRefunds}
                     onOpenCourse={openCourse}
                     onRefund={startRefund}
                     onRevokeAccess={(target) =>
@@ -550,6 +578,26 @@ export function StudentDetailsPage({
             phoneNo={student.phoneNo ?? null}
             onClose={() => setEditingContact(false)}
             setNotice={setNotice}
+          />
+        </Suspense>
+      ) : null}
+
+      {makingTeamMember && student?.email ? (
+        <Suspense fallback={null}>
+          <AddMemberPanel
+            initialUser={{
+              userId: student.id,
+              name: student.displayName,
+              username: student.username,
+              email: student.email,
+              avatarUrl: student.avatarUrl ?? null,
+              isMember: false,
+              roles: [],
+            }}
+            onClose={() => setMakingTeamMember(false)}
+            setNotice={(notice) =>
+              setNotice?.(typeof notice === "string" ? notice : notice.message)
+            }
           />
         </Suspense>
       ) : null}

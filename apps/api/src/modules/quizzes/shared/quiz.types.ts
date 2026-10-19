@@ -1,3 +1,6 @@
+import type { Permission } from "@veolms/contracts";
+import { hasAcademyPermission } from "../../authorization/index.ts";
+import { mayManageCourse } from "../../courses/shared/courses.utils.ts";
 import type { Kysely } from "kysely";
 import { AppError } from "../../../lib/errors.ts";
 import type { Database } from "@veolms/database";
@@ -35,15 +38,34 @@ export async function requireAcademyId(
 }
 
 /**
- * Only an admin or the course's creator manages its quizzes. Checked on the
- * course row the caller already loaded, so the course is read once.
+ * Who manages a course's quizzes: an admin, the course's creator, or anyone
+ * holding `permission` through a role that reaches every course (a course
+ * manager). Checked on the course row the caller already loaded.
  */
-export function assertCanManageCourse(
+export async function assertCanManageCourse(
+  database: Kysely<Database>,
   actor: QuizActor,
-  course: { creator_id: string | null },
+  course: { id: string; creator_id: string | null },
+  permission: Permission,
 ) {
-  if (isAdmin(actor) || course.creator_id === actor.id) return;
+  if (
+    await mayManageCourse(database, course, actor.id, actor.roles, permission)
+  )
+    return;
   throw new AppError(403, "FORBIDDEN", "Unauthorized course access.");
+}
+
+/**
+ * Admin, or `permission` through a role that reaches every course: what lets
+ * someone act on quizzes they did not write.
+ */
+export async function reachesEveryQuiz(
+  database: Kysely<Database>,
+  actor: QuizActor,
+  permission: Permission,
+): Promise<boolean> {
+  if (isAdmin(actor)) return true;
+  return await hasAcademyPermission(database, actor.id, permission);
 }
 
 /**

@@ -10,8 +10,8 @@ import {
 import { errorResponse } from "../../lib/errors.ts";
 import { jsonResponse } from "../../lib/responses.ts";
 import type { RoutePlugin } from "../../lib/route-plugin.ts";
-import { ADMIN_ROLE, INSTRUCTOR_ROLE } from "../auth/index.ts";
 import { createAuthContext } from "../auth/shared/auth.context.ts";
+import { createPermissionPreHandlers } from "../authorization/index.ts";
 import { createStudentsController } from "./students.controller.ts";
 import { createStudentsService } from "./students.service.ts";
 
@@ -23,19 +23,16 @@ const studentsRoutes: RoutePlugin = async (app, options) => {
   });
   const controller = createStudentsController({ service });
 
-  const requireInstructorOrAdmin = [
-    ...auth.mfaVerified,
-    auth.middleware.requireRoles([ADMIN_ROLE, INSTRUCTOR_ROLE]),
-  ];
-  const requireAdmin = [
-    ...auth.mfaVerified,
-    auth.middleware.requireRoles([ADMIN_ROLE]),
-  ];
+  const { requires } = createPermissionPreHandlers(options.database);
+  // Instructors pass with their own-course role; the service then lists
+  // only the students of their courses.
+  const canReadStudents = requires("student.read", "platform");
+  const canUpdateContact = requires("student.contact.update");
 
   app.get(
     "/students",
     {
-      preHandler: requireInstructorOrAdmin,
+      preHandler: canReadStudents,
       schema: {
         operationId: "listStudents",
         tags: ["Students"],
@@ -58,7 +55,7 @@ const studentsRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/students/:username",
     {
-      preHandler: requireInstructorOrAdmin,
+      preHandler: canReadStudents,
       schema: {
         operationId: "getStudentByUsername",
         tags: ["Students"],
@@ -81,7 +78,7 @@ const studentsRoutes: RoutePlugin = async (app, options) => {
   app.patch(
     "/students/:username/contact",
     {
-      preHandler: requireAdmin,
+      preHandler: canUpdateContact,
       schema: {
         operationId: "updateStudentContact",
         tags: ["Students"],

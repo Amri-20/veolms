@@ -142,7 +142,7 @@ const paymentRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/manual-payments",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("payment.manual.verify"),
       schema: {
         operationId: "listManualPayments",
         tags: ["Commerce - Manual Payments"],
@@ -167,7 +167,7 @@ const paymentRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/manual-payments/:requestId/verify",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("payment.manual.verify"),
       schema: {
         operationId: "verifyManualPayment",
         tags: ["Commerce - Manual Payments"],

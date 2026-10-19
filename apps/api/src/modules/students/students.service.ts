@@ -11,11 +11,8 @@ import type { Database } from "@veolms/database";
 import type { Kysely } from "kysely";
 
 import { AppError } from "../../lib/errors.ts";
-import {
-  ADMIN_ROLE,
-  createAuthService,
-  type AuthService,
-} from "../auth/index.ts";
+import { createAuthService, type AuthService } from "../auth/index.ts";
+import { hasAcademyPermission } from "../authorization/index.ts";
 import * as studentsRepo from "./students.repository.ts";
 
 export interface StudentsServiceOptions {
@@ -27,15 +24,6 @@ export interface StudentsServiceOptions {
 export interface StudentsActor {
   id: string;
   roles: readonly string[];
-}
-
-/**
- * Admins see every student. Anyone else is limited to learners enrolled in
- * courses they created, and to those courses' enrollments and progress — the
- * returned id is that restriction; undefined means unrestricted.
- */
-function resolveCreatorScope(actor: StudentsActor): string | undefined {
-  return actor.roles.includes(ADMIN_ROLE) ? undefined : actor.id;
 }
 
 /**
@@ -131,6 +119,21 @@ export function createStudentsService({
   database,
   authService,
 }: StudentsServiceOptions) {
+  /**
+   * Whoever reads students through a role that reaches every course (admin,
+   * or a team role with student.read) sees every student. Anyone else, an
+   * instructor, is limited to learners enrolled in courses they created and
+   * to those courses' enrollments and progress: the returned id is that
+   * restriction; undefined means unrestricted.
+   */
+  async function resolveCreatorScope(
+    actor: StudentsActor,
+  ): Promise<string | undefined> {
+    return (await hasAcademyPermission(database, actor.id, "student.read"))
+      ? undefined
+      : actor.id;
+  }
+
   async function resolveStudentAvatars(
     users: readonly {
       id: string;
@@ -168,7 +171,7 @@ export function createStudentsService({
     actor: StudentsActor,
   ): Promise<StudentListResponse> {
     const limit = query.limit || 50;
-    const creatorId = resolveCreatorScope(actor);
+    const creatorId = await resolveCreatorScope(actor);
     // Phone numbers are admin-only, and so is finding a learner by one: an
     // instructor could otherwise test whether a number is a learner's.
     const searchPhone = !creatorId;
@@ -389,7 +392,7 @@ export function createStudentsService({
     username: string,
     actor: StudentsActor,
   ): Promise<StudentDetailResponse> {
-    const creatorId = resolveCreatorScope(actor);
+    const creatorId = await resolveCreatorScope(actor);
     // Out-of-scope accounts answer exactly like unknown usernames, so the
     // endpoint cannot be used to probe who exists or studies elsewhere.
     const user = await studentsRepo.findStudentByUsername(
@@ -534,7 +537,13 @@ export function createStudentsService({
     input: StudentContactUpdateRequest,
     actor: StudentsActor,
   ): Promise<StudentContactUpdateResponse> {
-    if (resolveCreatorScope(actor)) {
+    if (
+      !(await hasAcademyPermission(
+        database,
+        actor.id,
+        "student.contact.update",
+      ))
+    ) {
       throw new AppError(
         403,
         "FORBIDDEN",

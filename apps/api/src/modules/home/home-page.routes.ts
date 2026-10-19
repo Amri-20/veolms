@@ -11,8 +11,7 @@ import { z } from "zod";
 import { errorResponse } from "../../lib/errors.ts";
 import { jsonResponse } from "../../lib/responses.ts";
 import type { RoutePlugin } from "../../lib/route-plugin.ts";
-import { createAuthMiddleware } from "../../middlewares/auth.middleware.ts";
-import { ADMIN_ROLE, createSessionService } from "../auth/index.ts";
+import { createPermissionPreHandlers } from "../authorization/index.ts";
 import { createCourseService } from "../courses/course/course.service.ts";
 import {
   createAttachmentsRepository,
@@ -25,15 +24,7 @@ import { createHomePageController } from "./home-page.controller.ts";
 import { createHomePageService } from "./home-page.service.ts";
 
 const homePageRoutes: RoutePlugin = async (app, options) => {
-  const middleware = createAuthMiddleware(
-    createSessionService({ database: options.database }),
-  );
-  const requireAdmin = [
-    middleware.authenticate,
-    middleware.requireAuthenticated,
-    middleware.requireMfaVerified,
-    middleware.requireRoles([ADMIN_ROLE]),
-  ];
+  const { requires } = createPermissionPreHandlers(options.database);
 
   const service = createHomePageService({
     database: options.database,
@@ -79,7 +70,7 @@ const homePageRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/home/page-settings",
     {
-      preHandler: requireAdmin,
+      preHandler: requires("platform.homepage.update"),
       schema: {
         operationId: "getHomePageSettings",
         tags: ["Home"],
@@ -100,7 +91,7 @@ const homePageRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/home/page-settings/options",
     {
-      preHandler: requireAdmin,
+      preHandler: requires("platform.homepage.update"),
       schema: {
         operationId: "getHomePageSettingsOptions",
         tags: ["Home"],
@@ -123,7 +114,7 @@ const homePageRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/home/page-settings/options/courses/:courseId/lessons",
     {
-      preHandler: requireAdmin,
+      preHandler: requires("platform.homepage.update"),
       schema: {
         operationId: "getHomePageLessonVideoOptions",
         tags: ["Home"],
@@ -188,7 +179,7 @@ const homePageRoutes: RoutePlugin = async (app, options) => {
   app.put(
     "/home/page-settings",
     {
-      preHandler: requireAdmin,
+      preHandler: requires("platform.homepage.update"),
       schema: {
         operationId: "updateHomePageSettings",
         tags: ["Home"],

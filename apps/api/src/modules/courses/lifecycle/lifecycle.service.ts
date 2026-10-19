@@ -1,3 +1,4 @@
+import type { Permission } from "@veolms/contracts";
 import type { Kysely } from "kysely";
 import type { Database } from "@veolms/database";
 import type {
@@ -50,9 +51,16 @@ export function createLifecycleService({
   function getCourseAndVerifyOwner(
     courseId: string,
     creatorId: string,
-    userRoles?: readonly string[],
+    userRoles: readonly string[] | undefined,
+    permission: Permission,
   ) {
-    return verifyCourseOwner(database, courseId, creatorId, userRoles);
+    return verifyCourseOwner(
+      database,
+      courseId,
+      creatorId,
+      userRoles,
+      permission,
+    );
   }
 
   async function validateCourseObject(
@@ -229,6 +237,7 @@ export function createLifecycleService({
       courseId,
       creatorId,
       userRoles,
+      "course.read",
     );
     return await validateCourseObject(course, creatorId, userRoles);
   }
@@ -242,6 +251,7 @@ export function createLifecycleService({
       courseId,
       creatorId,
       userRoles,
+      "course.publish",
     );
 
     const validation = await validateCourseObject(course, creatorId, userRoles);
@@ -299,6 +309,7 @@ export function createLifecycleService({
       courseId,
       creatorId,
       userRoles,
+      "course.unpublish",
     );
 
     const now = new Date();

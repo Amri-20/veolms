@@ -8,7 +8,7 @@ import {
   getMatchedRouteDescriptor,
   normalizeNavigationPath,
 } from "./routeDescriptors";
-import { CREATOR_ROLES, normalizeRoles } from "../shell/workspaceRole";
+import { hasTeamRole } from "../shell/workspaceRole";
 import { isCourseEditorPath } from "../courses/courseEditorRouting";
 
 export const APP_HOME_PATH = "/";
@@ -46,6 +46,8 @@ const RESERVED_PROFILE_PATHS = new Set([
   "/coupons",
   "/home-page",
   "/platform",
+  "/team",
+  "/invite",
   "/logout",
   LOGIN_PATH,
   "/register",
@@ -101,7 +103,9 @@ export function isCourseAuthorPath(pathname: string): boolean {
 export function hasCourseAuthorRole(
   roles: readonly string[] | null | undefined,
 ): boolean {
-  return normalizeRoles(roles).some((role) => CREATOR_ROLES.has(role));
+  // Any team role may reach the staff pages; each page then checks the
+  // permission it needs and shows "access denied" without it.
+  return hasTeamRole(roles);
 }
 
 export function shouldRedirectFromCourseAuthorPath(
@@ -116,7 +120,11 @@ export function shouldRedirectFromCourseAuthorPath(
 
 export function resolveCourseAuthorRouteFallback(pathname: string): string {
   const path = normalizeAppPath(pathname);
-  return path === "/dashboard" || path === "/" ? "/courses" : "/";
+  // A course editor refused (no course.create, say) returns to the
+  // courses rather than to a home that may be refused in turn.
+  return path === "/dashboard" || path === "/" || isCourseEditorPath(path)
+    ? "/courses"
+    : "/";
 }
 
 export function isCoursesPublicPath(pathname: string): boolean {
@@ -154,9 +162,15 @@ export function isLearningPath(pathname: string): boolean {
   return /^\/courses\/[^/]+(?:\/[^/]+)?$/.test(path);
 }
 
+/** A team invitation link: open signed out, so the invitee can sign in. */
+export function isInvitePath(pathname: string): boolean {
+  return /^\/invite\/[^/]+$/.test(normalizeAppPath(pathname));
+}
+
 export function isPublicAcademyPath(pathname: string): boolean {
   return (
     normalizeAppPath(pathname) === "/home" ||
+    isInvitePath(pathname) ||
     isSettingsPath(pathname) ||
     isCoursesPublicPath(pathname) ||
     isPublicProfilePath(pathname) ||
@@ -178,6 +192,7 @@ const LOGIN_PROMPT_PATH_ROOTS = [
   "/coupons",
   "/home-page",
   "/platform",
+  "/team",
 ] as const;
 
 /**

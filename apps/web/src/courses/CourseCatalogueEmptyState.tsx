@@ -9,6 +9,7 @@ import { SignInIcon as SignIn } from "@phosphor-icons/react/SignIn";
 import { TrashIcon as Trash } from "@phosphor-icons/react/Trash";
 import type { ComponentType } from "react";
 import type { NavigateTo } from "../routing/navigation";
+import { useCapabilities } from "../services/authorization/authorization.queries";
 import type { CourseEnrollmentFilter } from "./catalogue";
 
 type EmptyStateIcon = ComponentType<{
@@ -68,6 +69,15 @@ export function CourseCatalogueEmptyState({
   onEnrollmentFilterChange: (filter: CourseEnrollmentFilter) => void;
   onNavigatePage: NavigateTo;
 }) {
+  const canCreateCourse = useCapabilities({
+    enabled: role === "creator",
+  }).can("course.create");
+  const createCourse = canCreateCourse
+    ? {
+        label: "Create a course",
+        onClick: () => onNavigatePage("Create Course"),
+      }
+    : undefined;
   const copy = getEmptyStateCopy();
   const { Icon } = copy;
 
@@ -181,10 +191,7 @@ export function CourseCatalogueEmptyState({
           Icon: NotePencil,
           title: "No drafts in progress",
           body: "Courses you are still working on stay here until you publish them.",
-          action: {
-            label: "Create a course",
-            onClick: () => onNavigatePage("Create Course"),
-          },
+          action: createCourse,
         };
       }
       if (enrollmentFilter === "bin") {
@@ -198,10 +205,7 @@ export function CourseCatalogueEmptyState({
         Icon: BookOpenText,
         title: "Your first course starts here",
         body: "You haven't created any courses yet. Create one and it will appear here.",
-        action: {
-          label: "Create a course",
-          onClick: () => onNavigatePage("Create Course"),
-        },
+        action: createCourse,
       };
     }
 

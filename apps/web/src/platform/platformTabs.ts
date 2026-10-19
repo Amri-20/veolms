@@ -20,3 +20,12 @@ export const PLATFORM_TAB_DEFINITIONS: readonly PageTabDefinition<PlatformTab>[]
     },
     { id: "invoice", label: "Invoice", Icon: Receipt, tone: "green" },
   ];
+
+/** What changing each section takes; a section shows only to its holders. */
+export const PLATFORM_TAB_PERMISSIONS: Readonly<Record<PlatformTab, string>> = {
+  home: "platform.homepage.update",
+  appearance: "platform.settings.update",
+  security: "platform.settings.update",
+  general: "platform.branding.update",
+  invoice: "platform.settings.update",
+};

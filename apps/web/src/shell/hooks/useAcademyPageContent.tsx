@@ -31,6 +31,7 @@ import { LearnerHomeContent } from "../LearnerHomeContent";
 import { COURSE_OVERVIEW_CHUNK_URL_PLACEHOLDER } from "../../routing/routeChunkPreloads";
 import { ChunkStylesheets } from "../../routing/ChunkStylesheets";
 import { isStaffRole, getWorkspaceRoleStorageKey } from "../workspaceRole";
+import { useAcademyRouteGuardState } from "../../routing/RouteGuards";
 import { SIDEBAR_DEFAULT_WIDTH } from "../sidebarPreferences";
 import type { ThemeRevealOrigin } from "../themeViewTransition";
 import type {
@@ -65,6 +66,8 @@ import {
   ProgressPage,
   PublicProfilePageRoute,
   PlatformPage,
+  TeamPage,
+  InvitePage,
   CouponBuilderPage,
   CouponsAccessDenied,
 } from "../academyLazyPages";
@@ -306,6 +309,18 @@ export function useAcademyPageContent({
   changePalette,
   resetSidebarWidth,
 }: UseAcademyPageContentArgs): UseAcademyPageContentResult {
+  // What the account may do, for pages that used to ask "is admin".
+  const { permissions } = useAcademyRouteGuardState();
+  const holds = (...keys: string[]) =>
+    isAdmin || keys.some((key) => permissions?.includes(key) ?? false);
+  const canManagePlatform = holds(
+    "platform.settings.read",
+    "platform.settings.update",
+    "platform.branding.update",
+    "platform.homepage.update",
+  );
+  // The academy-wide analytics view, rather than "all my courses".
+  const seesAcademyAnalytics = holds("analytics.revenue.read");
   const renderPageContent = ({
     surfaceCourseSlug = courseSlug,
     surfaceDiscussionTab = discussionTab,
@@ -638,10 +653,26 @@ export function useAcademyPageContent({
         <Suspense fallback={<AcademyPageFallback />}>
           <PlatformPage
             tab={surfacePlatformTab}
-            canManage={Boolean(activeUser) && isAdmin}
+            canManage={Boolean(activeUser) && canManagePlatform}
             onNavigatePage={onNavigatePage}
             setNotice={setNotice}
           />
+        </Suspense>
+      );
+    }
+    if (surfacePage === "team") {
+      if (!isAuthReady) return <AcademyPageFallback />;
+      return (
+        <Suspense fallback={<AcademyPageFallback />}>
+          <TeamPage onNavigatePage={onNavigatePage} setNotice={setNotice} />
+        </Suspense>
+      );
+    }
+    if (surfacePage === "invite") {
+      if (!isAuthReady) return <AcademyPageFallback />;
+      return (
+        <Suspense fallback={<AcademyPageFallback />}>
+          <InvitePage onNavigatePage={onNavigatePage} />
         </Suspense>
       );
     }
@@ -772,7 +803,7 @@ export function useAcademyPageContent({
         return isAuthReady && !creatorViewExpected ? null : (
           <AcademyRouteSkeleton
             page="analytics"
-            isAdmin={isAdmin}
+            isAdmin={seesAcademyAnalytics}
             analyticsTab={surfaceAnalyticsTab}
           />
         );
@@ -782,14 +813,14 @@ export function useAcademyPageContent({
           fallback={
             <AcademyRouteSkeleton
               page="analytics"
-              isAdmin={isAdmin}
+              isAdmin={seesAcademyAnalytics}
               analyticsTab={surfaceAnalyticsTab}
             />
           }
         >
           <AnalyticsDashboardPage
             role={role}
-            isAdmin={isAdmin}
+            isAdmin={seesAcademyAnalytics}
             tab={surfaceAnalyticsTab}
             onNavigatePage={onNavigatePage}
           />

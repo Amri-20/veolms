@@ -18,6 +18,7 @@ import {
 } from "../../students/index.ts";
 import type { CourseService } from "../../courses/index.ts";
 import { ADMIN_ROLE } from "../../auth/index.ts";
+import { hasAcademyPermission } from "../../authorization/index.ts";
 import { createAccessService, type AccessService } from "../../access/index.ts";
 import {
   createLessonProgressResetService,
@@ -87,8 +88,15 @@ export function createEnrollmentService({
     limit: number,
     actor: { id: string; roles: readonly string[] },
   ): Promise<AcademyEnrollmentListItem[]> {
-    // Admins see the whole academy; other staff see only their own courses.
-    const creatorId = actor.roles.includes(ADMIN_ROLE) ? undefined : actor.id;
+    // Enrolment access through a role that reaches every course sees the
+    // whole academy; an instructor sees only their own courses.
+    const creatorId = (await hasAcademyPermission(
+      database,
+      actor.id,
+      "enrollment.read",
+    ))
+      ? undefined
+      : actor.id;
     const rows = await enrollmentRepo.listAcademyEnrollments(
       database,
       limit,

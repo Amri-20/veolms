@@ -24,7 +24,7 @@ const accessRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/access/grants",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("student.access.manage"),
       schema: {
         operationId: "grantManualAccess",
         tags: ["Access Grants"],
@@ -47,7 +47,7 @@ const accessRoutes: RoutePlugin = async (app, options) => {
   app.delete(
     "/access/grants/:grantId",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("student.access.manage"),
       schema: {
         operationId: "revokeAccessGrant",
         tags: ["Access Grants"],
@@ -73,7 +73,7 @@ const accessRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/access/users/:userId/grants",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("student.access.manage"),
       schema: {
         operationId: "listUserAccessGrants",
         tags: ["Access Grants"],
@@ -96,7 +96,7 @@ const accessRoutes: RoutePlugin = async (app, options) => {
   app.delete(
     "/access/users/:userId/courses/:courseId",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("student.access.manage"),
       schema: {
         operationId: "revokeCourseAccess",
         tags: ["Access Grants"],
@@ -119,7 +119,7 @@ const accessRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/access/users/:userId/courses/:courseId/restore",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("student.access.manage"),
       schema: {
         operationId: "restoreCourseAccess",
         tags: ["Access Grants"],

@@ -12,11 +12,12 @@ import * as repo from "../shared/quiz.repository.ts";
 import { presentAssignment } from "../shared/quiz.presenters.ts";
 import {
   assertNoLearnerAttempts,
-  isAdmin,
+  reachesEveryQuiz,
   requireAcademyId,
   type QuizActor,
   type QuizServiceOptions,
 } from "../shared/quiz.types.ts";
+import type { Permission } from "@veolms/contracts";
 
 type QuizRow = NonNullable<Awaited<ReturnType<typeof repo.findQuiz>>>;
 
@@ -77,13 +78,20 @@ function isJsonObject(value: unknown): value is Record<string, Json> {
 export function createAuthoringService(options: QuizServiceOptions) {
   const { database } = options;
 
-  async function requireQuiz(quizId: string, actor: QuizActor) {
+  async function requireQuiz(
+    quizId: string,
+    actor: QuizActor,
+    permission: Permission,
+  ) {
     const quiz = await repo.findQuiz(database, quizId);
     if (!quiz) throw new AppError(404, "QUIZ_NOT_FOUND", "Quiz not found.");
     const currentAcademyId = await requireAcademyId(options);
     if (quiz.academy_id !== currentAcademyId)
       throw new AppError(404, "QUIZ_NOT_FOUND", "Quiz not found.");
-    if (quiz.creator_id !== actor.id && !isAdmin(actor))
+    if (
+      quiz.creator_id !== actor.id &&
+      !(await reachesEveryQuiz(database, actor, permission))
+    )
       throw new AppError(403, "FORBIDDEN", "You do not own this Quiz.");
     return quiz;
   }
@@ -187,7 +195,7 @@ export function createAuthoringService(options: QuizServiceOptions) {
   async function listMine(actor: QuizActor) {
     const rows = await repo.listQuizSummaries(
       database,
-      isAdmin(actor)
+      (await reachesEveryQuiz(database, actor, "quiz.read"))
         ? { academyId: await requireAcademyId(options) }
         : { creatorId: actor.id },
     );
@@ -263,7 +271,7 @@ export function createAuthoringService(options: QuizServiceOptions) {
   }
 
   async function getQuiz(actor: QuizActor, quizId: string) {
-    return presentQuiz(await requireQuiz(quizId, actor));
+    return presentQuiz(await requireQuiz(quizId, actor, "quiz.read"));
   }
 
   async function getEditableVersion(trx: DatabaseExecutor, quizId: string) {
@@ -398,7 +406,7 @@ export function createAuthoringService(options: QuizServiceOptions) {
     quizId: string,
     payload: UpdateQuizRequest,
   ) {
-    await requireQuiz(quizId, actor);
+    await requireQuiz(quizId, actor, "quiz.settings.update");
     await database.transaction().execute(async (trx) => {
       if (payload.title !== undefined || payload.description !== undefined)
         await repo.updateQuiz(trx, quizId, {
@@ -420,7 +428,7 @@ export function createAuthoringService(options: QuizServiceOptions) {
     quizId: string,
     payload: CreateQuizQuestionRequest,
   ) {
-    await requireQuiz(quizId, actor);
+    await requireQuiz(quizId, actor, "quiz.questions.manage");
     validateQuestionPayload(payload);
     const questionId = crypto.randomUUID();
     await database.transaction().execute(async (trx) => {
@@ -462,7 +470,7 @@ export function createAuthoringService(options: QuizServiceOptions) {
     questionId: string,
     payload: UpdateQuizQuestionRequest,
   ) {
-    await requireQuiz(quizId, actor);
+    await requireQuiz(quizId, actor, "quiz.questions.manage");
     await database.transaction().execute(async (trx) => {
       const editable = await getEditableQuestion(trx, quizId, questionId);
       const currentOptions = await repo.listOptions(trx, [
@@ -527,7 +535,7 @@ export function createAuthoringService(options: QuizServiceOptions) {
     quizId: string,
     questionId: string,
   ) {
-    await requireQuiz(quizId, actor);
+    await requireQuiz(quizId, actor, "quiz.questions.manage");
     await database.transaction().execute(async (trx) => {
       const editable = await getEditableQuestion(trx, quizId, questionId);
       await repo.softDeleteQuestion(trx, editable.question.id);
@@ -536,7 +544,7 @@ export function createAuthoringService(options: QuizServiceOptions) {
   }
 
   async function publish(actor: QuizActor, quizId: string) {
-    await requireQuiz(quizId, actor);
+    await requireQuiz(quizId, actor, "quiz.publish");
     const version = await repo.findLatestVersion(database, quizId, false);
     if (!version)
       throw new AppError(
@@ -582,7 +590,7 @@ export function createAuthoringService(options: QuizServiceOptions) {
   }
 
   async function deleteQuiz(actor: QuizActor, quizId: string) {
-    await requireQuiz(quizId, actor);
+    await requireQuiz(quizId, actor, "quiz.delete");
     await database.transaction().execute(async (trx) => {
       const assignments = await repo.listAssignmentRefsForQuizzes(trx, [
         quizId,

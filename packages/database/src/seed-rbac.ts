@@ -101,6 +101,11 @@ export const STANDARD_FEATURES = [
     description: "Advanced reporting and analytics",
     enabled: true,
   },
+  {
+    feature_key: "team_custom_roles",
+    description: "Custom team roles built from permissions",
+    enabled: true,
+  },
 ] as const;
 
 export const ROLE_CAPABILITY_MAPPINGS: Record<
@@ -176,9 +181,16 @@ export const ROLE_CAPABILITY_MAPPINGS: Record<
     "lesson.read",
     "lesson.thumbnail.update",
   ],
+  // Course routes check these platform-wide; the course services still
+  // limit an instructor to the courses they own.
   instructor: [
     "course.read",
     "course.preview",
+    "course.create",
+    "course.publish",
+    "course.unpublish",
+    "course.archive",
+    "course.delete",
     "course.details.update",
     "course.thumbnail.update",
     "course.pricing.update",
@@ -190,11 +202,13 @@ export const ROLE_CAPABILITY_MAPPINGS: Record<
     "lesson.video.update",
     "lesson.thumbnail.update",
     "lesson.reorder",
+    "lesson.delete",
     "quiz.read",
     "quiz.create",
     "quiz.settings.update",
     "quiz.questions.manage",
     "quiz.publish",
+    "quiz.delete",
     "assignment.read",
     "assignment.create",
     "assignment.update",
@@ -205,6 +219,11 @@ export const ROLE_CAPABILITY_MAPPINGS: Record<
     "discussion.moderate",
     "analytics.course.read",
     "certificate.issue",
+    // Scoped to their own courses by the services.
+    "student.read",
+    "coupon.read",
+    "coupon.manage",
+    "enrollment.read",
   ],
   teaching_assistant: [
     "course.read",
@@ -666,9 +685,10 @@ export async function seedRolesAndPermissions(
       .insertInto("features")
       .values(feature)
       .onConflict((conflict) =>
+        // `enabled` is the default for a new academy only: re-running the
+        // seed must not undo a feature an admin switched on or off.
         conflict.column("feature_key").doUpdateSet({
           description: feature.description,
-          enabled: feature.enabled,
         }),
       )
       .execute();
@@ -706,6 +726,7 @@ export async function seedRolesAndPermissions(
     .execute();
 
   for (const role of Object.values(SYSTEM_ROLES)) {
+    const ownCoursesOnly = role.id === SYSTEM_ROLES.instructor.id;
     await database
       .insertInto("roles")
       .values({
@@ -713,12 +734,14 @@ export async function seedRolesAndPermissions(
         name: role.name,
         description: role.description,
         is_system: true,
+        own_courses_only: ownCoursesOnly,
       })
       .onConflict((conflict) =>
         conflict.column("id").doUpdateSet({
           name: role.name,
           description: role.description,
           is_system: true,
+          own_courses_only: ownCoursesOnly,
           updated_at: new Date(),
         }),
       )

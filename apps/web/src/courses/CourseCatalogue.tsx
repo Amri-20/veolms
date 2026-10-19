@@ -38,6 +38,7 @@ import type {
 } from "./catalogue";
 import { courseSurfaceElevation } from "../components/cardElevation";
 import { useCurrentUser } from "../services/auth";
+import { useCapabilities } from "../services/authorization/authorization.queries";
 import { hasAdminRole } from "../shell/workspaceRole";
 import { courseMatchesWishlist, getCourseRouteKey } from "./catalogue";
 
@@ -95,7 +96,6 @@ export interface CourseCatalogueProps {
   onNavigatePage: (destination: string) => void;
   onResetCatalogue: () => void;
   isAdmin?: boolean;
-  currentUserId?: string;
   /** The session has been checked and nobody is signed in. */
   signedOut?: boolean;
   isLoading?: boolean;
@@ -111,7 +111,6 @@ export function CourseCatalogue({
   activeSection,
   role,
   isAdmin = false,
-  currentUserId,
   signedOut = false,
   isLoading = false,
   hasLoadError = false,
@@ -141,6 +140,9 @@ export function CourseCatalogue({
   onRestoreCourse,
   deletingCourseIds,
 }: CourseCatalogueProps) {
+  const canCreateCourse = useCapabilities({
+    enabled: role === "creator",
+  }).can("course.create");
   const [pendingDelete, setPendingDelete] = useState<Course | null>(null);
   const [pendingUnenroll, setPendingUnenroll] = useState<Course | null>(null);
   // An admin in Student view can leave any course they enrolled in, and
@@ -273,7 +275,6 @@ export function CourseCatalogue({
       course={course}
       role={role}
       isAdmin={isAdmin}
-      currentUserId={currentUserId}
       wishlisted={courseMatchesWishlist(course, wishlisted)}
       onWishlist={onWishlist}
       onOpen={(selected) =>
@@ -368,20 +369,22 @@ export function CourseCatalogue({
             </p>
           </div>
 
-          {role === "creator" && activeSection === "Courses" && (
-            <div className="order-3 flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                aria-label="Create"
-                className="flex h-11 shrink-0 items-center gap-2 rounded-(--control-radius-action) border border-[color-mix(in_srgb,var(--accent)_70%,transparent)] bg-(--accent) px-4 text-[14px]! font-[650]! text-(--on-accent) shadow-[0_8px_22px_color-mix(in_srgb,var(--accent-shadow)_62%,transparent)] transition-colors hover:bg-(--accent-hover) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
-                data-control-radius-action
-                onClick={() => onNavigatePage("Create Course")}
-              >
-                <Plus size={18} weight="bold" />
-                <span>Create</span>
-              </button>
-            </div>
-          )}
+          {role === "creator" &&
+            activeSection === "Courses" &&
+            canCreateCourse && (
+              <div className="order-3 flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="Create"
+                  className="flex h-11 shrink-0 items-center gap-2 rounded-(--control-radius-action) border border-[color-mix(in_srgb,var(--accent)_70%,transparent)] bg-(--accent) px-4 text-[14px]! font-[650]! text-(--on-accent) shadow-[0_8px_22px_color-mix(in_srgb,var(--accent-shadow)_62%,transparent)] transition-colors hover:bg-(--accent-hover) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
+                  data-control-radius-action
+                  onClick={() => onNavigatePage("Create Course")}
+                >
+                  <Plus size={18} weight="bold" />
+                  <span>Create</span>
+                </button>
+              </div>
+            )}
         </ExpandableSearch>
       </header>
 

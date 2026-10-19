@@ -1,3 +1,4 @@
+import type { Permission } from "@veolms/contracts";
 import crypto from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import type { Kysely } from "kysely";
@@ -22,6 +23,7 @@ import {
   slugify,
   assertOptimisticUpdate,
   canManageCourse,
+  mayManageCourse,
   getCourseAndVerifyOwner as verifyCourseOwner,
 } from "../shared/courses.utils.ts";
 import {
@@ -29,6 +31,7 @@ import {
   createAuthService,
   type AuthService,
 } from "../../auth/index.ts";
+import { hasAcademyPermission } from "../../authorization/index.ts";
 import * as courseRepo from "./course.repository.ts";
 import {
   createCategoryService,
@@ -406,12 +409,46 @@ export function createCourseService({
     );
   }
 
+  /**
+   * The viewer, with whether they may preview every course: drafts and
+   * lessons open to reviewers and editors as they do to the creator.
+   */
+  async function withPreviewReach<Viewer extends OverviewViewer>(
+    user: Viewer | undefined,
+  ): Promise<(Viewer & { previewsEveryCourse: boolean }) | undefined> {
+    if (!user) return undefined;
+    return {
+      ...user,
+      previewsEveryCourse: await hasAcademyPermission(
+        database,
+        user.id,
+        "course.preview",
+      ),
+    };
+  }
+
+  /** Admin, or course.read through a role that reaches every course. */
+  async function seesEveryCourse(
+    userId: string,
+    userRoles?: readonly string[],
+  ): Promise<boolean> {
+    if (userRoles?.includes(ADMIN_ROLE)) return true;
+    return await hasAcademyPermission(database, userId, "course.read");
+  }
+
   function getCourseAndVerifyOwner(
     courseId: string,
     creatorId: string,
-    userRoles?: readonly string[],
+    userRoles: readonly string[] | undefined,
+    permission: Permission,
   ) {
-    return verifyCourseOwner(database, courseId, creatorId, userRoles);
+    return verifyCourseOwner(
+      database,
+      courseId,
+      creatorId,
+      userRoles,
+      permission,
+    );
   }
 
   /**
@@ -722,9 +759,10 @@ export function createCourseService({
     creatorId: string,
     userRoles?: readonly string[],
   ) {
-    // Admins manage every course; everyone else (instructors included) sees
-    // only the courses they created.
-    const isAdmin = userRoles?.includes(ADMIN_ROLE) ?? false;
+    // Admins, and team roles that see every course (a course manager, a
+    // content editor), list every course; an instructor lists only the
+    // courses they created.
+    const isAdmin = await seesEveryCourse(creatorId, userRoles);
     const rows = await courseRepo.listManagedCourses(
       database,
       isAdmin ? undefined : creatorId,
@@ -789,7 +827,7 @@ export function createCourseService({
     creatorId: string,
     userRoles?: readonly string[],
   ) {
-    const rows = userRoles?.includes(ADMIN_ROLE)
+    const rows = (await seesEveryCourse(creatorId, userRoles))
       ? await courseRepo.listAllCourseScope(database)
       : await courseRepo.listAvailableCourseScopeByCreator(database, creatorId);
 
@@ -813,10 +851,16 @@ export function createCourseService({
   async function listMyCourseSummaries(
     creatorId: string,
     userRoles?: readonly string[],
+    /** Every course in the academy, for a caller cleared for it. */
+    options?: { everyCourse?: boolean },
   ) {
-    const rows = userRoles?.includes(ADMIN_ROLE)
-      ? await courseRepo.listAllCourseScope(database)
-      : await courseRepo.listAvailableCourseScopeByCreator(database, creatorId);
+    const rows =
+      options?.everyCourse || (await seesEveryCourse(creatorId, userRoles))
+        ? await courseRepo.listAllCourseScope(database)
+        : await courseRepo.listAvailableCourseScopeByCreator(
+            database,
+            creatorId,
+          );
 
     return {
       courses: rows.map((course) => ({
@@ -844,6 +888,7 @@ export function createCourseService({
       courseId,
       creatorId,
       userRoles,
+      "course.details.update",
     );
 
     if (course.version !== version) {
@@ -993,7 +1038,15 @@ export function createCourseService({
     if (!course) {
       throw new AppError(404, "COURSE_NOT_FOUND", "Course not found.");
     }
-    if (!canManageCourse(course, creatorId, userRoles)) {
+    if (
+      !(await mayManageCourse(
+        database,
+        course,
+        creatorId,
+        userRoles,
+        "course.read",
+      ))
+    ) {
       throw new AppError(403, "FORBIDDEN", "Unauthorized course access.");
     }
 
@@ -1086,7 +1139,8 @@ export function createCourseService({
       throw new AppError(404, "COURSE_NOT_FOUND", "Course not found.");
     }
 
-    const visibility = resolveOverviewVisibility(course, user);
+    const viewer = await withPreviewReach(user);
+    const visibility = resolveOverviewVisibility(course, viewer);
     // An archived course is still shown to a learner who holds access to
     // it, as a learner sees any course; to everyone else it stays unfound.
     if (
@@ -1171,7 +1225,7 @@ export function createCourseService({
     // the rule its video is played by. The lesson page asks for it on its
     // own and is told to sign in or to get the course.
     const lessonContentAccess = createLessonContentAccess({
-      viewer: user,
+      viewer,
       course,
       pricingType: pricing?.pricing_type,
       accessType: accessRule?.access_type,
@@ -1293,8 +1347,9 @@ export function createCourseService({
     user?: OverviewViewer,
   ): Promise<LessonDescriptionResponse> {
     const course = await courseRepo.findCourseById(database, courseId);
+    const viewer = await withPreviewReach(user);
     const visibility = course
-      ? resolveOverviewVisibility(course, user)
+      ? resolveOverviewVisibility(course, viewer)
       : undefined;
     if (
       !course ||
@@ -1323,7 +1378,7 @@ export function createCourseService({
       configurationService.findPricingByCourseId(course.id),
     ]);
     const lessonContentAccess = createLessonContentAccess({
-      viewer: user,
+      viewer,
       course,
       pricingType: pricing?.pricing_type,
       accessType: accessRule?.access_type,
@@ -1498,6 +1553,7 @@ export function createCourseService({
       courseId,
       creatorId,
       userRoles,
+      "course.thumbnail.update",
     );
     assertDirectUpdateVersion(course, payload.version);
 
@@ -1558,6 +1614,7 @@ export function createCourseService({
       courseId,
       creatorId,
       userRoles,
+      "course.details.update",
     );
     assertDirectUpdateVersion(course, payload.version);
     await assertCategoryExists(payload.categoryId);
@@ -1590,7 +1647,12 @@ export function createCourseService({
     creatorId: string,
     userRoles: readonly string[] | undefined,
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "course.archive",
+    );
 
     await courseRepo.updateCourseDirect(database, courseId, {
       status: "archived",

@@ -23,6 +23,7 @@ import {
 } from "./home/creator/dashboardFormat";
 import { useDashboard } from "./services/analytics";
 import { useAuthStore } from "./store/auth.store";
+import { useCapabilities } from "./services/authorization/authorization.queries";
 import { rememberDashboardTitle } from "./store/homeHint";
 import "./styles/features/creator-dashboard.css";
 import "./styles/features/dashboard-discussion-preview.css";
@@ -37,6 +38,7 @@ export const CreatorDashboard = memo(function CreatorDashboard({
   academyTheme = "default",
   resolvedTheme = "dark",
 }: CreatorDashboardProps) {
+  const canCreateCourse = useCapabilities().can("course.create");
   const [range, setRange] = useState<DashboardRange>("30d");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshInFlightRef = useRef(false);
@@ -192,19 +194,21 @@ export const CreatorDashboard = memo(function CreatorDashboard({
             />
             Refresh
           </button>
-          <button
-            type="button"
-            className="creator-primary-action"
-            onClick={() => onNavigatePage?.("Create Course")}
-          >
-            <Plus size={18} />
-            <span className="creator-action-label creator-action-label--full">
-              Create Course
-            </span>
-            <span className="creator-action-label creator-action-label--compact">
-              Course
-            </span>
-          </button>
+          {canCreateCourse && (
+            <button
+              type="button"
+              className="creator-primary-action"
+              onClick={() => onNavigatePage?.("Create Course")}
+            >
+              <Plus size={18} />
+              <span className="creator-action-label creator-action-label--full">
+                Create Course
+              </span>
+              <span className="creator-action-label creator-action-label--compact">
+                Course
+              </span>
+            </button>
+          )}
           <button
             type="button"
             className="creator-outline-action"

@@ -40,6 +40,7 @@ export function viewerIsCourseStaff(
   if (!viewer) return false;
   return (
     viewer.id === course.creator_id ||
+    Boolean(viewer.previewsEveryCourse) ||
     Boolean(viewer.roles?.some((role) => role.toLowerCase() === ADMIN_ROLE))
   );
 }

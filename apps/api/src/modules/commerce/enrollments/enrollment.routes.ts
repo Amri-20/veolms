@@ -27,7 +27,7 @@ const enrollmentRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/enrollments",
     {
-      preHandler: ctx.requireStaff,
+      preHandler: ctx.requires("enrollment.read", "platform"),
       schema: {
         operationId: "listAcademyEnrollments",
         tags: ["Commerce - Enrollments"],

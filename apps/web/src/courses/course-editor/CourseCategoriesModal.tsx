@@ -6,6 +6,7 @@ import { TrashIcon as Trash } from "@phosphor-icons/react/Trash";
 import { XIcon as X } from "@phosphor-icons/react/X";
 import type { UseMutationResult } from "@tanstack/react-query";
 import type { ApiError } from "../../lib/api-error";
+import { useCapabilities } from "../../services/authorization/authorization.queries";
 
 export interface CourseCategoriesModalProps {
   handleCloseAddCategoryModal: () => void;
@@ -46,6 +47,11 @@ export function CourseCategoriesModal({
   setCategoryToDelete,
   deleteCategoryMutation,
 }: CourseCategoriesModalProps) {
+  // Removing a category affects every course; it takes category.manage.
+  const managesCategories = useCapabilities().canOnCourse(
+    "category.manage",
+    null,
+  );
   // prettier-ignore
   return (
     <div
@@ -185,7 +191,7 @@ export function CourseCategoriesModal({
                       {cat.slug}
                     </span>
                   </div>
-                  <button
+                  {managesCategories && <button
                     type="button"
                     onClick={() =>
                       setCategoryToDelete({ id: cat.id, name: cat.name })
@@ -196,7 +202,7 @@ export function CourseCategoriesModal({
                     className="inline-flex w-7 h-7 items-center justify-center rounded-[6px] text-(--muted) hover:text-red-500 hover:bg-red-500/10 border-none bg-transparent cursor-pointer transition-colors duration-150 p-0 shrink-0"
                   >
                     <Trash size={14} />
-                  </button>
+                  </button>}
                 </div>
               ))
             )}

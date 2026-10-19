@@ -6,7 +6,6 @@ import type {
   OrderDirectRefundRequest,
   NeedsRefundListQuery,
 } from "@veolms/contracts";
-import { ADMIN_ROLE } from "../../auth/index.ts";
 import { httpError } from "../../../lib/errors.ts";
 import type { OrderService } from "./order.service.ts";
 import type { NeedsRefundService } from "./needs-refund.service.ts";
@@ -39,15 +38,9 @@ export function createOrderController({
   }
 
   /**
-   * Allows the request when RBAC grants `permission`, or when the user holds
-   * the legacy ADMIN_ROLE.
-   *
-   * ADMIN_ROLE is a superuser bypass: it passes even if an RBAC policy
-   * explicitly denies the permission (`AuthorizationDecision` doesn't tell an
-   * explicit deny from a missing grant). That matches the `requireAdmin`
-   * routes, which check the role alone. Honouring a deny only here would be
-   * sidestepped through those routes, so tightening it has to be done
-   * platform-wide rather than in this controller.
+   * Allows the request when a role reaching every course grants
+   * `permission`: the academy's orders are not any one course's. Admin holds
+   * every billing permission, so it needs no bypass.
    */
   async function requireBillingPermission(
     request: FastifyRequest,
@@ -59,10 +52,10 @@ export function createOrderController({
     const decision = await authorizationService.check({
       userId: user.id,
       permission,
+      platformWide: true,
     });
-    const hasAdminRole = user.roles?.includes(ADMIN_ROLE) ?? false;
 
-    if (!decision.allowed && !hasAdminRole) {
+    if (!decision.allowed) {
       throw httpError(
         403,
         "PERMISSION_DENIED",

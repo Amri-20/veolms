@@ -88,6 +88,7 @@ import {
 } from "./discussion-editor/types";
 import { SurfaceTopRightAccentGlow } from "./SurfaceTopRightAccentGlow";
 import { ThreadReplyComposer } from "./ThreadReplyComposer";
+import { useCapabilities } from "../services/authorization/authorization.queries";
 import type { LessonParticipationState } from "./Discussion";
 import { TimeAgo } from "../components/TimeAgo";
 import { cheerLike } from "../components/likeFeedback";
@@ -877,7 +878,12 @@ function ThreadSlide({
 }: ThreadSlideProps) {
   const isQuestion =
     entry.entryKind === "question" || Boolean(entry.isQuestion);
-  const isModerator = userRole === "Instructor" || userRole === "Admin";
+  const { canOnCourse } = useCapabilities();
+  // See CommentCard: every-course moderators, or the course's instructor.
+  const isModerator =
+    canOnCourse("discussion.moderate", null) ||
+    userRole === "Instructor" ||
+    userRole === "Admin";
   const canLock = canParticipate && Boolean(entry.isOwn || isModerator);
   const canAcceptAnswer =
     canParticipate && isQuestion && Boolean(entry.isOwn || isModerator);

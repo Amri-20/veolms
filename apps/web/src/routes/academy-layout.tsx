@@ -93,6 +93,7 @@ import {
 } from "../learning/player/learningMiniPlayerStore";
 import type { NavigateTo, NavigationOptions } from "../routing/navigation";
 import { AcademyRouteGuard } from "../routing/RouteGuards";
+import { useCapabilities } from "../services/authorization/authorization.queries";
 import { ProfileNavigationProvider } from "../profiles/ProfileLink";
 import {
   buildLoginDialogPath,
@@ -209,6 +210,8 @@ function readAcademyNavigationState(value: unknown): Record<string, unknown> {
 function getWorkspaceNavigationItems(
   user: { id?: string } | null | undefined,
   settingsDocked: boolean,
+  /** The user's permissions, null while they load (see navigation.ts). */
+  permissions: readonly string[] | null,
 ) {
   const roles = getUserRoles(user);
   let storedRole: string | null = null;
@@ -228,6 +231,7 @@ function getWorkspaceNavigationItems(
   const navigation = getRoleNavigationItems(
     resolveWorkspaceRole(roles, rolePreference),
     hasAdminRole(roles),
+    { roles: roles ?? [], permissions },
   );
   return navigation.filter(
     ([label]) => label !== "Settings" || !settingsDocked,
@@ -458,6 +462,14 @@ export default function AcademyLayout() {
   } = useCurrentUser();
   const storeUser = useAuthStore((state) => state.user);
   const activeUser = authUserFetched && !authUserError ? authUser : storeUser;
+  // The menu a team member has is cut to their permissions; the shortcuts
+  // and fallbacks below read the same menu.
+  const navigationPermissions =
+    useCapabilities({ enabled: Boolean(activeUser) }).data?.permissions ?? null;
+  const navigationPermissionsRef = useRef(navigationPermissions);
+  useEffect(() => {
+    navigationPermissionsRef.current = navigationPermissions;
+  }, [navigationPermissions]);
   const settingsDocked = normalizeSidebarDockItems(
     getInitialSidebarPreferences().dockItems,
   ).includes("settings");
@@ -467,9 +479,14 @@ export default function AcademyLayout() {
   // switch left this list on the old role's menu, so the new role's extra
   // pages were not recognised as menu pages and never showed as selected.
   const workspaceNavigationItems = useMemo(
-    () => getWorkspaceNavigationItems(activeUser, settingsDocked),
+    () =>
+      getWorkspaceNavigationItems(
+        activeUser,
+        settingsDocked,
+        navigationPermissions,
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- location.key is the re-read trigger
-    [activeUser, settingsDocked, location.key],
+    [activeUser, settingsDocked, navigationPermissions, location.key],
   );
   const currentNavigationState = readAcademyNavigationState(location.state);
   const originPathValue =
@@ -731,6 +748,7 @@ export default function AcademyLayout() {
         const workspaceNavigationItems = getWorkspaceNavigationItems(
           activeUser,
           settingsDocked,
+          navigationPermissionsRef.current,
         );
         const targetNavigationMatch = getNavigationMatch(
           path,
@@ -1013,6 +1031,10 @@ export default function AcademyLayout() {
       const navigationItems = getRoleNavigationItems(
         navigationRole,
         hasAdminRole(userRoles),
+        {
+          roles: userRoles ?? [],
+          permissions: navigationPermissionsRef.current,
+        },
       );
       const orderedNavigation = navigationItems.filter(
         ([label]) =>

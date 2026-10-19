@@ -64,6 +64,42 @@ export const permissions = [
   "certificate.revoke",
   "billing.read",
   "billing.manage",
+
+  // Keys below were added after the first seed. The seed derives each
+  // permission row id from its position in this list, so new keys are only
+  // ever appended.
+
+  // Team management
+  "team.read",
+  "team.invite",
+  "team.update",
+  "team.remove",
+
+  // Students
+  "student.read",
+  "student.contact.update",
+  "student.access.manage",
+
+  // Coupons
+  "coupon.read",
+  "coupon.manage",
+  "coupon.delete",
+
+  // Commerce
+  "refund.review",
+  "payment.manual.verify",
+  "payment.gateway.manage",
+  "bundle.manage",
+
+  // Catalogue
+  "category.manage",
+  "course.restore",
+
+  // Platform
+  "platform.settings.read",
+  "platform.settings.update",
+  "platform.branding.update",
+  "platform.homepage.update",
 ] as const;
 
 export type Permission = (typeof permissions)[number];
@@ -110,6 +146,7 @@ export const featureKeys = [
   "discussions",
   "custom_branding",
   "advanced_analytics",
+  "team_custom_roles",
 ] as const;
 
 export type FeatureKey = (typeof featureKeys)[number];
@@ -127,6 +164,12 @@ export type CapabilitiesQuery = z.infer<typeof capabilitiesQuerySchema>;
 
 export const capabilitiesResponseSchema = z.object({
   permissions: z.array(z.string()),
+  /**
+   * The permissions held through a role that reaches every course. An
+   * instructor's course permissions are in `permissions` but not here:
+   * they cover only the instructor's own courses.
+   */
+  academyPermissions: z.array(z.string()),
 });
 
 export type CapabilitiesResponse = z.infer<typeof capabilitiesResponseSchema>;

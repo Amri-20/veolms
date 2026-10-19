@@ -24,8 +24,10 @@ const ACCESS_STATUS_LABEL: Record<
 
 export interface StudentCourseCardProps {
   course: StudentCourseDetail;
-  /** Refunds and access changes are an admin's; others only open the course. */
+  /** Revoking and restoring access: student.access.manage. */
   canManageAccess: boolean;
+  /** Returning a payment: billing.manage. */
+  canIssueRefunds: boolean;
   onOpenCourse: (course: StudentCourseDetail) => void;
   onRefund: (course: StudentCourseDetail) => void;
   onRevokeAccess: (course: StudentCourseDetail) => void;
@@ -36,6 +38,7 @@ export interface StudentCourseCardProps {
 export function StudentCourseCard({
   course,
   canManageAccess,
+  canIssueRefunds,
   onOpenCourse,
   onRefund,
   onRevokeAccess,
@@ -45,7 +48,7 @@ export function StudentCourseCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const isCompleted = course.progressPercent >= 100;
   const hasAccess = course.accessStatus === "active";
-  const canRefund = canManageAccess && course.refundable;
+  const canRefund = canIssueRefunds && course.refundable;
   const canRevoke = canManageAccess && hasAccess;
   const canRestore = canManageAccess && course.accessStatus === "revoked";
 

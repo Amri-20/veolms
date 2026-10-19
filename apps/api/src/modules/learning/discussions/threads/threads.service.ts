@@ -743,9 +743,9 @@ export function createThreadsService(
         roles: query.roles || [],
       };
       const tab = query.tab || "q-and-a";
-      const isStaff = actor.roles.some((r) =>
-        ["admin", "instructor", "creator", "staff"].includes(r.toLowerCase()),
-      );
+      // Anyone on the team may have something to moderate; which courses,
+      // if any, is the permission check in listModeratableCourseIds.
+      const isStaff = actor.roles.some((r) => r.toLowerCase() !== "student");
       const isAuthorRestrictedTab =
         tab === "all" ||
         tab === "q-and-a" ||
