@@ -10,10 +10,14 @@ export interface PlaybackTelemetryContext {
 interface OpenPlayback {
   playbackId: string;
   mediaKey: string;
-  courseKey: string;
+  /** Known at the load, or looked up again when the playback ends. */
+  courseKey: string | null;
   lessonNumber: number | null;
   startedAt: number;
   loadStartedAt: number;
+  /** When play was asked for; a video left ready and played later starts
+   * its clock here, not at the load. */
+  playRequestedAt: number | null;
   firstFrameAt: number | null;
   errorCode: string | undefined;
   bufferingSince: number | null;
@@ -51,18 +55,32 @@ export function createPlaybackTelemetry(
     if (playback.bufferingSince !== null) {
       playback.bufferingMs += performance.now() - playback.bufferingSince;
     }
+    // The course key arrives through a prop that can settle after the
+    // load has started; asked again now, so an early load is not lost.
+    const context = getContext();
+    const courseKey = playback.courseKey ?? context.courseKey;
+    if (!courseKey) return;
     const now = Date.now();
     const summary: PlaybackSummary = {
       playbackId: playback.playbackId,
-      courseKey: playback.courseKey,
-      lessonNumber: playback.lessonNumber,
+      courseKey,
+      lessonNumber: playback.lessonNumber ?? context.lessonNumber,
       mediaKey: playback.mediaKey,
       startedAt: new Date(playback.startedAt).toISOString(),
       endedAt: new Date(now).toISOString(),
       startupMs:
         playback.firstFrameAt === null
           ? null
-          : Math.round(playback.firstFrameAt - playback.loadStartedAt),
+          : Math.max(
+              0,
+              Math.round(
+                playback.firstFrameAt -
+                  Math.max(
+                    playback.loadStartedAt,
+                    playback.playRequestedAt ?? playback.loadStartedAt,
+                  ),
+              ),
+            ),
       startFailed: playback.firstFrameAt === null && reason === "error",
       ...(playback.errorCode ? { errorCode: playback.errorCode } : {}),
       bufferingCount: playback.bufferingCount,
@@ -88,7 +106,6 @@ export function createPlaybackTelemetry(
       case "loadstart": {
         finish("unloaded");
         const context = getContext();
-        if (!context.courseKey) return;
         open = {
           playbackId: crypto.randomUUID(),
           mediaKey: event.detail.source.id ?? "",
@@ -96,6 +113,7 @@ export function createPlaybackTelemetry(
           lessonNumber: context.lessonNumber,
           startedAt: Date.now(),
           loadStartedAt: performance.now(),
+          playRequestedAt: null,
           firstFrameAt: null,
           errorCode: undefined,
           bufferingSince: null,
@@ -107,6 +125,16 @@ export function createPlaybackTelemetry(
           currentHeight: null,
           secondsByHeight: new Map(),
         };
+        return;
+      }
+      case "play": {
+        if (
+          open &&
+          open.firstFrameAt === null &&
+          open.playRequestedAt === null
+        ) {
+          open.playRequestedAt = performance.now();
+        }
         return;
       }
       case "playing": {
