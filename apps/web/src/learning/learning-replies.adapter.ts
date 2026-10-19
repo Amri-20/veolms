@@ -25,6 +25,7 @@ export function adaptLearningReplyToCommentReply(
     name: reply.author.displayName || reply.author.username || "Learner",
     authorUsername: reply.author.username ?? undefined,
     time: formatRelativeTime(reply.createdAt),
+    createdAt: reply.createdAt,
     avatar: reply.author.avatarUrl || "",
     text: reply.plainText || reply.content,
     content: contentDraft,

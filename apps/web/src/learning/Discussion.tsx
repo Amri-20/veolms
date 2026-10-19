@@ -1145,7 +1145,12 @@ function DiscussionInner({
       visibleEntries.find(
         (candidate) => getServerEntityId(candidate) === spotlightThreadId,
       ) ??
-      (directThreadComment &&
+      // The comment fetched on its own stands in while the list has not
+      // reached it. Not under "My Discussions": there it is shown only when
+      // the filtered list itself has it, so someone else's linked comment
+      // stays out.
+      (!feedMine &&
+      directThreadComment &&
       getServerEntityId(directThreadComment) === spotlightThreadId
         ? directThreadComment
         : null);
@@ -1153,7 +1158,13 @@ function DiscussionInner({
     return entryFilter === "all" || entryFilter === entry.entryKind
       ? entry
       : null;
-  }, [directThreadComment, entryFilter, spotlightThreadId, visibleEntries]);
+  }, [
+    directThreadComment,
+    entryFilter,
+    feedMine,
+    spotlightThreadId,
+    visibleEntries,
+  ]);
   const displayEntries = isNoteDeepLinkPending
     ? visibleEntries.filter(
         (entry) => getServerEntityId(entry) === noteDeepLinkId,

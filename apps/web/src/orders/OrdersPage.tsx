@@ -21,7 +21,7 @@ import { useOrdersFilter } from "./useOrdersFilter";
 import { OrderSummaryCards } from "./OrderSummaryCards";
 import { OrderFiltersBar } from "./OrderFiltersBar";
 import { OrdersTable } from "./OrdersTable";
-import { OrderDetailsDrawer } from "./OrderDetailsDrawer";
+import { OrderDetailsPanel } from "./OrderDetailsPanel";
 import { OrderRefundModal } from "./OrderRefundModal";
 import { NeedsRefundNotice } from "./NeedsRefundNotice";
 import { canRejectTransferRequests } from "./needsRefundHelpers";
@@ -109,6 +109,19 @@ export function OrdersPage({
     setSelectedOrderId(null);
     setFlaggedOrderId(null);
   }, [setSelectedOrderId]);
+
+  // The desktop panel's gutter opens the order it showed last: from the
+  // list when it is still there, else as the flagged order was opened.
+  const reopenOrder = useCallback(
+    (orderId: string) => {
+      if (filterState.orders.some((order) => order.id === orderId)) {
+        setSelectedOrderId(orderId);
+      } else {
+        setFlaggedOrderId(orderId);
+      }
+    },
+    [filterState.orders, setSelectedOrderId],
+  );
 
   usePageSearchShortcut("orders-search-input");
 
@@ -236,11 +249,13 @@ export function OrdersPage({
         layoutRevision={needsRefundEntries.length}
       />
 
-      {/* Slide-over Order Details Drawer. A row picked in the table, or
-          failing that the order opened from the refund notice. */}
-      <OrderDetailsDrawer
+      {/* The open order, in the Discussions page's side panel. A row
+          picked in the table, or failing that the order opened from the
+          refund notice. */}
+      <OrderDetailsPanel
         order={filterState.selectedOrder ?? flaggedOrder}
         onClose={closeOrderDrawer}
+        onReopen={reopenOrder}
         hasPrev={filterState.hasPrevOrder}
         hasNext={filterState.hasNextOrder}
         onPrev={filterState.selectPrevOrder}

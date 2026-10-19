@@ -205,6 +205,28 @@ function useRemeasureRowsOnWidthChange(
   }, [feedRef, virtualizer]);
 }
 
+/**
+ * Forgets the measured heights when the list changes (a tab or filter
+ * switch) and measures the rows on screen again, before the browser paints.
+ * The reset used to run after paint and threw away the heights the rows had
+ * just been measured at, so every row sat at its estimated height, shorter
+ * than most rows, and was drawn over the next one until something measured
+ * the rows again (half a second or more).
+ */
+function useResetMeasurementsBeforePaint(
+  virtualizer: DiscussionWorkspaceVirtualizer,
+  feedRef: RefObject<HTMLDivElement | null>,
+  datasetKey: string,
+  estimateSize: number,
+) {
+  useLayoutEffect(() => {
+    virtualizer.measure();
+    feedRef.current
+      ?.querySelectorAll("[data-discussion-workspace-virtual-row]")
+      .forEach((row) => virtualizer.measureElement(row));
+  }, [datasetKey, estimateSize, feedRef, virtualizer]);
+}
+
 /** How long after the last scroll event a scroll counts as over: the
  * virtualizer's own "is scrolling" lasts 150ms past it. */
 const SCROLL_SETTLE_MS = 200;
@@ -386,9 +408,12 @@ function DiscussionWorkspaceWindowVirtualFeed({
     scrollMargin,
   });
 
-  useEffect(() => {
-    virtualizer.measure();
-  }, [datasetKey, estimateSize, virtualizer]);
+  useResetMeasurementsBeforePaint(
+    virtualizer,
+    feedRef,
+    datasetKey,
+    estimateSize,
+  );
   useRemeasureRowsOnWidthChange(virtualizer, feedRef);
   useRemeasureRowsAfterScroll(virtualizer, feedRef, getWindowScrollTarget);
   useScrollFocusedRowIntoView(virtualizer, feedRef, cards, focusKey);
@@ -427,9 +452,12 @@ function DiscussionWorkspaceScrollportVirtualFeed({
     scrollMargin,
   });
 
-  useEffect(() => {
-    virtualizer.measure();
-  }, [datasetKey, estimateSize, virtualizer]);
+  useResetMeasurementsBeforePaint(
+    virtualizer,
+    feedRef,
+    datasetKey,
+    estimateSize,
+  );
   useRemeasureRowsOnWidthChange(virtualizer, feedRef);
   useRemeasureRowsAfterScroll(
     virtualizer,

@@ -7,7 +7,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { CaretLeftIcon as CaretLeft } from "@phosphor-icons/react/CaretLeft";
 import { ChatsCircleIcon as ChatsCircle } from "@phosphor-icons/react/ChatsCircle";
 import { CaretRightIcon as CaretRight } from "@phosphor-icons/react/CaretRight";
@@ -45,6 +44,8 @@ import { DiscussionTextSizeControl } from "./DiscussionTextSizeControl";
 import { useDiscussionTextScale } from "./discussionTextScale";
 import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
 import { useDiscussionWorkspaceCardActions } from "./useDiscussionWorkspaceCardActions";
+import { useDiscussionReplyFocus } from "./discussionReplyFocus";
+import { TimeAgo } from "../components/TimeAgo";
 
 const DiscussionMarkdown = lazy(() =>
   import("../learning/discussion-editor/DiscussionMarkdown").then((module) => ({
@@ -60,23 +61,6 @@ const LINE = "border-[color-mix(in_srgb,var(--text)_8%,transparent)]";
 
 const ghostIconButtonClasses =
   "grid size-8 shrink-0 place-items-center rounded-lg text-(--muted) transition-colors hover:bg-(--hover) hover:text-(--text) disabled:pointer-events-none disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-(--accent)";
-
-function formatPostTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const minutes = Math.floor((Date.now() - date.getTime()) / 60_000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 // Instructors are marked beside their name; admins are not.
 function RoleBadge({ role }: { role?: string }) {
@@ -255,9 +239,7 @@ function PanelReply({
             {reply.isOwn ? "You" : reply.author.displayName}
           </span>
           <RoleBadge role={reply.author.role} />
-          <time className="text-xs text-(--muted)">
-            {formatPostTime(reply.createdAt)}
-          </time>
+          <TimeAgo value={reply.createdAt} className="text-xs text-(--muted)" />
         </div>
         {edit ? (
           <PanelEditForm
@@ -408,6 +390,30 @@ export function DiscussionPanelContent({
   const panelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [composerFocusRequest, setComposerFocusRequest] = useState(0);
+  // "Reply" on the row: the box takes focus and the whole reply area
+  // flashes twice, so it is plain where to type.
+  const [replyFlash, setReplyFlash] = useState(false);
+  const replyFlashTimers = useRef<number[]>([]);
+  useEffect(
+    () => () => replyFlashTimers.current.forEach(window.clearTimeout),
+    [],
+  );
+  // Once the thread has loaded, so a locked one (no reply box) is known.
+  const replyBoxShown =
+    !isNote &&
+    Boolean(threadId) &&
+    Boolean(thread.data) &&
+    !thread.data?.isLocked;
+  useDiscussionReplyFocus(card.id, replyBoxShown, () => {
+    setComposerFocusRequest((request) => request + 1);
+    replyFlashTimers.current.forEach(window.clearTimeout);
+    setReplyFlash(true);
+    replyFlashTimers.current = [
+      window.setTimeout(() => setReplyFlash(false), 320),
+      window.setTimeout(() => setReplyFlash(true), 560),
+      window.setTimeout(() => setReplyFlash(false), 1100),
+    ];
+  });
 
   const kindName = isNote
     ? "Note"
@@ -623,122 +629,140 @@ export function DiscussionPanelContent({
   const canReply = !isNote && Boolean(threadId);
   const isLocked = Boolean(thread.data?.isLocked);
 
+  const actionMenu = (
+    <DiscussionWorkspaceActionMenu
+      card={card}
+      destination={destination}
+      setNotice={setNotice}
+      onEdit={() => onEditingChange(true)}
+      onReport={onReport}
+    />
+  );
+  const hasLessonInfo = Boolean(card.course || card.lesson);
+  const lessonInBar = variant === "phone" && hasLessonInfo;
+  // The course and lesson are the way to the lesson (Enter does the same);
+  // there is no separate button for it.
+  const renderLessonLink = (className: string) => {
+    if (!hasLessonInfo) return null;
+    const lessonInfo = (
+      <>
+        <span
+          className="grid size-9 shrink-0 place-items-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-(--accent)"
+          aria-hidden="true"
+        >
+          <Play size={15} weight="fill" />
+        </span>
+        <div className="min-w-0 flex-1">
+          {card.course && (
+            <p className="m-0 truncate text-xs font-semibold text-(--muted)">
+              {card.course}
+            </p>
+          )}
+          {card.lesson && (
+            <p className="m-0 truncate text-sm font-semibold text-(--text)">
+              {card.lesson}
+            </p>
+          )}
+        </div>
+      </>
+    );
+    return destination ? (
+      <a
+        href={destination}
+        aria-keyshortcuts="Enter"
+        title="Open lesson (Enter)"
+        onClick={(event) => {
+          event.preventDefault();
+          onOpenInCourse(destination);
+        }}
+        className={`flex items-center gap-3 px-5 py-3 no-underline transition-colors hover:bg-(--hover) focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-(--accent) ${className}`}
+      >
+        {lessonInfo}
+      </a>
+    ) : (
+      <div className={`flex items-center gap-3 px-5 py-3 ${className}`}>
+        {lessonInfo}
+      </div>
+    );
+  };
+
   return (
     <div
       ref={panelRef}
       tabIndex={-1}
       className="flex min-h-0 flex-1 flex-col outline-none"
     >
-      {/* The bar: out and through the list on the left, the menu alone on
-          the right, so neither is pressed for the other. */}
-      <div
-        // Sized so "Open lesson" fits in full down to the panel's 300px
-        // minimum. A container all the same: should it ever be narrower,
-        // the button keeps only its icon rather than slide under the menu
-        // (which stays at the right edge while the gutter moves the rest).
-        className={`@container flex h-14 shrink-0 items-center justify-between gap-2 border-b ${LINE} px-2.5`}
-      >
-        <div className="flex min-w-0 items-center gap-1">
-          {onClose && (
-            <>
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close panel"
-                title="Close (Esc)"
-                className={ghostIconButtonClasses}
-              >
-                <X size={17} weight="bold" aria-hidden="true" />
-              </button>
-              {showStepButtons && (
-                <span
-                  className="mx-1 h-5 w-px bg-[color-mix(in_srgb,var(--text)_10%,transparent)]"
-                  aria-hidden="true"
-                />
-              )}
-            </>
-          )}
-          {showStepButtons && (
-            <>
-              <button
-                type="button"
-                onClick={step.onPrev}
-                disabled={step.index <= 0}
-                aria-label="Previous discussion"
-                title="Previous (←)"
-                className={ghostIconButtonClasses}
-              >
-                <CaretLeft size={15} weight="bold" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                onClick={step.onNext}
-                disabled={step.index >= step.count - 1}
-                aria-label="Next discussion"
-                title="Next (→)"
-                className={ghostIconButtonClasses}
-              >
-                <CaretRight size={15} weight="bold" aria-hidden="true" />
-              </button>
-            </>
-          )}
-          {destination && (
-            <a
-              href={destination}
-              aria-label="Open lesson"
-              aria-keyshortcuts="Enter"
-              title="Open lesson (Enter)"
-              onClick={(event) => {
-                event.preventDefault();
-                onOpenInCourse(destination);
-              }}
-              // Goes to the lesson in this tab, so it reads as a button
-              // rather than a link out.
-              className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-2.5 text-xs font-semibold text-(--accent) no-underline transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] focus-visible:outline-2 focus-visible:outline-(--accent) ${
-                onClose || showStepButtons ? "ml-1.5" : ""
-              }`}
-            >
-              <Play size={12} weight="fill" aria-hidden="true" />
-              <span className="hidden @min-[17.5rem]:inline">Open lesson</span>
-            </a>
-          )}
+      {lessonInBar ? (
+        // A phone has no ✕ and no steps (a swipe steps, the sheet closes
+        // itself), so the course and lesson are the top row, the menu on
+        // their right.
+        <div
+          className={`flex shrink-0 items-center gap-1 border-b ${LINE} pr-2.5`}
+        >
+          {renderLessonLink("min-w-0 flex-1")}
+          {actionMenu}
         </div>
-        <DiscussionWorkspaceActionMenu
-          card={card}
-          destination={destination}
-          setNotice={setNotice}
-          onEdit={() => onEditingChange(true)}
-          onReport={onReport}
-        />
-      </div>
+      ) : (
+        // The bar: out and through the list on the left, the menu alone on
+        // the right, so neither is pressed for the other.
+        <div
+          className={`flex h-14 shrink-0 items-center justify-between gap-2 border-b ${LINE} px-2.5`}
+        >
+          <div className="flex min-w-0 items-center gap-1">
+            {onClose && (
+              <>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close panel"
+                  title="Close (Esc)"
+                  className={ghostIconButtonClasses}
+                >
+                  <X size={17} weight="bold" aria-hidden="true" />
+                </button>
+                {showStepButtons && (
+                  <span
+                    className="mx-1 h-5 w-px bg-[color-mix(in_srgb,var(--text)_10%,transparent)]"
+                    aria-hidden="true"
+                  />
+                )}
+              </>
+            )}
+            {showStepButtons && (
+              <>
+                <button
+                  type="button"
+                  onClick={step.onPrev}
+                  disabled={step.index <= 0}
+                  aria-label="Previous discussion"
+                  title="Previous (←)"
+                  className={ghostIconButtonClasses}
+                >
+                  <CaretLeft size={15} weight="bold" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={step.onNext}
+                  disabled={step.index >= step.count - 1}
+                  aria-label="Next discussion"
+                  title="Next (→)"
+                  className={ghostIconButtonClasses}
+                >
+                  <CaretRight size={15} weight="bold" aria-hidden="true" />
+                </button>
+              </>
+            )}
+          </div>
+          {actionMenu}
+        </div>
+      )}
 
       <div
         ref={scrollRef}
         // pan-y: a sideways swipe on a phone moves through the list.
         className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain"
       >
-        {(card.course || card.lesson) && (
-          <div className={`flex items-center gap-3 border-b ${LINE} px-5 py-3`}>
-            <span
-              className="grid size-9 shrink-0 place-items-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-(--accent)"
-              aria-hidden="true"
-            >
-              <BookOpen size={18} weight="duotone" />
-            </span>
-            <div className="min-w-0 flex-1">
-              {card.course && (
-                <p className="m-0 truncate text-xs font-semibold text-(--muted)">
-                  {card.course}
-                </p>
-              )}
-              {card.lesson && (
-                <p className="m-0 truncate text-sm font-semibold text-(--text)">
-                  {card.lesson}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
+        {!lessonInBar && renderLessonLink(`border-b ${LINE}`)}
 
         <article className="px-5 pt-5 pb-4">
           <div className="flex items-center gap-3">
@@ -760,9 +784,18 @@ export function DiscussionPanelContent({
                 <RoleBadge role={author?.role} />
                 <KindBadge label={kindLabel} />
               </div>
-              <time className="text-xs text-(--muted)">
-                {post ? formatPostTime(post.createdAt) : card.activity}
-              </time>
+              {post ? (
+                <TimeAgo
+                  value={post.createdAt}
+                  className="text-xs text-(--muted)"
+                />
+              ) : (
+                <TimeAgo
+                  value={card.activityAt}
+                  label={card.activity}
+                  className="text-xs text-(--muted)"
+                />
+              )}
             </div>
             <DiscussionTextSizeControl />
           </div>
@@ -851,7 +884,11 @@ export function DiscussionPanelContent({
 
       {canReply && threadId && (
         <div
-          className={`shrink-0 border-t ${LINE} ${
+          // The flash is a tinted layer over the whole area below the
+          // line, the box and its toolbar alike, so their own colours stay.
+          className={`relative shrink-0 border-t ${LINE} after:pointer-events-none after:absolute after:inset-0 after:z-10 after:bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] after:shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_55%,transparent)] after:transition-opacity after:duration-200 after:content-[""] ${
+            replyFlash ? "after:opacity-100" : "after:opacity-0"
+          } ${
             variant === "phone" ? "pb-[var(--app-safe-area-bottom,0px)]" : ""
           }`}
         >
