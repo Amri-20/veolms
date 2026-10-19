@@ -128,6 +128,18 @@ const ROWS: Row[] = [
   },
   { method: "GET", path: "/students", key: "student.read", instructor: true },
   { method: "GET", path: "/quizzes/mine", key: "quiz.read", instructor: true },
+  {
+    method: "GET",
+    path: "/analytics/admin/overview",
+    key: "analytics.revenue.read",
+    instructor: false,
+  },
+  {
+    method: "GET",
+    path: "/analytics/instructor/overview",
+    key: "analytics.course.read",
+    instructor: true,
+  },
   { method: "GET", path: "/team/roles", key: "role.read", instructor: false },
   { method: "GET", path: "/team/members", key: "team.read", instructor: false },
 ];

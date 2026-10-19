@@ -813,10 +813,16 @@ export function createCourseService({
   async function listMyCourseSummaries(
     creatorId: string,
     userRoles?: readonly string[],
+    /** Every course in the academy, for a caller cleared for it. */
+    options?: { everyCourse?: boolean },
   ) {
-    const rows = userRoles?.includes(ADMIN_ROLE)
-      ? await courseRepo.listAllCourseScope(database)
-      : await courseRepo.listAvailableCourseScopeByCreator(database, creatorId);
+    const rows =
+      options?.everyCourse || userRoles?.includes(ADMIN_ROLE)
+        ? await courseRepo.listAllCourseScope(database)
+        : await courseRepo.listAvailableCourseScopeByCreator(
+            database,
+            creatorId,
+          );
 
     return {
       courses: rows.map((course) => ({
