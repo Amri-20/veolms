@@ -1,3 +1,4 @@
+import type { Permission } from "@veolms/contracts";
 import crypto from "node:crypto";
 import type { Kysely } from "kysely";
 import type { Database } from "@veolms/database";
@@ -21,9 +22,16 @@ export function createIncludesService({ database }: IncludesServiceOptions) {
   function getCourseAndVerifyOwner(
     courseId: string,
     creatorId: string,
-    userRoles?: readonly string[],
+    userRoles: readonly string[] | undefined,
+    permission: Permission,
   ) {
-    return verifyCourseOwner(database, courseId, creatorId, userRoles);
+    return verifyCourseOwner(
+      database,
+      courseId,
+      creatorId,
+      userRoles,
+      permission,
+    );
   }
 
   function formatInclude(row: {
@@ -44,7 +52,12 @@ export function createIncludesService({ database }: IncludesServiceOptions) {
     payload: CreateCourseIncludeRequest,
     userRoles?: readonly string[],
   ): Promise<CourseIncludeItem> {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "course.details.update",
+    );
 
     let position = payload.position;
     if (position === undefined) {
@@ -101,7 +114,12 @@ export function createIncludesService({ database }: IncludesServiceOptions) {
     payload: UpdateCourseIncludeRequest,
     userRoles?: readonly string[],
   ): Promise<CourseIncludeItem> {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "course.details.update",
+    );
 
     const existing = await includesRepo.findIncludeById(
       database,
@@ -138,7 +156,12 @@ export function createIncludesService({ database }: IncludesServiceOptions) {
     creatorId: string,
     userRoles?: readonly string[],
   ): Promise<{ success: boolean }> {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "course.details.update",
+    );
 
     const existing = await includesRepo.findIncludeById(
       database,
@@ -163,7 +186,12 @@ export function createIncludesService({ database }: IncludesServiceOptions) {
     orderedIds: string[],
     userRoles?: readonly string[],
   ): Promise<{ success: boolean }> {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "course.details.update",
+    );
 
     const currentItems = await includesRepo.findIncludesByCourseId(
       database,

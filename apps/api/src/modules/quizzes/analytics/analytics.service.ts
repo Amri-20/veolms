@@ -1,7 +1,7 @@
 import type { QuizActor, QuizServiceOptions } from "../shared/quiz.types.ts";
 import {
   assertCanManageCourse,
-  isAdmin,
+  reachesEveryQuiz,
   requireAcademyId,
 } from "../shared/quiz.types.ts";
 import { AppError } from "../../../lib/errors.ts";
@@ -34,8 +34,13 @@ export function createAnalyticsService(options: QuizServiceOptions) {
         "ASSIGNMENT_NOT_FOUND",
         "Quiz assignment not found.",
       );
-    assertCanManageCourse(actor, await requireCourse(assignment.course_id));
-    if (!isAdmin(actor)) {
+    await assertCanManageCourse(
+      database,
+      actor,
+      await requireCourse(assignment.course_id),
+      "submission.read",
+    );
+    if (!(await reachesEveryQuiz(database, actor, "submission.read"))) {
       const quiz = await repo.findQuiz(database, assignment.quiz_id);
       if (!quiz || quiz.creator_id !== actor.id)
         throw new AppError(403, "FORBIDDEN", "You do not own this Quiz.");
@@ -135,7 +140,12 @@ export function createAnalyticsService(options: QuizServiceOptions) {
   }
 
   async function course(actor: QuizActor, courseId: string) {
-    assertCanManageCourse(actor, await requireCourse(courseId));
+    await assertCanManageCourse(
+      database,
+      actor,
+      await requireCourse(courseId),
+      "submission.read",
+    );
     const assignments = await repo.listAssignmentsForCourse(database, courseId);
     const studentIds = await accessService.listActiveUserIdsForCourse(
       database,
@@ -151,7 +161,7 @@ export function createAnalyticsService(options: QuizServiceOptions) {
 
     // Same rule assertOwned applied per assignment: a non-admin may only
     // see the course report when every assigned quiz is their own.
-    if (!isAdmin(actor)) {
+    if (!(await reachesEveryQuiz(database, actor, "submission.read"))) {
       for (const item of assignments) {
         const quiz = quizById.get(item.quiz_id);
         if (!quiz || quiz.creator_id !== actor.id)
@@ -201,7 +211,7 @@ export function createAnalyticsService(options: QuizServiceOptions) {
   async function student(actor: QuizActor, studentId: string) {
     const quizzes = await repo.listQuizTitles(
       database,
-      isAdmin(actor)
+      (await reachesEveryQuiz(database, actor, "submission.read"))
         ? { academyId: await requireAcademyId(options) }
         : { creatorId: actor.id },
     );

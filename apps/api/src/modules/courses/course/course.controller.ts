@@ -158,6 +158,7 @@ export function createCourseController({
       request.params.id,
       request.user!.id,
       request.user?.roles,
+      "course.details.update",
     );
     return (
       staticPages?.getStatus(request.params.id) ?? {
@@ -178,6 +179,7 @@ export function createCourseController({
       request.params.id,
       request.user!.id,
       request.user?.roles,
+      "course.details.update",
     );
     return (
       staticPages?.retry(request.params.id) ??

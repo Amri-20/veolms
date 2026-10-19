@@ -24,9 +24,10 @@ import {
   updateQuizAssignmentRequestSchema,
   updateQuizQuestionRequestSchema,
   updateQuizRequestSchema,
+  type Permission,
 } from "@veolms/contracts";
 import { createAuthContext } from "../auth/shared/auth.context.ts";
-import { ADMIN_ROLE, INSTRUCTOR_ROLE } from "../auth/index.ts";
+import { createPermissionPreHandlers } from "../authorization/index.ts";
 import { createCourseService } from "../courses/course/course.service.ts";
 import { createAccessService } from "../access/access.service.ts";
 import { createPricingService } from "../commerce/pricing/pricing.service.ts";
@@ -63,10 +64,10 @@ const quizRoutes: RoutePlugin = async (app, options) => {
     analytics: createAnalyticsService(shared),
     pricingService,
   });
-  const author = [
-    ...auth.mfaVerified,
-    auth.middleware.requireRoles([ADMIN_ROLE, INSTRUCTOR_ROLE]),
-  ];
+  // Quiz ids are not course ids, so these check the permission
+  // platform-wide; the quiz services still limit authors to their own.
+  const { requires } = createPermissionPreHandlers(options.database);
+  const can = (permission: Permission) => requires(permission, "platform");
   const learner = auth.mfaVerified;
   const errors = {
     400: errorResponse("Invalid request"),
@@ -85,7 +86,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
         body: createQuizRequestSchema,
         response: { 201: jsonResponse("Quiz created", quizSchema), ...errors },
       },
-      preHandler: author,
+      preHandler: can("quiz.create"),
     },
     controller.create,
   );
@@ -101,7 +102,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("quiz.create"),
     },
     controller.createWithQuestions,
   );
@@ -116,7 +117,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("quiz.read"),
     },
     controller.listMine,
   );
@@ -129,7 +130,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
         params: idParam("id"),
         response: { 200: jsonResponse("Quiz", quizSchema), ...errors },
       },
-      preHandler: author,
+      preHandler: can("quiz.read"),
     },
     controller.get,
   );
@@ -143,7 +144,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
         body: updateQuizRequestSchema,
         response: { 200: jsonResponse("Quiz updated", quizSchema), ...errors },
       },
-      preHandler: author,
+      preHandler: can("quiz.settings.update"),
     },
     controller.update,
   );
@@ -159,7 +160,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("quiz.delete"),
     },
     controller.deleteQuiz,
   );
@@ -176,7 +177,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("quiz.questions.manage"),
     },
     controller.addQuestion,
   );
@@ -193,7 +194,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("quiz.questions.manage"),
     },
     controller.updateQuestion,
   );
@@ -209,7 +210,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("quiz.questions.manage"),
     },
     controller.deleteQuestion,
   );
@@ -225,7 +226,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("quiz.publish"),
     },
     controller.publish,
   );
@@ -242,7 +243,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("quiz.settings.update"),
     },
     controller.assign,
   );
@@ -302,7 +303,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("quiz.settings.update"),
     },
     controller.getCoursePricing,
   );
@@ -319,7 +320,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("quiz.settings.update"),
     },
     controller.setPricing,
   );
@@ -336,7 +337,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("quiz.settings.update"),
     },
     controller.updateAssignment,
   );
@@ -355,7 +356,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("quiz.settings.update"),
     },
     controller.deleteAssignment,
   );
@@ -485,7 +486,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("submission.read"),
     },
     controller.assignmentAnalytics,
   );
@@ -501,7 +502,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("submission.read"),
     },
     controller.courseAnalytics,
   );
@@ -517,7 +518,7 @@ const quizRoutes: RoutePlugin = async (app, options) => {
           ...errors,
         },
       },
-      preHandler: author,
+      preHandler: can("submission.read"),
     },
     controller.studentReport,
   );

@@ -6,8 +6,10 @@ import type {
 } from "fastify";
 import { config } from "../config.ts";
 import { httpError } from "../lib/errors.ts";
-import { ADMIN_ROLE } from "../modules/auth/shared/auth.constants.ts";
-import { sessionNeedsMfaChallenge } from "../modules/auth/shared/mfa-policy.ts";
+import {
+  sessionNeedsMfaChallenge,
+  skipsStaffMfa,
+} from "../modules/auth/shared/mfa-policy.ts";
 import type { SessionService } from "../modules/auth/index.ts";
 
 export interface AuthMiddleware {
@@ -90,10 +92,7 @@ export function createAuthMiddleware(
       return false;
     }
 
-    if (
-      config.SKIP_ADMIN_MFA &&
-      request.user.roles?.some((role) => role.toLowerCase() === ADMIN_ROLE)
-    ) {
+    if (skipsStaffMfa(config.SKIP_ADMIN_MFA, request.user.roles)) {
       return false;
     }
 

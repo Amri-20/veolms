@@ -310,7 +310,9 @@ const serverConfigSchema = z.object({
 
   /**
    * When enabled (true), MFA enforcement, step-up challenges, and mandatory
-   * MFA enrollment are skipped for administrator accounts.
+   * MFA enrollment are skipped for every staff account: admins, instructors
+   * and all team roles, custom ones included. Students are unaffected. For
+   * development and testing; keep it false in production.
    */
   SKIP_ADMIN_MFA: booleanEnvironmentValueSchema.default(false),
 

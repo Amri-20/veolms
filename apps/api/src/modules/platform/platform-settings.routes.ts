@@ -6,8 +6,8 @@ import {
 import { errorResponse } from "../../lib/errors.ts";
 import { jsonResponse } from "../../lib/responses.ts";
 import type { RoutePlugin } from "../../lib/route-plugin.ts";
-import { createAuthMiddleware } from "../../middlewares/auth.middleware.ts";
-import { ADMIN_ROLE, createSessionService } from "../auth/index.ts";
+import { createSessionService } from "../auth/index.ts";
+import { createPermissionPreHandlers } from "../authorization/index.ts";
 import { createPlatformSettingsController } from "./platform-settings.controller.ts";
 import { createPlatformSettingsService } from "./platform-settings.service.ts";
 
@@ -18,13 +18,7 @@ import { createPlatformSettingsService } from "./platform-settings.service.ts";
  */
 const platformSettingsRoutes: RoutePlugin = async (app, options) => {
   const sessionService = createSessionService({ database: options.database });
-  const middleware = createAuthMiddleware(sessionService);
-  const requireAdmin = [
-    middleware.authenticate,
-    middleware.requireAuthenticated,
-    middleware.requireMfaVerified,
-    middleware.requireRoles([ADMIN_ROLE]),
-  ];
+  const { requires } = createPermissionPreHandlers(options.database);
   const service = createPlatformSettingsService({
     database: options.database,
     onSecuritySettingsChange: sessionService.forgetCachedAuthContexts,
@@ -54,7 +48,7 @@ const platformSettingsRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/platform/settings",
     {
-      preHandler: requireAdmin,
+      preHandler: requires("platform.settings.read"),
       schema: {
         operationId: "getPlatformSettings",
         tags: ["Platform"],
@@ -75,7 +69,7 @@ const platformSettingsRoutes: RoutePlugin = async (app, options) => {
   app.patch(
     "/platform/settings",
     {
-      preHandler: requireAdmin,
+      preHandler: requires("platform.settings.update"),
       schema: {
         operationId: "updatePlatformSettings",
         tags: ["Platform"],

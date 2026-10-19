@@ -281,7 +281,7 @@ export function createModerationService({
     if (courseId) {
       await courseAccess.assertCanModerateCourse(db, actor, courseId);
     } else {
-      courseAccess.assertCanModeratePlatform(actor);
+      await courseAccess.assertCanModeratePlatform(db, actor);
     }
   }
 

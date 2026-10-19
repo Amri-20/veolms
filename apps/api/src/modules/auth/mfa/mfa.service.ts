@@ -197,7 +197,7 @@ export function createMfaService({
     const isMandatory = isMfaMandatoryAccount(
       Boolean(user.mfaMandatory),
       user.roles,
-      { skipAdminMfa: config.SKIP_ADMIN_MFA },
+      { skipStaffMfa: config.SKIP_ADMIN_MFA },
     );
     const passkeyCount = await mfaRepository.countUserPasskeys(
       database,
@@ -235,7 +235,7 @@ export function createMfaService({
     const isMandatory = isMfaMandatoryAccount(
       Boolean(user.mfaMandatory),
       user.roles,
-      { skipAdminMfa: config.SKIP_ADMIN_MFA },
+      { skipStaffMfa: config.SKIP_ADMIN_MFA },
     );
     const totpActive = await mfaRepository.isTotpEnabled(database, user.id);
     if (isMandatory && !totpActive) {

@@ -19,7 +19,7 @@ import type { StudentsService } from "../students/students.service.ts";
 import type { CourseService } from "../courses/course/course.service.ts";
 import type { LearningProgressService } from "../learning-progress/learning-progress.service.ts";
 import type { AnalyticsActor } from "./analytics.types.ts";
-import { isAdmin } from "./analytics.types.ts";
+import { hasAcademyPermission } from "../authorization/index.ts";
 import * as analyticsRepo from "./analytics.repository.ts";
 
 export interface AnalyticsServiceOptions {
@@ -199,6 +199,18 @@ export function createAnalyticsService(options: AnalyticsServiceOptions) {
    * courses/shared/courses.utils.ts). With none given: an admin sees every
    * course on the platform (isPlatformWide), an instructor sees their own.
    */
+  /**
+   * Analytics held through a role that reaches every course (admin, or a
+   * team role) covers the whole academy; an instructor's covers their own.
+   */
+  async function seesEveryCourse(actor: AnalyticsActor): Promise<boolean> {
+    const [course, revenue] = await Promise.all([
+      hasAcademyPermission(database, actor.id, "analytics.course.read"),
+      hasAcademyPermission(database, actor.id, "analytics.revenue.read"),
+    ]);
+    return course || revenue;
+  }
+
   async function resolveCoursesInScope(
     actor: AnalyticsActor,
     courseId: string | undefined,
@@ -207,10 +219,16 @@ export function createAnalyticsService(options: AnalyticsServiceOptions) {
     courses: ScopedCourse[];
     isPlatformWide: boolean;
   }> {
+    const everyCourse = await seesEveryCourse(actor);
     if (courseId) {
-      const course = isAdmin(actor)
+      const course = everyCourse
         ? await courseService.findCourseById(courseId)
-        : await courseService.getCourseAndVerifyOwner(courseId, actor.id);
+        : await courseService.getCourseAndVerifyOwner(
+            courseId,
+            actor.id,
+            actor.roles,
+            "analytics.course.read",
+          );
       if (!course) {
         return { courseIds: [], courses: [], isPlatformWide: false };
       }
@@ -221,13 +239,14 @@ export function createAnalyticsService(options: AnalyticsServiceOptions) {
       };
     }
 
-    if (isAdmin(actor)) {
+    if (everyCourse) {
       // Summaries, not listMyCourses: scope resolution only needs ids and
       // titles, and listMyCourses hydrates media URLs at up to ~5 queries
       // per course before a single aggregate has run.
       const mine = await courseService.listMyCourseSummaries(
         actor.id,
         actor.roles,
+        { everyCourse: true },
       );
       return {
         courseIds: mine.courses.map((course) => course.id),

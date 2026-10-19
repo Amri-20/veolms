@@ -24,6 +24,8 @@ import {
 } from "../services/auth";
 import { useAuthStore } from "../store/auth.store";
 import { isPendingMfaLoginAbandoned } from "../store/pendingMfaLogin";
+import { canOpenNavigationPath } from "../shell/navigationPermissions";
+import { hasAdminRole, hasTeamRole } from "../shell/workspaceRole";
 import {
   APP_HOME_PATH,
   buildMfaChallengePath,
@@ -87,6 +89,8 @@ interface AcademyRouteGuardState {
    */
   dashboardPermissionPending: boolean;
   routeContentBlocked: boolean;
+  /** The account's permissions; null until they have loaded. */
+  permissions: readonly string[] | null;
 }
 
 const defaultAcademyRouteGuardState: AcademyRouteGuardState = {
@@ -94,6 +98,7 @@ const defaultAcademyRouteGuardState: AcademyRouteGuardState = {
   dashboardCapabilitiesResolved: false,
   dashboardPermissionPending: false,
   routeContentBlocked: false,
+  permissions: null,
 };
 
 const AcademyRouteGuardContext = createContext<AcademyRouteGuardState>(
@@ -132,9 +137,21 @@ export function AcademyRouteGuard({ children }: { children: ReactNode }) {
     access.isSessionReady &&
     dashboardCapabilities.isFetched &&
     !canAccessDashboard;
+  // A team member on a staff page their permissions do not open (typed
+  // in, or an old link) goes home instead, as the sidebar never offers it.
+  const staffPageDenied =
+    access.isSessionReady &&
+    dashboardCapabilities.isFetched &&
+    hasTeamRole(user?.roles) &&
+    !hasAdminRole(user?.roles) &&
+    !canOpenNavigationPath(
+      `${path}${location.search}`,
+      new Set(dashboardCapabilities.permissions),
+    );
   const courseAuthorRouteDenied =
     access.isSessionReady &&
     (dashboardRouteDenied ||
+      staffPageDenied ||
       shouldRedirectFromCourseAuthorPath(path, user?.roles));
 
   useEffect(() => {
@@ -198,18 +215,23 @@ export function AcademyRouteGuard({ children }: { children: ReactNode }) {
         shouldBlockAcademyRender(path, access, addressUnknown) ||
         courseAuthorRouteDenied));
 
+  const permissions = dashboardCapabilities.isFetched
+    ? dashboardCapabilities.permissions
+    : null;
   const academyRouteGuardState = useMemo(
     () => ({
       canAccessDashboard,
       dashboardCapabilitiesResolved,
       dashboardPermissionPending,
       routeContentBlocked,
+      permissions,
     }),
     [
       canAccessDashboard,
       dashboardCapabilitiesResolved,
       dashboardPermissionPending,
       routeContentBlocked,
+      permissions,
     ],
   );
 

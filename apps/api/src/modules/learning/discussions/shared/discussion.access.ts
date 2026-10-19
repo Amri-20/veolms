@@ -5,7 +5,7 @@ import {
   createAccessService,
   isOpenFreeCourse,
 } from "../../../access/index.ts";
-import { ADMIN_ROLE } from "../../../auth/index.ts";
+import { hasAcademyPermission } from "../../../authorization/index.ts";
 import { httpError } from "../../../../lib/errors.ts";
 import { DiscussionErrors } from "./discussion.errors.ts";
 import { createDiscussionRepository } from "./discussion.repository.ts";
@@ -113,15 +113,27 @@ export interface DiscussionAccess {
     actor: DiscussionActor,
     courseId: string,
   ): Promise<void>;
-  assertCanModeratePlatform(actor: DiscussionActor): void;
+  assertCanModeratePlatform(
+    db: DatabaseExecutor,
+    actor: DiscussionActor,
+  ): Promise<void>;
 }
 
 export function createDiscussionAccess(): DiscussionAccess {
   const access = createAccessService();
   const discussionRepo = createDiscussionRepository();
 
-  function isAdmin(actor: DiscussionActor): boolean {
-    return actor.roles.includes(ADMIN_ROLE);
+  /**
+   * Discussion permissions held through a role that reaches every course
+   * (admin, or a team role): what "is admin" used to mean here. A course's
+   * creator is handled separately, course by course.
+   */
+  function readsEveryCourse(db: DatabaseExecutor, actor: DiscussionActor) {
+    return hasAcademyPermission(db, actor.userId, "discussion.read");
+  }
+
+  function moderatesEveryCourse(db: DatabaseExecutor, actor: DiscussionActor) {
+    return hasAcademyPermission(db, actor.userId, "discussion.moderate");
   }
 
   async function isCourseCreator(
@@ -138,7 +150,7 @@ export function createDiscussionAccess(): DiscussionAccess {
     actor: DiscussionActor,
     courseId: string,
   ): Promise<boolean> {
-    if (isAdmin(actor)) return true;
+    if (await readsEveryCourse(db, actor)) return true;
 
     // One read answers both "is the actor the creator" and "is the course
     // open". The creator keeps access to a deleted course; nobody else does.
@@ -160,7 +172,7 @@ export function createDiscussionAccess(): DiscussionAccess {
     actor: DiscussionActor,
     courseId: string,
   ): Promise<boolean> {
-    if (isAdmin(actor)) return true;
+    if (await moderatesEveryCourse(db, actor)) return true;
     return isCourseCreator(db, actor.userId, courseId);
   }
 
@@ -181,7 +193,7 @@ export function createDiscussionAccess(): DiscussionAccess {
     },
 
     async assertCanParticipateInCourse(db, actor, courseId) {
-      if (isAdmin(actor)) return;
+      if (await readsEveryCourse(db, actor)) return;
       if (await isCourseCreator(db, actor.userId, courseId)) return;
       if (await access.hasActiveAccess(db, actor.userId, courseId)) return;
       throw DiscussionErrors.courseAccessDenied();
@@ -295,7 +307,7 @@ export function createDiscussionAccess(): DiscussionAccess {
     },
 
     async listAccessibleCourseIds(db, actor) {
-      if (isAdmin(actor)) return "all";
+      if (await readsEveryCourse(db, actor)) return "all";
 
       // Three independent reads: one parallel round trip instead of three
       // serial ones on every notes, threads, workspace and bookmarks listing.
@@ -321,7 +333,7 @@ export function createDiscussionAccess(): DiscussionAccess {
     },
 
     async listModeratableCourseIds(db, actor) {
-      if (isAdmin(actor)) return "all";
+      if (await moderatesEveryCourse(db, actor)) return "all";
       const rows = await discussionRepo.listActiveCreatedCourseIds(
         db,
         actor.userId,
@@ -338,7 +350,10 @@ export function createDiscussionAccess(): DiscussionAccess {
       if (!course) {
         throw httpError(404, "COURSE_NOT_FOUND", "Course not found");
       }
-      if (!isAdmin(actor) && course.creator_id !== actor.userId) {
+      if (
+        course.creator_id !== actor.userId &&
+        !(await moderatesEveryCourse(db, actor))
+      ) {
         throw httpError(
           403,
           "FORBIDDEN",
@@ -347,8 +362,8 @@ export function createDiscussionAccess(): DiscussionAccess {
       }
     },
 
-    assertCanModeratePlatform(actor) {
-      if (!isAdmin(actor)) {
+    async assertCanModeratePlatform(db, actor) {
+      if (!(await moderatesEveryCourse(db, actor))) {
         throw httpError(
           403,
           "FORBIDDEN",

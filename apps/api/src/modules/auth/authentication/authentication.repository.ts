@@ -1,5 +1,5 @@
 import type { Executor } from "../shared/repository.types.ts";
-import type { UserAvatarSource } from "@veolms/database";
+import { grantPlatformRole, type UserAvatarSource } from "@veolms/database";
 import { sql } from "kysely";
 
 export function findUserById(database: Executor, userId: string) {
@@ -510,6 +510,11 @@ export async function markUserEmailVerified(
     .executeTakeFirst();
 }
 
+/**
+ * Names of the roles a user holds platform-wide, from both role tables:
+ * team roles are written to `role_assignments`, and the role-name checks
+ * that remain must see them too.
+ */
 export async function listUserRoleNames(
   database: Executor,
   userId: string,
@@ -519,6 +524,20 @@ export async function listUserRoleNames(
     .innerJoin("roles", "roles.id", "user_roles.role_id")
     .select("roles.name")
     .where("user_roles.user_id", "=", userId)
+    .union((eb) =>
+      eb
+        .selectFrom("role_assignments")
+        .innerJoin("roles", "roles.id", "role_assignments.role_id")
+        .select("roles.name")
+        .where("role_assignments.user_id", "=", userId)
+        .where("role_assignments.scope_type", "=", "platform")
+        .where((inner) =>
+          inner.or([
+            inner("role_assignments.expires_at", "is", null),
+            inner("role_assignments.expires_at", ">", sql<Date>`now()`),
+          ]),
+        ),
+    )
     .execute();
 
   return rows.map((row) => row.name);
@@ -542,10 +561,7 @@ export async function assignRole(
   userId: string,
   roleId: string,
 ): Promise<void> {
-  await database
-    .insertInto("user_roles")
-    .values({ user_id: userId, role_id: roleId })
-    .execute();
+  await grantPlatformRole(database, { userId, roleId });
 }
 
 /**

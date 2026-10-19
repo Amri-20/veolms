@@ -6,7 +6,7 @@ import type {
 } from "@veolms/contracts";
 import type { CouponService } from "./coupon.service.ts";
 
-// Every coupon route runs behind requireStaff/requireAdmin, so the user is
+// Every coupon route runs behind a coupon permission check, so the user is
 // always present here.
 const actorOf = (request: FastifyRequest) => ({
   id: request.user!.id,

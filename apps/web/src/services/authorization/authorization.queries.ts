@@ -27,13 +27,32 @@ export function useCapabilities(options?: {
 
   const permissions = new Set(query.data?.permissions ?? []);
 
+  // An answer cached before the field existed has no academy list.
+  const academyPermissions = new Set(query.data?.academyPermissions ?? []);
+
   const can = (permission: Permission): boolean => {
     return permissions.has(permission);
+  };
+
+  /**
+   * Whether the permission covers this course: on their own course any of
+   * the user's roles counts, on someone else's only a role that reaches every
+   * course (an instructor's permissions stop at their own courses).
+   */
+  const canOnCourse = (
+    permission: Permission,
+    course: { creatorId?: string | null } | null | undefined,
+  ): boolean => {
+    if (course?.creatorId && course.creatorId === userId) {
+      return permissions.has(permission);
+    }
+    return academyPermissions.has(permission);
   };
 
   return {
     ...query,
     can,
+    canOnCourse,
     permissions: query.data?.permissions ?? [],
   };
 }

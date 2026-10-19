@@ -1,3 +1,4 @@
+import type { Permission } from "@veolms/contracts";
 import crypto from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import type { Kysely } from "kysely";
@@ -74,9 +75,16 @@ export function createCurriculumService({
   function getCourseAndVerifyOwner(
     courseId: string,
     creatorId: string,
-    userRoles?: readonly string[],
+    userRoles: readonly string[] | undefined,
+    permission: Permission,
   ) {
-    return verifyCourseOwner(database, courseId, creatorId, userRoles);
+    return verifyCourseOwner(
+      database,
+      courseId,
+      creatorId,
+      userRoles,
+      permission,
+    );
   }
 
   // --- Sections ---
@@ -87,7 +95,12 @@ export function createCurriculumService({
     title: string,
     userRoles?: readonly string[],
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "course.curriculum.update",
+    );
 
     const maxPos = await curriculumRepo.findMaxSectionPosition(
       database,
@@ -116,7 +129,12 @@ export function createCurriculumService({
     title?: string,
     userRoles?: readonly string[],
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "course.curriculum.update",
+    );
 
     const section = await curriculumRepo.findSectionById(
       database,
@@ -141,7 +159,12 @@ export function createCurriculumService({
     creatorId: string,
     userRoles?: readonly string[],
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "course.curriculum.update",
+    );
 
     const section = await curriculumRepo.findSectionById(
       database,
@@ -186,6 +209,7 @@ export function createCurriculumService({
       courseId,
       creatorId,
       userRoles,
+      "course.curriculum.update",
     );
     if (course.version !== version) {
       throw new AppError(
@@ -247,7 +271,12 @@ export function createCurriculumService({
     payload: CreateCourseLessonRequest,
     userRoles?: readonly string[],
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "lesson.create",
+    );
 
     const section = await curriculumRepo.findSectionById(
       database,
@@ -291,7 +320,12 @@ export function createCurriculumService({
     logger: FastifyBaseLogger,
     userRoles?: readonly string[],
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "lesson.details.update",
+    );
 
     const lesson = await curriculumRepo.findLessonById(
       database,
@@ -407,7 +441,12 @@ export function createCurriculumService({
     creatorId: string,
     userRoles?: readonly string[],
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "lesson.delete",
+    );
 
     const lesson = await curriculumRepo.findLessonById(
       database,
@@ -439,6 +478,7 @@ export function createCurriculumService({
       courseId,
       creatorId,
       userRoles,
+      "lesson.reorder",
     );
     if (course.version !== version) {
       throw new AppError(
@@ -509,7 +549,12 @@ export function createCurriculumService({
     payload: CreateLessonResourceRequest,
     userRoles?: readonly string[],
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "course.curriculum.update",
+    );
 
     const lesson = await curriculumRepo.findLessonById(
       database,
@@ -580,7 +625,12 @@ export function createCurriculumService({
     creatorId: string,
     userRoles?: readonly string[],
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "course.curriculum.update",
+    );
 
     const resource = await curriculumRepo.findResourceById(
       database,

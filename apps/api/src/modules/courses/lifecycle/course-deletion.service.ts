@@ -10,7 +10,7 @@ import {
   createMediaRetentionService,
   type MediaRetentionService,
 } from "../../media/index.ts";
-import { canManageCourse } from "../shared/courses.utils.ts";
+import { mayManageCourse } from "../shared/courses.utils.ts";
 import * as deletionRepo from "./course-deletion.repository.ts";
 
 export const COURSE_DELETION_RETENTION_DAYS = 30;
@@ -85,7 +85,15 @@ export function createCourseDeletionService({
       if (!course) {
         throw new AppError(404, "COURSE_NOT_FOUND", "Course not found.");
       }
-      if (!canManageCourse(course, creatorId, userRoles)) {
+      if (
+        !(await mayManageCourse(
+          trx,
+          course,
+          creatorId,
+          userRoles,
+          "course.delete",
+        ))
+      ) {
         throw new AppError(403, "FORBIDDEN", "Unauthorized course access.");
       }
       if (course.deleted_at) {

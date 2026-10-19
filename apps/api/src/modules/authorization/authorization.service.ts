@@ -7,6 +7,12 @@ export interface AuthorizationCheckRequest {
   permission: Permission;
   courseId?: string | null;
   featureKey?: string;
+  /**
+   * Count only roles that reach every course: for academy-wide surfaces
+   * (platform moderation, all students), where an instructor's course
+   * permissions must not apply.
+   */
+  platformWide?: boolean;
 }
 
 export interface AuthorizationDecision {
@@ -38,7 +44,8 @@ export function createAuthorizationService(
     async check(
       request: AuthorizationCheckRequest,
     ): Promise<AuthorizationDecision> {
-      const { userId, permission, courseId, featureKey } = request;
+      const { userId, permission, courseId, featureKey, platformWide } =
+        request;
 
       // 1. Check Feature Entitlement if a feature is bound to this action
       if (featureKey) {
@@ -61,6 +68,7 @@ export function createAuthorizationService(
         userId,
         permissionKey: permission,
         courseId,
+        excludeOwnCoursesOnlyRoles: platformWide,
       });
 
       if (!result.allowed) {
@@ -87,12 +95,14 @@ export function createAuthorizationService(
     }): Promise<CapabilitiesResponse> {
       const { userId, courseId } = params;
 
-      return {
-        permissions: await repo.getUserEffectivePermissions(database, {
+      const [permissions, academyPermissions] = await Promise.all([
+        repo.getUserEffectivePermissions(database, { userId, courseId }),
+        repo.getUserEffectivePermissions(database, {
           userId,
-          courseId,
+          excludeOwnCoursesOnlyRoles: true,
         }),
-      };
+      ]);
+      return { permissions, academyPermissions };
     },
 
     async resolveScope(

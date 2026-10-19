@@ -23,7 +23,7 @@ const creatorGatewayRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/payments/gateway-config",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("payment.gateway.manage"),
       schema: {
         operationId: "savePaymentGatewayConfig",
         tags: ["Commerce - Payment Gateways"],
@@ -50,7 +50,7 @@ const creatorGatewayRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/payments/gateway-config",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("payment.gateway.manage"),
       schema: {
         operationId: "getPaymentGatewayConfig",
         tags: ["Commerce - Payment Gateways"],

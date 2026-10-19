@@ -48,6 +48,7 @@ import {
 import { optimisticEditCoordinator } from "../services/learning-interactions/optimistic-edit-coordinator";
 import { adaptLearningReplyToCommentReply } from "./learning-replies.adapter";
 import { useCurrentUser } from "../services/auth";
+import { useCapabilities } from "../services/authorization/authorization.queries";
 import { DiscussionAvatar } from "./DiscussionAvatar";
 import { ProfileLink } from "../profiles/ProfileLink";
 import {
@@ -304,9 +305,13 @@ export const CommentCard = React.memo(function CommentCard({
   const isBackendEntity = Boolean(isBackendMode && serverId);
   const threadId = serverId;
   const { data: authUser } = useCurrentUser();
+  const { canOnCourse } = useCapabilities({ enabled: Boolean(authUser) });
   const effectiveUserId = currentUserId ?? authUser?.id;
   const isQuestion = entryKind === "question" || Boolean(comment.isQuestion);
+  // A team role that moderates every course (a teaching assistant), or a
+  // course's instructor; the API limits instructors to their own courses.
   const isModerator = Boolean(
+    canOnCourse("discussion.moderate", null) ||
     userRole === "Instructor" ||
     userRole === "Admin" ||
     authUser?.roles?.some(

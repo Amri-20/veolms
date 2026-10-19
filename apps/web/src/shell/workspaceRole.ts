@@ -7,18 +7,16 @@ export const ADMIN_ROLES = new Set([
   "platform administrator",
 ]);
 
-export const STAFF_ROLES = new Set([
-  "admin",
-  "administrator",
-  "creator",
-  "instructor",
-  "platform_admin",
-  "platform administrator",
-  "superadmin",
-  "super_admin",
-]);
-
-export const CREATOR_ROLES = new Set(["creator", "instructor", ...ADMIN_ROLES]);
+/**
+ * Any role beyond student puts the account on the team: built-in staff
+ * roles and every custom team role. Which pages it may open is decided by
+ * its permissions (see navigation.ts), not by the role's name.
+ */
+export function hasTeamRole(
+  roles: readonly string[] | null | undefined,
+): boolean {
+  return normalizeRoles(roles).some((role) => role !== "student");
+}
 
 export function normalizeRoles(
   roles: readonly string[] | null | undefined,
@@ -47,7 +45,7 @@ export function getAllowedWorkspaceRoles(
   if (normalized.has("student")) {
     allowed.push("student");
   }
-  if ([...normalized].some((role) => CREATOR_ROLES.has(role))) {
+  if ([...normalized].some((role) => role !== "student")) {
     allowed.push("creator");
   }
   return allowed;
@@ -97,7 +95,7 @@ export function isStaffRole(
   if (!roles?.length) {
     return false;
   }
-  return normalizeRoles(roles).some((role) => STAFF_ROLES.has(role));
+  return hasTeamRole(roles);
 }
 
 export function getRoleDisplayName(
@@ -110,7 +108,11 @@ export function getRoleDisplayName(
   if (hasAdminRole(userRoles)) {
     return "Admin";
   }
-  return "Instructor";
+  const normalized = normalizeRoles(userRoles);
+  if (normalized.includes("instructor") || normalized.includes("creator")) {
+    return "Instructor";
+  }
+  return "Team";
 }
 
 export function getShellProfileSubtitle(

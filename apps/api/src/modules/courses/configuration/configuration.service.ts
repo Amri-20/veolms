@@ -1,3 +1,4 @@
+import type { Permission } from "@veolms/contracts";
 import crypto from "node:crypto";
 import type { Kysely } from "kysely";
 import type { Database, DatabaseExecutor } from "@veolms/database";
@@ -37,9 +38,16 @@ export function createConfigurationService({
   function getCourseAndVerifyOwner(
     courseId: string,
     creatorId: string,
-    userRoles?: readonly string[],
+    userRoles: readonly string[] | undefined,
+    permission: Permission,
   ) {
-    return verifyCourseOwner(database, courseId, creatorId, userRoles);
+    return verifyCourseOwner(
+      database,
+      courseId,
+      creatorId,
+      userRoles,
+      permission,
+    );
   }
 
   async function upsertCourseAccessRules(
@@ -48,7 +56,12 @@ export function createConfigurationService({
     updates: UpdateCourseAccessRuleRequest,
     userRoles?: readonly string[],
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "course.details.update",
+    );
 
     const now = new Date();
 
@@ -82,7 +95,12 @@ export function createConfigurationService({
     updates: UpdateCoursePricingRequest,
     userRoles?: readonly string[],
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "course.pricing.update",
+    );
 
     const now = new Date();
 
@@ -135,7 +153,12 @@ export function createConfigurationService({
     updates: UpdateCourseSettingsRequest,
     userRoles?: readonly string[],
   ) {
-    await getCourseAndVerifyOwner(courseId, creatorId, userRoles);
+    await getCourseAndVerifyOwner(
+      courseId,
+      creatorId,
+      userRoles,
+      "course.details.update",
+    );
 
     const now = new Date();
 

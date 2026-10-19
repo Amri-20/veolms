@@ -12,7 +12,15 @@ declare module "fastify" {
   }
 }
 
-export type ResourceType = "platform" | "course" | "lesson" | "section";
+/**
+ * What the permission is checked against. "platform" counts every role the
+ * user holds, an instructor's own-course roles included (they still need the
+ * course service's ownership check). "academy" is for academy-wide surfaces
+ * (platform moderation, every student, settings): only roles that reach all
+ * courses count.
+ */
+export type ResourceType =
+  "platform" | "academy" | "course" | "lesson" | "section";
 
 export interface AuthorizationGuard {
   authorize: (
@@ -83,8 +91,10 @@ export function createAuthorizationGuard(
           .send(httpError(401, "UNAUTHORIZED", "Authentication required"));
       }
 
-      const resourceId = extractResourceId(request, resourceType);
-      const scope = await service.resolveScope(resourceType, resourceId);
+      const platformWide = resourceType === "academy";
+      const scopeType = platformWide ? "platform" : resourceType;
+      const resourceId = extractResourceId(request, scopeType);
+      const scope = await service.resolveScope(scopeType, resourceId);
 
       const decisions = await Promise.all(
         permissions.map((permission) =>
@@ -93,6 +103,7 @@ export function createAuthorizationGuard(
             permission,
             courseId: scope.courseId,
             featureKey,
+            platformWide,
           }),
         ),
       );

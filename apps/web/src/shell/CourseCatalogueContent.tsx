@@ -144,7 +144,6 @@ export function CourseCatalogueContent({
         activeSection={surfaceActiveSection}
         role={effectiveRole}
         isAdmin={isAdmin}
-        currentUserId={activeUser?.id}
         signedOut={authUserFetched && !activeUser}
         isLoading={isLoadingCourses}
         hasLoadError={isCourseCatalogueLoadError}

@@ -11,6 +11,12 @@ export {
   deactivatedAccountSignInEmail,
   escapeHtml,
   otpVerificationEmail,
+  teamInvitationEmail,
+  teamMemberAddedEmail,
+  teamPreapprovedEmail,
   type EmailContent,
   type OtpVerificationInput,
+  type TeamInvitationInput,
+  type TeamMemberAddedInput,
+  type TeamPreapprovedInput,
 } from "./email.templates.ts";

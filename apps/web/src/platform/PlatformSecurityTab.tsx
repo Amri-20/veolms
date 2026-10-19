@@ -115,7 +115,7 @@ export function PlatformSecurityTab({
           <SettingRow
             className={ROW_CLASS}
             icon={UserGear}
-            label="Admins and instructors"
+            label="Admins, instructors and team members"
             note="Always sign in with a second step, to protect courses, payments and student records."
           >
             <StatusNote>Always on</StatusNote>

@@ -66,7 +66,7 @@ const includesRoutes: RoutePlugin = async (app, options) => {
           404: errorResponse("Course not found"),
         },
       },
-      preHandler: ctx.requireCourseAuthor,
+      preHandler: ctx.authorize("course.details.update", "course"),
     },
     controller.createCourseInclude,
   );
@@ -89,7 +89,7 @@ const includesRoutes: RoutePlugin = async (app, options) => {
           404: errorResponse("Include item not found"),
         },
       },
-      preHandler: ctx.requireCourseAuthor,
+      preHandler: ctx.authorize("course.details.update", "course"),
     },
     controller.updateCourseInclude,
   );
@@ -111,7 +111,7 @@ const includesRoutes: RoutePlugin = async (app, options) => {
           404: errorResponse("Include item not found"),
         },
       },
-      preHandler: ctx.requireCourseAuthor,
+      preHandler: ctx.authorize("course.details.update", "course"),
     },
     controller.deleteCourseInclude,
   );
@@ -134,7 +134,7 @@ const includesRoutes: RoutePlugin = async (app, options) => {
           403: errorResponse("Forbidden - not course owner"),
         },
       },
-      preHandler: ctx.requireCourseAuthor,
+      preHandler: ctx.authorize("course.details.update", "course"),
     },
     controller.reorderCourseIncludes,
   );

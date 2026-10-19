@@ -11,6 +11,11 @@ export interface OverviewViewer {
   roles?: readonly string[];
   /** Answer as for a learner: see `LEARNER_VIEW_HEADER`. */
   learnerView?: boolean;
+  /**
+   * Holds course.preview through a role that reaches every course (a
+   * reviewer, a content editor): may open any draft and its lessons.
+   */
+  previewsEveryCourse?: boolean;
 }
 
 export interface OverviewVisibility {
@@ -36,7 +41,10 @@ export function resolveOverviewVisibility(
   const isAdmin = Boolean(viewer?.roles?.includes(ADMIN_ROLE));
   const isStaff = isOwner || isAdmin;
   return {
-    mayOpen: course.status === "published" || isStaff,
+    mayOpen:
+      course.status === "published" ||
+      isStaff ||
+      Boolean(viewer?.previewsEveryCourse),
     managesCourse: isStaff && !viewer?.learnerView,
   };
 }

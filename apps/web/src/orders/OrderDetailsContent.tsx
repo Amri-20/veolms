@@ -9,6 +9,7 @@ import { XIcon as X } from "@phosphor-icons/react/X";
 import type { SidePanelVariant } from "../components/useSidePanelVariant";
 import type { NavigateTo } from "../routing/navigation";
 import { ordersService } from "../services/orders";
+import { useCapabilities } from "../services/authorization";
 import {
   formatCurrency,
   formatFullPlacedDate,
@@ -118,9 +119,12 @@ export function OrderDetailsContent({
     ? order.orderNumber
     : `#${order.orderNumber}`;
   const showStepButtons = variant !== "phone";
-  // Nothing to give back from a free order.
+  const issuesRefunds = useCapabilities().can("billing.manage");
+  // Nothing to give back from a free order; refunds take billing.manage.
   const canRefund =
-    REFUNDABLE_STATUSES.has(order.status) && order.totalAmount > 0;
+    issuesRefunds &&
+    REFUNDABLE_STATUSES.has(order.status) &&
+    order.totalAmount > 0;
   const hasInvoice = Boolean(order.invoiceNumber);
 
   const copy = (text: string, label: string) => {

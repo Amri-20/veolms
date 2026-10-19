@@ -8,7 +8,7 @@ import type {
 } from "@veolms/contracts";
 import type { Executor } from "../shared/repository.types.ts";
 import { AppError } from "../../../lib/errors.ts";
-import { ADMIN_ROLE } from "../../auth/index.ts";
+import { hasAcademyPermission } from "../../authorization/index.ts";
 import type { CourseService } from "../../courses/index.ts";
 import { isUniqueViolation } from "../shared/db-errors.ts";
 import * as couponRepo from "./coupon.repository.ts";
@@ -107,7 +107,14 @@ export function createCouponService({
   database: Executor;
   courseService: Pick<CourseService, "listOwnedCourseIds">;
 }): CouponService {
-  const isAdmin = (actor: CouponActor) => actor.roles.includes(ADMIN_ROLE);
+  /**
+   * Coupon permissions held through a role that reaches every course (admin,
+   * or a team role) cover every coupon; an instructor's cover only their own.
+   */
+  const coversEveryCoupon = (
+    actor: CouponActor,
+    permission: "coupon.read" | "coupon.manage",
+  ) => hasAcademyPermission(database, actor.id, permission);
 
   function couponNotFound(id: string): AppError {
     return new AppError(
@@ -122,11 +129,11 @@ export function createCouponService({
    * created; other coupons (including pre-ownership rows with no creator)
    * answer exactly like a missing id.
    */
-  function assertCanManageCoupon(
+  async function assertCanManageCoupon(
     actor: CouponActor,
     coupon: { id: string; created_by: string | null },
-  ): void {
-    if (isAdmin(actor)) return;
+  ): Promise<void> {
+    if (await coversEveryCoupon(actor, "coupon.manage")) return;
     if (coupon.created_by !== actor.id) throw couponNotFound(coupon.id);
   }
 
@@ -141,7 +148,7 @@ export function createCouponService({
     restrictedCourseIds: readonly string[] | null | undefined,
     restrictedBundleIds: readonly string[] | null | undefined,
   ): Promise<void> {
-    if (isAdmin(actor)) return;
+    if (await coversEveryCoupon(actor, "coupon.manage")) return;
 
     if (!restrictedCourseIds || restrictedCourseIds.length === 0) {
       throw new AppError(
@@ -213,7 +220,9 @@ export function createCouponService({
   ): Promise<CouponListResponse> {
     const limit = query?.limit ?? 30;
     const cursor = query?.cursor ? decodeCouponCursor(query.cursor) : undefined;
-    const createdBy = isAdmin(actor) ? undefined : actor.id;
+    const createdBy = (await coversEveryCoupon(actor, "coupon.read"))
+      ? undefined
+      : actor.id;
 
     // The summary describes the whole library, so only the first page
     // carries it; later pages would recompute the same numbers.
@@ -276,7 +285,7 @@ export function createCouponService({
   ): Promise<Coupon> {
     const coupon = await couponRepo.findCouponById(database, id);
     if (!coupon) throw couponNotFound(id);
-    assertCanManageCoupon(actor, coupon);
+    await assertCanManageCoupon(actor, coupon);
     return mapToCoupon(coupon);
   }
 
@@ -356,7 +365,7 @@ export function createCouponService({
   ): Promise<Coupon> {
     const existing = await couponRepo.findCouponById(database, id);
     if (!existing) throw couponNotFound(id);
-    assertCanManageCoupon(actor, existing);
+    await assertCanManageCoupon(actor, existing);
     // Check the restriction the coupon will have AFTER this update, so a
     // partial update cannot widen it (e.g. `restrictedCourseIds: null`).
     await assertOwnCourseScope(

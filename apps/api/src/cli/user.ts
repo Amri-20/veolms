@@ -2,7 +2,7 @@
 import crypto from "node:crypto";
 import readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
-import { createDatabase } from "@veolms/database";
+import { createDatabase, grantPlatformRole } from "@veolms/database";
 import { config } from "../config.ts";
 import {
   createEmailService,
@@ -301,39 +301,10 @@ async function main() {
           .execute();
       }
 
-      // Assign role in user_roles
-      await database
-        .insertInto("user_roles")
-        .values({
-          user_id: userId,
-          role_id: targetRoleRecord.id,
-        })
-        .onConflict((oc) => oc.doNothing())
-        .execute();
-
-      // For Administrator, also ensure platform-scoped role_assignment exists
-      if (isAdministrator) {
-        const existingAssignment = await database
-          .selectFrom("role_assignments")
-          .select("id")
-          .where("user_id", "=", userId)
-          .where("role_id", "=", targetRoleRecord.id)
-          .where("scope_type", "=", "platform")
-          .executeTakeFirst();
-
-        if (!existingAssignment) {
-          await database
-            .insertInto("role_assignments")
-            .values({
-              id: crypto.randomUUID(),
-              user_id: userId,
-              role_id: targetRoleRecord.id,
-              scope_type: "platform",
-              course_id: null,
-            })
-            .execute();
-        }
-      }
+      await grantPlatformRole(database, {
+        userId,
+        roleId: targetRoleRecord.id,
+      });
 
       console.log(`\n${green("✓ OTP verified successfully!")}`);
       console.log(`${green(`✓ User upgraded to ${roleDisplayName}:`)}`);
@@ -380,29 +351,10 @@ async function main() {
         })
         .execute();
 
-      // Assign role in user_roles
-      await database
-        .insertInto("user_roles")
-        .values({
-          user_id: userId,
-          role_id: targetRoleRecord.id,
-        })
-        .onConflict((oc) => oc.doNothing())
-        .execute();
-
-      // For Administrator, assign platform-scoped role_assignment
-      if (isAdministrator) {
-        await database
-          .insertInto("role_assignments")
-          .values({
-            id: crypto.randomUUID(),
-            user_id: userId,
-            role_id: targetRoleRecord.id,
-            scope_type: "platform",
-            course_id: null,
-          })
-          .execute();
-      }
+      await grantPlatformRole(database, {
+        userId,
+        roleId: targetRoleRecord.id,
+      });
 
       console.log(`\n${green("✓ OTP verified successfully!")}`);
       console.log(`${green(`✓ ${roleDisplayName} account created:`)}`);

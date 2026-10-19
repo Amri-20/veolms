@@ -37,7 +37,7 @@ const refundRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/refunds",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("billing.manage"),
       schema: {
         operationId: "createRefund",
         tags: ["Commerce - Refunds"],
@@ -67,7 +67,7 @@ const refundRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/refunds/:refundId",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("billing.read"),
       schema: {
         operationId: "getRefund",
         tags: ["Commerce - Refunds"],
@@ -87,7 +87,7 @@ const refundRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/refunds/order/:orderId",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("billing.read"),
       schema: {
         operationId: "listOrderRefunds",
         tags: ["Commerce - Refunds"],
@@ -156,7 +156,7 @@ const refundRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/refund-requests",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("refund.review"),
       schema: {
         operationId: "listRefundRequests",
         tags: ["Commerce - Refund Requests"],
@@ -183,7 +183,7 @@ const refundRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/refund-requests/:requestId/review",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("refund.review"),
       schema: {
         operationId: "reviewRefundRequest",
         tags: ["Commerce - Refund Requests"],
