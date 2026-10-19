@@ -29,7 +29,11 @@ interface PublicProfilePageProps {
   onNavigateBack?: () => void;
 }
 
-function PublicProfileAvatar({ profile }: { profile: PublicProfileResponse }) {
+export function PublicProfileAvatar({
+  profile,
+}: {
+  profile: PublicProfileResponse;
+}) {
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
@@ -68,7 +72,11 @@ function PublicProfileAvatar({ profile }: { profile: PublicProfileResponse }) {
   );
 }
 
-function PublicProfileLinks({ profile }: { profile: PublicProfileResponse }) {
+export function PublicProfileLinks({
+  profile,
+}: {
+  profile: PublicProfileResponse;
+}) {
   const linkedinUrl = safeExternalUrl(profile.linkedinUrl);
   const githubUrl = safeExternalUrl(profile.githubUrl);
   const websiteUrl = safeExternalUrl(profile.websiteUrl);

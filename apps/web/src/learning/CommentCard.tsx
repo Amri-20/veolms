@@ -700,7 +700,12 @@ export const CommentCard = React.memo(function CommentCard({
                       line under the name. */}
                   {comment.authorUsername && (
                     <span className="-mt-1 basis-full truncate text-[0.8125rem] text-(--muted)">
-                      @{comment.authorUsername.replace(/^@+/, "")}
+                      <ProfileLink
+                        username={comment.authorUsername}
+                        variant="name"
+                      >
+                        @{comment.authorUsername.replace(/^@+/, "")}
+                      </ProfileLink>
                     </span>
                   )}
                 </div>
@@ -780,7 +785,7 @@ export const CommentCard = React.memo(function CommentCard({
                 enableInlineTimestamps={Boolean(onSeekToTimestamp)}
                 onSeekToTimestamp={onSeekToTimestamp}
                 preserveSoftBreaks
-                className="mt-1 pr-9 text-[0.9375rem]! leading-relaxed! text-(--text)! sm:pr-10 sm:text-base!"
+                className="mt-1 pr-0 text-[0.9375rem]! leading-relaxed! text-(--text)! sm:pr-10 sm:text-base!"
               />
 
               {comment.attachments && comment.attachments.length > 0 ? (
@@ -1171,15 +1176,6 @@ function ReplyCard({
                       Instructor
                     </span>
                   )}
-                  {reply.isAccepted && (
-                    <span
-                      data-testid="accepted-answer-badge"
-                      className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400"
-                    >
-                      <CheckCircle size={13} weight="fill" />
-                      Accepted Answer
-                    </span>
-                  )}
                   <span
                     data-reply-time-separator
                     aria-hidden="true"
@@ -1194,7 +1190,12 @@ function ReplyCard({
                   />
                   {reply.authorUsername && (
                     <span className="-mt-1 basis-full truncate text-[0.8125rem] text-(--muted)">
-                      @{reply.authorUsername.replace(/^@+/, "")}
+                      <ProfileLink
+                        username={reply.authorUsername}
+                        variant="name"
+                      >
+                        @{reply.authorUsername.replace(/^@+/, "")}
+                      </ProfileLink>
                     </span>
                   )}
                 </div>
@@ -1284,7 +1285,7 @@ function ReplyCard({
                   enableInlineTimestamps={Boolean(onSeekToTimestamp)}
                   onSeekToTimestamp={onSeekToTimestamp}
                   preserveSoftBreaks
-                  className="mt-1 pr-9 text-[0.9375rem]! leading-relaxed! text-(--text)! sm:pr-10 sm:text-base!"
+                  className="mt-1 pr-0 text-[0.9375rem]! leading-relaxed! text-(--text)! sm:pr-10 sm:text-base!"
                 />
               )}
 

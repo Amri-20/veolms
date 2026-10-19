@@ -6,13 +6,14 @@ import {
 } from "react";
 import { isValidPublicProfileUsername } from "@veolms/contracts/username-rules";
 import type { NavigateTo } from "../routing/navigation";
+import { toggleProfilePreview } from "./profilePreviewStore";
 
 /**
  * The app's own navigation, so a profile opened from a name or a picture
  * goes through it: the page it was opened from is remembered, and the
  * profile's back button returns there (a lesson included).
  */
-const ProfileNavigationContext = createContext<NavigateTo | null>(null);
+export const ProfileNavigationContext = createContext<NavigateTo | null>(null);
 
 export const ProfileNavigationProvider = ProfileNavigationContext.Provider;
 
@@ -41,7 +42,7 @@ interface ProfileLinkProps {
 }
 
 /**
- * A name or picture that opens the member's profile. Without a profile
+ * A name or picture that opens the member's profile preview. Without a profile
  * address (a removed account, a post still being sent) it is shown as it is.
  */
 export function ProfileLink({
@@ -68,7 +69,9 @@ export function ProfileLink({
       return;
     }
     event.preventDefault();
-    navigateTo(profilePath);
+    // A click shows the member's profile over the page (a side pop-up, a
+    // sheet on a phone); its picture there opens the full page.
+    toggleProfilePreview(username ?? "", event.currentTarget);
   };
 
   const picture = variant === "picture";

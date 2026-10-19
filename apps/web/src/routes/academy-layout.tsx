@@ -95,6 +95,7 @@ import type { NavigateTo, NavigationOptions } from "../routing/navigation";
 import { AcademyRouteGuard } from "../routing/RouteGuards";
 import { useCapabilities } from "../services/authorization/authorization.queries";
 import { ProfileNavigationProvider } from "../profiles/ProfileLink";
+import { ProfilePreviewHost } from "../profiles/ProfilePreviewHost";
 import {
   buildLoginDialogPath,
   buildLoginPath,
@@ -2061,6 +2062,7 @@ export default function AcademyLayout() {
           </Suspense>
         ) : null}
         <LoginDialogHost />
+        <ProfilePreviewHost />
       </ProfileNavigationProvider>
     </AcademyRouteGuard>
   );

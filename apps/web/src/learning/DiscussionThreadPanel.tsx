@@ -1659,15 +1659,6 @@ function ThreadReplyEntry({
                       Instructor
                     </span>
                   )}
-                  {reply.isAccepted && (
-                    <span
-                      data-testid="accepted-answer-badge"
-                      className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400"
-                    >
-                      <CheckCircle size={13} weight="fill" />
-                      Accepted Answer
-                    </span>
-                  )}
                   <span aria-hidden="true" className="text-(--muted)">
                     ·
                   </span>
