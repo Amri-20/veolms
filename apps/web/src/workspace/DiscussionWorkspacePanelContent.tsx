@@ -40,7 +40,6 @@ import {
 import type { LocalComposerAttachment } from "../services/learning-interactions/attachment-model";
 import { DiscussionWorkspaceActionMenu } from "./DiscussionWorkspaceActionMenu";
 import { DiscussionLikeButton } from "./DiscussionLikeButton";
-import { DiscussionTextSizeControl } from "./DiscussionTextSizeControl";
 import { useDiscussionTextScale } from "./discussionTextScale";
 import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
 import { useDiscussionWorkspaceCardActions } from "./useDiscussionWorkspaceCardActions";
@@ -90,9 +89,12 @@ function PostBody({
   size?: "base" | "sm";
 }) {
   const [textScale] = useDiscussionTextScale();
+  // The post: marked important, as the renderer's own size (14px on phones, 15px wider)
+  // otherwise wins. 15px on every screen, the size the list's comment text
+  // has on a phone.
   const textClass =
     size === "base"
-      ? "text-base leading-relaxed"
+      ? "text-[0.9375rem]! leading-relaxed"
       : "text-[0.9375rem] leading-relaxed";
   return (
     // The viewer's text size ("Aa" beside the author) scales the post as a
@@ -398,12 +400,10 @@ export function DiscussionPanelContent({
     () => () => replyFlashTimers.current.forEach(window.clearTimeout),
     [],
   );
-  // Once the thread has loaded, so a locked one (no reply box) is known.
+  // Once the thread's request has finished, so a locked one (no reply
+  // box) is known; a thread that could not be loaded still shows the box.
   const replyBoxShown =
-    !isNote &&
-    Boolean(threadId) &&
-    Boolean(thread.data) &&
-    !thread.data?.isLocked;
+    !isNote && Boolean(threadId) && !thread.isPending && !thread.data?.isLocked;
   useDiscussionReplyFocus(card.id, replyBoxShown, () => {
     setComposerFocusRequest((request) => request + 1);
     replyFlashTimers.current.forEach(window.clearTimeout);
@@ -633,12 +633,14 @@ export function DiscussionPanelContent({
     <DiscussionWorkspaceActionMenu
       card={card}
       destination={destination}
+      textSize
       setNotice={setNotice}
       onEdit={() => onEditingChange(true)}
       onReport={onReport}
     />
   );
   const hasLessonInfo = Boolean(card.course || card.lesson);
+  const lessonPressRef = useRef<{ x: number; y: number } | null>(null);
   const lessonInBar = variant === "phone" && hasLessonInfo;
   // The course and lesson are the way to the lesson (Enter does the same);
   // there is no separate button for it.
@@ -669,13 +671,26 @@ export function DiscussionPanelContent({
     return destination ? (
       <a
         href={destination}
+        // A drag here moves the sheet (or nothing), not the link itself.
+        draggable={false}
         aria-keyshortcuts="Enter"
         title="Open lesson (Enter)"
+        onPointerDown={(event) => {
+          lessonPressRef.current = { x: event.clientX, y: event.clientY };
+        }}
         onClick={(event) => {
           event.preventDefault();
+          // The end of a drag of the sheet is not a press of the link.
+          const press = lessonPressRef.current;
+          lessonPressRef.current = null;
+          if (
+            press &&
+            Math.hypot(event.clientX - press.x, event.clientY - press.y) > 6
+          )
+            return;
           onOpenInCourse(destination);
         }}
-        className={`flex items-center gap-3 px-5 py-3 no-underline transition-colors hover:bg-(--hover) focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-(--accent) ${className}`}
+        className={`flex items-center gap-3 px-5 py-3 no-underline transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-(--accent) ${className}`}
       >
         {lessonInfo}
       </a>
@@ -697,9 +712,11 @@ export function DiscussionPanelContent({
         // itself), so the course and lesson are the top row, the menu on
         // their right.
         <div
-          className={`flex shrink-0 items-center gap-1 border-b ${LINE} pr-2.5`}
+          // Pointing at the course and lesson lights the whole row, behind
+          // the menu too; the menu keeps its own hover.
+          className={`flex shrink-0 items-center gap-1 border-b ${LINE} rounded-t-[inherit] pt-0 pr-2.5 transition-colors has-[>a:hover]:bg-(--hover) [&>div:last-child]:mt-2`}
         >
-          {renderLessonLink("min-w-0 flex-1")}
+          {renderLessonLink("min-w-0 flex-1 pt-5")}
           {actionMenu}
         </div>
       ) : (
@@ -762,7 +779,8 @@ export function DiscussionPanelContent({
         // pan-y: a sideways swipe on a phone moves through the list.
         className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain"
       >
-        {!lessonInBar && renderLessonLink(`border-b ${LINE}`)}
+        {!lessonInBar &&
+          renderLessonLink(`border-b ${LINE} hover:bg-(--hover)`)}
 
         <article className="px-5 pt-5 pb-4">
           <div className="flex items-center gap-3">
@@ -797,7 +815,6 @@ export function DiscussionPanelContent({
                 />
               )}
             </div>
-            <DiscussionTextSizeControl />
           </div>
 
           {post?.title && (

@@ -378,6 +378,9 @@ function PhonePanel({
       }}
       snapToSequentialPoints
       showSwipeHandle
+      // Over the content, as on the lesson's thread sheet, so the top row
+      // (and its hover) reaches the sheet's top edge.
+      swipeHandleClassName="absolute inset-x-0 top-0 z-30 pt-2.5"
       dismissThenRef={dismissThenRef}
     >
       <DrawerContent

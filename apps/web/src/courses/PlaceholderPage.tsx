@@ -51,7 +51,7 @@ const placeholderContent: Record<string, PlaceholderContent> = {
   },
   Discussions: {
     title: "Discussions",
-    description: "Bring course conversations, questions, and replies together.",
+    description: "All your discussions in one place.",
     message: "Discussions are not implemented yet.",
     icon: ChatCircleDots,
   },

@@ -4,14 +4,28 @@ import { useEffect, useRef } from "react";
  * "Reply" on a Discussions row asks the side panel to take the learner to
  * its reply box. The panel may not be showing that discussion yet (it opens
  * with the press, or is a phone sheet still on its way), so the request
- * waits here until the panel with that discussion picks it up.
+ * waits until the panel with that discussion picks it up.
+ *
+ * The pending request and its signal live on the window, not in this
+ * module: when the dev server reloads one of the two files that use it, the
+ * row and the panel can hold different copies of this module, and a
+ * request kept here would never reach the panel.
  */
-let pendingDiscussionId: string | null = null;
-const requests = new EventTarget();
+const REQUEST_EVENT = "veolms:discussion-reply-focus";
+
+interface ReplyFocusWindow extends Window {
+  __veolmsPendingReplyFocus?: string | null;
+}
+
+function replyFocusWindow(): ReplyFocusWindow | null {
+  return typeof window === "undefined" ? null : (window as ReplyFocusWindow);
+}
 
 export function requestDiscussionReplyFocus(discussionId: string) {
-  pendingDiscussionId = discussionId;
-  requests.dispatchEvent(new Event("request"));
+  const win = replyFocusWindow();
+  if (!win) return;
+  win.__veolmsPendingReplyFocus = discussionId;
+  win.dispatchEvent(new Event(REQUEST_EVENT));
 }
 
 /**
@@ -29,15 +43,16 @@ export function useDiscussionReplyFocus(
     onRequestRef.current = onRequest;
   });
   useEffect(() => {
-    if (!ready) return undefined;
+    const win = replyFocusWindow();
+    if (!ready || !win) return undefined;
     const take = () => {
-      if (pendingDiscussionId !== discussionId) return;
-      pendingDiscussionId = null;
+      if (win.__veolmsPendingReplyFocus !== discussionId) return;
+      win.__veolmsPendingReplyFocus = null;
       onRequestRef.current();
     };
     // Asked for before this panel was showing the discussion.
     take();
-    requests.addEventListener("request", take);
-    return () => requests.removeEventListener("request", take);
+    win.addEventListener(REQUEST_EVENT, take);
+    return () => win.removeEventListener(REQUEST_EVENT, take);
   }, [discussionId, ready]);
 }
