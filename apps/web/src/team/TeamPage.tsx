@@ -1,27 +1,31 @@
+import { PaperPlaneTiltIcon as PaperPlaneTilt } from "@phosphor-icons/react/PaperPlaneTilt";
+import { PlusIcon as Plus } from "@phosphor-icons/react/Plus";
 import { ShieldWarningIcon as ShieldWarning } from "@phosphor-icons/react/ShieldWarning";
-import { UsersThreeIcon as UsersThree } from "@phosphor-icons/react/UsersThree";
-import { memo, useCallback, useRef, useState } from "react";
+import { UserPlusIcon as UserPlus } from "@phosphor-icons/react/UserPlus";
+import { useState } from "react";
 import { useLocation } from "react-router";
 import { Button } from "../components/Button";
-import { PageHeading } from "../components/PageHeading";
-import { SwipeableTabPanel } from "../navigation/SwipeableTabPanel";
 import type { NavigateTo } from "../routing/navigation";
-import { SettingsTabBar } from "../settings/SettingsTabBar";
+import {
+  useTeamInvitations,
+  useTeamMembers,
+  useTeamRoles,
+} from "../services/team";
 import { AcademyPageFallback } from "../shell/academyPageFallbacks";
 import type { ToastMessage } from "../ToastNotification";
 import { InvitationsTab } from "./invitations/InvitationsTab";
+import { InvitePanel } from "./invitations/InvitePanel";
+import { AddMemberPanel } from "./members/AddMemberPanel";
 import { MembersTab } from "./members/MembersTab";
+import { RoleEditorPanel } from "./roles/RoleEditorPanel";
 import { RolesTab } from "./roles/RolesTab";
 import {
   TEAM_TAB_DEFINITIONS,
-  TEAM_TABS,
   isTeamTab,
   teamTabFromPath,
   type TeamTab,
 } from "./teamTabs";
 import { useTeamAccess } from "./useTeamAccess";
-import "../styles/features/settings/foundation.css";
-import "../styles/features/settings/preferences-responsive.css";
 
 export interface TeamPageProps {
   tab?: string;
@@ -29,38 +33,21 @@ export interface TeamPageProps {
   setNotice?: (message: ToastMessage) => void;
 }
 
-const TeamTabContent = memo(function TeamTabContent({
-  tab,
-  setNotice,
-}: {
-  tab: TeamTab;
-  setNotice?: (message: ToastMessage) => void;
-}) {
-  switch (tab) {
-    case "members":
-      return <MembersTab setNotice={setNotice} />;
-    case "roles":
-      return <RolesTab setNotice={setNotice} />;
-    case "invitations":
-      return <InvitationsTab setNotice={setNotice} />;
-  }
-});
+type Panel = "add-member" | "invite" | "new-role" | null;
 
 function AccessDenied({ onNavigatePage }: { onNavigatePage?: NavigateTo }) {
   return (
-    <div className="settings-page">
-      <section className="settings-section mx-auto mt-6 grid max-w-xl place-items-center p-10! text-center">
-        <span className="flex size-11 items-center justify-center rounded-xl bg-(--accent)/10 text-(--accent)">
-          <ShieldWarning size={24} weight="bold" />
-        </span>
-        <h1 className="mt-3 text-lg font-semibold">Access denied</h1>
-        <p className="mt-1 max-w-md text-sm text-(--muted)">
-          Your roles do not include managing the team.
-        </p>
-        <div className="mt-4">
-          <Button onClick={() => onNavigatePage?.("/")}>Return home</Button>
-        </div>
-      </section>
+    <div className="mx-auto mt-10 grid max-w-xl place-items-center rounded-2xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] p-10 text-center">
+      <span className="flex size-11 items-center justify-center rounded-xl bg-(--accent)/10 text-(--accent)">
+        <ShieldWarning size={24} weight="bold" />
+      </span>
+      <h1 className="mt-3 text-lg font-semibold">Access denied</h1>
+      <p className="mt-1 max-w-md text-sm text-(--muted)">
+        Your roles do not include managing the team.
+      </p>
+      <div className="mt-4">
+        <Button onClick={() => onNavigatePage?.("/")}>Return home</Button>
+      </div>
     </div>
   );
 }
@@ -76,98 +63,136 @@ export function TeamPage({ tab, onNavigatePage, setNotice }: TeamPageProps) {
     return <AccessDenied onNavigatePage={onNavigatePage} />;
   }
   return (
-    <TeamTabs tab={tab} onNavigatePage={onNavigatePage} setNotice={setNotice} />
+    <TeamWorkspace
+      tab={tab}
+      onNavigatePage={onNavigatePage}
+      setNotice={setNotice}
+    />
   );
 }
 
-function TeamTabs({ tab, onNavigatePage, setNotice }: TeamPageProps) {
+function TeamWorkspace({ tab, onNavigatePage, setNotice }: TeamPageProps) {
   const { pathname } = useLocation();
   const activeTab: TeamTab = isTeamTab(tab) ? tab : teamTabFromPath(pathname);
-  const activeTabIndex = TEAM_TABS.indexOf(activeTab);
-  const tabListRef = useRef<HTMLElement>(null);
-  const [preparedTabs, setPreparedTabs] = useState<ReadonlySet<TeamTab>>(
-    () => new Set([activeTab]),
-  );
+  const { can } = useTeamAccess();
+  const [panel, setPanel] = useState<Panel>(null);
 
-  const prepareTab = useCallback((id: TeamTab) => {
-    setPreparedTabs((current) => {
-      if (current.has(id)) return current;
-      return new Set(current).add(id);
-    });
-  }, []);
+  const members = useTeamMembers("");
+  const roles = useTeamRoles();
+  const invitations = useTeamInvitations("all");
+  const customRolesEnabled = roles.data?.customRolesEnabled ?? false;
+  const pendingInvites = (invitations.data?.pages ?? [])
+    .flatMap((page) => page.invitations)
+    .filter((invitation) => invitation.status === "pending").length;
 
-  const navigateTab = useCallback(
-    (id: TeamTab) => {
-      prepareTab(id);
-      // As in Settings: the tab's pressed state paints before the route
-      // change starts.
-      window.requestAnimationFrame(() => {
-        window.setTimeout(
-          () => onNavigatePage?.(`/team/${id}`, { resetScroll: true }),
-          0,
-        );
-      });
-    },
-    [onNavigatePage, prepareTab],
-  );
+  const counts: Record<TeamTab, number | undefined> = {
+    members: members.data?.pages[0]?.totalCount,
+    roles: roles.data?.roles.length,
+    invitations: invitations.data ? pendingInvites : undefined,
+  };
 
-  const prepareSwipeNeighbors = useCallback(() => {
-    setPreparedTabs((current) => {
-      const next = new Set(current);
-      const previous = TEAM_TABS[activeTabIndex - 1];
-      const following = TEAM_TABS[activeTabIndex + 1];
-      if (previous) next.add(previous);
-      if (following) next.add(following);
-      return next.size === current.size ? current : next;
-    });
-  }, [activeTabIndex]);
+  const action =
+    activeTab === "members" && can("role.assign")
+      ? { label: "Add member", icon: UserPlus, panel: "add-member" as const }
+      : activeTab === "roles" && customRolesEnabled && can("role.create")
+        ? { label: "New role", icon: Plus, panel: "new-role" as const }
+        : activeTab === "invitations" && can("team.invite")
+          ? {
+              label: "Invite people",
+              icon: PaperPlaneTilt,
+              panel: "invite" as const,
+            }
+          : null;
 
   return (
-    <div className="settings-page" aria-labelledby="team-page-title">
-      <header className="settings-page__topbar contents!">
-        <div className="settings-page__heading mb-2">
-          <PageHeading
+    <div className="pb-10" aria-labelledby="team-page-title">
+      <header className="flex flex-wrap items-start justify-between gap-4 px-1 pt-2">
+        <div>
+          <h1
             id="team-page-title"
-            title="Team"
-            description="Who works on the academy and what each person may do."
-            copyClassName="settings-page__heading-copy"
-          />
-          <div className="settings-page__icon" aria-hidden="true">
-            <UsersThree size={25} weight="regular" />
-          </div>
+            className="text-[1.75rem] leading-tight font-bold tracking-tight text-(--text)"
+          >
+            Team
+          </h1>
+          <p className="mt-1 text-sm text-(--muted)">
+            Who works on the academy and what each person may do.
+          </p>
         </div>
-
-        <SettingsTabBar
-          tabs={TEAM_TAB_DEFINITIONS}
-          activeTab={activeTab}
-          idPrefix="team-tab"
-          panelId="team-tab-panel"
-          label="Team sections"
-          navRef={tabListRef}
-          onPrepare={prepareTab}
-          onSelect={navigateTab}
-        />
+        {action ? (
+          <Button onClick={() => setPanel(action.panel)}>
+            <action.icon size={17} weight="bold" />
+            {action.label}
+          </Button>
+        ) : null}
       </header>
 
-      <SwipeableTabPanel
-        tabs={TEAM_TABS}
-        activeTab={activeTab}
-        onTabChange={(nextTab) => navigateTab(nextTab)}
-        tabListRef={tabListRef}
-        id="team-tab-panel"
-        className="settings-tab-content pb-8"
-        stateAttribute="data-team-tab"
-        labelledBy={`team-tab-${activeTab}`}
-        onSwipeStart={prepareSwipeNeighbors}
-        nativeOnFinePointer
-        focusable={false}
+      <nav
+        aria-label="Team sections"
+        className="mt-6 flex gap-1 overflow-x-auto border-b border-[color-mix(in_srgb,var(--text)_10%,transparent)]"
       >
-        {(panelTab) =>
-          panelTab === activeTab || preparedTabs.has(panelTab) ? (
-            <TeamTabContent tab={panelTab} setNotice={setNotice} />
-          ) : null
-        }
-      </SwipeableTabPanel>
+        {TEAM_TAB_DEFINITIONS.map((definition) => {
+          const active = definition.id === activeTab;
+          const count = counts[definition.id];
+          return (
+            <button
+              key={definition.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() =>
+                onNavigatePage?.(`/team/${definition.id}`, {
+                  resetScroll: true,
+                })
+              }
+              className={`-mb-px flex cursor-pointer items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors ${active ? "border-(--accent) text-(--accent)" : "border-transparent text-(--muted) hover:text-(--text)"}`}
+            >
+              {definition.label}
+              {typeof count === "number" ? (
+                <span
+                  className={`rounded-md px-1.5 py-px text-[0.7rem] tabular-nums ${active ? "bg-(--accent)/15 text-(--accent)" : "bg-[color-mix(in_srgb,var(--text)_8%,transparent)] text-(--muted)"}`}
+                >
+                  {count}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="mt-6" role="tabpanel">
+        {activeTab === "members" ? (
+          <MembersTab
+            setNotice={setNotice}
+            onAddMember={() => setPanel("add-member")}
+          />
+        ) : activeTab === "roles" ? (
+          <RolesTab setNotice={setNotice} />
+        ) : (
+          <InvitationsTab
+            setNotice={setNotice}
+            onInvite={() => setPanel("invite")}
+            onViewMember={() =>
+              onNavigatePage?.("/team/members", { resetScroll: true })
+            }
+          />
+        )}
+      </div>
+
+      {panel === "add-member" ? (
+        <AddMemberPanel onClose={() => setPanel(null)} setNotice={setNotice} />
+      ) : null}
+      {panel === "invite" ? (
+        <InvitePanel onClose={() => setPanel(null)} />
+      ) : null}
+      {panel === "new-role" ? (
+        <RoleEditorPanel
+          target={{ mode: "create" }}
+          customRolesEnabled={customRolesEnabled}
+          onClose={() => setPanel(null)}
+          onDuplicate={() => undefined}
+          setNotice={setNotice}
+        />
+      ) : null}
     </div>
   );
 }

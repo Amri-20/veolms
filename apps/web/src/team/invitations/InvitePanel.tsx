@@ -4,21 +4,20 @@ import {
   type CreateTeamInvitationsResponse,
   type TeamInvitationKind,
 } from "@veolms/contracts";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "../../components/Button";
 import { Checkbox } from "../../components/Checkbox";
 import { SlideOverPanel } from "../../components/SlideOverPanel";
-import { useCreateTeamInvitations } from "../../services/team";
+import { useCreateTeamInvitations, useTeamRoles } from "../../services/team";
 import { RolePicker } from "../RolePicker";
-import { parseEmailList } from "../teamFormat";
+import { looksLikeEmail, roleLabel } from "../teamFormat";
 import {
-  FieldLabel,
   inputClassName,
   PanelBody,
-  PanelFooter,
   secondaryButtonClassName,
   StatusChip,
 } from "../TeamBits";
+import { EmailChipsInput } from "./EmailChipsInput";
 
 const OUTCOME_LABELS: Record<
   CreateTeamInvitationsResponse["results"][number]["outcome"],
@@ -26,26 +25,75 @@ const OUTCOME_LABELS: Record<
 > = {
   invited: { label: "Invited", tone: "success" },
   updated: { label: "Invitation renewed", tone: "success" },
-  preapproved: { label: "Added by email", tone: "success" },
+  preapproved: { label: "Added directly", tone: "success" },
   promoted: { label: "Added now", tone: "accent" },
   already_member: { label: "Already has these roles", tone: "neutral" },
   failed: { label: "Not added", tone: "danger" },
 };
 
+const MODES: readonly {
+  id: TeamInvitationKind;
+  label: string;
+  hint: string;
+}[] = [
+  { id: "invite", label: "Send invite link", hint: "They accept first" },
+  {
+    id: "preapproved",
+    label: "Add directly",
+    hint: "Roles apply on first sign-in",
+  },
+];
+
+function SectionLabel({
+  htmlFor,
+  children,
+  aside,
+}: {
+  htmlFor?: string;
+  children: string;
+  aside?: ReactNode;
+}) {
+  return (
+    <div className="mb-2 flex items-baseline justify-between gap-2">
+      <label htmlFor={htmlFor} className="text-sm font-semibold text-(--text)">
+        {children}
+      </label>
+      {aside ? <span className="text-xs text-(--muted)">{aside}</span> : null}
+    </div>
+  );
+}
+
+function sendLabel(kind: TeamInvitationKind, count: number): string {
+  if (kind === "preapproved") return count > 0 ? `Add ${count}` : "Add";
+  if (count === 0) return "Send invites";
+  return `Send ${count} invite${count === 1 ? "" : "s"}`;
+}
+
 /** Invite several people at once, then show what happened for each. */
 export function InvitePanel({ onClose }: { onClose: () => void }) {
-  const [emailsText, setEmailsText] = useState("");
+  const [emails, setEmails] = useState<string[]>([]);
   const [roleIds, setRoleIds] = useState<string[]>([]);
   const [kind, setKind] = useState<TeamInvitationKind>("invite");
   const [notify, setNotify] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const create = useCreateTeamInvitations();
+  const roles = useTeamRoles();
   const [results, setResults] =
     useState<CreateTeamInvitationsResponse["results"]>();
 
-  const { valid, invalid } = parseEmailList(emailsText);
+  const valid = emails.filter(looksLikeEmail);
+  const invalidCount = emails.length - valid.length;
   const tooMany = valid.length > TEAM_INVITATION_MAX_EMAILS;
+  const chosenRoles = (roles.data?.roles ?? []).filter((role) =>
+    roleIds.includes(role.id),
+  );
+  const canSend =
+    !create.isPending &&
+    valid.length > 0 &&
+    invalidCount === 0 &&
+    !tooMany &&
+    roleIds.length > 0;
 
   const submit = async () => {
     setError(null);
@@ -71,6 +119,11 @@ export function InvitePanel({ onClose }: { onClose: () => void }) {
       title="Invite people"
       onClose={onClose}
       closeLabel="Close"
+      headerContent={
+        <p className="mt-1 text-xs text-(--muted)">
+          They&apos;ll get an email with a link valid for 7 days.
+        </p>
+      }
     >
       <PanelBody>
         {results ? (
@@ -105,74 +158,67 @@ export function InvitePanel({ onClose }: { onClose: () => void }) {
         ) : (
           <div className="flex flex-col gap-6">
             <div>
-              <FieldLabel
+              <SectionLabel
                 htmlFor="invite-emails"
-                hint="Paste one or more addresses, separated by commas or new lines."
+                aside={
+                  emails.length > 0 ? (
+                    <>
+                      {valid.length} added
+                      {invalidCount > 0 ? (
+                        <span className="text-rose-400">
+                          {" "}
+                          · {invalidCount} invalid
+                        </span>
+                      ) : null}
+                      {tooMany ? (
+                        <span className="text-rose-400">
+                          {" "}
+                          · at most {TEAM_INVITATION_MAX_EMAILS}
+                        </span>
+                      ) : null}
+                    </>
+                  ) : null
+                }
               >
                 Emails
-              </FieldLabel>
-              <textarea
+              </SectionLabel>
+              <EmailChipsInput
                 id="invite-emails"
-                className={`${inputClassName} h-auto min-h-24 py-2`}
-                value={emailsText}
-                onChange={(event) => setEmailsText(event.target.value)}
-                placeholder="name@example.com"
+                emails={emails}
+                onChange={setEmails}
                 autoFocus
               />
-              <p className="mt-1 text-xs text-(--muted)">
-                {valid.length} address{valid.length === 1 ? "" : "es"}
-                {invalid.length > 0 ? (
-                  <span className="text-rose-500">
-                    {" "}
-                    · not an email: {invalid.slice(0, 3).join(", ")}
-                  </span>
-                ) : null}
-                {tooMany ? (
-                  <span className="text-rose-500">
-                    {" "}
-                    · at most {TEAM_INVITATION_MAX_EMAILS} at a time
-                  </span>
-                ) : null}
-              </p>
             </div>
 
-            <fieldset>
-              <legend className="mb-1.5 text-sm font-semibold text-(--text)">
-                How
-              </legend>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {(
-                  [
-                    [
-                      "invite",
-                      "Send invite",
-                      "They get a link and accept first.",
-                    ],
-                    [
-                      "preapproved",
-                      "Add by email",
-                      "Roles apply the first time they sign in.",
-                    ],
-                  ] as const
-                ).map(([value, label, hint]) => (
-                  <label
-                    key={value}
-                    className={`flex cursor-pointer flex-col rounded-xl border px-3 py-2.5 ${kind === value ? "border-(--accent) bg-(--accent)/6" : "border-[color-mix(in_srgb,var(--text)_12%,transparent)] hover:bg-(--hover)"}`}
-                  >
-                    <input
-                      type="radio"
-                      name="invite-kind"
-                      value={value}
-                      checked={kind === value}
-                      onChange={() => setKind(value)}
-                      className="sr-only"
-                    />
-                    <span className="text-sm font-semibold text-(--text)">
-                      {label}
-                    </span>
-                    <span className="text-xs text-(--muted)">{hint}</span>
-                  </label>
-                ))}
+            <div>
+              <SectionLabel>How they join</SectionLabel>
+              <div
+                role="radiogroup"
+                aria-label="How they join"
+                className="grid grid-cols-2 gap-1 rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-[color-mix(in_srgb,var(--text)_3%,transparent)] p-1"
+              >
+                {MODES.map((mode) => {
+                  const active = kind === mode.id;
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setKind(mode.id)}
+                      className={`cursor-pointer rounded-lg px-3 py-2 text-left transition-colors ${active ? "bg-[color-mix(in_srgb,var(--text)_9%,transparent)]" : "hover:bg-(--hover)"}`}
+                    >
+                      <span
+                        className={`block text-sm font-semibold ${active ? "text-(--accent)" : "text-(--muted)"}`}
+                      >
+                        {mode.label}
+                      </span>
+                      <span className="block text-xs text-(--muted)">
+                        {mode.hint}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
               {kind === "preapproved" ? (
                 <div className="mt-3">
@@ -184,10 +230,10 @@ export function InvitePanel({ onClose }: { onClose: () => void }) {
                   />
                 </div>
               ) : null}
-            </fieldset>
+            </div>
 
             <div>
-              <FieldLabel>Roles</FieldLabel>
+              <SectionLabel aside="Pick one or more">Roles</SectionLabel>
               <RolePicker
                 selected={roleIds}
                 onChange={setRoleIds}
@@ -196,17 +242,15 @@ export function InvitePanel({ onClose }: { onClose: () => void }) {
             </div>
 
             <div>
-              <FieldLabel
-                htmlFor="invite-message"
-                hint="Optional. Shown in the email."
-              >
-                Message
-              </FieldLabel>
+              <SectionLabel htmlFor="invite-message" aside="Optional">
+                Personal note
+              </SectionLabel>
               <textarea
                 id="invite-message"
-                className={`${inputClassName} h-auto min-h-18 py-2`}
+                className={`${inputClassName} h-auto min-h-20 rounded-xl py-2`}
                 value={message}
                 maxLength={TEAM_INVITATION_MESSAGE_MAX_LENGTH}
+                placeholder="Shown in the invite email"
                 onChange={(event) => setMessage(event.target.value)}
               />
             </div>
@@ -219,37 +263,51 @@ export function InvitePanel({ onClose }: { onClose: () => void }) {
           </div>
         )}
       </PanelBody>
-      <PanelFooter>
+
+      <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[color-mix(in_srgb,var(--text)_10%,transparent)] p-4 sm:px-6">
         {results ? (
-          <Button onClick={onClose}>Done</Button>
+          <>
+            <span />
+            <Button onClick={onClose}>Done</Button>
+          </>
         ) : (
           <>
-            <button
-              type="button"
-              className={secondaryButtonClassName}
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-            <Button
-              disabled={
-                create.isPending ||
-                valid.length === 0 ||
-                tooMany ||
-                invalid.length > 0 ||
-                roleIds.length === 0
-              }
-              onClick={() => void submit()}
-            >
-              {create.isPending
-                ? "Sending…"
-                : kind === "invite"
-                  ? `Invite ${valid.length || ""}`.trim()
-                  : `Add ${valid.length || ""}`.trim()}
-            </Button>
+            <p className="min-w-0 truncate text-xs text-(--muted)">
+              {valid.length > 0 ? (
+                <>
+                  <strong className="text-(--text)">
+                    {valid.length} {valid.length === 1 ? "person" : "people"}
+                  </strong>
+                  {chosenRoles.length > 0 ? (
+                    <>
+                      {" as "}
+                      <strong className="text-(--text)">
+                        {chosenRoles
+                          .map((role) => roleLabel(role.name))
+                          .join(" + ")}
+                      </strong>
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                "Add at least one email"
+              )}
+            </p>
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                className={secondaryButtonClassName}
+                onClick={onClose}
+              >
+                Cancel
+              </button>
+              <Button disabled={!canSend} onClick={() => void submit()}>
+                {create.isPending ? "Sending…" : sendLabel(kind, valid.length)}
+              </Button>
+            </div>
           </>
         )}
-      </PanelFooter>
+      </div>
     </SlideOverPanel>
   );
 }

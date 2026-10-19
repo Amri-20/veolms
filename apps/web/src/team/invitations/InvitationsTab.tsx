@@ -1,10 +1,7 @@
-import { ArrowClockwiseIcon as ArrowClockwise } from "@phosphor-icons/react/ArrowClockwise";
 import { EnvelopeSimpleIcon as EnvelopeSimple } from "@phosphor-icons/react/EnvelopeSimple";
-import { PaperPlaneTiltIcon as PaperPlaneTilt } from "@phosphor-icons/react/PaperPlaneTilt";
 import { XCircleIcon as XCircle } from "@phosphor-icons/react/XCircle";
 import type { TeamInvitation } from "@veolms/contracts";
-import { useState } from "react";
-import { Button } from "../../components/Button";
+import { useMemo, useState } from "react";
 import {
   useResendTeamInvitation,
   useRevokeTeamInvitation,
@@ -12,42 +9,78 @@ import {
 } from "../../services/team";
 import { ConfirmActionModal } from "../../shell/ConfirmActionModal";
 import type { ToastMessage } from "../../ToastNotification";
-import { formatTeamDate } from "../teamFormat";
-import {
-  EmptyState,
-  RoleChips,
-  RowMenu,
-  secondaryButtonClassName,
-  StatusChip,
-} from "../TeamBits";
+import { RoleChips, secondaryButtonClassName } from "../TeamBits";
 import { useTeamAccess } from "../useTeamAccess";
-import { InvitePanel } from "./InvitePanel";
+import { InvitationsEmpty } from "./InvitationsEmpty";
+import {
+  invitationState,
+  sentLabel,
+  type InvitationTone,
+} from "./invitationState";
 
-const FILTERS = ["all", "pending", "accepted", "expired", "revoked"] as const;
-type Filter = (typeof FILTERS)[number];
+const FILTERS = [
+  { id: "all", label: "All" },
+  { id: "pending", label: "Pending" },
+  { id: "accepted", label: "Accepted" },
+  { id: "expired", label: "Expired" },
+  { id: "revoked", label: "Revoked" },
+] as const;
+type Filter = (typeof FILTERS)[number]["id"];
 
-const STATUS = {
-  pending: { label: "Pending", tone: "accent" },
-  accepted: { label: "Accepted", tone: "success" },
-  expired: { label: "Expired", tone: "warning" },
-  revoked: { label: "Cancelled", tone: "neutral" },
-} as const;
+const TONES: Record<InvitationTone, { text: string; bar: string }> = {
+  pending: { text: "text-(--accent)", bar: "bg-(--accent)" },
+  soon: { text: "text-orange-400", bar: "bg-orange-400" },
+  accepted: { text: "text-emerald-400", bar: "bg-emerald-400" },
+  muted: { text: "text-(--muted)", bar: "bg-(--muted)" },
+};
+
+const line = "border-[color-mix(in_srgb,var(--text)_9%,transparent)]";
+const columns =
+  "md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.6fr)_11rem]";
+const smallButton =
+  "inline-flex h-8 cursor-pointer items-center rounded-lg border px-3 text-xs font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50";
+const neutralButton = `${smallButton} ${line} text-(--text) hover:bg-(--hover)`;
+const accentButton = `${smallButton} ${line} text-(--accent) hover:bg-(--accent)/10`;
+const dangerButton = `${smallButton} ${line} text-rose-400 hover:bg-rose-500/10`;
 
 export function InvitationsTab({
   setNotice,
+  onInvite,
+  onViewMember,
 }: {
   setNotice?: (message: ToastMessage) => void;
+  onInvite: () => void;
+  onViewMember: () => void;
 }) {
-  const [filter, setFilter] = useState<Filter>("all");
-  const query = useTeamInvitations(filter);
+  // One list of every invite; the filter and its counts are worked out
+  // here, so switching filters never waits on the network.
+  const query = useTeamInvitations("all");
   const { can } = useTeamAccess();
-  const [inviting, setInviting] = useState(false);
+  const [filter, setFilter] = useState<Filter>("all");
   const [revoking, setRevoking] = useState<TeamInvitation | null>(null);
   const resend = useResendTeamInvitation();
   const revoke = useRevokeTeamInvitation();
   const canInvite = can("team.invite");
-  const invitations =
-    query.data?.pages.flatMap((page) => page.invitations) ?? [];
+
+  const invitations = useMemo(
+    () => query.data?.pages.flatMap((page) => page.invitations) ?? [],
+    [query.data],
+  );
+  const counts = useMemo(() => {
+    const result: Record<Filter, number> = {
+      all: invitations.length,
+      pending: 0,
+      accepted: 0,
+      expired: 0,
+      revoked: 0,
+    };
+    for (const invitation of invitations) result[invitation.status] += 1;
+    return result;
+  }, [invitations]);
+  const shown =
+    filter === "all"
+      ? invitations
+      : invitations.filter((invitation) => invitation.status === filter);
 
   const run = async (action: () => Promise<unknown>, success: string) => {
     try {
@@ -62,145 +95,180 @@ export function InvitationsTab({
     }
   };
 
-  return (
-    <div className="settings-content">
-      <header className="settings-detail__header">
-        <div>
-          <h2>Invitations</h2>
-          <p>
-            People invited with a link to accept. Links last 7 days; resending
-            sends a new one. People added by email appear under Members.
-          </p>
-        </div>
-        {canInvite ? (
-          <Button onClick={() => setInviting(true)}>
-            <PaperPlaneTilt size={17} weight="bold" />
-            Invite people
-          </Button>
-        ) : null}
-      </header>
+  if (query.isPending) {
+    return (
+      <div className="flex flex-col gap-2" aria-busy="true">
+        {[0, 1, 2, 3].map((index) => (
+          <div
+            key={index}
+            className="h-16 animate-pulse rounded-xl bg-(--hover)"
+          />
+        ))}
+      </div>
+    );
+  }
 
-      <section className="settings-section" aria-label="Invitations">
+  if (query.isError) {
+    return (
+      <p className="text-sm text-rose-500">
+        Invitations could not be loaded. {query.error.message}
+      </p>
+    );
+  }
+
+  if (invitations.length === 0) {
+    return <InvitationsEmpty canInvite={canInvite} onInvite={onInvite} />;
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div
-          className="mb-4 flex flex-wrap gap-1.5"
           role="group"
           aria-label="Filter by status"
+          className={`inline-flex flex-wrap gap-0.5 rounded-xl border p-1 ${line} bg-[color-mix(in_srgb,var(--text)_3%,transparent)]`}
         >
-          {FILTERS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={filter === value}
-              onClick={() => setFilter(value)}
-              className={`cursor-pointer rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${filter === value ? "border-(--accent) bg-(--accent)/10 text-(--accent)" : "border-[color-mix(in_srgb,var(--text)_12%,transparent)] text-(--muted) hover:bg-(--hover)"}`}
-            >
-              {value === "all" ? "All" : STATUS[value].label}
-            </button>
-          ))}
+          {FILTERS.map(({ id, label }) => {
+            const active = filter === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setFilter(id)}
+                className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[0.8rem] font-semibold transition-colors ${active ? "bg-(--accent)/15 text-(--accent)" : "text-(--muted) hover:text-(--text)"}`}
+              >
+                {label}
+                <span className={`tabular-nums ${active ? "" : "opacity-60"}`}>
+                  {counts[id]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs text-(--muted)">
+          Links last 7 days. Resending issues a fresh link.
+        </p>
+      </div>
+
+      <div
+        className={`overflow-hidden rounded-2xl border ${line} bg-[color-mix(in_srgb,var(--text)_2%,transparent)]`}
+      >
+        <div
+          className={`hidden gap-4 border-b px-5 py-3 text-[0.68rem] font-semibold tracking-wider text-(--muted) uppercase md:grid ${columns} ${line}`}
+        >
+          <span>Invited</span>
+          <span>Role</span>
+          <span>Sent by</span>
+          <span>Link</span>
+          <span className="sr-only">Actions</span>
         </div>
 
-        {query.isPending ? (
-          <div className="flex flex-col gap-2" aria-busy="true">
-            {[0, 1, 2].map((index) => (
-              <div
-                key={index}
-                className="h-16 animate-pulse rounded-xl bg-(--hover)"
-              />
-            ))}
-          </div>
-        ) : query.isError ? (
-          <p className="text-sm text-rose-500">
-            Invitations could not be loaded. {query.error.message}
+        {shown.length === 0 ? (
+          <p className="px-5 py-10 text-center text-sm text-(--muted)">
+            No invitations here.
           </p>
-        ) : invitations.length === 0 ? (
-          <EmptyState icon={EnvelopeSimple} title="No invitations">
-            {canInvite ? "Invite someone to join the team." : null}
-          </EmptyState>
         ) : (
-          <ul className="m-0 flex list-none flex-col divide-y divide-[color-mix(in_srgb,var(--text)_8%,transparent)] p-0">
-            {invitations.map((invitation) => {
-              const status = STATUS[invitation.status];
-              const open =
-                invitation.status === "pending" ||
-                invitation.status === "expired";
+          <ul className="m-0 list-none p-0">
+            {shown.map((invitation) => {
+              const state = invitationState(invitation);
+              const tone = TONES[state.tone];
               return (
                 <li
                   key={invitation.id}
-                  className="flex items-center gap-3 py-3"
+                  className={`grid grid-cols-1 gap-3 border-b px-5 py-4 last:border-b-0 md:items-center md:gap-4 ${columns} ${line}`}
                 >
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-(--accent)/12 text-(--accent)">
-                    <EnvelopeSimple size={17} weight="bold" />
-                  </span>
-                  <div className="grid min-w-0 flex-1 gap-1 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_7rem_9rem] md:items-center md:gap-4">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--text)_7%,transparent)] text-(--muted)">
+                      <EnvelopeSimple size={16} />
+                    </span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-semibold text-(--text)">
                         {invitation.email}
                       </span>
-                      <span className="block truncate text-xs text-(--muted)">
-                        {invitation.invitedBy?.name
-                          ? `By ${invitation.invitedBy.name}`
-                          : "Invited"}{" "}
-                        · {formatTeamDate(invitation.createdAt)}
+                      <span className="block text-xs text-(--muted)">
+                        {sentLabel(invitation.createdAt)}
                       </span>
                     </span>
-                    <RoleChips roles={invitation.roles} />
-                    <span>
-                      <StatusChip tone={status.tone}>{status.label}</StatusChip>
-                    </span>
-                    <span className="text-xs text-(--muted)">
-                      {invitation.status === "accepted"
-                        ? `Accepted ${formatTeamDate(invitation.acceptedAt)}`
-                        : invitation.status === "revoked"
-                          ? `Cancelled ${formatTeamDate(invitation.revokedAt)}`
-                          : `${invitation.status === "expired" ? "Expired" : "Expires"} ${formatTeamDate(invitation.expiresAt)}`}
-                    </span>
                   </div>
-                  <RowMenu
-                    label={`Actions for ${invitation.email}`}
-                    items={
-                      canInvite && open
-                        ? [
-                            {
-                              label: "Resend",
-                              icon: ArrowClockwise,
-                              disabled: resend.isPending,
-                              onSelect: () =>
-                                void run(
-                                  () => resend.mutateAsync(invitation.id),
-                                  `A new link was sent to ${invitation.email}.`,
-                                ),
-                            },
-                            {
-                              label: "Cancel invite",
-                              icon: XCircle,
-                              danger: true,
-                              onSelect: () => setRevoking(invitation),
-                            },
-                          ]
-                        : []
-                    }
-                  />
+
+                  <RoleChips roles={invitation.roles} />
+
+                  <span className="truncate text-sm text-(--muted)">
+                    {invitation.invitedBy?.name ?? "—"}
+                  </span>
+
+                  <div className="min-w-0">
+                    <div className="flex items-baseline justify-between gap-2 text-xs">
+                      <span className={`font-semibold ${tone.text}`}>
+                        {state.label}
+                      </span>
+                      <span className="text-(--muted)">{state.detail}</span>
+                    </div>
+                    <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--text)_10%,transparent)]">
+                      <div
+                        className={`h-full rounded-full ${tone.bar}`}
+                        style={{
+                          width: `${Math.round(state.progress * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-start gap-2 md:justify-end">
+                    {invitation.status === "accepted" ? (
+                      <button
+                        type="button"
+                        className={neutralButton}
+                        onClick={onViewMember}
+                      >
+                        View member
+                      </button>
+                    ) : null}
+                    {canInvite && state.isOpen ? (
+                      <button
+                        type="button"
+                        className={accentButton}
+                        disabled={resend.isPending}
+                        onClick={() =>
+                          void run(
+                            () => resend.mutateAsync(invitation.id),
+                            `A fresh link was sent to ${invitation.email}.`,
+                          )
+                        }
+                      >
+                        Resend
+                      </button>
+                    ) : null}
+                    {canInvite && invitation.status === "pending" ? (
+                      <button
+                        type="button"
+                        className={dangerButton}
+                        onClick={() => setRevoking(invitation)}
+                      >
+                        Revoke
+                      </button>
+                    ) : null}
+                  </div>
                 </li>
               );
             })}
           </ul>
         )}
+      </div>
 
-        {query.hasNextPage ? (
-          <div className="mt-4 flex justify-center">
-            <button
-              type="button"
-              className={secondaryButtonClassName}
-              disabled={query.isFetchingNextPage}
-              onClick={() => void query.fetchNextPage()}
-            >
-              {query.isFetchingNextPage ? "Loading…" : "Show more"}
-            </button>
-          </div>
-        ) : null}
-      </section>
-
-      {inviting ? <InvitePanel onClose={() => setInviting(false)} /> : null}
+      {query.hasNextPage ? (
+        <div className="mt-4 flex justify-center">
+          <button
+            type="button"
+            className={secondaryButtonClassName}
+            disabled={query.isFetchingNextPage}
+            onClick={() => void query.fetchNextPage()}
+          >
+            {query.isFetchingNextPage ? "Loading…" : "Show more"}
+          </button>
+        </div>
+      ) : null}
 
       <ConfirmActionModal
         id="team-invitation-revoke"
@@ -210,20 +278,21 @@ export function InvitationsTab({
         onConfirm={() => {
           const target = revoking;
           setRevoking(null);
-          if (target)
+          if (target) {
             void run(
               () => revoke.mutateAsync(target.id),
-              `The invitation to ${target.email} is cancelled.`,
+              `The invitation to ${target.email} is revoked.`,
             );
+          }
         }}
         icon={XCircle}
         tone="danger"
         emphasis="cancel"
-        title={`Cancel the invitation to ${revoking?.email ?? ""}?`}
+        title={`Revoke the invitation to ${revoking?.email ?? ""}?`}
         description="The link stops working. You can invite them again later."
         cancelLabel="Keep it"
-        confirmLabel="Cancel invite"
-        pendingLabel="Cancelling…"
+        confirmLabel="Revoke"
+        pendingLabel="Revoking…"
       />
     </div>
   );

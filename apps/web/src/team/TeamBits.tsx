@@ -1,3 +1,4 @@
+import { CheckIcon as Check } from "@phosphor-icons/react/Check";
 import { DotsThreeVerticalIcon as DotsThreeVertical } from "@phosphor-icons/react/DotsThreeVertical";
 import { MagnifyingGlassIcon as MagnifyingGlass } from "@phosphor-icons/react/MagnifyingGlass";
 import type { Icon } from "@phosphor-icons/react";
@@ -12,6 +13,24 @@ import {
 import { initials, roleLabel } from "./teamFormat";
 
 /** Small shared pieces of the Team page. */
+
+/** The square tick the role lists use; the real input sits beside it. */
+export function SquareCheck({
+  checked,
+  className = "",
+}: {
+  checked: boolean;
+  className?: string;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex size-4.5 shrink-0 items-center justify-center rounded-[5px] border-[1.5px] transition-colors ${checked ? "border-(--accent) bg-(--accent) text-(--on-accent)" : "border-[color-mix(in_srgb,var(--text)_32%,transparent)]"} ${className}`}
+    >
+      {checked ? <Check size={11} weight="bold" /> : null}
+    </span>
+  );
+}
 
 export function RoleChips({
   roles,

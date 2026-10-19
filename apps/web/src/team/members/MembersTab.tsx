@@ -1,11 +1,9 @@
 import { PencilSimpleIcon as PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { UserMinusIcon as UserMinus } from "@phosphor-icons/react/UserMinus";
-import { UserPlusIcon as UserPlus } from "@phosphor-icons/react/UserPlus";
 import { UsersThreeIcon as UsersThree } from "@phosphor-icons/react/UsersThree";
 import { XCircleIcon as XCircle } from "@phosphor-icons/react/XCircle";
 import type { TeamMember } from "@veolms/contracts";
 import { useDeferredValue, useState } from "react";
-import { Button } from "../../components/Button";
 import {
   useRemoveTeamMember,
   useRevokeTeamInvitation,
@@ -26,22 +24,22 @@ import {
   secondaryButtonClassName,
 } from "../TeamBits";
 import { useTeamAccess } from "../useTeamAccess";
-import { AddMemberPanel } from "./AddMemberPanel";
 import { EditRolesPanel } from "./EditRolesPanel";
 
 type Pending = { kind: "remove" | "cancel"; member: TeamMember } | null;
 
 export function MembersTab({
   setNotice,
+  onAddMember,
 }: {
   setNotice?: (message: ToastMessage) => void;
+  onAddMember: () => void;
 }) {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
   const membersQuery = useTeamMembers(deferredSearch);
   const { can, canGrantRole } = useTeamAccess();
   const currentUserId = useAuthStore((state) => state.user?.id);
-  const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<TeamMember | null>(null);
   const [confirming, setConfirming] = useState<Pending>(null);
   const removeMember = useRemoveTeamMember();
@@ -53,7 +51,6 @@ export function MembersTab({
   );
   const pages = membersQuery.data?.pages ?? [];
   const members = pages.flatMap((page) => page.members);
-  const total = pages[0]?.totalCount;
   const canAssign = can("role.assign");
 
   const confirm = async () => {
@@ -132,71 +129,83 @@ export function MembersTab({
     ];
   };
 
-  return (
-    <div className="settings-content">
-      <header className="settings-detail__header">
-        <div>
-          <h2>Members</h2>
-          <p>
-            Everyone who works on the academy, and what each person may do.
-            {typeof total === "number" ? ` ${total} in all.` : ""}
-          </p>
-        </div>
-      </header>
+  const line = "border-[color-mix(in_srgb,var(--text)_9%,transparent)]";
+  const columns =
+    "md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.6fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_2.5rem]";
 
-      <section className="settings-section" aria-label="Team members">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="w-full max-w-sm">
           <SearchField
             value={search}
             onChange={setSearch}
             placeholder="Search by name or email"
             label="Search team members"
           />
-          {canAssign ? (
-            <Button onClick={() => setAdding(true)}>
-              <UserPlus size={17} weight="bold" />
-              Add member
-            </Button>
-          ) : null}
         </div>
+        <p className="text-xs text-(--muted)">
+          Team members sign in with two-factor verification.
+        </p>
+      </div>
 
-        {membersQuery.isPending ? (
-          <div className="flex flex-col gap-2" aria-busy="true">
-            {[0, 1, 2, 3].map((index) => (
-              <div
-                key={index}
-                className="h-16 animate-pulse rounded-xl bg-(--hover)"
-              />
-            ))}
-          </div>
-        ) : membersQuery.isError ? (
-          <p className="text-sm text-rose-500">
-            Members could not be loaded. {membersQuery.error.message}
-          </p>
-        ) : members.length === 0 ? (
-          <EmptyState
-            icon={UsersThree}
-            title={deferredSearch ? "Nobody matches" : "No team members yet"}
+      {membersQuery.isPending ? (
+        <div className="flex flex-col gap-2" aria-busy="true">
+          {[0, 1, 2, 3].map((index) => (
+            <div
+              key={index}
+              className="h-16 animate-pulse rounded-xl bg-(--hover)"
+            />
+          ))}
+        </div>
+      ) : membersQuery.isError ? (
+        <p className="text-sm text-rose-500">
+          Members could not be loaded. {membersQuery.error.message}
+        </p>
+      ) : members.length === 0 ? (
+        <EmptyState
+          icon={UsersThree}
+          title={deferredSearch ? "Nobody matches" : "No team members yet"}
+        >
+          {deferredSearch ? (
+            "Try another name or email."
+          ) : canAssign ? (
+            <button
+              type="button"
+              className="cursor-pointer font-semibold text-(--accent) hover:underline"
+              onClick={onAddMember}
+            >
+              Add someone to start your team.
+            </button>
+          ) : null}
+        </EmptyState>
+      ) : (
+        <div
+          className={`overflow-hidden rounded-2xl border ${line} bg-[color-mix(in_srgb,var(--text)_2%,transparent)]`}
+        >
+          <div
+            className={`hidden gap-4 border-b px-5 py-3 text-[0.68rem] font-semibold tracking-wider text-(--muted) uppercase md:grid ${columns} ${line}`}
           >
-            {deferredSearch
-              ? "Try another name or email."
-              : "Add someone to start your team."}
-          </EmptyState>
-        ) : (
-          <ul className="m-0 flex list-none flex-col divide-y divide-[color-mix(in_srgb,var(--text)_8%,transparent)] p-0">
+            <span>Member</span>
+            <span>Roles</span>
+            <span>Joined</span>
+            <span>Last active</span>
+            <span className="sr-only">Actions</span>
+          </div>
+          <ul className="m-0 list-none p-0">
             {members.map((member) => (
               <li
                 key={member.userId ?? member.invitationId}
-                className="flex items-center gap-3 py-3"
+                className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b px-5 py-3.5 last:border-b-0 md:gap-4 ${columns} ${line}`}
               >
-                <PersonAvatar
-                  name={member.name}
-                  email={member.email}
-                  avatarUrl={member.avatarUrl}
-                />
-                <div className="grid min-w-0 flex-1 gap-1 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)_8rem_8rem] md:items-center md:gap-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <PersonAvatar
+                    name={member.name}
+                    email={member.email}
+                    avatarUrl={member.avatarUrl}
+                  />
                   <span className="min-w-0">
-                    <span className="flex items-center gap-2 truncate text-sm font-semibold text-(--text)">
+                    <span className="flex items-center gap-2 text-sm font-semibold text-(--text)">
                       <span className="truncate">
                         {member.name || member.email}
                       </span>
@@ -210,58 +219,54 @@ export function MembersTab({
                       </span>
                     ) : null}
                   </span>
-                  <RoleChips roles={member.roles} />
-                  {member.status === "awaiting_sign_in" ? (
-                    <span className="md:col-span-2">
-                      <StatusChip tone="warning">
-                        Waiting for first sign-in
-                      </StatusChip>
-                      <span className="ml-2 text-xs text-(--muted)">
-                        until {formatTeamDate(member.expiresAt)}
-                      </span>
-                    </span>
-                  ) : (
-                    <>
-                      <span className="text-xs text-(--muted)">
-                        <span className="md:hidden">Joined </span>
-                        {formatTeamDate(member.joinedAt)}
-                      </span>
-                      <span className="text-xs text-(--muted)">
-                        <span className="md:hidden">Active </span>
-                        {formatLastActive(member.lastActiveAt)}
-                      </span>
-                    </>
-                  )}
                 </div>
-                <RowMenu
-                  label={`Actions for ${member.name || member.email}`}
-                  items={menuFor(member)}
-                />
+                <div className="col-span-2 row-start-2 md:col-span-1 md:row-start-auto">
+                  <RoleChips roles={member.roles} />
+                </div>
+                {member.status === "awaiting_sign_in" ? (
+                  <span className="col-span-2 row-start-3 md:col-span-2 md:row-start-auto">
+                    <StatusChip tone="warning">
+                      Waiting for first sign-in
+                    </StatusChip>
+                    <span className="ml-2 text-xs text-(--muted)">
+                      until {formatTeamDate(member.expiresAt)}
+                    </span>
+                  </span>
+                ) : (
+                  <>
+                    <span className="hidden text-sm text-(--muted) md:block">
+                      {formatTeamDate(member.joinedAt)}
+                    </span>
+                    <span className="hidden text-sm text-(--muted) md:block">
+                      {formatLastActive(member.lastActiveAt)}
+                    </span>
+                  </>
+                )}
+                <div className="col-start-2 row-start-1 flex justify-end md:col-start-auto md:row-start-auto">
+                  <RowMenu
+                    label={`Actions for ${member.name || member.email}`}
+                    items={menuFor(member)}
+                  />
+                </div>
               </li>
             ))}
           </ul>
-        )}
+        </div>
+      )}
 
-        {membersQuery.hasNextPage ? (
-          <div className="mt-4 flex justify-center">
-            <button
-              type="button"
-              className={secondaryButtonClassName}
-              disabled={membersQuery.isFetchingNextPage}
-              onClick={() => void membersQuery.fetchNextPage()}
-            >
-              {membersQuery.isFetchingNextPage ? "Loading…" : "Show more"}
-            </button>
-          </div>
-        ) : null}
-      </section>
-
-      {adding ? (
-        <AddMemberPanel
-          onClose={() => setAdding(false)}
-          setNotice={setNotice}
-        />
+      {membersQuery.hasNextPage ? (
+        <div className="mt-4 flex justify-center">
+          <button
+            type="button"
+            className={secondaryButtonClassName}
+            disabled={membersQuery.isFetchingNextPage}
+            onClick={() => void membersQuery.fetchNextPage()}
+          >
+            {membersQuery.isFetchingNextPage ? "Loading…" : "Show more"}
+          </button>
+        </div>
       ) : null}
+
       {editing ? (
         <EditRolesPanel
           member={editing}

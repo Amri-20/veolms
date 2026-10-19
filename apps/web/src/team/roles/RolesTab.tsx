@@ -1,13 +1,10 @@
-import { PlusIcon as Plus } from "@phosphor-icons/react/Plus";
 import { ShieldCheckIcon as ShieldCheck } from "@phosphor-icons/react/ShieldCheck";
 import { useState } from "react";
-import { Button } from "../../components/Button";
 import { ElevatedCard } from "../../components/ElevatedCard";
 import { useTeamRoles } from "../../services/team";
 import type { ToastMessage } from "../../ToastNotification";
 import { roleLabel } from "../teamFormat";
 import { EmptyState, StatusChip } from "../TeamBits";
-import { useTeamAccess } from "../useTeamAccess";
 import { RoleEditorPanel, type RoleEditorTarget } from "./RoleEditorPanel";
 
 export function RolesTab({
@@ -16,30 +13,18 @@ export function RolesTab({
   setNotice?: (message: ToastMessage) => void;
 }) {
   const rolesQuery = useTeamRoles();
-  const { can } = useTeamAccess();
   const [editor, setEditor] = useState<RoleEditorTarget | null>(null);
   const roles = rolesQuery.data?.roles ?? [];
   const customRolesEnabled = rolesQuery.data?.customRolesEnabled ?? false;
 
   return (
-    <div className="settings-content">
-      <header className="settings-detail__header">
-        <div>
-          <h2>Roles</h2>
-          <p>
-            Each role is a set of permissions. Built-in roles are fixed;
-            {customRolesEnabled
-              ? " build your own from any of them."
-              : " custom roles are coming soon."}
-          </p>
-        </div>
-        {customRolesEnabled && can("role.create") ? (
-          <Button onClick={() => setEditor({ mode: "create" })}>
-            <Plus size={17} weight="bold" />
-            New role
-          </Button>
-        ) : null}
-      </header>
+    <div>
+      <p className="mb-4 text-xs text-(--muted)">
+        Each role is a set of permissions. Built-in roles are fixed
+        {customRolesEnabled
+          ? "; duplicate one, or start a new role, to make your own."
+          : "."}
+      </p>
 
       {rolesQuery.isPending ? (
         <div
