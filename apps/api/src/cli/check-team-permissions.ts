@@ -250,8 +250,22 @@ async function status(row: Row, cookie: string): Promise<number> {
 
 const passed = (code: number) => code !== 401 && code !== 403;
 
+/** A run cut short (a dropped connection) leaves its users and roles behind. */
+async function removeEarlierRuns(): Promise<void> {
+  await db
+    .deleteFrom("users")
+    .where("email", "like", "permcheck%@example.test")
+    .execute();
+  await db
+    .deleteFrom("roles")
+    .where("name", "like", "permcheck%")
+    .where("is_system", "=", false)
+    .execute();
+}
+
 let failures = 0;
 try {
+  await removeEarlierRuns();
   const admin = await persona("admin", [await roleId("admin")]);
   const instructor = await persona("instructor", [await roleId("instructor")]);
   const student = await persona("student", [await roleId("student")]);

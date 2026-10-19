@@ -51,9 +51,23 @@ export function AddMemberPanel({
     initialUser?.roles.map((role) => role.id) ?? [],
   );
   const search = useTeamUserSearch(target ? "" : deferredQuery);
+  // Opened for a chosen person (from their student page): saving replaces
+  // their team roles, so read the ones they hold before anything is saved.
+  const initialLookup = useTeamUserSearch(initialUser?.email ?? "");
+  const [initialRolesLoaded, setInitialRolesLoaded] = useState(!initialUser);
+  const initialMatch = initialLookup.data?.users.find(
+    (user) => user.userId === initialUser?.userId,
+  );
+  if (initialUser && !initialRolesLoaded && initialLookup.isSuccess) {
+    setInitialRolesLoaded(true);
+    if (initialMatch) {
+      setTarget({ kind: "user", user: initialMatch });
+      setRoleIds(initialMatch.roles.map((role) => role.id));
+    }
+  }
   const setRoles = useSetTeamMemberRoles();
   const invite = useCreateTeamInvitations();
-  const pending = setRoles.isPending || invite.isPending;
+  const pending = setRoles.isPending || invite.isPending || !initialRolesLoaded;
   const [error, setError] = useState<string | null>(null);
 
   const users = search.data?.users ?? [];
@@ -254,7 +268,7 @@ function saveLabel(target: Target | null): string {
   if (target?.kind === "email") {
     return target.mode === "invite" ? "Send invite" : "Add by email";
   }
-  return "Add to team";
+  return target?.user.isMember ? "Save roles" : "Add to team";
 }
 
 function outcomeMessage(

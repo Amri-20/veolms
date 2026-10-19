@@ -11,6 +11,7 @@ import { SquaresFourIcon as SquaresFour } from "@phosphor-icons/react/SquaresFou
 import { TagIcon as Tag } from "@phosphor-icons/react/Tag";
 import type { Icon } from "@phosphor-icons/react";
 import type { SidebarPreferences } from "../settings/settingsPreferences";
+import { canOpenNavigationPath } from "./navigationPermissions";
 
 export interface NavigationItemMetadata {
   id: string;
@@ -102,12 +103,36 @@ const adminNavigation: readonly NavigationItem[] = [
   createNavigationItem("creator-settings", "Settings", GearSix, "/settings"),
 ];
 
+/** What the sidebar knows of a team member beyond admin or instructor. */
+export interface TeamNavigationAccess {
+  roles: readonly string[];
+  /** Null while capabilities load: only pages anyone may open show. */
+  permissions: readonly string[] | null;
+}
+
+/** On the team in some role other than (or besides) instructor. */
+function holdsOtherTeamRole(roles: readonly string[]): boolean {
+  return roles.some((role) => {
+    const name = role.trim().toLowerCase();
+    return name !== "student" && name !== "instructor" && name !== "creator";
+  });
+}
+
 export function getRoleNavigationItems(
   role: "student" | "creator",
   isAdmin = false,
+  team?: TeamNavigationAccess,
 ): readonly NavigationItem[] {
   if (role === "student") return studentNavigation;
-  return isAdmin ? adminNavigation : creatorNavigation;
+  if (isAdmin) return adminNavigation;
+  // An instructor alone keeps their usual menu. Any other team role gets the
+  // staff menu, cut down to the pages its permissions open; until those are
+  // known, only pages that need none, so nothing appears and then vanishes.
+  if (!team || !holdsOtherTeamRole(team.roles)) return creatorNavigation;
+  const permissions = new Set(team.permissions ?? []);
+  return adminNavigation.filter(([, , metadata]) =>
+    canOpenNavigationPath(metadata?.routeLink ?? "/", permissions, team.roles),
+  );
 }
 
 /** Public visitors get the same navigation as a student while `/auth/me` is resolving. */

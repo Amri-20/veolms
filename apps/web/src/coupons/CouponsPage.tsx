@@ -6,6 +6,7 @@ import { Button } from "../components/Button";
 import { CenteredLoadingSpinner } from "../components/LoadingSpinner";
 import { useCurrentUser } from "../services/auth";
 import { useAuthStore } from "../store/auth.store";
+import { useCapabilities } from "../services/authorization";
 import { getUserRoles, isStaffRole } from "../shell/workspaceRole";
 import type { NavigateTo } from "../routing/navigation";
 import { useUpdateCoupon } from "../services/coupons";
@@ -28,7 +29,10 @@ export function CouponsPage({ onNavigatePage, setNotice }: CouponsPageProps) {
   const isAuthReady = Boolean(storeUser) || authUserFetched;
   const user = authUserFetched ? authUser : storeUser;
   const userRoles = getUserRoles(user);
-  const isAuthorized = Boolean(user && isStaffRole(userRoles));
+  const { can } = useCapabilities({ enabled: Boolean(user) });
+  const isAuthorized = Boolean(
+    user && isStaffRole(userRoles) && can("coupon.read"),
+  );
 
   const {
     coupons,

@@ -170,6 +170,7 @@ export function useShellSession({
     dashboardCapabilitiesResolved,
     dashboardPermissionPending,
     routeContentBlocked,
+    permissions,
   } = useAcademyRouteGuardState();
   const isEditingOrCreatingCourse = page === "course-create";
   const isAuthReady = Boolean(storeUser) || authUserFetched;
@@ -224,15 +225,29 @@ export function useShellSession({
     !(dashboardPermissionPending && page === "home");
   const isDashboardRoute =
     page === "home" && (effectiveRole === "creator" || dashboardHomeExpected);
+  // Team members beyond admin and instructor see the pages their
+  // permissions open (see navigation.ts).
+  const teamNavigation = useMemo(
+    () => ({ roles: userRoles ?? [], permissions }),
+    [permissions, userRoles],
+  );
   const roleNavigationItems = useMemo(
     () =>
       creatorViewExpected
         ? getRoleNavigationItems(
             "creator",
             isAuthenticated ? isAdmin : homeHint === "admin-dashboard",
+            teamNavigation,
           )
-        : getRoleNavigationItems(effectiveRole, isAdmin),
-    [creatorViewExpected, effectiveRole, homeHint, isAdmin, isAuthenticated],
+        : getRoleNavigationItems(effectiveRole, isAdmin, teamNavigation),
+    [
+      creatorViewExpected,
+      effectiveRole,
+      homeHint,
+      isAdmin,
+      isAuthenticated,
+      teamNavigation,
+    ],
   );
   // Every sign-out confirmed in this tab, whichever screen started it.
   useEffect(

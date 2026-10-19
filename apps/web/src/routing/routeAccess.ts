@@ -8,7 +8,7 @@ import {
   getMatchedRouteDescriptor,
   normalizeNavigationPath,
 } from "./routeDescriptors";
-import { CREATOR_ROLES, normalizeRoles } from "../shell/workspaceRole";
+import { hasTeamRole } from "../shell/workspaceRole";
 import { isCourseEditorPath } from "../courses/courseEditorRouting";
 
 export const APP_HOME_PATH = "/";
@@ -103,7 +103,9 @@ export function isCourseAuthorPath(pathname: string): boolean {
 export function hasCourseAuthorRole(
   roles: readonly string[] | null | undefined,
 ): boolean {
-  return normalizeRoles(roles).some((role) => CREATOR_ROLES.has(role));
+  // Any team role may reach the staff pages; each page then checks the
+  // permission it needs and shows "access denied" without it.
+  return hasTeamRole(roles);
 }
 
 export function shouldRedirectFromCourseAuthorPath(

@@ -13,6 +13,7 @@ import {
   SlideOverStepButtons,
 } from "../components/SlideOverPanel";
 import type { NavigateTo } from "../routing/navigation";
+import { useCapabilities } from "../services/authorization";
 import { ordersService } from "../services/orders";
 import {
   formatCurrency,
@@ -48,6 +49,7 @@ export const OrderDetailsDrawer = memo(function OrderDetailsDrawer({
   onNavigatePage,
   setNotice,
 }: OrderDetailsDrawerProps) {
+  const canRefund = useCapabilities().can("billing.manage");
   // ESC key listener to close drawer & body scroll lock
   useEffect(() => {
     if (!order) return;
@@ -498,18 +500,22 @@ export const OrderDetailsDrawer = memo(function OrderDetailsDrawer({
 
       {/* Sticky Bottom Actions Footer */}
       <div className="border-t border-[color-mix(in_srgb,var(--text)_9%,transparent)] bg-(--card-surface,var(--surface)) p-4 sm:p-5 flex items-center justify-between gap-3 shrink-0">
-        {/* Left: Refund button */}
-        <button
-          type="button"
-          onClick={() => onRequestRefund(order)}
-          disabled={order.status === "refunded"}
-          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[10px] border border-rose-500/25 bg-rose-500/10 px-3.5 text-xs font-semibold text-rose-400 hover:bg-rose-500/20 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none transition-all whitespace-nowrap cursor-pointer"
-        >
-          <ArrowCounterClockwise size={14} weight="bold" />
-          <span>
-            {order.status === "refunded" ? "Refunded" : "Refund Order"}
-          </span>
-        </button>
+        {/* Left: Refund button, for whoever may issue refunds */}
+        {canRefund ? (
+          <button
+            type="button"
+            onClick={() => onRequestRefund(order)}
+            disabled={order.status === "refunded"}
+            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[10px] border border-rose-500/25 bg-rose-500/10 px-3.5 text-xs font-semibold text-rose-400 hover:bg-rose-500/20 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none transition-all whitespace-nowrap cursor-pointer"
+          >
+            <ArrowCounterClockwise size={14} weight="bold" />
+            <span>
+              {order.status === "refunded" ? "Refunded" : "Refund Order"}
+            </span>
+          </button>
+        ) : (
+          <span />
+        )}
 
         {/* Right action group */}
         <div className="flex items-center gap-2.5">
