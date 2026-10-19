@@ -175,6 +175,17 @@ export async function createVeoLMSApi<
         "camera=(), microphone=(), geolocation=()",
       );
     }
+    // Most answers depend on who asks: a course overview lists unpublished
+    // lessons to the course's admin and only published ones to a learner,
+    // and lesson numbers are positions in that list. With no Cache-Control,
+    // the CDN in front of the API (Cloudflare, for procodrr.dev) kept the
+    // first answer it saw for up to two hours and gave it to everyone, so
+    // learners got an admin's curriculum and every lesson after an
+    // unpublished one played the next lesson's video. Routes that are the
+    // same for everyone set their own header and keep it.
+    if (!reply.hasHeader("cache-control")) {
+      reply.header("Cache-Control", "private, no-store");
+    }
     if (isProduction && !reply.hasHeader("strict-transport-security")) {
       reply.header("Strict-Transport-Security", "max-age=15552000");
     }
