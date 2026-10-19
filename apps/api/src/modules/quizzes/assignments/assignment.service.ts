@@ -12,10 +12,11 @@ import { presentAssignment } from "../shared/quiz.presenters.ts";
 import {
   assertCanManageCourse,
   assertNoLearnerAttempts,
-  isAdmin,
+  reachesEveryQuiz,
   type QuizActor,
   type QuizServiceOptions,
 } from "../shared/quiz.types.ts";
+import { mayManageCourse } from "../../courses/shared/courses.utils.ts";
 
 type PricingRow = Awaited<ReturnType<typeof pricingRepo.findPricing>>;
 
@@ -53,8 +54,13 @@ export function createAssignmentService(options: QuizServiceOptions) {
         "ASSIGNMENT_NOT_FOUND",
         "Quiz assignment not found.",
       );
-    assertCanManageCourse(actor, await requireCourse(assignment.course_id));
-    if (!isAdmin(actor)) {
+    await assertCanManageCourse(
+      database,
+      actor,
+      await requireCourse(assignment.course_id),
+      "quiz.settings.update",
+    );
+    if (!(await reachesEveryQuiz(database, actor, "quiz.settings.update"))) {
       const quiz = await repo.findQuiz(database, assignment.quiz_id);
       if (!quiz || quiz.creator_id !== actor.id)
         throw new AppError(
@@ -73,7 +79,12 @@ export function createAssignmentService(options: QuizServiceOptions) {
     payload: AssignQuizRequest,
   ) {
     const course = await requireCourse(courseId);
-    assertCanManageCourse(actor, course);
+    await assertCanManageCourse(
+      database,
+      actor,
+      course,
+      "quiz.settings.update",
+    );
     const lesson = await courseService.findLessonById(courseId, lessonId);
     if (!lesson)
       throw new AppError(404, "LESSON_NOT_FOUND", "Course lesson not found.");
@@ -91,7 +102,11 @@ export function createAssignmentService(options: QuizServiceOptions) {
         "Only published Quiz versions can be assigned.",
       );
     const quiz = await repo.findQuiz(database, version.quiz_id);
-    if (!quiz || (quiz.creator_id !== actor.id && !isAdmin(actor)))
+    if (
+      !quiz ||
+      (quiz.creator_id !== actor.id &&
+        !(await reachesEveryQuiz(database, actor, "quiz.settings.update")))
+    )
       throw new AppError(403, "FORBIDDEN", "You do not own this Quiz.");
     const currentAcademyId = await getAcademyId();
     if (currentAcademyId && quiz.academy_id !== currentAcademyId)
@@ -267,7 +282,13 @@ export function createAssignmentService(options: QuizServiceOptions) {
     const course = await requireCourse(courseId);
     // Managing a course's assignments is admin or course-creator only; the
     // instructor role alone used to list other instructors' draft courses.
-    const canManageCourse = isAdmin(actor) || course.creator_id === actor.id;
+    const canManageCourse = await mayManageCourse(
+      database,
+      course,
+      actor.id,
+      actor.roles,
+      "quiz.read",
+    );
     if (
       !canManageCourse &&
       !(await repo.isPublishedFreeCourse(database, courseId)) &&
@@ -323,7 +344,12 @@ export function createAssignmentService(options: QuizServiceOptions) {
     actor: QuizActor,
     courseId: string,
   ) {
-    assertCanManageCourse(actor, await requireCourse(courseId));
+    await assertCanManageCourse(
+      database,
+      actor,
+      await requireCourse(courseId),
+      "quiz.settings.update",
+    );
   }
 
   async function getPricing(actor: QuizActor, courseId: string) {

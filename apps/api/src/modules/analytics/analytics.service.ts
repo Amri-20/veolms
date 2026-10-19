@@ -223,7 +223,12 @@ export function createAnalyticsService(options: AnalyticsServiceOptions) {
     if (courseId) {
       const course = everyCourse
         ? await courseService.findCourseById(courseId)
-        : await courseService.getCourseAndVerifyOwner(courseId, actor.id);
+        : await courseService.getCourseAndVerifyOwner(
+            courseId,
+            actor.id,
+            actor.roles,
+            "analytics.course.read",
+          );
       if (!course) {
         return { courseIds: [], courses: [], isPlatformWide: false };
       }

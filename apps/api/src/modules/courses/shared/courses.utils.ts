@@ -1,5 +1,5 @@
 import type { Kysely, UpdateResult } from "kysely";
-import type { Database } from "@veolms/database";
+import type { Database, DatabaseExecutor } from "@veolms/database";
 import { AppError } from "../../../lib/errors.ts";
 import * as courseRepo from "../course/course.repository.ts";
 
@@ -15,8 +15,10 @@ export function slugify(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+import type { Permission } from "@veolms/contracts";
 import { ADMIN_ROLE } from "../../auth/index.ts";
 import { createAccessService } from "../../access/index.ts";
+import { canActOnCourse } from "../../authorization/index.ts";
 
 const accessService = createAccessService();
 
@@ -44,21 +46,45 @@ export function canManageCourse(
  * `courseId`, leaving nested resource IDs (sectionId, lessonId, videoId)
  * unchecked. Callers still must scope any nested resource ID to the returned
  * course themselves (e.g. via findSectionById(id, courseId)).
+ *
+ * `permission` is what the action needs. Someone who did not create the
+ * course passes when they hold it through a role that reaches every course
+ * (a course manager, a content editor); an instructor's course permissions
+ * reach only their own courses, so instructors still cannot touch others'.
  */
 export async function getCourseAndVerifyOwner(
   database: Kysely<Database>,
   courseId: string,
   userId: string,
   userRoles?: readonly string[],
+  permission?: Permission,
 ) {
   const course = await courseRepo.findCourseById(database, courseId);
   if (!course) {
     throw new AppError(404, "COURSE_NOT_FOUND", "Course not found.");
   }
-  if (!canManageCourse(course, userId, userRoles)) {
+  if (
+    !(await mayManageCourse(database, course, userId, userRoles, permission))
+  ) {
     throw new AppError(403, "FORBIDDEN", "Unauthorized course access.");
   }
   return course;
+}
+
+/**
+ * `canManageCourse`, widened by permission: admin or the creator, or anyone
+ * holding `permission` through a role that reaches every course.
+ */
+export async function mayManageCourse(
+  database: DatabaseExecutor,
+  course: { id: string; creator_id: string | null },
+  userId: string | null | undefined,
+  userRoles: readonly string[] | undefined,
+  permission?: Permission,
+): Promise<boolean> {
+  if (canManageCourse(course, userId, userRoles)) return true;
+  if (!permission || !userId) return false;
+  return await canActOnCourse(database, { userId, permission, course });
 }
 
 /**
@@ -75,7 +101,15 @@ export async function getCourseForViewer(
   const course = await courseRepo.findCourseById(database, courseId);
   if (
     !course ||
-    (!canManageCourse(course, viewer?.id, viewer?.roles) &&
+    // A draft is open to whoever may manage it, and to reviewers who may
+    // preview every course.
+    (!(await mayManageCourse(
+      database,
+      course,
+      viewer?.id,
+      viewer?.roles,
+      "course.preview",
+    )) &&
       !(await accessService.isCourseOpenToLearner(
         database,
         viewer?.id,

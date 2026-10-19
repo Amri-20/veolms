@@ -202,6 +202,7 @@ export const ROLE_CAPABILITY_MAPPINGS: Record<
     "lesson.video.update",
     "lesson.thumbnail.update",
     "lesson.reorder",
+    "lesson.delete",
     "quiz.read",
     "quiz.create",
     "quiz.settings.update",

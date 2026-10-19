@@ -1,3 +1,5 @@
+import type { Permission } from "@veolms/contracts";
+import { hasAcademyPermission } from "../authorization/index.ts";
 import crypto from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import type { Kysely } from "kysely";
@@ -331,13 +333,42 @@ export function createMediaService({
    * Verifies that a media file is uploaded and exists, then sets status to 'uploaded'.
    * If it's a video, automatically queues and triggers transcoding.
    */
+  /**
+   * Admin, or a team role that reaches every course: "view" lets reviewers
+   * and editors play and download any course's media; "manage" lets those
+   * who edit every course's content handle uploads that are not their own.
+   */
+  async function reachesAllMedia(
+    userId: string | null | undefined,
+    userRoles: readonly string[] | undefined,
+    purpose: "view" | "manage",
+  ): Promise<boolean> {
+    if (userRoles?.some((role) => role.toLowerCase() === ADMIN_ROLE)) {
+      return true;
+    }
+    if (!userId) return false;
+    const keys: Permission[] =
+      purpose === "view"
+        ? ["course.preview"]
+        : [
+            "course.curriculum.update",
+            "lesson.video.update",
+            "course.thumbnail.update",
+            "lesson.thumbnail.update",
+          ];
+    for (const key of keys) {
+      if (await hasAcademyPermission(database, userId, key)) return true;
+    }
+    return false;
+  }
+
   async function confirmUpload(
     mediaId: string,
     ownerId: string,
     logger?: FastifyBaseLogger,
     userRoles?: readonly string[],
   ): Promise<{ status: MediaAssetStatus }> {
-    const isAdmin = userRoles?.includes(ADMIN_ROLE);
+    const isAdmin = await reachesAllMedia(ownerId, userRoles, "manage");
     const media = await mediaRepo.findMediaAssetSummaryById(
       database,
       mediaId,
@@ -432,7 +463,7 @@ export function createMediaService({
     logger?: FastifyBaseLogger,
     userRoles?: readonly string[],
   ): Promise<{ should202: boolean; jobId: string | null }> {
-    const isAdmin = userRoles?.includes(ADMIN_ROLE);
+    const isAdmin = await reachesAllMedia(ownerId, userRoles, "manage");
     const media = await mediaRepo.findMediaAssetById(
       database,
       mediaId,
@@ -664,7 +695,7 @@ export function createMediaService({
     logger?: FastifyBaseLogger,
     userRoles?: readonly string[],
   ) {
-    const isAdmin = userRoles?.includes(ADMIN_ROLE);
+    const isAdmin = await reachesAllMedia(ownerId, userRoles, "manage");
     const media = await mediaRepo.findMediaAssetSummaryById(
       database,
       mediaId,
@@ -779,7 +810,7 @@ export function createMediaService({
     logger?: FastifyBaseLogger,
     userRoles?: readonly string[],
   ) {
-    const isAdmin = userRoles?.includes(ADMIN_ROLE);
+    const isAdmin = await reachesAllMedia(ownerId, userRoles, "manage");
     const media = await mediaRepo.findMediaAssetSummaryById(
       database,
       mediaId,
@@ -844,7 +875,7 @@ export function createMediaService({
     ownerId?: string,
     userRoles?: readonly string[],
   ) {
-    const isAdmin = userRoles?.includes(ADMIN_ROLE);
+    const isAdmin = await reachesAllMedia(ownerId, userRoles, "manage");
     return await mediaRepo.findMediaAssetById(
       database,
       mediaId,
@@ -895,7 +926,7 @@ export function createMediaService({
     ownerId?: string,
     userRoles?: readonly string[],
   ) {
-    const isAdmin = userRoles?.includes(ADMIN_ROLE);
+    const isAdmin = await reachesAllMedia(ownerId, userRoles, "manage");
     return await mediaRepo.findMediaAssetsByIds(
       database,
       mediaIds,
@@ -911,7 +942,7 @@ export function createMediaService({
     ownerId?: string,
     userRoles?: readonly string[],
   ) {
-    const isAdmin = userRoles?.includes(ADMIN_ROLE);
+    const isAdmin = await reachesAllMedia(ownerId, userRoles, "manage");
     // This runs every 1.5s for each open progress stream, so it reads only
     // the two statuses and the percentage, in one query.
     const progress = await mediaRepo.findVideoJobProgress(
@@ -977,9 +1008,8 @@ export function createMediaService({
     user?: PlaybackUser,
   ): Promise<void> {
     const isOwner = Boolean(user && context.course_creator_id === user.id);
-    const isAdmin = Boolean(
-      user?.roles?.some((role) => role.toLowerCase() === ADMIN_ROLE),
-    );
+    const isAdmin =
+      isOwner || (await reachesAllMedia(user?.id, user?.roles, "view"));
 
     if (isOwner || isAdmin) return;
 
@@ -1109,7 +1139,7 @@ export function createMediaService({
     requestingUserId?: string,
     userRoles?: readonly string[],
   ) {
-    const isAdmin = userRoles?.includes(ADMIN_ROLE);
+    const isAdmin = await reachesAllMedia(requestingUserId, userRoles, "view");
     const media = await mediaRepo.findMediaAssetSummaryById(database, mediaId);
     if (!media) {
       throw new AppError(404, "MEDIA_NOT_FOUND", "Media asset not found.");
@@ -1164,9 +1194,8 @@ export function createMediaService({
     user?: PlaybackUser,
   ): Promise<void> {
     const isOwner = Boolean(user && context.course_creator_id === user.id);
-    const isAdmin = Boolean(
-      user?.roles?.some((role) => role.toLowerCase() === ADMIN_ROLE),
-    );
+    const isAdmin =
+      isOwner || (await reachesAllMedia(user?.id, user?.roles, "view"));
     if (isOwner || isAdmin) return;
 
     if (!user) {
@@ -1220,9 +1249,8 @@ export function createMediaService({
     }
 
     const isOwner = Boolean(user && user.id === course.creator_id);
-    const isAdmin = Boolean(
-      user?.roles?.some((role) => role.toLowerCase() === ADMIN_ROLE),
-    );
+    const isAdmin =
+      isOwner || (await reachesAllMedia(user?.id, user?.roles, "view"));
     const canManageCourse = isOwner || isAdmin;
 
     if (
@@ -1548,7 +1576,7 @@ export function createMediaService({
     const media = await mediaRepo.findMediaAssetById(database, mediaId);
     if (!media || media.type !== "image")
       throw new AppError(404, "MEDIA_NOT_FOUND", "Image asset not found.");
-    const isAdmin = userRoles?.includes(ADMIN_ROLE);
+    const isAdmin = await reachesAllMedia(requestingUserId, userRoles, "view");
     const isPublic = await mediaRepo.isMediaAttachedToPublishedCourse(
       database,
       mediaId,
