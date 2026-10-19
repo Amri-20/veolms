@@ -27,6 +27,8 @@ import {
   useLinkPreview,
 } from "../../services/learning-interactions";
 
+import { MentionLink } from "./MentionLink";
+
 const MENTION_PATTERN =
   /(^|[^A-Za-z0-9_])@([A-Za-z0-9_]{3,30})(?=[^A-Za-z0-9_]|$)/g;
 
@@ -48,13 +50,10 @@ export function renderContentWithMentions(text: string): React.ReactNode {
     }
 
     parts.push(
-      <span
+      <MentionLink
         key={`mention-${mentionStart}-${username}`}
-        data-mention={username}
-        className="inline-flex items-center rounded bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-1 py-0.5 font-medium text-(--accent)"
-      >
-        @{username}
-      </span>,
+        username={username!}
+      />,
     );
 
     lastIndex = matchEnd;

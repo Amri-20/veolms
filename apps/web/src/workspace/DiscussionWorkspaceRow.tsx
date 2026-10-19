@@ -168,7 +168,7 @@ export function DiscussionWorkspaceRow({
         )}
 
         {text && (
-          <p className="m-0 line-clamp-4 max-w-180 text-base leading-relaxed wrap-anywhere text-(--text) select-text">
+          <p className="m-0 line-clamp-4 max-w-180 text-base leading-relaxed max-[48.75rem]:text-[0.9375rem] wrap-anywhere text-(--text) select-text">
             {text}
           </p>
         )}
