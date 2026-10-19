@@ -98,20 +98,24 @@ export function LessonResourcesMenu({
             Resources{" "}
             <span className="font-medium text-(--muted)">({items.length})</span>
           </PopoverTitle>
-          <button
-            type="button"
-            className={HEADER_ACTION_CLASS}
-            disabled={downloadingAll}
-            aria-label={`Download all ${items.length} resources`}
-            title="Download all"
-            onClick={() => void downloadAll(items)}
-          >
-            {downloadingAll ? (
-              <CircleNotch size={17} className="animate-spin" />
-            ) : (
-              <DownloadSimple size={18} weight="bold" />
-            )}
-          </button>
+          {/* One resource has its own download in the list; "all" is only
+              worth a button when there are several. */}
+          {items.length > 1 && (
+            <button
+              type="button"
+              className={HEADER_ACTION_CLASS}
+              disabled={downloadingAll}
+              aria-label={`Download all ${items.length} resources`}
+              title="Download all"
+              onClick={() => void downloadAll(items)}
+            >
+              {downloadingAll ? (
+                <CircleNotch size={17} className="animate-spin" />
+              ) : (
+                <DownloadSimple size={18} weight="bold" />
+              )}
+            </button>
+          )}
         </div>
         <ul className="m-0 flex min-h-0 list-none flex-col gap-0.5 overflow-y-auto px-1.5 pb-1.5">
           {items.map((item) => {

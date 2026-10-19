@@ -850,7 +850,10 @@ export default function AcademyLayout() {
           const storedDestination = resetDestinationScroll
             ? undefined
             : applicationScrollPositionsRef.current.get(destinationStorageKey);
-          const position = storedDestination?.position ?? { left: 0, top: 0 };
+          const position = resetDestinationScroll
+            ? { left: 0, top: 0 }
+            : (options?.chooseScrollPosition?.(storedDestination?.position) ??
+              storedDestination?.position ?? { left: 0, top: 0 });
           const restorePosition = () => {
             const shouldRestore =
               resetDestinationScroll ||
@@ -876,7 +879,8 @@ export default function AcademyLayout() {
             ? { left: 0, top: 0 }
             : options?.preserveScroll
               ? sourcePosition
-              : (storedDestination?.position ?? { left: 0, top: 0 }));
+              : (options?.chooseScrollPosition?.(storedDestination?.position) ??
+                storedDestination?.position ?? { left: 0, top: 0 }));
         if (
           isLearningRoutePath(path) &&
           isLearningReturnCandidate(sourcePath)

@@ -23,9 +23,11 @@
 .learning-workspace__main {
   /* This element's own copy of the course content's width: the page's value,
      or the width a drag of the gutter has reached. The copy is what animates,
-     because it is not inherited (learning-split-layout.css explains). */
+     because it is not inherited (components/split-frame-pane.css explains).
+     Used outside the framed layout; inside it the lesson and the course
+     content are SplitFramePane's two cards. */
   --learning-split-width: var(
-    --learning-curriculum-drag-width,
+    --split-frame-drag-width,
     var(--learning-curriculum-width, 400px)
   );
   display: grid;
@@ -243,10 +245,7 @@ html[data-app-hydrated="false"] .learning-workspace__main {
    split is moving. The video remains live; only its decorative glow yields
    until the pointer is released, then the existing opacity transition returns. */
 .courses-app--resizing .learning-persistent-player--full .ambient-canvas,
-.courses-app:is(
-    [data-learning-split-dragging],
-    :has(.learning-workspace.is-curriculum-resizing)
-  )
+.courses-app[data-split-frame-resizing]
   .learning-persistent-player--full
   .ambient-canvas {
   opacity: 0;

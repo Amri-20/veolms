@@ -8,7 +8,6 @@ import {
   type SetStateAction,
   type RefObject,
 } from "react";
-import { useLearningSplitMark } from "../../learningSplitMark";
 import {
   claimPointerGesture,
   subscribeToPointerGestureClaims,
@@ -88,7 +87,6 @@ export function useWorkspaceRefs({
     useState<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   const splitPaneRef = useRef<HTMLDivElement>(null);
-  useLearningSplitMark(splitPaneRef, !theaterMode);
   const playerWrapRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const lessonContentRef = useRef<HTMLElement>(null);

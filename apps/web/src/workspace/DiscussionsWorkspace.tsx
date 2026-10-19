@@ -25,8 +25,9 @@ import { AtIcon as At } from "@phosphor-icons/react/At";
 import { BookmarkSimpleIcon as BookmarkSimple } from "@phosphor-icons/react/BookmarkSimple";
 import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { ChatCircleDotsIcon as ChatCircleDots } from "@phosphor-icons/react/ChatCircleDots";
-import { ChatsCircleIcon as ChatsCircle } from "@phosphor-icons/react/ChatsCircle";
 import { ChatTeardropTextIcon as ChatTeardropText } from "@phosphor-icons/react/ChatTeardropText";
+import { ChatTextIcon as ChatText } from "@phosphor-icons/react/ChatText";
+import { BellSimpleRingingIcon as BellSimpleRinging } from "@phosphor-icons/react/BellSimpleRinging";
 import { CheckCircleIcon as CheckCircle } from "@phosphor-icons/react/CheckCircle";
 import { ClockIcon as Clock } from "@phosphor-icons/react/Clock";
 import { DotsThreeVerticalIcon as DotsThreeVertical } from "@phosphor-icons/react/DotsThreeVertical";
@@ -86,11 +87,13 @@ import {
   getDiscussionWorkspaceItemKey,
 } from "./DiscussionWorkspaceVirtualFeed";
 import { DiscussionWorkspaceListRow } from "./DiscussionWorkspaceRow";
+import { isRightPanelShortcut } from "../keyboardShortcuts";
 import { DiscussionWorkspacePanel } from "./DiscussionWorkspacePanel";
 import { useDiscussionWorkspaceReport } from "./useDiscussionWorkspaceReport";
 import { useDiscussionWorkspaceCardLongPress } from "./useDiscussionWorkspaceCardLongPress";
 import {
   getApplicationScrollElement,
+  readApplicationScrollPosition,
   type ApplicationScrollPosition,
 } from "../shell/applicationScroll";
 
@@ -117,13 +120,38 @@ const normalizeDiscussionRestorationValue = (
 const encodeDiscussionRestorationValue = (value: string) =>
   encodeURIComponent(normalizeDiscussionRestorationValue(value));
 
+/**
+ * The scroll position at which the tabs and filters stick to the top: the
+ * page's header is above it, so a position up to there always fits, even
+ * while a list is still loading or has nothing in it (its minimum height
+ * keeps the page that tall).
+ */
+const getDiscussionStickPoint = (): number | null => {
+  const region = document.querySelector<HTMLElement>(
+    ".discussion-hub__sticky-region",
+  );
+  const header = region?.previousElementSibling;
+  if (!region || !header) return null;
+  const scrollport = getApplicationScrollElement();
+  const viewportTop = scrollport ? scrollport.getBoundingClientRect().top : 0;
+  const style = getComputedStyle(region);
+  return Math.round(
+    header.getBoundingClientRect().bottom -
+      viewportTop +
+      readApplicationScrollPosition().top +
+      (parseFloat(style.marginTop) || 0) -
+      (parseFloat(style.top) || 0),
+  );
+};
+
 const canRestoreDiscussionScroll = ({ top }: ApplicationScrollPosition) => {
-  if (top <= 0) return true;
+  if (top <= (getDiscussionStickPoint() ?? 0)) return true;
 
   const feed = document.querySelector<HTMLElement>(
     "[data-discussion-workspace-virtual-feed]",
   );
-  if (!feed) return false;
+  // Still loading: the position is followed while the list grows.
+  if (!feed) return true;
 
   const feedRect = feed.getBoundingClientRect();
   const scrollport = getApplicationScrollElement();
@@ -135,6 +163,35 @@ const canRestoreDiscussionScroll = ({ top }: ApplicationScrollPosition) => {
 
   return contentTop + feedRect.height >= top;
 };
+
+/**
+ * Where a tab opens, so that switching tabs never moves the tabs: a page
+ * scrolled less than the tabs' sticking point stays where it is; with the
+ * tabs stuck at the top they stay there, and the new list shows where it was
+ * left (or its start). Never the page's top, nor a jump to the bottom.
+ */
+const chooseDiscussionTabScrollPosition = (
+  remembered: ApplicationScrollPosition | undefined,
+): ApplicationScrollPosition => {
+  const current = readApplicationScrollPosition();
+  const stickPoint = getDiscussionStickPoint();
+  if (stickPoint === null) return remembered ?? { left: 0, top: 0 };
+  if (current.top < stickPoint) return current;
+  return {
+    left: current.left,
+    top: Math.max(stickPoint, remembered?.top ?? 0),
+  };
+};
+
+/** The address parameter that names the discussion open in the panel. */
+const OPEN_DISCUSSION_PARAM = "discussion";
+/** The panel's discussion as written in the address: `thread.<id>`, which
+ * needs no escaping (the list's own key is `thread:<id>`). */
+const toOpenDiscussionParam = (key: string) => key.replace(":", ".");
+const fromOpenDiscussionParam = (value: string | null) =>
+  value ? value.replace(".", ":") : null;
+/** How many more pages a reload loads to find that discussion. */
+const OPEN_DISCUSSION_PAGE_LIMIT = 30;
 
 function hasTextSelectionWithin(node: Node): boolean {
   if (typeof window === "undefined") return false;
@@ -256,20 +313,20 @@ const tabs: readonly {
   Icon: typeof Question;
   tone: PageTabTone;
 }[] = [
-  { id: "all", label: "All", Icon: ChatsCircle, tone: "green" },
-  { id: "q-and-a", label: "Q&A", Icon: Question, tone: "violet" },
+  { id: "all", label: "All", Icon: ChatCircleDots, tone: "green" },
   {
     id: "comments",
     label: "Comments",
-    Icon: ChatTeardropText,
+    Icon: ChatText,
     tone: "blue",
   },
   { id: "notes", label: "Notes", Icon: Note, tone: "gold" },
+  { id: "q-and-a", label: "Q&A", Icon: Question, tone: "violet" },
   { id: "mentions", label: "Mentions", Icon: At, tone: "rose" },
   {
     id: "following",
     label: "Following",
-    Icon: ChatCircleDots,
+    Icon: BellSimpleRinging,
     tone: "green",
   },
   { id: "saved", label: "Bookmarks", Icon: BookmarkSimple, tone: "gold" },
@@ -1806,7 +1863,7 @@ interface MobileDiscussionActionTarget {
 
 export function DiscussionsWorkspace({
   role,
-  tab = "q-and-a",
+  tab = "all",
   onNavigatePage,
   setNotice,
   sessionPending = false,
@@ -1984,6 +2041,7 @@ export function DiscussionsWorkspace({
     onNavigatePage(`/discussions/${id}${suffix ? `?${suffix}` : ""}`, {
       captureScroll: effectiveSearch.length === 0,
       canRestoreScroll: canRestoreDiscussionScroll,
+      chooseScrollPosition: chooseDiscussionTabScrollPosition,
       resetScroll: effectiveSearch.length > 0,
       scrollRestorationKey: getRestorationKeyForTab(id),
       sourceScrollRestorationKey: discussionRestorationKey,
@@ -2350,10 +2408,14 @@ export function DiscussionsWorkspace({
     useState<DiscussionWorkspaceCard | null>(null);
   // Whether the open discussion's own text is being edited ("Edit").
   const [isEditingPanelCard, setIsEditingPanelCard] = useState(false);
+  // The discussion last open, which the panel shows again when it is
+  // brought back after being closed.
+  const [lastPanelKey, setLastPanelKey] = useState<string | null>(null);
   const openPanel = useCallback(
     (card: DiscussionWorkspaceCard) => {
       setOpenPanelCard(card);
       setIsEditingPanelCard(false);
+      setLastPanelKey(getDiscussionWorkspaceItemKey(card));
     },
     [setIsEditingPanelCard, setOpenPanelCard],
   );
@@ -2361,6 +2423,7 @@ export function DiscussionsWorkspace({
     (card: DiscussionWorkspaceCard) => {
       setOpenPanelCard(card);
       setIsEditingPanelCard(true);
+      setLastPanelKey(getDiscussionWorkspaceItemKey(card));
     },
     [setIsEditingPanelCard, setOpenPanelCard],
   );
@@ -2368,8 +2431,133 @@ export function DiscussionsWorkspace({
     setOpenPanelCard(null);
     setIsEditingPanelCard(false);
   }, [setIsEditingPanelCard, setOpenPanelCard]);
-  // Another tab is another list; the open discussion closes with it.
-  useEffect(() => closePanel(), [activeTab, closePanel]);
+  // Another tab is another list. The open discussion stays open: once the
+  // new list is in, it stays selected if the list has it too (a Q&A opened
+  // from All, then the Q&A tab), and otherwise the list's first item opens.
+  const tabWhenPanelSettledRef = useRef(activeTab);
+  const [tabSwitchPending, setTabSwitchPending] = useState(false);
+  useEffect(() => {
+    if (tabWhenPanelSettledRef.current === activeTab) return;
+    tabWhenPanelSettledRef.current = activeTab;
+    setIsEditingPanelCard(false);
+    setTabSwitchPending(true);
+  }, [activeTab, setIsEditingPanelCard]);
+  useEffect(() => {
+    if (!tabSwitchPending || isWorkspacePending) return;
+    setTabSwitchPending(false);
+    if (!openPanelCard) return;
+    const openKey = getDiscussionWorkspaceItemKey(openPanelCard);
+    if (cards.some((card) => getDiscussionWorkspaceItemKey(card) === openKey))
+      return;
+    // An empty list keeps the panel open; it says there is nothing to show.
+    const first = cards[0];
+    if (first) openPanel(first);
+  }, [cards, isWorkspacePending, openPanel, openPanelCard, tabSwitchPending]);
+  // The sticky tabs and filters' height, for the list's minimum height.
+  const stickyRegionRef = useRef<HTMLDivElement>(null);
+  const [stickyRegionHeight, setStickyRegionHeight] = useState(0);
+  useEffect(() => {
+    const region = stickyRegionRef.current;
+    if (!region || typeof ResizeObserver === "undefined") return undefined;
+    const measure = () =>
+      setStickyRegionHeight(Math.round(region.getBoundingClientRect().height));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(region);
+    return () => observer.disconnect();
+  }, []);
+  // Brings the panel back: with the discussion last open if it is in this
+  // list, otherwise with the list's first.
+  const reopenPanel = () => {
+    const card =
+      cards.find(
+        (item) => getDiscussionWorkspaceItemKey(item) === lastPanelKey,
+      ) ?? cards[0];
+    if (card) openPanel(card);
+  };
+  // The open discussion is in the address (`?discussion=<type>:<id>`), so a
+  // reload or a shared link opens it again. Read once: the list may first
+  // have to load further pages to reach it.
+  const [pendingPanelKey, setPendingPanelKey] = useState<string | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : fromOpenDiscussionParam(
+          new URLSearchParams(window.location.search).get(
+            OPEN_DISCUSSION_PARAM,
+          ),
+        ),
+  );
+  const restorePagesRef = useRef(0);
+  useEffect(() => {
+    if (!pendingPanelKey || isWorkspacePending) return;
+    const card = cards.find(
+      (item) => getDiscussionWorkspaceItemKey(item) === pendingPanelKey,
+    );
+    if (card) {
+      openPanel(card);
+      setPendingPanelKey(null);
+      return;
+    }
+    if (hasNextPage && restorePagesRef.current < OPEN_DISCUSSION_PAGE_LIMIT) {
+      if (!isFetchingNextPage) {
+        restorePagesRef.current += 1;
+        loadMore();
+      }
+      return;
+    }
+    // Not in this list (deleted, hidden, or another tab's): the address
+    // lets go of it below.
+    setPendingPanelKey(null);
+  }, [
+    cards,
+    hasNextPage,
+    isFetchingNextPage,
+    isWorkspacePending,
+    loadMore,
+    openPanel,
+    pendingPanelKey,
+  ]);
+  // The address follows the panel. Written with the history entry's own
+  // state kept (React Router's, and the Back-closes-the-panel entry of a
+  // tablet or phone), and again after any navigation within the page.
+  // Open with nothing to show: this tab (or these filters) has no items.
+  const panelIsEmpty =
+    Boolean(openPanelCard) && !isWorkspacePending && cards.length === 0;
+  const openPanelUrlKey =
+    openPanelCard && !panelIsEmpty
+      ? getDiscussionWorkspaceItemKey(openPanelCard)
+      : null;
+  useEffect(() => {
+    if (pendingPanelKey) return;
+    const url = new URL(window.location.href);
+    if (openPanelUrlKey)
+      url.searchParams.set(
+        OPEN_DISCUSSION_PARAM,
+        toOpenDiscussionParam(openPanelUrlKey),
+      );
+    else url.searchParams.delete(OPEN_DISCUSSION_PARAM);
+    if (url.href === window.location.href) return;
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }, [location.key, openPanelUrlKey, pendingPanelKey]);
+  // Ctrl/⌘+Alt+B, the right-side panel's shortcut across the app, opens
+  // and closes the discussion beside the list (reopening the last one).
+  const togglePanelRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    togglePanelRef.current = openPanelCard ? closePanel : reopenPanel;
+  });
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || !isRightPanelShortcut(event)) return;
+      event.preventDefault();
+      togglePanelRef.current();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
   const { openReport, reportDialog } = useDiscussionWorkspaceReport(setNotice);
   const openMobileActions = useCallback(
     (card: DiscussionWorkspaceCard, destination: string | null) => {
@@ -2397,6 +2585,7 @@ export function DiscussionsWorkspace({
               getDiscussionWorkspaceItemKey(card)
           }
           onOpen={openPanel}
+          onClose={closePanel}
           onNavigatePage={onNavigatePage}
           onEdit={editInPanel}
           onReport={openReport}
@@ -2409,6 +2598,7 @@ export function DiscussionsWorkspace({
       );
     },
     [
+      closePanel,
       editInPanel,
       onNavigatePage,
       openMobileActions,
@@ -2585,7 +2775,9 @@ export function DiscussionsWorkspace({
               : isCommentsTab || isNotesTab || isAllTab
                 ? "discussion-hub__filters--comments"
                 : ""
-      }`}
+      } overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}
+      // The filters keep their widths; where the page is too narrow for them
+      // (the discussion panel open beside it) the row scrolls sideways.
       aria-label="Filter discussions"
     >
       <div className="discussion-hub__filter-toolbar" data-filter-bar="">
@@ -2637,15 +2829,53 @@ export function DiscussionsWorkspace({
     </section>
   );
 
+  // Where the open discussion is in this tab's list, for previous and next.
+  const openPanelKey = openPanelCard
+    ? getDiscussionWorkspaceItemKey(openPanelCard)
+    : null;
+  const openPanelIndex =
+    openPanelKey === null
+      ? -1
+      : cards.findIndex(
+          (card) => getDiscussionWorkspaceItemKey(card) === openPanelKey,
+        );
+  // The list's own copy of the open card, so a like or an edit made in the
+  // panel shows there at once.
+  const livePanelCard =
+    openPanelIndex >= 0
+      ? (cards[openPanelIndex] ?? openPanelCard)
+      : openPanelCard;
+  // What the panel holds: the open discussion, or while it is closed the
+  // one it would open with (the last open, else the list's first). On a
+  // desktop the closed panel stays at the frame's edge, where its gutter
+  // brings it back, as the lesson page's course content does.
+  const panelCard =
+    livePanelCard ??
+    cards.find(
+      (item) => getDiscussionWorkspaceItemKey(item) === lastPanelKey,
+    ) ??
+    cards[0] ??
+    null;
+  // The row the list scrolls into view: only one the panel stepped to with
+  // its arrows. A discussion opened any other way (a click, a tab switch
+  // opening the new list's first) leaves the page where it is.
+  const [steppedPanelKey, setSteppedPanelKey] = useState<string | null>(null);
+  const stepPanel = (step: -1 | 1) => {
+    const nextCard = cards[openPanelIndex + step];
+    if (openPanelIndex < 0 || !nextCard) return;
+    setSteppedPanelKey(getDiscussionWorkspaceItemKey(nextCard));
+    openPanel(nextCard);
+  };
+
   return (
-    <div
-      className={`flex min-w-0 items-start ${
-        // Room for the panel, which stands over the frame's right edge.
-        openPanelCard ? "lg:pr-110" : ""
-      }`}
-    >
+    <div className="flex min-w-0 items-start">
       <div
         className={`discussion-hub min-w-0 flex-1 ${elevatedCardTokenScopeClasses}`}
+        style={
+          {
+            "--discussion-sticky-height": `${stickyRegionHeight}px`,
+          } as CSSProperties
+        }
         aria-labelledby="discussions-title"
       >
         <header className="discussion-hub__header">
@@ -2653,9 +2883,12 @@ export function DiscussionsWorkspace({
             <h1 id="discussions-title">Discussions</h1>
             <p>Bring course conversations, questions, and replies together.</p>
           </div>
+          <span className="discussion-hub__header-icon" aria-hidden="true">
+            <ChatCircleDots size={28} weight="duotone" />
+          </span>
         </header>
 
-        <div className="discussion-hub__sticky-region">
+        <div ref={stickyRegionRef} className="discussion-hub__sticky-region">
           <nav
             ref={tablistRef}
             className="discussion-hub__tabs page-tabs"
@@ -2682,7 +2915,10 @@ export function DiscussionsWorkspace({
                 onFocus={scrollKeyboardFocusedTabIntoView}
               >
                 <span className="inline-flex origin-bottom items-center gap-2 transition-transform duration-150 ease-out group-active:scale-[0.985] motion-reduce:duration-[0.01ms]">
-                  {/* Plain words: the redesigned page keeps its tabs quiet. */}
+                  <Icon
+                    size={17}
+                    weight={activeTab === id ? "fill" : "regular"}
+                  />
                   <span>{label}</span>
                 </span>
               </button>
@@ -2782,9 +3018,13 @@ export function DiscussionsWorkspace({
           id="discussion-panel"
           labelledBy={`discussion-tab-${activeTab}`}
           slideClassName="pb-8"
+          // At least a screen below the sticky tabs and filters: switching
+          // to a short or empty tab while scrolled down then leaves the page
+          // where it is, instead of the browser pulling it back to the new,
+          // nearer bottom.
+          className="min-h-[calc(100dvh-var(--shell-frame-block-space,22px)-var(--discussion-sticky-height,0px))]"
           stateAttribute="data-discussion-tab"
           spaceBetweenOffset={14}
-          layoutKey={openPanelCard ? "with-panel" : "full"}
         >
           {(panelTab, preview) => {
             const isActivePanel = panelTab === activeTab;
@@ -2865,6 +3105,11 @@ export function DiscussionsWorkspace({
                         <DiscussionWorkspaceVirtualFeed
                           cards={cards}
                           datasetKey={workspaceDatasetKey}
+                          focusKey={
+                            steppedPanelKey === openPanelUrlKey
+                              ? steppedPanelKey
+                              : null
+                          }
                           renderCard={renderDiscussionCard}
                         />
                       ) : (
@@ -2966,13 +3211,25 @@ export function DiscussionsWorkspace({
           }}
         </SwipeableTabPanel>
       </div>
-      {openPanelCard && (
+      {/* Always there, so that a tab with nothing in it, or a closed
+          panel on a desktop (its gutter at the frame's edge), does not take
+          the panel off the page and put it back when the next tab loads. */}
+      {
         <DiscussionWorkspacePanel
-          card={openPanelCard}
+          card={panelIsEmpty ? null : panelCard}
+          emptyMessage={
+            activeTab === "all"
+              ? "No discussions to show"
+              : `No ${(tabs.find((tab) => tab.id === activeTab)?.label ?? "discussions").toLowerCase()} to show`
+          }
+          open={Boolean(openPanelCard)}
+          onReopen={reopenPanel}
           destination={
-            openPanelCard.itemType === "note" || openPanelCard.kind === "note"
-              ? getDiscussionNoteDestination(openPanelCard)
-              : getDiscussionThreadDestination(openPanelCard)
+            !panelCard || panelIsEmpty
+              ? null
+              : panelCard.itemType === "note" || panelCard.kind === "note"
+                ? getDiscussionNoteDestination(panelCard)
+                : getDiscussionThreadDestination(panelCard)
           }
           editing={isEditingPanelCard}
           onEditingChange={setIsEditingPanelCard}
@@ -2980,8 +3237,18 @@ export function DiscussionsWorkspace({
           onNavigatePage={onNavigatePage}
           onReport={openReport}
           setNotice={setNotice}
+          step={
+            openPanelIndex >= 0
+              ? {
+                  index: openPanelIndex,
+                  count: cards.length,
+                  onPrev: () => stepPanel(-1),
+                  onNext: () => stepPanel(1),
+                }
+              : undefined
+          }
         />
-      )}
+      }
       {reportDialog}
     </div>
   );

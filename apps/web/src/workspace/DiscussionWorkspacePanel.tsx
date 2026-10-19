@@ -1,657 +1,387 @@
 import {
-  lazy,
-  Suspense,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
-  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
-import { createPortal } from "react-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRightIcon as ArrowRight } from "@phosphor-icons/react/ArrowRight";
-import { ArrowSquareOutIcon as ArrowSquareOut } from "@phosphor-icons/react/ArrowSquareOut";
-import { ThumbsUpIcon as ThumbsUp } from "@phosphor-icons/react/ThumbsUp";
-import { XIcon as X } from "@phosphor-icons/react/X";
-import type { LearningReply } from "@veolms/contracts";
-import { DiscussionAvatar } from "../learning/DiscussionAvatar";
-import type { NavigateTo } from "../routing/navigation";
-import { useBackDismiss } from "../navigation/useBackDismiss";
-import { getApplicationScrollElement } from "../shell/applicationScroll";
-import { useCurrentUser } from "../services/auth";
+import { SlideOverFrame } from "../components/SlideOverPanel";
 import {
-  learningInteractionKeys,
-  learningInteractionsService,
-  useCreateReply,
-  useNoteDetails,
-  useThreadDetails,
-  useThreadReplies,
-  useUpdateNote,
-  useUpdateReply,
-  useUpdateThread,
-} from "../services/learning-interactions";
-import { DiscussionWorkspaceActionMenu } from "./DiscussionWorkspaceActionMenu";
-import { DiscussionRowAction } from "./DiscussionWorkspaceRow";
+  SplitFrameGutter,
+  SplitFramePane,
+  useSplitFrameWidth,
+} from "../components/SplitFramePane";
+import {
+  Drawer,
+  DrawerContent,
+  type DrawerDismissThen,
+} from "../components/ui/drawer";
+import {
+  getRightPanelShortcutLabel,
+  RIGHT_PANEL_SHORTCUT_ARIA,
+} from "../keyboardShortcuts";
+import { useBackDismiss } from "../navigation/useBackDismiss";
+import { useShortcutPlatform } from "../useShortcutPlatform";
+import type { NavigateTo } from "../routing/navigation";
+import {
+  DiscussionPanelEmpty,
+  DiscussionPanelContent,
+  type DiscussionPanelStep,
+  type DiscussionPanelVariant,
+} from "./DiscussionWorkspacePanelContent";
 import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
 
-const DiscussionMarkdown = lazy(() =>
-  import("../learning/discussion-editor/DiscussionMarkdown").then((module) => ({
-    default: module.DiscussionMarkdown,
-  })),
-);
+// Desktop is Tailwind's `lg`; a phone is the Discussions list's own phone
+// width (see DiscussionWorkspaceVirtualFeed).
+const DESKTOP_QUERY = "(min-width: 64rem)";
+const PHONE_QUERY = "(max-width: 780px)";
 
-function formatPostTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const minutes = Math.floor((Date.now() - date.getTime()) / 60_000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString();
-}
-
-function RoleBadge({ role }: { role?: string }) {
-  if (role !== "Instructor" && role !== "Admin") return null;
-  return (
-    <span className="rounded-md bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-1.5 py-0.5 text-[0.65rem] font-bold tracking-wide text-(--accent) uppercase">
-      {role}
-    </span>
+const subscribeToPanelVariant = (listener: () => void) => {
+  const queries = [DESKTOP_QUERY, PHONE_QUERY].map((query) =>
+    window.matchMedia(query),
   );
-}
-
-function PostBody({ content, label }: { content: string; label: string }) {
-  return (
-    <Suspense
-      fallback={
-        <p className="m-0 text-base leading-relaxed whitespace-pre-wrap text-(--text)">
-          {content}
-        </p>
-      }
-    >
-      <DiscussionMarkdown
-        content={{ format: "markdown", markdown: content, plainText: content }}
-        label={label}
-        className="text-base leading-relaxed wrap-anywhere text-(--text)"
-      />
-    </Suspense>
-  );
-}
-
-interface PanelEditHandlers {
-  saving: boolean;
-  onCancel: () => void;
-  onSave: (content: string) => void;
-}
-
-/** The post's text in a box to change it, in place of the text itself. */
-function PanelEditForm({
-  initialContent,
-  label,
-  saving,
-  onCancel,
-  onSave,
-}: PanelEditHandlers & { initialContent: string; label: string }) {
-  const [draft, setDraft] = useState(initialContent);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // The box opens because its author asked to edit: the caret goes to the
-  // end of the text, before the panel would otherwise focus its Close.
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    textarea.focus({ preventScroll: true });
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-  }, []);
-  const save = () => {
-    const content = draft.trim();
-    if (!content || saving) return;
-    if (content === initialContent.trim()) onCancel();
-    else onSave(content);
-  };
-
-  return (
-    <form
-      className="flex flex-col rounded-xl border border-(--accent) bg-(--surface-strong,var(--surface))"
-      onSubmit={(event) => {
-        event.preventDefault();
-        save();
-      }}
-    >
-      <textarea
-        aria-label={label}
-        rows={4}
-        value={draft}
-        ref={textareaRef}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            // Leaves the edit, not the panel.
-            event.preventDefault();
-            onCancel();
-          } else if (
-            event.key === "Enter" &&
-            (event.metaKey || event.ctrlKey)
-          ) {
-            event.preventDefault();
-            save();
-          }
-        }}
-        className="field-sizing-content max-h-[50dvh] min-h-24 resize-none border-0 bg-transparent px-3.5 pt-3 pb-1 text-base leading-relaxed text-(--text) outline-0"
-      />
-      <div className="flex justify-end gap-1.5 px-2 pt-1.5 pb-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={saving}
-          className="inline-flex h-8.5 items-center rounded-lg px-3.5 text-[0.84rem] font-bold text-(--muted) transition-colors hover:bg-(--hover) hover:text-(--text)"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={!draft.trim() || saving}
-          className="inline-flex h-8.5 items-center rounded-lg bg-(--accent) px-3.5 text-[0.84rem] font-extrabold text-(--on-accent) transition-opacity disabled:opacity-40"
-        >
-          {saving ? "Saving…" : "Save"}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function PanelReply({
-  reply,
-  onLike,
-  edit,
-}: {
-  reply: LearningReply;
-  onLike: (reply: LearningReply) => void;
-  /** Given, the reply's text is shown in a box to change it. */
-  edit?: PanelEditHandlers;
-}) {
-  return (
-    <article className="flex gap-3 pl-5">
-      <DiscussionAvatar
-        src={reply.author.avatarUrl ?? null}
-        className="size-8 shrink-0 rounded-full object-cover"
-        width={32}
-        height={32}
-        loading="lazy"
-      />
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[0.9rem] font-bold text-(--text)">
-            {reply.isOwn ? "You" : reply.author.displayName}
-          </span>
-          <RoleBadge role={reply.author.role} />
-          <time className="text-[0.8125rem] text-(--muted)">
-            {formatPostTime(reply.createdAt)}
-          </time>
-        </div>
-        {edit ? (
-          <PanelEditForm
-            {...edit}
-            initialContent={reply.content}
-            label="Edit reply"
-          />
-        ) : (
-          <PostBody content={reply.content} label="Reply" />
-        )}
-        <div className="-ml-2.5">
-          <DiscussionRowAction
-            icon={
-              <ThumbsUp
-                size={14}
-                weight={reply.isLiked ? "fill" : "regular"}
-                aria-hidden="true"
-              />
-            }
-            label={reply.likesCount > 0 ? reply.likesCount : "Like"}
-            ariaLabel={reply.isLiked ? "Unlike reply" : "Like reply"}
-            pressed={Boolean(reply.isLiked)}
-            onClick={() => onLike(reply)}
-          />
-        </div>
-      </div>
-    </article>
-  );
-}
-
-// Below Tailwind's `lg` the panel covers the whole screen (see its classes).
-const FULL_SCREEN_PANEL_QUERY = "(width < 64rem)";
-
-const subscribeToFullScreenPanel = (listener: () => void) => {
-  const media = window.matchMedia(FULL_SCREEN_PANEL_QUERY);
-  media.addEventListener("change", listener);
-  return () => media.removeEventListener("change", listener);
+  queries.forEach((media) => media.addEventListener("change", listener));
+  return () =>
+    queries.forEach((media) => media.removeEventListener("change", listener));
 };
 
-function useFullScreenPanel(): boolean {
+const getPanelVariant = (): DiscussionPanelVariant =>
+  window.matchMedia(DESKTOP_QUERY).matches
+    ? "desktop"
+    : window.matchMedia(PHONE_QUERY).matches
+      ? "phone"
+      : "tablet";
+
+function usePanelVariant(): DiscussionPanelVariant {
   return useSyncExternalStore(
-    subscribeToFullScreenPanel,
-    () => window.matchMedia(FULL_SCREEN_PANEL_QUERY).matches,
-    () => false,
+    subscribeToPanelVariant,
+    getPanelVariant,
+    () => "desktop",
   );
 }
 
-/**
- * Where the panel stands on a wide screen: along the right edge of the app's
- * scrolling frame, as tall as the frame, whatever the page scrolls. The frame
- * sits inside the shell's padding, so neither the window nor a sticky column
- * gives that box; it is measured.
- */
-function usePanelFrameBox(): CSSProperties | undefined {
-  const [box, setBox] = useState<CSSProperties>();
-  useLayoutEffect(() => {
-    const frame = getApplicationScrollElement();
-    if (!frame) return;
-    const measure = () => {
-      const rect = frame.getBoundingClientRect();
-      setBox({
-        "--panel-top": `${rect.top}px`,
-        "--panel-right": `${Math.max(0, window.innerWidth - rect.right)}px`,
-        "--panel-height": `${rect.height}px`,
-      } as CSSProperties);
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(frame);
-    window.addEventListener("resize", measure);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", measure);
-    };
-  }, []);
-  return box;
-}
-
-/**
- * The discussion opened from the Discussions page, beside the list: the post
- * in full, its replies and a box to reply. "Open in course" takes it to the
- * lesson, where the comment is highlighted.
- */
-export function DiscussionWorkspacePanel({
-  card,
-  destination,
-  editing = false,
-  onEditingChange,
-  onClose,
-  onNavigatePage,
-  onReport,
-  setNotice,
-}: {
-  card: DiscussionWorkspaceCard;
+interface DiscussionWorkspacePanelProps {
+  /** The discussion shown; none while the list has nothing to show. */
+  card: DiscussionWorkspaceCard | null;
+  /** What the open panel says when there is no discussion to show. */
+  emptyMessage: string;
+  /** Whether a discussion is open. A closed panel shows only on a desktop,
+   * as its gutter at the frame's edge. */
+  open: boolean;
+  /** The gutter was dragged or double-clicked open. */
+  onReopen: () => void;
   destination: string | null;
   /** Whether the card's own text is being edited. */
-  editing?: boolean;
-  onEditingChange?: (editing: boolean) => void;
+  editing: boolean;
+  onEditingChange: (editing: boolean) => void;
   onClose: () => void;
   onNavigatePage?: NavigateTo;
   onReport?: (card: DiscussionWorkspaceCard) => void;
   setNotice?: (message: string) => void;
-}) {
-  const queryClient = useQueryClient();
-  const { data: currentUser } = useCurrentUser();
-  const isNote = card.itemType === "note" || card.kind === "note";
-  // A reply or mention opens the discussion it belongs to.
-  const threadId = isNote
-    ? undefined
-    : card.itemType === "reply"
-      ? (card.parentThreadId ?? undefined)
-      : card.id;
-  const thread = useThreadDetails(threadId);
-  const note = useNoteDetails(isNote ? card.id : undefined);
-  const replies = useThreadReplies(threadId);
-  const createReply = useCreateReply(threadId);
-  const updateThread = useUpdateThread(threadId);
-  const updateReply = useUpdateReply(threadId);
-  const updateNote = useUpdateNote(isNote ? card.id : undefined);
-  const [draft, setDraft] = useState("");
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const frameBox = usePanelFrameBox();
-  // On a phone the panel is a page of its own, so Back closes it rather than
-  // leaving the Discussions page.
-  const isFullScreen = useFullScreenPanel();
+  /** Stepping to the discussion above or below this one in the list. */
+  step?: DiscussionPanelStep;
+}
+
+/**
+ * The discussion opened from the Discussions page: beside the list on a
+ * desktop, over the page from the right on a tablet, and a sheet from the
+ * bottom on a phone, where a sideways swipe moves through the list.
+ */
+export function DiscussionWorkspacePanel(props: DiscussionWorkspacePanelProps) {
+  const variant = usePanelVariant();
+  if (variant === "desktop") return <DesktopPanel {...props} />;
+  if (!props.open) return null;
+  if (variant === "tablet") return <TabletPanel {...props} />;
+  return <PhonePanel {...props} />;
+}
+
+function DesktopPanel({
+  card,
+  emptyMessage,
+  open,
+  onReopen,
+  onClose,
+  onNavigatePage,
+  ...props
+}: DiscussionWorkspacePanelProps) {
+  const shortcutLabel = getRightPanelShortcutLabel(useShortcutPlatform());
+  // The page says whether the panel is open; the gutter can change it too.
+  // Following the page must not report back to it as a change of the user's.
+  const followingPageRef = useRef(false);
+  const {
+    paneRef,
+    contentRef,
+    paneWidth,
+    collapsed,
+    setCollapsed,
+    gutterProps,
+  } = useSplitFrameWidth({
+    storageKey: "veolms-discussions-panel-width",
+    closedLabel: "Discussion panel closed",
+    defaultCollapsed: !open,
+    onCollapsedChange: (nowCollapsed) => {
+      if (followingPageRef.current) return;
+      if (nowCollapsed) onClose();
+      else onReopen();
+    },
+  });
+  useEffect(() => {
+    if (collapsed === !open) return;
+    followingPageRef.current = true;
+    setCollapsed(!open);
+    followingPageRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- follows `open` only
+  }, [open]);
+
+  return (
+    <SplitFramePane
+      aria-label="Discussion details"
+      paneRef={paneRef}
+      width={paneWidth}
+      slide
+      className="flex flex-col"
+    >
+      <SplitFrameGutter
+        aria-label="Resize discussion panel"
+        aria-keyshortcuts={RIGHT_PANEL_SHORTCUT_ARIA}
+        title={
+          collapsed
+            ? `Open discussion panel · drag, double-click or ${shortcutLabel}`
+            : `Resize discussion panel · double-click or ${shortcutLabel} to close`
+        }
+        {...gutterProps}
+      />
+      <div className="flex min-h-0 flex-1 overflow-hidden rounded-[inherit]">
+        {/* Never narrower than the pane's minimum: while the pane slides
+              to a width after a drag, its contents keep their layout and
+              the edge clips them, as on the lesson page. */}
+        <div
+          ref={contentRef}
+          className="flex min-h-0 w-full min-w-75 shrink-0 flex-col"
+        >
+          {/* Closed, the panel is only its gutter: nothing is fetched for a
+              discussion nobody opened. A drag brings the content in with
+              the first movement. */}
+          {!collapsed &&
+            (card ? (
+              <DiscussionPanelContent
+                {...props}
+                card={card}
+                variant="desktop"
+                onClose={onClose}
+                onEscape={onClose}
+                onOpenInCourse={(path) =>
+                  onNavigatePage?.(path, { exact: true })
+                }
+              />
+            ) : (
+              <DiscussionPanelEmpty message={emptyMessage} onClose={onClose} />
+            ))}
+        </div>
+      </div>
+    </SplitFramePane>
+  );
+}
+
+function TabletPanel({
+  card,
+  emptyMessage,
+  onClose,
+  onNavigatePage,
+  open: _open,
+  onReopen: _onReopen,
+  ...props
+}: DiscussionWorkspacePanelProps) {
+  // The panel covers the page, so Back closes it rather than leaving the
+  // Discussions page.
   const dismissThroughHistory = useBackDismiss({
-    enabled: isFullScreen,
     open: true,
     onDismiss: onClose,
   });
-  // Full screen, the panel has to cover the sidebar, which sits outside the
-  // page's frame. The frame is a layer of its own (a grid item with a
-  // z-index), so nothing inside it can rise above the sidebar however high
-  // its z-index: between phone width and `lg` the sidebar was drawn over the
-  // panel. The panel is drawn in the shell's own layer instead, beside the
-  // sidebar. Wide, it stays in the frame, along its right edge.
-  const fullScreenHost = isFullScreen
-    ? document.querySelector<HTMLElement>(".courses-app")
-    : null;
-  const openInCourse = (path: string) => {
-    if (!onNavigatePage) return;
-    // The panel's Back entry is taken off first, so Back from the lesson
-    // returns to the list and not to a panel that is no longer there.
-    dismissThroughHistory(() => onNavigatePage(path, { exact: true }));
-  };
-
-  const kindName = isNote
-    ? "Note"
-    : thread.data?.kind === "question" || card.kind === "question"
-      ? "Q&A"
-      : "Comment";
-  const replyList = replies.data?.pages.flatMap((page) => page.replies) ?? [];
-  const post = isNote ? note.data : thread.data;
-  const author = thread.data?.author;
-  const authorName = isNote
-    ? card.isOwn
-      ? "You"
-      : card.author
-    : thread.data?.isOwn
-      ? "You"
-      : (author?.displayName ?? card.author);
-
-  // Keyboard users land in the panel when it opens and leave it with Escape.
-  // A panel opened by "Edit" has already put them in the edit box.
-  useEffect(() => {
-    const closeButton = closeRef.current;
-    if (closeButton?.closest("aside")?.contains(document.activeElement)) return;
-    closeButton?.focus({ preventScroll: true });
-  }, [card.id]);
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented) onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
-  const refreshReplies = () => {
-    if (!threadId) return;
-    void queryClient.invalidateQueries({
-      queryKey: learningInteractionKeys.threadReplies(threadId),
-    });
-  };
-
-  const isEditingReply = editing && card.itemType === "reply";
-  const isEditingPost = editing && !isEditingReply;
-  const stopEditing = () => onEditingChange?.(false);
-  const afterEdit = {
-    onSuccess: () => {
-      stopEditing();
-      setNotice?.("Changes saved");
-      if (threadId) {
-        void queryClient.invalidateQueries({
-          queryKey: learningInteractionKeys.threadDetails(threadId),
-        });
-      }
-      if (isNote) {
-        void queryClient.invalidateQueries({
-          queryKey: learningInteractionKeys.noteDetails(card.id),
-        });
-      }
-      refreshReplies();
-      // The list's row, and the lesson's own lists when next shown.
-      void queryClient.invalidateQueries({
-        queryKey: learningInteractionKeys.all,
-        refetchType: "none",
-      });
-      void queryClient.invalidateQueries({
-        predicate: (query) => query.queryKey[1] === "discussions-workspace",
-      });
-    },
-    onError: () => setNotice?.("Couldn't save your changes"),
-  };
-  const editHandlers: PanelEditHandlers = {
-    saving:
-      updateThread.isPending || updateReply.isPending || updateNote.isPending,
-    onCancel: stopEditing,
-    onSave: (content) => {
-      if (isEditingReply) {
-        updateReply.mutate(
-          { replyId: card.id, payload: { content } },
-          afterEdit,
-        );
-      } else if (isNote) {
-        updateNote.mutate({ content }, afterEdit);
-      } else {
-        updateThread.mutate({ content }, afterEdit);
-      }
-    },
-  };
-
-  const likeReply = (reply: LearningReply) => {
-    void learningInteractionsService
-      .toggleLike({ targetType: "reply", targetId: reply.id })
-      .then(refreshReplies)
-      .catch(() => setNotice?.("Couldn't update like"));
-  };
-
-  const submitReply = () => {
-    const content = draft.trim();
-    if (!content || !threadId || createReply.isPending) return;
-    createReply.mutate(
-      { content },
-      {
-        onSuccess: () => {
-          setDraft("");
-          refreshReplies();
-          // The reply count on the list's row and the lesson's lists.
-          void queryClient.invalidateQueries({
-            queryKey: learningInteractionKeys.all,
-            refetchType: "none",
-          });
-          void queryClient.invalidateQueries({
-            predicate: (query) => query.queryKey[1] === "discussions-workspace",
-          });
-        },
-        onError: () => setNotice?.("Couldn't post your reply"),
-      },
-    );
-  };
-
-  const firstName = (authorName ?? "").split(" ")[0];
-
-  const panel = (
-    <aside
-      aria-label={`${kindName} details`}
-      style={frameBox}
-      className="fixed z-60 flex flex-col bg-(--surface) max-lg:inset-0 max-lg:z-150 lg:top-(--panel-top) lg:right-(--panel-right) lg:h-(--panel-height) lg:w-110 lg:rounded-r-[inherit] lg:border-l lg:border-[color-mix(in_srgb,var(--text)_9%,transparent)]"
+  return (
+    <SlideOverFrame
+      label="Discussion details"
+      onClose={onClose}
+      className="max-w-[460px]"
+      // A light dim, no blur: the list stays readable behind the panel.
+      backdropClassName="bg-black/35"
     >
-      <header className="flex items-center justify-between gap-3 border-b border-[color-mix(in_srgb,var(--text)_9%,transparent)] px-5 py-4">
-        <div className="flex items-center gap-2.5">
-          <button
-            ref={closeRef}
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="grid size-9 place-items-center rounded-lg text-(--muted) transition-colors hover:bg-(--hover) hover:text-(--text) focus-visible:outline-2 focus-visible:outline-(--accent)"
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
-          <span className="text-sm font-bold text-(--muted)">{kindName}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {destination && onNavigatePage && (
-            <a
-              href={destination}
-              onClick={(event) => {
-                event.preventDefault();
-                openInCourse(destination);
-              }}
-              className="inline-flex h-9 items-center gap-2 rounded-lg bg-[color-mix(in_srgb,var(--text)_7%,transparent)] px-3 text-[0.84rem] font-bold text-(--text) transition-colors hover:bg-[color-mix(in_srgb,var(--text)_11%,transparent)] focus-visible:outline-2 focus-visible:outline-(--accent)"
-            >
-              Open in course
-              <ArrowSquareOut size={14} weight="bold" aria-hidden="true" />
-            </a>
-          )}
-          <DiscussionWorkspaceActionMenu
-            card={card}
-            destination={destination}
-            setNotice={setNotice}
-            onEdit={onEditingChange ? () => onEditingChange(true) : undefined}
-            onReport={onReport}
-          />
-        </div>
-      </header>
-
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        {(card.course || card.lesson) && (
-          <div className="flex flex-col gap-1 border-b border-[color-mix(in_srgb,var(--text)_9%,transparent)] px-5 py-4">
-            {card.course && (
-              <span className="text-[0.8125rem] font-bold text-(--accent)">
-                {card.course}
-              </span>
-            )}
-            {card.lesson && (
-              <span className="text-base leading-snug font-bold text-(--text)">
-                {card.lesson}
-              </span>
-            )}
-          </div>
-        )}
-
-        <div className="flex flex-col gap-5 p-5">
-          <article className="flex gap-3">
-            <DiscussionAvatar
-              src={
-                (isNote ? card.avatar : author?.avatarUrl) ||
-                card.avatar ||
-                null
-              }
-              className="size-10 shrink-0 rounded-full object-cover"
-              width={40}
-              height={40}
-            />
-            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[0.9375rem] font-bold text-(--text)">
-                  {authorName}
-                </span>
-                <RoleBadge role={author?.role} />
-                <time className="text-[0.8125rem] text-(--muted)">
-                  {post ? formatPostTime(post.createdAt) : card.activity}
-                </time>
-              </div>
-              {post?.title && (
-                <h2 className="m-0 text-base font-bold text-(--text)">
-                  {post.title}
-                </h2>
-              )}
-              {isEditingPost ? (
-                <PanelEditForm
-                  key={card.id}
-                  {...editHandlers}
-                  initialContent={post?.content ?? card.content}
-                  label={`Edit ${kindName === "Q&A" ? "question" : kindName.toLowerCase()}`}
-                />
-              ) : (
-                <PostBody
-                  content={post?.content ?? card.content}
-                  label={kindName}
-                />
-              )}
-            </div>
-          </article>
-
-          {!isNote && (
-            <>
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-extrabold tracking-wider text-(--muted) uppercase">
-                  {replies.isLoading
-                    ? "Replies"
-                    : replyList.length === 0
-                      ? "No replies yet"
-                      : `${replyList.length} ${replyList.length === 1 ? "reply" : "replies"}`}
-                </span>
-                <div
-                  className="h-px flex-1 bg-[color-mix(in_srgb,var(--text)_8%,transparent)]"
-                  aria-hidden="true"
-                />
-              </div>
-              {replyList.map((reply) => (
-                <PanelReply
-                  key={reply.id}
-                  reply={reply}
-                  onLike={likeReply}
-                  edit={
-                    isEditingReply && reply.id === card.id
-                      ? editHandlers
-                      : undefined
-                  }
-                />
-              ))}
-              {replies.hasNextPage && (
-                <button
-                  type="button"
-                  onClick={() => void replies.fetchNextPage()}
-                  disabled={replies.isFetchingNextPage}
-                  className="self-start rounded-lg px-3 py-2 text-sm font-bold text-(--accent) hover:bg-(--hover)"
-                >
-                  {replies.isFetchingNextPage
-                    ? "Loading…"
-                    : "Show more replies"}
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {!isNote && threadId && !thread.data?.isLocked && (
-        <form
-          className="border-t border-[color-mix(in_srgb,var(--text)_9%,transparent)] px-5 pt-4 pb-[max(20px,var(--app-safe-area-bottom,0px))]"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submitReply();
-          }}
-        >
-          <label htmlFor="discussion-panel-reply" className="sr-only">
-            Write a reply
-          </label>
-          <div className="flex items-start gap-3">
-            <DiscussionAvatar
-              src={currentUser?.avatarDataUrl ?? null}
-              className="mt-1.5 size-8 shrink-0 rounded-full object-cover"
-              width={32}
-              height={32}
-            />
-            <div className="flex min-w-0 flex-1 flex-col rounded-xl border border-[color-mix(in_srgb,var(--text)_9%,transparent)] bg-(--surface-strong,var(--surface)) focus-within:border-(--accent)">
-              <textarea
-                id="discussion-panel-reply"
-                rows={2}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (
-                    event.key === "Enter" &&
-                    (event.metaKey || event.ctrlKey)
-                  ) {
-                    event.preventDefault();
-                    submitReply();
-                  }
-                }}
-                placeholder={
-                  firstName ? `Reply to ${firstName}…` : "Write a reply…"
-                }
-                className="resize-none border-0 bg-transparent px-3.5 pt-3 pb-1 text-[0.9375rem] leading-normal text-(--text) outline-0 placeholder:text-(--muted)"
-              />
-              <div className="flex justify-end px-2 pt-1.5 pb-2">
-                <button
-                  type="submit"
-                  disabled={!draft.trim() || createReply.isPending}
-                  className="inline-flex h-8.5 items-center gap-2 rounded-lg bg-(--accent) px-3.5 text-[0.84rem] font-extrabold text-(--on-accent) transition-opacity disabled:opacity-40"
-                >
-                  {createReply.isPending ? "Posting…" : "Reply"}
-                  <ArrowRight size={14} weight="bold" aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </form>
+      {card ? (
+        <DiscussionPanelContent
+          {...props}
+          card={card}
+          variant="tablet"
+          onEscape={onClose}
+          onOpenInCourse={(path) =>
+            // The panel's Back entry is taken off first, so Back from the
+            // lesson returns to the list and not to a closed panel.
+            dismissThroughHistory(() => onNavigatePage?.(path, { exact: true }))
+          }
+        />
+      ) : (
+        <DiscussionPanelEmpty message={emptyMessage} />
       )}
-    </aside>
+    </SlideOverFrame>
   );
-  return fullScreenHost ? createPortal(panel, fullScreenHost) : panel;
+}
+
+/** How far a finger has to travel sideways to move to the next discussion. */
+const STEP_SWIPE_DISTANCE = 72;
+
+/**
+ * A sideways swipe on the phone sheet moves to the discussion before or
+ * after this one. The sheet follows the finger, and the new discussion
+ * slides in from the side it was swiped towards. A swipe that starts in the
+ * reply box, a code block or a menu is left to them.
+ */
+function usePhoneStepSwipe(step: DiscussionPanelStep | undefined) {
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const gestureRef = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    axis: "x" | "y" | null;
+    dx: number;
+  } | null>(null);
+  const [enterFrom, setEnterFrom] = useState<"left" | "right" | null>(null);
+
+  const setOffset = (dx: number, animate: boolean) => {
+    const surface = surfaceRef.current;
+    if (!surface) return;
+    surface.style.transition = animate ? "transform 160ms ease-out" : "none";
+    surface.style.transform = dx ? `translate3d(${dx}px,0,0)` : "";
+  };
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!step || event.pointerType !== "touch") return;
+    const target = event.target as Element;
+    if (
+      target.closest(
+        "[data-thread-reply-composer], pre, .cm-editor, [role=menu], input, textarea",
+      )
+    )
+      return;
+    gestureRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      axis: null,
+      dx: 0,
+    };
+  };
+
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId || !step) return;
+    const dx = event.clientX - gesture.x;
+    const dy = event.clientY - gesture.y;
+    if (gesture.axis === null) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      gesture.axis = Math.abs(dx) > Math.abs(dy) * 1.2 ? "x" : "y";
+    }
+    if (gesture.axis !== "x") return;
+    gesture.dx = dx;
+    const canGo = dx < 0 ? step.index < step.count - 1 : step.index > 0;
+    // At either end of the list the sheet only gives a little.
+    setOffset(canGo ? dx : dx * 0.25, false);
+  };
+
+  const finish = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    gestureRef.current = null;
+    if (gesture.axis !== "x" || !step) return;
+    setOffset(0, false);
+    if (gesture.dx <= -STEP_SWIPE_DISTANCE && step.index < step.count - 1) {
+      setEnterFrom("right");
+      step.onNext();
+    } else if (gesture.dx >= STEP_SWIPE_DISTANCE && step.index > 0) {
+      setEnterFrom("left");
+      step.onPrev();
+    } else {
+      setOffset(0, true);
+    }
+  };
+
+  return {
+    surfaceRef,
+    enterFrom,
+    handlers: {
+      onPointerDown,
+      onPointerMove,
+      onPointerUp: finish,
+      onPointerCancel: finish,
+    },
+  };
+}
+
+function PhonePanel({
+  onClose,
+  onNavigatePage,
+  card,
+  emptyMessage,
+  step,
+  open: _open,
+  onReopen: _onReopen,
+  ...props
+}: DiscussionWorkspacePanelProps) {
+  const [open, setOpen] = useState(true);
+  const dismissThenRef = useRef<DrawerDismissThen | null>(null);
+  const swipe = usePhoneStepSwipe(step);
+
+  return (
+    <Drawer
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) setOpen(false);
+      }}
+      onOpenChangeComplete={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
+      showSwipeHandle
+      dismissThenRef={dismissThenRef}
+    >
+      <DrawerContent
+        aria-label="Discussion details"
+        finalFocus={false}
+        // The drawer sizes a bottom sheet under this same variant.
+        className="bg-(--surface) data-[swipe-axis=y]:[--drawer-content-height:calc(100dvh-2.5rem)] data-[swipe-axis=y]:[--drawer-content-max-height:calc(100dvh-2.5rem)]"
+      >
+        <div
+          ref={swipe.surfaceRef}
+          {...swipe.handlers}
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        >
+          <div
+            key={card?.id ?? "empty"}
+            className={`flex min-h-0 flex-1 flex-col ${
+              swipe.enterFrom === "right"
+                ? "animate-in fade-in slide-in-from-right-10 duration-200"
+                : swipe.enterFrom === "left"
+                  ? "animate-in fade-in slide-in-from-left-10 duration-200"
+                  : ""
+            }`}
+          >
+            {card ? (
+              <DiscussionPanelContent
+                {...props}
+                card={card}
+                step={step}
+                variant="phone"
+                onOpenInCourse={(path) => {
+                  const navigate = () =>
+                    onNavigatePage?.(path, { exact: true });
+                  const dismissThen = dismissThenRef.current;
+                  if (dismissThen) dismissThen(navigate);
+                  else navigate();
+                }}
+              />
+            ) : (
+              <DiscussionPanelEmpty message={emptyMessage} />
+            )}
+          </div>
+        </div>
+      </DrawerContent>
+    </Drawer>
+  );
 }

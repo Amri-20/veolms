@@ -191,8 +191,8 @@
     --main-surface-inline-start: 14px;
   }
 
-  /* The same box as a shell-level overlay. The desktop lesson page gives it a
-     shadow to cast (learning-split-layout.css). */
+  /* The same box as a shell-level overlay. A split frame gives it a shadow
+     to cast (components/split-frame-pane.css). */
   :root[data-content-layout="framed"] .courses-app::after {
     --main-surface-inline-start: inherit;
     content: "";

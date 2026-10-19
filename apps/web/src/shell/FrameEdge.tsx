@@ -37,7 +37,7 @@
  *   sidebar's glow) into a layer that size.
  *
  * Touch devices only. With a mouse or trackpad the uncut box still draws the
- * edge, as an `::after` overlay (foundation.css, learning-split-layout.css):
+ * edge, as an `::after` overlay (foundation.css, components/split-frame-pane.css):
  * those screens have the memory for it, and which layers exist there also
  * decides how Chrome smooths the sidebar's icons at 125% and 150% display
  * scaling, so the strips would change pixels that have nothing to do with
@@ -55,8 +55,8 @@ const cuts = [
 
 const surfaces = {
   // Children of the shell, laid over the main frame. Shown in the framed
-  // layout on touch devices; the desktop lesson page hides them
-  // (learning-split-layout.css). The frame's left edge is a property the
+  // layout on touch devices; a split frame (SplitFramePane: the desktop
+  // lesson and Discussions pages) hides them (split-frame-pane.css). The frame's left edge is a property the
   // shell does not hand down by itself (see its registration in
   // foundation.css), so each level asks.
   shell: {
@@ -64,9 +64,9 @@ const surfaces = {
       "hidden [--main-surface-inline-start:inherit] min-[641px]:pointer-coarse:[:root[data-content-layout=framed]_&]:contents",
     box: "top-[12px] right-[12px] bottom-[10px] left-(--main-surface-inline-start) [--main-surface-inline-start:inherit]",
   },
-  // Children of the main frame, which is the lesson card while the desktop
-  // lesson page is open. Only that page shows them, on touch devices
-  // (learning-split-layout.css).
+  // Children of the main frame, which is the page's card while a
+  // SplitFramePane splits it. Only then are they shown, on touch devices
+  // (components/split-frame-pane.css).
   lesson: { group: "hidden", box: "inset-0" },
 };
 
@@ -76,7 +76,11 @@ export function FrameEdge({ surface }: { surface: keyof typeof surfaces }) {
   return (
     <div aria-hidden="true" data-frame-edge={surface} className={group}>
       {cuts.map((cut) => (
-        <span key={cut} className={`${strip} ${box} ${cut}`} />
+        <span
+          key={cut}
+          data-frame-edge-strip=""
+          className={`${strip} ${box} ${cut}`}
+        />
       ))}
     </div>
   );

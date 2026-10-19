@@ -148,7 +148,7 @@ export function CoursesPage({
   section: requestedSection = null,
   settingsTab = SETTINGS_DEFAULT_TAB,
   platformTab,
-  discussionTab = "q-and-a",
+  discussionTab = "all",
   courseSlug,
   quizId,
   assignmentId,

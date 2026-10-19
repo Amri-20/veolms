@@ -113,6 +113,11 @@ export const ELASTIC_SCROLL_UNLOCK_SIDE_KEY =
   "veolms-elastic-scroll-unlock-side";
 export const ELASTIC_SCROLL_UNLOCK_SIDE_DEFAULT: ElasticScrollGestureSide =
   "left";
+/** How long the control stays after scrolling stops, in seconds. */
+export const ELASTIC_SCROLL_HIDE_DELAY_KEY = "veolms-elastic-scroll-hide-delay";
+export const ELASTIC_SCROLL_HIDE_DELAY_MIN = 1;
+export const ELASTIC_SCROLL_HIDE_DELAY_MAX = 10;
+export const ELASTIC_SCROLL_HIDE_DELAY_DEFAULT = 2;
 export const ELASTIC_SCROLL_PREFERENCES_EVENT =
   "veolms:elastic-scroll-preferences";
 
@@ -122,6 +127,7 @@ export interface ElasticScrollPreferences {
   animateIcon: boolean;
   lockSide: ElasticScrollGestureSide;
   unlockSide: ElasticScrollGestureSide;
+  hideDelaySeconds: number;
 }
 
 export const ELASTIC_SCROLL_PREFERENCES_DEFAULT: ElasticScrollPreferences = {
@@ -130,6 +136,7 @@ export const ELASTIC_SCROLL_PREFERENCES_DEFAULT: ElasticScrollPreferences = {
   animateIcon: ELASTIC_SCROLL_ICON_ANIMATION_DEFAULT,
   lockSide: ELASTIC_SCROLL_LOCK_SIDE_DEFAULT,
   unlockSide: ELASTIC_SCROLL_UNLOCK_SIDE_DEFAULT,
+  hideDelaySeconds: ELASTIC_SCROLL_HIDE_DELAY_DEFAULT,
 };
 export const CONTROL_RADIUS_KEY = "veolms-control-radius";
 export const CONTROL_RADIUS_CUSTOM_KEY = "veolms-control-radius-custom";
@@ -459,6 +466,18 @@ export const normalizeElasticScrollGestureSide = (
     ? (value as ElasticScrollGestureSide)
     : fallback;
 
+/** Whole seconds from the minimum to the maximum; anything else is the
+ * default. */
+export const normalizeElasticScrollHideDelay = (value: unknown): number => {
+  const seconds = Math.round(Number(value));
+  return Number.isFinite(seconds) && seconds > 0
+    ? Math.min(
+        ELASTIC_SCROLL_HIDE_DELAY_MAX,
+        Math.max(ELASTIC_SCROLL_HIDE_DELAY_MIN, seconds),
+      )
+    : ELASTIC_SCROLL_HIDE_DELAY_DEFAULT;
+};
+
 export const readElasticScrollPreferences = (): ElasticScrollPreferences => ({
   appearance: normalizeElasticScrollAppearance(
     readStored(
@@ -484,6 +503,12 @@ export const readElasticScrollPreferences = (): ElasticScrollPreferences => ({
     ),
     ELASTIC_SCROLL_UNLOCK_SIDE_DEFAULT,
   ),
+  hideDelaySeconds: normalizeElasticScrollHideDelay(
+    readStored(
+      ELASTIC_SCROLL_HIDE_DELAY_KEY,
+      String(ELASTIC_SCROLL_HIDE_DELAY_DEFAULT),
+    ),
+  ),
 });
 
 export const applyElasticScrollPreferences = (
@@ -503,6 +528,9 @@ export const applyElasticScrollPreferences = (
     unlockSide: normalizeElasticScrollGestureSide(
       preferences.unlockSide,
       ELASTIC_SCROLL_UNLOCK_SIDE_DEFAULT,
+    ),
+    hideDelaySeconds: normalizeElasticScrollHideDelay(
+      preferences.hideDelaySeconds,
     ),
   };
   if (typeof document !== "undefined") {
@@ -546,6 +574,10 @@ export const persistElasticScrollPreferences = (
       window.localStorage.setItem(
         ELASTIC_SCROLL_UNLOCK_SIDE_KEY,
         normalizedPreferences.unlockSide,
+      );
+      window.localStorage.setItem(
+        ELASTIC_SCROLL_HIDE_DELAY_KEY,
+        String(normalizedPreferences.hideDelaySeconds),
       );
     } catch {
       // Keep the preference active for this session when storage is blocked.
