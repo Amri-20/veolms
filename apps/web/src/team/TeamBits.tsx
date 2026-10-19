@@ -79,6 +79,21 @@ export function StatusChip({
   );
 }
 
+/** A steady tint per person, so the same initials keep the same colour. */
+const AVATAR_TONES = [
+  "bg-amber-400/15 text-amber-300 [[data-theme=light]_&]:text-amber-700",
+  "bg-emerald-400/15 text-emerald-300 [[data-theme=light]_&]:text-emerald-700",
+  "bg-sky-400/15 text-sky-300 [[data-theme=light]_&]:text-sky-700",
+  "bg-violet-400/15 text-violet-300 [[data-theme=light]_&]:text-violet-700",
+  "bg-rose-400/15 text-rose-300 [[data-theme=light]_&]:text-rose-700",
+] as const;
+
+function avatarTone(seed: string): string {
+  let hash = 0;
+  for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return AVATAR_TONES[hash % AVATAR_TONES.length]!;
+}
+
 export function PersonAvatar({
   name,
   email,
@@ -100,7 +115,7 @@ export function PersonAvatar({
   ) : (
     <span
       aria-hidden="true"
-      className="flex size-9 shrink-0 items-center justify-center rounded-full bg-(--accent)/12 text-xs font-bold text-(--accent)"
+      className={`flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${avatarTone(email)}`}
     >
       {initials(name, email)}
     </span>
@@ -113,15 +128,20 @@ export interface RowMenuItem {
   onSelect: () => void;
   danger?: boolean;
   disabled?: boolean;
+  /** Draw a line above this item, setting it apart (a destructive one). */
+  separated?: boolean;
 }
 
 /** The "⋮" menu at the end of a row. */
 export function RowMenu({
   label,
   items,
+  title,
 }: {
   label: string;
   items: readonly RowMenuItem[];
+  /** A small heading above the items, such as whose row this is. */
+  title?: string;
 }) {
   const [open, setOpen] = useState(false);
   if (items.length === 0) return null;
@@ -130,14 +150,27 @@ export function RowMenu({
       <PopoverTrigger
         aria-label={label}
         title="Actions"
-        className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-(--muted) transition-colors hover:bg-(--hover) hover:text-(--text) data-popup-open:bg-(--hover)"
+        className="flex size-8 cursor-pointer items-center justify-center rounded-lg border border-transparent text-(--muted) transition-colors hover:bg-(--hover) hover:text-(--text) data-popup-open:border-[color-mix(in_srgb,var(--text)_14%,transparent)] data-popup-open:bg-(--hover) data-popup-open:text-(--text)"
       >
         <DotsThreeVertical size={18} weight="bold" />
       </PopoverTrigger>
-      <PopoverContent side="bottom" align="end" className="w-48 p-1.5">
+      <PopoverContent side="bottom" align="end" className="w-60 p-1.5">
+        {title ? (
+          <p className="truncate px-2.5 pt-1.5 pb-1 text-[0.68rem] font-semibold tracking-wider text-(--muted) uppercase">
+            {title}
+          </p>
+        ) : null}
         <ul className="m-0 flex list-none flex-col gap-0.5 p-0" role="menu">
           {items.map((item) => (
-            <li key={item.label} role="none">
+            <li
+              key={item.label}
+              role="none"
+              className={
+                item.separated
+                  ? "mt-1 border-t border-[color-mix(in_srgb,var(--text)_10%,transparent)] pt-1"
+                  : undefined
+              }
+            >
               <button
                 type="button"
                 role="menuitem"
