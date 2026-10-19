@@ -1,39 +1,56 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useSearchParams } from "react-router";
-import { handleRovingTabKeyDown } from "../accessibility/rovingTabFocus";
-import { LoadingCards } from "../components/analytics/StatTiles";
-import { Button } from "../components/Button";
-import { ThemedSelect, type ThemedSelectOption } from "../ThemedSelect";
-import { useMyCourses } from "../services/courses";
 import {
-  useAdminAnalyticsOverview,
-  useInstructorAnalyticsOverview,
-} from "../services/analytics";
-import { selectTriggerClass } from "./analyticsShared";
-import { OverviewTab } from "./tabs/OverviewTab";
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useSearchParams } from "react-router";
+import { downloadCsv } from "@veolms/analytics-ui";
+import type {
+  AnalyticsExportSection,
+  AnalyticsTabFilters,
+} from "@veolms/web-core";
+import { SwipeableTabPanel } from "../navigation/SwipeableTabPanel";
+import type { NavigateTo } from "../routing/navigation";
+import type { ThemedSelectOption } from "../ThemedSelect";
+import { useMyCourses } from "../services/courses";
+import { useSettingsTabShortcuts } from "../settings/useSettingsTabShortcuts";
+import {
+  ANALYTICS_DEFAULT_RANGE,
+  ANALYTICS_DEFAULT_TAB,
+  ANALYTICS_RANGE_OPTIONS,
+  AnalyticsPageChrome,
+  AnalyticsTabLoading,
+  isAnalyticsRangeKey,
+  resolveAnalyticsTab,
+  useAnalyticsTabs,
+  type AnalyticsRangeKey,
+} from "./AnalyticsPageChrome";
+import "../styles/features/settings/foundation.css";
+import "../styles/features/settings/preferences-responsive.css";
 
 interface Props {
   role: "student" | "creator";
   isAdmin: boolean;
-  onNavigatePage?: (destination: string) => void;
+  /** The section from the path (`/analytics/<tab>`); the overview without one. */
+  tab?: string;
+  onNavigatePage?: NavigateTo;
 }
 
-type RangeKey = "7d" | "30d" | "3m" | "1y";
+const ANALYTICS_PATH = "/analytics";
 
-const RANGE_OPTIONS: ReadonlyArray<{
-  key: RangeKey;
-  label: string;
-  days: number;
-}> = [
-  { key: "7d", label: "7D", days: 7 },
-  { key: "30d", label: "30D", days: 30 },
-  { key: "3m", label: "3M", days: 90 },
-  { key: "1y", label: "1Y", days: 365 },
-];
+/** `/analytics` for the overview, `/analytics/<tab>` for any other section. */
+export function analyticsTabPath(tabId: string): string {
+  return tabId === ANALYTICS_DEFAULT_TAB
+    ? ANALYTICS_PATH
+    : `${ANALYTICS_PATH}/${tabId}`;
+}
 
-function useDateRangeParams(rangeKey: RangeKey) {
+function useDateRangeParams(rangeKey: AnalyticsRangeKey) {
   return useMemo(() => {
-    const option = RANGE_OPTIONS.find(
+    const option = ANALYTICS_RANGE_OPTIONS.find(
       (candidate) => candidate.key === rangeKey,
     )!;
     // Through the end of today (UTC), so the range is the same for every
@@ -47,80 +64,90 @@ function useDateRangeParams(rangeKey: RangeKey) {
   }, [rangeKey]);
 }
 
-function DateRangeTabs({
-  value,
-  onChange,
+/**
+ * The analytics page, laid out like Settings: the heading scrolls away, the
+ * section tabs stay pinned (same bar, same colours, same Alt+1… and arrow
+ * shortcuts, same swipe between sections on touch), and the filters and
+ * the open section scroll under them. A section is a path of its own.
+ */
+function AnalyticsContent({
+  isAdmin,
+  tab,
+  onNavigatePage,
 }: {
-  value: RangeKey;
-  onChange: (value: RangeKey) => void;
+  isAdmin: boolean;
+  tab: string | undefined;
+  onNavigatePage: NavigateTo | undefined;
 }) {
-  return (
-    <div
-      role="tablist"
-      aria-label="Date range"
-      className="flex gap-1 sm:gap-1.5 rounded-[12px] sm:rounded-[14px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--canvas)_80%,var(--surface))] p-1 sm:p-1.5"
-    >
-      {RANGE_OPTIONS.map((option) => (
-        <button
-          key={option.key}
-          type="button"
-          role="tab"
-          aria-selected={value === option.key}
-          tabIndex={value === option.key ? 0 : -1}
-          onClick={() => onChange(option.key)}
-          onKeyDown={handleRovingTabKeyDown}
-          className={`rounded-[8px] sm:rounded-[10px] px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
-            value === option.key
-              ? "bg-(--card-surface,var(--surface)) text-(--text) shadow-[var(--card-compact-shadow)]"
-              : "text-(--muted) hover:text-(--text) hover:bg-[color-mix(in_srgb,var(--text)_5%,transparent)]"
-          }`}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabListRef = useRef<HTMLElement>(null);
 
-function PageHeader({
-  title,
-  description,
-  action,
-}: {
-  eyebrow?: string;
-  title: string;
-  description: string;
-  action?: ReactNode;
-}) {
-  return (
-    <header className="pt-2 sm:pt-0 flex flex-col gap-3.5 sm:gap-5 border-b border-(--border) pb-4.5 sm:pb-7 lg:flex-row lg:items-end lg:justify-between">
-      <div>
-        <h1 className="text-[clamp(1.8rem,2.4vw,2.15rem)] font-bold leading-tight tracking-[-0.035em] text-(--text)">
-          {title}
-        </h1>
-        <p className="mt-1.5 max-w-2xl text-[0.88rem] leading-6 text-(--muted)">
-          {description}
-        </p>
-      </div>
-      {action ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 pt-2 pb-0.5 sm:py-0">
-          {action}
-        </div>
-      ) : null}
-    </header>
-  );
-}
+  const tabs = useAnalyticsTabs(isAdmin);
+  const tabIds = useMemo(() => tabs.map((entry) => entry.id), [tabs]);
+  const activeTab = resolveAnalyticsTab(tabs, tab);
+  const activeTabRef = useRef(activeTab.id);
+  activeTabRef.current = activeTab.id;
 
-function AnalyticsContent({ isAdmin }: { isAdmin: boolean }) {
-  const [range, setRange] = useState<RangeKey>("30d");
+  // The sections used to live in `?tab=`; a saved link of that shape opens
+  // the same section at its path, with the rest of the query kept.
+  const legacyTab = searchParams.get("tab");
+  useEffect(() => {
+    if (!legacyTab) return;
+    const rest = new URLSearchParams(searchParams);
+    rest.delete("tab");
+    const query = rest.toString();
+    const destination = `${analyticsTabPath(legacyTab)}${query ? `?${query}` : ""}`;
+    if (onNavigatePage) onNavigatePage(destination);
+    else window.history.replaceState(window.history.state, "", destination);
+  }, [legacyTab, onNavigatePage, searchParams]);
+
+  const requestedRange = searchParams.get("range");
+  const range: AnalyticsRangeKey = isAnalyticsRangeKey(requestedRange)
+    ? requestedRange
+    : ANALYTICS_DEFAULT_RANGE;
   const [courseId, setCourseId] = useState<string>("all");
   const dateRangeParams = useDateRangeParams(range);
   const myCourses = useMyCourses();
 
+  const updateParams = useCallback(
+    (changes: Record<string, string | null>) => {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          for (const [key, value] of Object.entries(changes)) {
+            if (value === null) next.delete(key);
+            else next.set(key, value);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  // A section is a path of its own (`/analytics/revenue`), as on Settings;
+  // the range and course stay in the query string and travel with it.
+  const selectTab = useCallback(
+    (id: string) => {
+      if (id === activeTabRef.current) return;
+      const query = window.location.search.replace(/^\?/, "");
+      const destination = `${analyticsTabPath(id)}${query ? `?${query}` : ""}`;
+      if (onNavigatePage) onNavigatePage(destination, { resetScroll: true });
+      else window.location.assign(destination);
+    },
+    [onNavigatePage],
+  );
+  const getCurrentTab = useCallback(() => activeTabRef.current, []);
+  useSettingsTabShortcuts({
+    tabIds,
+    getCurrentTab,
+    onNavigate: selectTab,
+  });
+
   // A course card's "Analytics" link opens this page with ?course=<id>, which
   // used to be ignored. It is read once and becomes the selected course only
   // if it is one of the courses in the list below.
-  const [searchParams] = useSearchParams();
   const [requestedCourseId, setRequestedCourseId] = useState(
     () => searchParams.get("course") || null,
   );
@@ -133,22 +160,19 @@ function AnalyticsContent({ isAdmin }: { isAdmin: boolean }) {
     }
   }, [requestedCourseId, myCourseRecords]);
 
-  const changeCourse = (nextCourseId: string) => {
+  const changeCourse = useCallback((nextCourseId: string) => {
     setRequestedCourseId(null);
     setCourseId(nextCourseId);
-  };
+  }, []);
 
-  const params = {
-    ...dateRangeParams,
-    courseId: courseId === "all" ? undefined : courseId,
-  };
-  const adminQuery = useAdminAnalyticsOverview(params, { enabled: isAdmin });
-  const instructorQuery = useInstructorAnalyticsOverview(params, {
-    enabled: !isAdmin,
-  });
-  const { data, isLoading, isError, refetch } = isAdmin
-    ? adminQuery
-    : instructorQuery;
+  const filters: AnalyticsTabFilters = useMemo(
+    () => ({
+      ...dateRangeParams,
+      courseId: courseId === "all" ? undefined : courseId,
+      rangeKey: range,
+    }),
+    [dateRangeParams, courseId, range],
+  );
 
   const courseOptions: ThemedSelectOption<string>[] = [
     [
@@ -160,64 +184,95 @@ function AnalyticsContent({ isAdmin }: { isAdmin: boolean }) {
     ),
   ];
 
-  return (
-    <main className="mx-auto grid w-full max-w-[1800px] gap-6">
-      <PageHeader
-        title="Analytics"
-        description={
-          isAdmin
-            ? "Track your academy's performance with actionable insights."
-            : "See how your courses are performing — revenue, enrollments, completion, and engagement."
-        }
-        action={
-          <>
-            <ThemedSelect
-              value={courseId}
-              onValueChange={changeCourse}
-              options={courseOptions}
-              ariaLabel="Course"
-              searchable
-              triggerClassName={selectTriggerClass}
-            />
-            <DateRangeTabs value={range} onChange={setRange} />
-          </>
-        }
-      />
+  const [exportSections, setExportSections] = useState<
+    AnalyticsExportSection[] | null
+  >(null);
+  const handleExportChange = useCallback(
+    (sections: AnalyticsExportSection[] | null) => setExportSections(sections),
+    [],
+  );
+  const exportCsv = () => {
+    if (!exportSections) return;
+    const day = (iso: string) => iso.slice(0, 10);
+    downloadCsv(
+      `analytics-${activeTab.id}-${day(filters.from)}-to-${day(filters.to)}.csv`,
+      exportSections,
+    );
+  };
 
-      {isError && !data ? (
-        // Without this a failed load left the loading cards up for good.
-        <div
-          role="alert"
-          className="rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-(--card-surface,var(--surface)) p-6 text-sm text-(--muted)"
-        >
-          <p className="font-semibold text-(--text)">
-            Analytics could not be loaded.
-          </p>
-          <p className="mt-1">
-            Check your connection and try again. Nothing has been changed.
-          </p>
-          <Button
-            motion="static"
-            className="mt-4 h-9 text-xs"
-            onClick={() => void refetch()}
-          >
-            Try again
-          </Button>
-        </div>
-      ) : isLoading || !data ? (
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3 xl:grid-cols-6">
-          <LoadingCards />
-        </div>
-      ) : (
-        <OverviewTab data={data} />
-      )}
-    </main>
+  const isFiltered = range !== ANALYTICS_DEFAULT_RANGE || courseId !== "all";
+  const resetFilters = () => {
+    setRequestedCourseId(null);
+    setCourseId("all");
+    updateParams({ range: null, course: null });
+  };
+  const changeRange = useCallback(
+    (next: AnalyticsRangeKey) =>
+      updateParams({ range: next === ANALYTICS_DEFAULT_RANGE ? null : next }),
+    [updateParams],
+  );
+
+  const TabComponent = activeTab.component;
+
+  return (
+    <AnalyticsPageChrome
+      tabs={tabs}
+      activeTab={activeTab}
+      isAdmin={isAdmin}
+      range={range}
+      courseId={courseId}
+      courseOptions={courseOptions}
+      onSelectTab={selectTab}
+      onRangeChange={changeRange}
+      onCourseChange={changeCourse}
+      onExport={exportCsv}
+      exportDisabled={!exportSections}
+      onReset={isFiltered ? resetFilters : undefined}
+      navRef={tabListRef}
+    >
+      <SwipeableTabPanel
+        tabs={tabIds}
+        activeTab={activeTab.id}
+        onTabChange={selectTab}
+        tabListRef={tabListRef}
+        id="analytics-tab-panel"
+        className="settings-tab-content pb-8"
+        stateAttribute="data-analytics-tab"
+        labelledBy={`analytics-tab-${activeTab.id}`}
+        nativeOnFinePointer
+        focusable={false}
+      >
+        {(panelTab) =>
+          panelTab === activeTab.id ? (
+            <Suspense fallback={<AnalyticsTabLoading tab={activeTab} />}>
+              <TabComponent
+                key={activeTab.id}
+                filters={filters}
+                isAdmin={isAdmin}
+                onExportChange={handleExportChange}
+              />
+            </Suspense>
+          ) : null
+        }
+      </SwipeableTabPanel>
+    </AnalyticsPageChrome>
   );
 }
 
-export function AnalyticsDashboardPage({ role, isAdmin }: Props) {
+export function AnalyticsDashboardPage({
+  role,
+  isAdmin,
+  tab,
+  onNavigatePage,
+}: Props) {
   if (role !== "creator") {
     return null;
   }
-  return <AnalyticsContent isAdmin={isAdmin} />;
+  return (
+    <AnalyticsContent
+      isAdmin={isAdmin}
+      tab={tab}
+      onNavigatePage={onNavigatePage}
+    />
+  );
 }

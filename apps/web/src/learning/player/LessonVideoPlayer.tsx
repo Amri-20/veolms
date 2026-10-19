@@ -93,6 +93,7 @@ import {
   addWatchedSeconds,
   createWatchTimeTracker,
 } from "../learningWatchTime";
+import { createPlaybackTelemetry } from "./playbackTelemetry";
 
 const RESUME_PERSIST_INTERVAL_MS = 5_000;
 // A lesson left this close to its end counts as finished when it is reopened.
@@ -647,10 +648,31 @@ export function LessonVideoPlayer({
       if (courseKey) addWatchedSeconds(courseKey, seconds);
     }),
   );
+  // One playback summary per video for the analytics sink (startup time,
+  // rebuffering, errors, time at each quality); nothing when no sink is
+  // registered. Reported when the video is unloaded, on an error, when
+  // the page is hidden and when the player goes away.
+  const lessonIndexRef = useRef(lessonIndex);
+  lessonIndexRef.current = lessonIndex;
+  const [playbackTelemetry] = useState(() =>
+    createPlaybackTelemetry(() => ({
+      courseKey: watchTimeCourseKeyRef.current ?? null,
+      lessonNumber: lessonIndexRef.current ?? null,
+    })),
+  );
+  useEffect(() => {
+    const flush = () => playbackTelemetry.flush();
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [playbackTelemetry]);
 
   const handleEvent = useCallback(
     (event: VideoPlayerEvent) => {
       trackWatchTime(event);
+      playbackTelemetry.handle(event);
       if (playbackSuspended) {
         if (
           event.type === "playing" ||
@@ -832,6 +854,7 @@ export function LessonVideoPlayer({
     [
       finishMiniPlayerRestore,
       mediaKey,
+      playbackTelemetry,
       onLessonEnded,
       onProgressChange,
       onNearLessonEnd,

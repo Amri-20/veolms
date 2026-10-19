@@ -261,6 +261,9 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.14.13
         version: 3.14.13(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@veolms/analytics-ui':
+        specifier: workspace:*
+        version: link:../../packages/analytics-ui
       '@veolms/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -364,6 +367,34 @@ importers:
       vite:
         specifier: 8.2.1
         version: 8.2.1(@types/node@24.19.0)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.1)
+
+  packages/analytics-ui:
+    dependencies:
+      '@phosphor-icons/react':
+        specifier: ^2.1.10
+        version: 2.1.10(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@veolms/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@veolms/web-core':
+        specifier: workspace:*
+        version: link:../web-core
+      recharts:
+        specifier: ^2.15.4
+        version: 2.15.4(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+    devDependencies:
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 19.2.4
+        version: 19.2.4(@types/react@19.2.18)
+      react:
+        specifier: 19.2.8
+        version: 19.2.8
+      react-dom:
+        specifier: 19.2.8
+        version: 19.2.8(react@19.2.8)
 
   packages/api-core:
     dependencies:

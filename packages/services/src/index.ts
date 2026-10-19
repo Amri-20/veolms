@@ -17,12 +17,17 @@ import {
   createVideoDispatchService,
   type VideoDispatchService,
 } from "./video/index.ts";
+import {
+  createAnalyticsEventBus,
+  type AnalyticsEventBus,
+} from "./analytics-events.ts";
 import { createPaymentGateway } from "./payment/index.ts";
 import {
   createCourseStaticPageRefreshService,
   type CourseStaticPageRefreshService,
 } from "./course-static-pages/index.ts";
 
+export * from "./analytics-events.ts";
 export * from "./email/index.ts";
 export * from "./sms/index.ts";
 export * from "./payment/index.ts";
@@ -40,6 +45,8 @@ export interface AppServices {
   paymentGateway: PaymentGateway;
   config: ServerConfig;
   courseStaticPages?: CourseStaticPageRefreshService;
+  /** Facts the API announces as they happen, for plugins to listen to. */
+  analyticsEvents: AnalyticsEventBus;
 }
 
 export interface CreateServicesOptions {
@@ -110,6 +117,7 @@ export function createServices({
   };
 
   return {
+    analyticsEvents: createAnalyticsEventBus(),
     email: createEmailService({
       logger,
       config: emailConfig,

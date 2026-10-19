@@ -4,7 +4,6 @@ import type { Executor } from "../shared/repository.types.ts";
 import { config } from "../../../config.ts";
 import { AppError } from "../../../lib/errors.ts";
 import { CommerceErrors } from "../shared/commerce.errors.ts";
-import { toMinorUnits } from "../shared/currency.ts";
 import * as orderRepo from "../orders/order.repository.ts";
 import * as paymentRepo from "../payments/payment.repository.ts";
 import * as setupRepo from "../../auth/setup/setup.repository.ts";
@@ -157,7 +156,7 @@ export function createInvoiceService({
 
     const paymentRef =
       payment?.gateway_payment_id ?? payment?.gateway_order_id ?? "N/A";
-    const totalAmount = toMinorUnits(order.total_amount, order.currency);
+    const totalAmount = order.total_amount;
 
     return {
       invoiceNumber,
@@ -180,9 +179,9 @@ export function createInvoiceService({
       },
       currency: order.currency,
       // Invoice amounts are minor units, like every order response.
-      subtotalAmount: toMinorUnits(order.subtotal_amount, order.currency),
-      discountAmount: toMinorUnits(order.discount_amount, order.currency),
-      taxAmount: toMinorUnits(order.tax_amount, order.currency),
+      subtotalAmount: order.subtotal_amount,
+      discountAmount: order.discount_amount,
+      taxAmount: order.tax_amount,
       totalAmount,
       totalInWords: amountInWords(totalAmount, order.currency),
       paymentReference: paymentRef,
@@ -192,9 +191,9 @@ export function createInvoiceService({
         quantity: 1,
         // A numeric column: the driver returns it as text.
         taxRatePercent: Number(it.tax_rate_percent) || 0,
-        unitPrice: toMinorUnits(it.unit_price, order.currency),
-        discountAmount: toMinorUnits(it.discount_amount, order.currency),
-        finalAmount: toMinorUnits(it.final_amount, order.currency),
+        unitPrice: it.unit_price,
+        discountAmount: it.discount_amount,
+        finalAmount: it.final_amount,
       })),
       paidAt: order.paid_at,
       createdAt: order.created_at,

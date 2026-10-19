@@ -10,18 +10,14 @@ import type { Executor } from "../shared/repository.types.ts";
 import { AppError } from "../../../lib/errors.ts";
 import { hasAcademyPermission } from "../../authorization/index.ts";
 import type { CourseService } from "../../courses/index.ts";
-import { toMinorUnits } from "../shared/currency.ts";
 import { isUniqueViolation } from "../shared/db-errors.ts";
 import * as couponRepo from "./coupon.repository.ts";
 
 /**
- * Discounts actually given are transacted money, so they leave the API in
- * minor units like order totals. Redemption rows store the order's
- * major-unit discount and carry no currency of their own; INR is the
- * academy's operating currency.
+ * Discounts actually given are transacted money: redemption rows store the
+ * order's discount in minor units, and they leave the API that way.
  */
-const discountGivenToMinor = (amountMajor: number) =>
-  toMinorUnits(Math.round(amountMajor), "INR");
+const discountGivenToMinor = (amountMinor: number) => Math.round(amountMinor);
 
 /** The staff member managing coupons. */
 export interface CouponActor {

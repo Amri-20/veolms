@@ -106,6 +106,7 @@ export interface UseAcademyPageContentArgs {
   requestedSection: string | null;
   settingsTab: string;
   platformTab: string | undefined;
+  analyticsTab: string | undefined;
   showPageBackButton: boolean;
   username: string | undefined;
   prepareCourseEditorEdit: (course: Course) => void;
@@ -150,6 +151,8 @@ export interface UseAcademyPageContentArgs {
   discussionsWhileSessionPending: boolean;
   isWorkspaceRoleHydrated: boolean;
   dashboardHomeExpected: boolean;
+  /** A creator view is on its way (see useShellSession) though the role still reads student. */
+  creatorViewExpected: boolean;
   routeContentHeld: boolean;
   enrollmentFilter: CourseEnrollmentFilter;
   needsCompleteCourseList: boolean;
@@ -234,6 +237,7 @@ export function useAcademyPageContent({
   requestedSection,
   settingsTab,
   platformTab,
+  analyticsTab,
   showPageBackButton,
   username,
   prepareCourseEditorEdit,
@@ -278,6 +282,7 @@ export function useAcademyPageContent({
   discussionsWhileSessionPending,
   isWorkspaceRoleHydrated,
   dashboardHomeExpected,
+  creatorViewExpected,
   routeContentHeld,
   enrollmentFilter,
   needsCompleteCourseList,
@@ -310,6 +315,7 @@ export function useAcademyPageContent({
     surfaceSection = requestedSection,
     surfaceSettingsTab = settingsTab,
     surfacePlatformTab = platformTab,
+    surfaceAnalyticsTab = analyticsTab,
     surfaceUsername = username,
   }: {
     surfaceCourseSlug?: string;
@@ -318,6 +324,7 @@ export function useAcademyPageContent({
     surfaceSection?: string | null;
     surfaceSettingsTab?: string;
     surfacePlatformTab?: string;
+    surfaceAnalyticsTab?: string;
     surfaceUsername?: string;
   } = {}): ReactNode => {
     const homeIsTheRoute = surfacePage === "home" && page === "home";
@@ -357,6 +364,8 @@ export function useAcademyPageContent({
           page={surfacePage}
           role={effectiveRole}
           quizId={quizId}
+          isAdmin={isAdmin}
+          analyticsTab={surfaceAnalyticsTab}
         />
       );
     }
@@ -775,13 +784,31 @@ export function useAcademyPageContent({
     }
     if (surfacePage === "analytics" || isSectionPage("Analytics")) {
       if (effectiveRole !== "creator") {
-        return null;
+        // Until the session has answered and the saved view is in, the
+        // page's own frame stays up rather than a blank; a learner (never a
+        // creator) still gets nothing.
+        return isAuthReady && !creatorViewExpected ? null : (
+          <AcademyRouteSkeleton
+            page="analytics"
+            isAdmin={isAdmin}
+            analyticsTab={surfaceAnalyticsTab}
+          />
+        );
       }
       return (
-        <Suspense fallback={<AcademyRouteSkeleton page="analytics" />}>
+        <Suspense
+          fallback={
+            <AcademyRouteSkeleton
+              page="analytics"
+              isAdmin={isAdmin}
+              analyticsTab={surfaceAnalyticsTab}
+            />
+          }
+        >
           <AnalyticsDashboardPage
             role={role}
             isAdmin={isAdmin}
+            tab={surfaceAnalyticsTab}
             onNavigatePage={onNavigatePage}
           />
         </Suspense>

@@ -318,6 +318,14 @@ export async function createVeoLMSApi<
     });
   }
 
+  // The analytics event bus is also reachable from the app, so a plugin
+  // can listen without knowing the services container's shape.
+  const analyticsEvents = (appServices as { analyticsEvents?: unknown })
+    ?.analyticsEvents;
+  if (analyticsEvents && !app.hasDecorator("analyticsEvents")) {
+    app.decorate("analyticsEvents", analyticsEvents);
+  }
+
   // Register cloud plugins after all core setup is complete.
   for (const plugin of plugins) {
     await plugin.register(app, {

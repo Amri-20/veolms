@@ -12,7 +12,6 @@ import {
   CommerceErrors,
   toClientGatewayError,
 } from "../shared/commerce.errors.ts";
-import { toMinorUnits } from "../shared/currency.ts";
 import { isUniqueViolation } from "../shared/db-errors.ts";
 import {
   CHECKOUT_HAND_OUT_ATTEMPT_STATUS,
@@ -29,14 +28,13 @@ import { toPaymentProvider } from "./payment.mapper.ts";
 import { reportDuplicatePurchases } from "./duplicate-purchase.ts";
 
 /**
- * Course pricing is currently stored in major currency units (for example,
- * 499 means ₹499). Payment gateways expect the amount in the currency's
- * smallest unit (for INR, 49900 paise). Keep this conversion at the gateway
- * boundary so internal course/order pricing remains unchanged. Shared with
- * the refund paths so full/partial comparisons use one definition.
+ * What the gateway is asked to charge for an order. Order totals are stored
+ * in the currency's smallest unit (49900 paise for ₹499), which is what
+ * gateways take, so this is the stored total. Shared with the refund paths
+ * so full/partial comparisons use one definition.
  */
-function toGatewayAmount(amount: number, currency: string): number {
-  return toMinorUnits(amount, currency);
+function toGatewayAmount(amountMinor: number, _currency: string): number {
+  return amountMinor;
 }
 
 /** The order columns `initializePayment` works from. */
@@ -271,8 +269,7 @@ export function createPaymentService({
     }
 
     // 3. Create upstream order via the gateway abstraction (Razorpay, Stripe, etc.).
-    // The gateway receives minor units; the internal order remains in the
-    // major-unit format used by the current course-pricing configuration.
+    // The gateway receives minor units, as the order total is stored.
     const gatewayOrder = await paymentGateway
       .createOrder({
         orderId: order.id,
