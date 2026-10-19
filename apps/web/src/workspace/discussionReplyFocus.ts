@@ -13,18 +13,27 @@ import { useEffect, useRef } from "react";
  */
 const REQUEST_EVENT = "veolms:discussion-reply-focus";
 
+interface ReplyFocusRequest {
+  discussionId: string;
+  /** Pulse the reply area too: asked again while the panel was showing it. */
+  pulse: boolean;
+}
+
 interface ReplyFocusWindow extends Window {
-  __veolmsPendingReplyFocus?: string | null;
+  __veolmsPendingReplyFocus?: ReplyFocusRequest | null;
 }
 
 function replyFocusWindow(): ReplyFocusWindow | null {
   return typeof window === "undefined" ? null : (window as ReplyFocusWindow);
 }
 
-export function requestDiscussionReplyFocus(discussionId: string) {
+export function requestDiscussionReplyFocus(
+  discussionId: string,
+  { pulse = false }: { pulse?: boolean } = {},
+) {
   const win = replyFocusWindow();
   if (!win) return;
-  win.__veolmsPendingReplyFocus = discussionId;
+  win.__veolmsPendingReplyFocus = { discussionId, pulse };
   win.dispatchEvent(new Event(REQUEST_EVENT));
 }
 
@@ -36,7 +45,7 @@ export function requestDiscussionReplyFocus(discussionId: string) {
 export function useDiscussionReplyFocus(
   discussionId: string,
   ready: boolean,
-  onRequest: () => void,
+  onRequest: (request: { pulse: boolean }) => void,
 ) {
   const onRequestRef = useRef(onRequest);
   useEffect(() => {
@@ -46,9 +55,10 @@ export function useDiscussionReplyFocus(
     const win = replyFocusWindow();
     if (!ready || !win) return undefined;
     const take = () => {
-      if (win.__veolmsPendingReplyFocus !== discussionId) return;
+      const request = win.__veolmsPendingReplyFocus;
+      if (request?.discussionId !== discussionId) return;
       win.__veolmsPendingReplyFocus = null;
-      onRequestRef.current();
+      onRequestRef.current({ pulse: request.pulse });
     };
     // Asked for before this panel was showing the discussion.
     take();

@@ -63,6 +63,7 @@ import {
   getReplyTotalCount,
 } from "../services/learning-interactions/reply-pagination";
 import { TimeAgo } from "../components/TimeAgo";
+import { cheerLike } from "../components/likeFeedback";
 
 export interface CommentReply {
   id: string | number;
@@ -760,6 +761,7 @@ export const CommentCard = React.memo(function CommentCard({
               </div>
 
               <DiscussionMarkdown
+                linkPreviewSource="url"
                 content={comment.content ?? createDiscussionDraft(comment.text)}
                 label={`${entryLabel} by ${comment.name}`}
                 linkedAttachments={comment.attachments}
@@ -798,7 +800,8 @@ export const CommentCard = React.memo(function CommentCard({
                   {canParticipate && (
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={(event) => {
+                        if (!isCommentLiked) cheerLike(event.currentTarget);
                         if (!isBackendMode) {
                           setLocalLiked((current) => !current);
                         }
@@ -808,10 +811,15 @@ export const CommentCard = React.memo(function CommentCard({
                       aria-label={isCommentLiked ? "Unlike" : "Like"}
                       className={`inline-flex min-h-9 items-center gap-2 rounded-lg px-1.5 transition-colors hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--accent) ${isCommentLiked ? "text-(--accent-ink,var(--accent))" : ""}`}
                     >
-                      <ThumbsUp
-                        size={19}
-                        weight={isCommentLiked ? "fill" : "regular"}
-                      />
+                      <span
+                        data-like-icon
+                        className="relative inline-grid place-items-center"
+                      >
+                        <ThumbsUp
+                          size={19}
+                          weight={isCommentLiked ? "fill" : "regular"}
+                        />
+                      </span>
                       <span>{comment.likes}</span>
                     </button>
                   )}
@@ -1252,6 +1260,7 @@ function ReplyCard({
                 </div>
               ) : (
                 <DiscussionMarkdown
+                  linkPreviewSource="url"
                   content={reply.content ?? createDiscussionDraft(reply.text)}
                   label={`Reply by ${reply.name}`}
                   linkedAttachments={reply.attachments}
@@ -1273,7 +1282,8 @@ function ReplyCard({
                 {canParticipate && (
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(event) => {
+                      if (!isReplyLiked) cheerLike(event.currentTarget);
                       if (!isBackendMode) {
                         setLocalLiked((current) => !current);
                       }
@@ -1283,10 +1293,15 @@ function ReplyCard({
                     aria-label={isReplyLiked ? "Unlike reply" : "Like reply"}
                     className={`inline-flex min-h-9 items-center gap-2 rounded-lg px-1.5 transition-colors hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--accent) ${isReplyLiked ? "text-(--accent-ink,var(--accent))" : ""}`}
                   >
-                    <ThumbsUp
-                      size={18}
-                      weight={isReplyLiked ? "fill" : "regular"}
-                    />
+                    <span
+                      data-like-icon
+                      className="relative inline-grid place-items-center"
+                    >
+                      <ThumbsUp
+                        size={18}
+                        weight={isReplyLiked ? "fill" : "regular"}
+                      />
+                    </span>
                     <span>{replyLikesCount}</span>
                   </button>
                 )}

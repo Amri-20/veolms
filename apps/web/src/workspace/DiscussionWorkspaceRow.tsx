@@ -11,6 +11,7 @@ import { useDiscussionWorkspaceCardLongPress } from "./useDiscussionWorkspaceCar
 import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
 import { useDiscussionWorkspaceCardActions } from "./useDiscussionWorkspaceCardActions";
 import { TimeAgo } from "../components/TimeAgo";
+import { renderContentWithMentions } from "../learning/discussion-editor/MentionLink";
 import { requestDiscussionReplyFocus } from "./discussionReplyFocus";
 
 /** What the row's small label says next to the time, if anything. */
@@ -169,7 +170,7 @@ export function DiscussionWorkspaceRow({
 
         {text && (
           <p className="m-0 line-clamp-4 max-w-180 text-base leading-relaxed max-[48.75rem]:text-[0.9375rem] wrap-anywhere text-(--text) select-text">
-            {text}
+            {renderContentWithMentions(text)}
           </p>
         )}
 
@@ -188,7 +189,7 @@ export function DiscussionWorkspaceRow({
               className="grid size-9 shrink-0 place-items-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-(--accent)"
               aria-hidden="true"
             >
-              <BookOpen size={18} weight="duotone" />
+              <BookOpen size={22} weight="duotone" />
             </span>
             <div className="min-w-0 flex-1 leading-snug">
               {card.course && (
@@ -205,7 +206,7 @@ export function DiscussionWorkspaceRow({
           </div>
         )}
 
-        <div className="flex items-center gap-1">
+        <div className="-ml-2.5 flex items-center gap-1">
           {actions.canLike && (
             <DiscussionLikeButton
               liked={Boolean(card.isLiked)}
@@ -225,7 +226,9 @@ export function DiscussionWorkspaceRow({
                 // Opens the panel when it is not already this discussion's,
                 // then takes the learner to its reply box.
                 if (!selected) onOpen(card);
-                requestDiscussionReplyFocus(card.id);
+                // Opening is enough to show where to type; asked again
+                // while it is open, the reply area pulses once as well.
+                requestDiscussionReplyFocus(card.id, { pulse: selected });
               }}
             />
           )}

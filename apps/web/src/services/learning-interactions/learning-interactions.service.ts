@@ -148,6 +148,16 @@ export const learningInteractionsService = {
     return api.post(`/moderation/replies/${serverId}`, { action: "hide" });
   },
 
+  unhideThread(threadId: string): Promise<unknown> {
+    const serverId = requireServerEntityId(threadId);
+    return api.post(`/moderation/threads/${serverId}`, { action: "unhide" });
+  },
+
+  unhideReply(replyId: string): Promise<unknown> {
+    const serverId = requireServerEntityId(replyId);
+    return api.post(`/moderation/replies/${serverId}`, { action: "unhide" });
+  },
+
   // Replies
   listReplies(
     threadId: string,

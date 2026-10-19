@@ -45,6 +45,7 @@ import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
 import { useDiscussionWorkspaceCardActions } from "./useDiscussionWorkspaceCardActions";
 import { useDiscussionReplyFocus } from "./discussionReplyFocus";
 import { TimeAgo } from "../components/TimeAgo";
+import { getCourseThumbnailCdnUrl } from "../courses/courseMedia";
 
 const DiscussionMarkdown = lazy(() =>
   import("../learning/discussion-editor/DiscussionMarkdown").then((module) => ({
@@ -111,6 +112,7 @@ function PostBody({
         }
       >
         <DiscussionMarkdown
+          linkPreviewSource="url"
           content={{
             format: "markdown",
             markdown: content,
@@ -342,6 +344,8 @@ export interface DiscussionPanelContentProps {
   onReport?: (card: DiscussionWorkspaceCard) => void;
   setNotice?: (message: string) => void;
   step?: DiscussionPanelStep;
+  /** The course's thumbnail, shown small beside the course and lesson. */
+  courseThumbnailMediaId?: string | null;
 }
 
 /**
@@ -361,6 +365,7 @@ export function DiscussionPanelContent({
   onReport,
   setNotice,
   step,
+  courseThumbnailMediaId,
 }: DiscussionPanelContentProps) {
   const queryClient = useQueryClient();
   const { data: currentUser } = useCurrentUser();
@@ -392,8 +397,9 @@ export function DiscussionPanelContent({
   const panelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [composerFocusRequest, setComposerFocusRequest] = useState(0);
-  // "Reply" on the row: the box takes focus and the whole reply area
-  // flashes twice, so it is plain where to type.
+  // "Reply" on the row: the box takes focus; pressed again while this is
+  // open, the reply area also pulses once, softly, as a linked comment
+  // under a lesson video does.
   const [replyFlash, setReplyFlash] = useState(false);
   const replyFlashTimers = useRef<number[]>([]);
   useEffect(
@@ -404,14 +410,16 @@ export function DiscussionPanelContent({
   // box) is known; a thread that could not be loaded still shows the box.
   const replyBoxShown =
     !isNote && Boolean(threadId) && !thread.isPending && !thread.data?.isLocked;
-  useDiscussionReplyFocus(card.id, replyBoxShown, () => {
+  useDiscussionReplyFocus(card.id, replyBoxShown, ({ pulse }) => {
     setComposerFocusRequest((request) => request + 1);
     replyFlashTimers.current.forEach(window.clearTimeout);
+    if (!pulse) {
+      setReplyFlash(false);
+      return;
+    }
     setReplyFlash(true);
     replyFlashTimers.current = [
-      window.setTimeout(() => setReplyFlash(false), 320),
-      window.setTimeout(() => setReplyFlash(true), 560),
-      window.setTimeout(() => setReplyFlash(false), 1100),
+      window.setTimeout(() => setReplyFlash(false), 450),
     ];
   });
 
@@ -644,6 +652,7 @@ export function DiscussionPanelContent({
   const lessonInBar = variant === "phone" && hasLessonInfo;
   // The course and lesson are the way to the lesson (Enter does the same);
   // there is no separate button for it.
+  const thumbnailUrl = getCourseThumbnailCdnUrl(courseThumbnailMediaId, 160);
   const renderLessonLink = (className: string) => {
     if (!hasLessonInfo) return null;
     const lessonInfo = (
@@ -652,7 +661,7 @@ export function DiscussionPanelContent({
           className="grid size-9 shrink-0 place-items-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-(--accent)"
           aria-hidden="true"
         >
-          <Play size={15} weight="fill" />
+          <Play size={18} weight="fill" />
         </span>
         <div className="min-w-0 flex-1">
           {card.course && (
@@ -666,6 +675,19 @@ export function DiscussionPanelContent({
             </p>
           )}
         </div>
+        {/* The course's picture, small, as the home page's pinned course
+            has it; only when the row is wide enough to spare the room. */}
+        {thumbnailUrl && (
+          <img
+            src={thumbnailUrl}
+            alt=""
+            width={160}
+            height={90}
+            loading="lazy"
+            decoding="async"
+            className="hidden aspect-video h-9 w-auto shrink-0 rounded-md object-cover @min-[22rem]:block"
+          />
+        )}
       </>
     );
     return destination ? (
@@ -690,12 +712,14 @@ export function DiscussionPanelContent({
             return;
           onOpenInCourse(destination);
         }}
-        className={`flex items-center gap-3 px-5 py-3 no-underline transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-(--accent) ${className}`}
+        className={`@container flex items-center gap-3 px-5 py-3 no-underline transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-(--accent) ${className}`}
       >
         {lessonInfo}
       </a>
     ) : (
-      <div className={`flex items-center gap-3 px-5 py-3 ${className}`}>
+      <div
+        className={`@container flex items-center gap-3 px-5 py-3 ${className}`}
+      >
         {lessonInfo}
       </div>
     );
@@ -903,8 +927,10 @@ export function DiscussionPanelContent({
         <div
           // The flash is a tinted layer over the whole area below the
           // line, the box and its toolbar alike, so their own colours stay.
-          className={`relative shrink-0 border-t ${LINE} after:pointer-events-none after:absolute after:inset-0 after:z-10 after:bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] after:shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent)_55%,transparent)] after:transition-opacity after:duration-200 after:content-[""] ${
-            replyFlash ? "after:opacity-100" : "after:opacity-0"
+          className={`relative shrink-0 border-t ${LINE} after:pointer-events-none after:absolute after:inset-0 after:z-10 after:bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] after:transition-opacity after:ease-out after:content-[""] ${
+            replyFlash
+              ? "after:opacity-100 after:duration-200"
+              : "after:opacity-0 after:duration-700"
           } ${
             variant === "phone" ? "pb-[var(--app-safe-area-bottom,0px)]" : ""
           }`}

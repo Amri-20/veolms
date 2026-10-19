@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BellSimpleIcon as BellSimple } from "@phosphor-icons/react/BellSimple";
 import { BookmarkSimpleIcon as BookmarkSimple } from "@phosphor-icons/react/BookmarkSimple";
 import { CopySimpleIcon as CopySimple } from "@phosphor-icons/react/CopySimple";
+import { EyeIcon as Eye } from "@phosphor-icons/react/Eye";
 import { EyeSlashIcon as EyeSlash } from "@phosphor-icons/react/EyeSlash";
 import { FlagIcon as Flag } from "@phosphor-icons/react/Flag";
 import { PencilSimpleIcon as PencilSimple } from "@phosphor-icons/react/PencilSimple";
@@ -118,9 +119,9 @@ export function DiscussionWorkspaceActionMenu({
       )}
       {actions.canHide && (
         <MenuAction
-          Icon={EyeSlash}
+          Icon={actions.isHidden ? Eye : EyeSlash}
           label={actions.hideLabel}
-          onClick={actions.hide}
+          onClick={actions.isHidden ? actions.unhide : actions.hide}
         />
       )}
       {actions.canDelete && (

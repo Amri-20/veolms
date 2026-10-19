@@ -762,6 +762,7 @@ function DiscussionWorkspaceCardContent({
             }
           >
             <DiscussionMarkdown
+              linkPreviewSource="url"
               content={content}
               label={`${label} by ${thread.author}`}
               enableLinkPreview={!isMobileOrCoarsePointer}
@@ -2108,6 +2109,16 @@ export function DiscussionsWorkspace({
   }, [workspaceData]);
 
   const courses = new Map(Object.entries(knownCourseOptions));
+  // Thumbnails of the courses, for the small picture in the open
+  // discussion's panel.
+  const courseThumbnails = new Map<string, string | null>();
+  workspaceData?.pages.forEach((page) => {
+    page.courses.forEach((courseOption) => {
+      if (courseOption.thumbnailMediaId !== undefined) {
+        courseThumbnails.set(courseOption.id, courseOption.thumbnailMediaId);
+      }
+    });
+  });
   workspaceData?.pages.forEach((page) => {
     page.courses.forEach((courseOption) => {
       courses.set(courseOption.id, courseOption.title);
@@ -3239,6 +3250,9 @@ export function DiscussionsWorkspace({
           onEditingChange={setIsEditingPanelCard}
           onClose={closePanel}
           onNavigatePage={onNavigatePage}
+          courseThumbnailMediaId={
+            panelCard ? courseThumbnails.get(panelCard.courseId) : null
+          }
           onReport={openReport}
           setNotice={setNotice}
           step={

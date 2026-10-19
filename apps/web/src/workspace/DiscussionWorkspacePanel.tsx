@@ -51,6 +51,7 @@ interface DiscussionWorkspacePanelProps {
   setNotice?: (message: string) => void;
   /** Stepping to the discussion above or below this one in the list. */
   step?: DiscussionPanelStep;
+  courseThumbnailMediaId?: string | null;
 }
 
 /**

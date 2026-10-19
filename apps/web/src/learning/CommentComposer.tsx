@@ -24,8 +24,8 @@ import {
   type LocalComposerAttachment,
 } from "../services/learning-interactions/attachment-model";
 import {
-  extractFirstUrl,
-  useLinkPreview,
+  useUrlLinkPreview,
+  extractFirstWrittenUrl,
 } from "../services/learning-interactions";
 
 interface CommentComposerProps {
@@ -141,11 +141,12 @@ export function CommentComposer({
     window.setTimeout(() => editorController?.focus(), 0);
   };
 
-  const detectedUrl = extractFirstUrl(draft.markdown);
+  const detectedUrl = extractFirstWrittenUrl(draft.markdown);
   const [dismissedUrl, setDismissedUrl] = useState<string | null>(null);
   const activeUrl =
     detectedUrl && detectedUrl !== dismissedUrl ? detectedUrl : null;
-  const { data: linkPreview } = useLinkPreview(activeUrl);
+  // Made from the link alone; no request while typing.
+  const { data: linkPreview } = useUrlLinkPreview(activeUrl);
 
   const resetAfterLocalSubmit = () => {
     // This callback is invoked only when the local optimistic create is

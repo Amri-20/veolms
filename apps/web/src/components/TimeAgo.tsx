@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -69,7 +70,7 @@ export function TimeAgo({ value, label, className = "" }: TimeAgoProps) {
         <TapTooltip
           anchorRef={anchorRef}
           text={exact}
-          onClose={() => setOpen(false)}
+          onClosed={() => setOpen(false)}
         />
       )}
     </>
@@ -79,14 +80,24 @@ export function TimeAgo({ value, label, className = "" }: TimeAgoProps) {
 function TapTooltip({
   anchorRef,
   text,
-  onClose,
+  onClosed,
 }: {
   anchorRef: RefObject<HTMLElement | null>;
   text: string;
-  onClose: () => void;
+  /** After it has faded out. */
+  onClosed: () => void;
 }) {
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number }>();
+  // Shown once placed, so it fades in where it belongs instead of being
+  // drawn first at the corner of the screen; it fades out before it goes.
+  const [leaving, setLeaving] = useState(false);
+  const onClose = useCallback(() => setLeaving(true), []);
+  useEffect(() => {
+    if (!leaving) return undefined;
+    const timer = window.setTimeout(onClosed, 150);
+    return () => window.clearTimeout(timer);
+  }, [leaving, onClosed]);
 
   // Above the time, centred on it, kept inside the screen; below it when
   // there is no room above.
@@ -127,7 +138,9 @@ function TapTooltip({
           ? { left: position.left, top: position.top }
           : { left: 0, top: 0, visibility: "hidden" }
       }
-      className="pointer-events-none fixed z-1000 rounded-md bg-black/90 px-2 py-1 text-xs font-medium whitespace-nowrap text-white shadow-lg animate-in fade-in duration-100"
+      className={`pointer-events-none fixed z-1000 rounded-md bg-black/90 px-2 py-1 text-xs font-medium whitespace-nowrap text-white shadow-lg transition-opacity duration-150 ease-out ${
+        position && !leaving ? "opacity-100" : "opacity-0"
+      }`}
     >
       {text}
     </div>,
