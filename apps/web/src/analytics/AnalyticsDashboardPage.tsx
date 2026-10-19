@@ -20,6 +20,7 @@ import { handleRovingTabKeyDown } from "../accessibility/rovingTabFocus";
 import { elevatedCardTokenScopeClasses } from "../components/ElevatedCard";
 import { PageHeading } from "../components/PageHeading";
 import { SwipeableTabPanel } from "../navigation/SwipeableTabPanel";
+import type { NavigateTo } from "../routing/navigation";
 import { ThemedSelect, type ThemedSelectOption } from "../ThemedSelect";
 import { useWebContributions } from "../lib/web-contributions";
 import { useMyCourses } from "../services/courses";
@@ -34,7 +35,9 @@ import "../styles/features/settings/preferences-responsive.css";
 interface Props {
   role: "student" | "creator";
   isAdmin: boolean;
-  onNavigatePage?: (destination: string) => void;
+  /** The section from the path (`/analytics/<tab>`); the overview without one. */
+  tab?: string;
+  onNavigatePage?: NavigateTo;
 }
 
 type RangeKey = AnalyticsTabFilters["rangeKey"];
@@ -51,6 +54,12 @@ const RANGE_OPTIONS: ReadonlyArray<{
 ];
 const DEFAULT_RANGE: RangeKey = "30d";
 const DEFAULT_TAB = "overview";
+const ANALYTICS_PATH = "/analytics";
+
+/** `/analytics` for the overview, `/analytics/<tab>` for any other section. */
+export function analyticsTabPath(tabId: string): string {
+  return tabId === DEFAULT_TAB ? ANALYTICS_PATH : `${ANALYTICS_PATH}/${tabId}`;
+}
 
 function isRangeKey(value: string | null): value is RangeKey {
   return RANGE_OPTIONS.some((option) => option.key === value);
@@ -151,7 +160,15 @@ const noop = () => {};
  * shortcuts, same swipe between sections on touch), and the filters and
  * the open section scroll under them.
  */
-function AnalyticsContent({ isAdmin }: { isAdmin: boolean }) {
+function AnalyticsContent({
+  isAdmin,
+  tab,
+  onNavigatePage,
+}: {
+  isAdmin: boolean;
+  tab: string | undefined;
+  onNavigatePage: NavigateTo | undefined;
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const contributions = useWebContributions();
   const tabListRef = useRef<HTMLElement>(null);
@@ -170,13 +187,25 @@ function AnalyticsContent({ isAdmin }: { isAdmin: boolean }) {
     [tabs],
   );
 
-  const requestedTab = searchParams.get("tab");
   const activeTab: AnalyticsTabContribution =
-    tabs.find((tab) => tab.id === requestedTab) ??
-    tabs.find((tab) => tab.id === DEFAULT_TAB) ??
+    tabs.find((candidate) => candidate.id === tab) ??
+    tabs.find((candidate) => candidate.id === DEFAULT_TAB) ??
     tabs[0]!;
   const activeTabRef = useRef(activeTab.id);
   activeTabRef.current = activeTab.id;
+
+  // The sections used to live in `?tab=`; a saved link of that shape opens
+  // the same section at its path, with the rest of the query kept.
+  const legacyTab = searchParams.get("tab");
+  useEffect(() => {
+    if (!legacyTab) return;
+    const rest = new URLSearchParams(searchParams);
+    rest.delete("tab");
+    const query = rest.toString();
+    const destination = `${analyticsTabPath(legacyTab)}${query ? `?${query}` : ""}`;
+    if (onNavigatePage) onNavigatePage(destination);
+    else window.history.replaceState(window.history.state, "", destination);
+  }, [legacyTab, onNavigatePage, searchParams]);
 
   const requestedRange = searchParams.get("range");
   const range: RangeKey = isRangeKey(requestedRange)
@@ -203,9 +232,17 @@ function AnalyticsContent({ isAdmin }: { isAdmin: boolean }) {
     [setSearchParams],
   );
 
+  // A section is a path of its own (`/analytics/revenue`), as on Settings;
+  // the range and course stay in the query string and travel with it.
   const selectTab = useCallback(
-    (id: string) => updateParams({ tab: id === DEFAULT_TAB ? null : id }),
-    [updateParams],
+    (id: string) => {
+      if (id === activeTabRef.current) return;
+      const query = window.location.search.replace(/^\?/, "");
+      const destination = `${analyticsTabPath(id)}${query ? `?${query}` : ""}`;
+      if (onNavigatePage) onNavigatePage(destination, { resetScroll: true });
+      else window.location.assign(destination);
+    },
+    [onNavigatePage],
   );
   const getCurrentTab = useCallback(() => activeTabRef.current, []);
   useSettingsTabShortcuts({
@@ -386,9 +423,20 @@ function AnalyticsContent({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
-export function AnalyticsDashboardPage({ role, isAdmin }: Props) {
+export function AnalyticsDashboardPage({
+  role,
+  isAdmin,
+  tab,
+  onNavigatePage,
+}: Props) {
   if (role !== "creator") {
     return null;
   }
-  return <AnalyticsContent isAdmin={isAdmin} />;
+  return (
+    <AnalyticsContent
+      isAdmin={isAdmin}
+      tab={tab}
+      onNavigatePage={onNavigatePage}
+    />
+  );
 }

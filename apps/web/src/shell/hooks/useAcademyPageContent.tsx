@@ -104,6 +104,7 @@ export interface UseAcademyPageContentArgs {
   requestedSection: string | null;
   settingsTab: string;
   platformTab: string | undefined;
+  analyticsTab: string | undefined;
   showPageBackButton: boolean;
   username: string | undefined;
   prepareCourseEditorEdit: (course: Course) => void;
@@ -232,6 +233,7 @@ export function useAcademyPageContent({
   requestedSection,
   settingsTab,
   platformTab,
+  analyticsTab,
   showPageBackButton,
   username,
   prepareCourseEditorEdit,
@@ -308,6 +310,7 @@ export function useAcademyPageContent({
     surfaceSection = requestedSection,
     surfaceSettingsTab = settingsTab,
     surfacePlatformTab = platformTab,
+    surfaceAnalyticsTab = analyticsTab,
     surfaceUsername = username,
   }: {
     surfaceCourseSlug?: string;
@@ -316,6 +319,7 @@ export function useAcademyPageContent({
     surfaceSection?: string | null;
     surfaceSettingsTab?: string;
     surfacePlatformTab?: string;
+    surfaceAnalyticsTab?: string;
     surfaceUsername?: string;
   } = {}): ReactNode => {
     const homeIsTheRoute = surfacePage === "home" && page === "home";
@@ -764,6 +768,7 @@ export function useAcademyPageContent({
           <AnalyticsDashboardPage
             role={role}
             isAdmin={isAdmin}
+            tab={surfaceAnalyticsTab}
             onNavigatePage={onNavigatePage}
           />
         </Suspense>

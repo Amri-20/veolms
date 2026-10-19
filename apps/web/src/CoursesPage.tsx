@@ -102,6 +102,7 @@ interface CoursesPageProps {
   section?: string | null;
   settingsTab?: string;
   platformTab?: string;
+  analyticsTab?: string;
   discussionTab?: string;
   courseSlug?: string;
   quizId?: string;
@@ -119,6 +120,7 @@ interface CoursesPageProps {
     section?: string;
     settingsTab?: string;
     platformTab?: string;
+    analyticsTab?: string;
   } | null;
   /**
    * While a lesson fills the screen: the page and navigation section the
@@ -148,6 +150,7 @@ export function CoursesPage({
   section: requestedSection = null,
   settingsTab = SETTINGS_DEFAULT_TAB,
   platformTab,
+  analyticsTab,
   discussionTab = "all",
   courseSlug,
   quizId,
@@ -985,6 +988,7 @@ export function CoursesPage({
     requestedSection,
     settingsTab,
     platformTab,
+    analyticsTab,
     showPageBackButton,
     username,
     prepareCourseEditorEdit,

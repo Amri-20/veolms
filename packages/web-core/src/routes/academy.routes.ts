@@ -96,7 +96,10 @@ export function getAcademyRoutes(): RouteConfigEntry {
       id: "discussions-saved",
       caseSensitive: true,
     }),
-    route("analytics", marker, { id: "analytics", caseSensitive: true }),
+    route("analytics/:analyticsTab?", marker, {
+      id: "analytics",
+      caseSensitive: true,
+    }),
     route("orders", marker, { id: "orders", caseSensitive: true }),
     route("messages", marker, { id: "messages", caseSensitive: true }),
     route("purchase-history", marker, {

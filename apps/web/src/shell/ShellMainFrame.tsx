@@ -30,6 +30,7 @@ export interface ShellMainFrameProps {
     section?: string;
     settingsTab?: string;
     platformTab?: string;
+    analyticsTab?: string;
   } | null;
   renderPageContent: ({
     surfaceCourseSlug,
@@ -46,6 +47,7 @@ export interface ShellMainFrameProps {
     surfaceSection?: string | null;
     surfaceSettingsTab?: string;
     surfacePlatformTab?: string;
+    surfaceAnalyticsTab?: string;
     surfaceUsername?: string;
   }) => ReactNode;
   routeContentHeld: boolean;
@@ -191,6 +193,7 @@ export function ShellMainFrame({
                   surfaceSection: learningBackground.section,
                   surfaceSettingsTab: learningBackground.settingsTab,
                   surfacePlatformTab: learningBackground.platformTab,
+                  surfaceAnalyticsTab: learningBackground.analyticsTab,
                 })}
               </LearningBackgroundSurface>
             ) : null

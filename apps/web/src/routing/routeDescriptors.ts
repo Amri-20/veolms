@@ -56,6 +56,8 @@ export interface ShellRouteDescriptor {
   section?: string;
   settingsTab?: string;
   platformTab?: string;
+  /** The analytics section's id from the path (`/analytics/<tab>`). */
+  analyticsTab?: string;
   discussionTab?: string;
   title: string;
   description: string;
@@ -67,6 +69,7 @@ export interface LearningRouteDescriptor {
   section: "Courses";
   settingsTab?: undefined;
   platformTab?: undefined;
+  analyticsTab?: undefined;
   discussionTab?: undefined;
 }
 
@@ -76,6 +79,7 @@ export interface CourseOverviewRouteDescriptor {
   section: "Courses";
   settingsTab?: undefined;
   platformTab?: undefined;
+  analyticsTab?: undefined;
   discussionTab?: undefined;
 }
 
@@ -565,6 +569,22 @@ const hasOwn = <ObjectType extends object>(
 const isPlatformTab = (value: string) =>
   (PLATFORM_TABS as readonly string[]).includes(value);
 
+/**
+ * `/analytics/<tab>`: the analytics page with that section open. The
+ * sections are not a fixed list (a plugin adds its own), so any id-shaped
+ * segment is accepted here and the page falls back to its overview for one
+ * it does not have.
+ */
+const ANALYTICS_TAB_PATH = /^\/analytics\/([a-z0-9][a-z0-9-]*)$/;
+
+const analyticsDescriptorForPath = (
+  normalizedPath: string,
+): RouteDescriptor | undefined => {
+  if (normalizedPath === "/analytics") return routeDescriptors.analytics;
+  const tab = ANALYTICS_TAB_PATH.exec(normalizedPath)?.[1];
+  return tab ? { ...routeDescriptors.analytics, analyticsTab: tab } : undefined;
+};
+
 export const normalizeNavigationPath = (path: string) =>
   String(path).replace(/\/+$/, "") || "/";
 
@@ -589,6 +609,12 @@ export const getEffectiveRouteId = (
     if (normalizedPath === "/platform") return routeId;
     const tab = /^\/platform\/([^/]+)$/.exec(normalizedPath)?.[1];
     return tab && isPlatformTab(tab) ? `platform-${tab}` : "home-fallback";
+  }
+
+  if (routeId === "analytics") {
+    return analyticsDescriptorForPath(normalizedPath)
+      ? routeId
+      : "home-fallback";
   }
 
   if (routeId === "learning" || routeId === "legacy-learning") {
@@ -739,6 +765,8 @@ export const getStaticRouteDescriptor = (
   }
 
   const normalizedPath = normalizeNavigationPath(pathname);
+  const analyticsDescriptor = analyticsDescriptorForPath(normalizedPath);
+  if (analyticsDescriptor) return analyticsDescriptor;
   const canonicalRoute = Object.entries(canonicalPathsByRouteId).find(
     ([, canonicalPath]) => canonicalPath === normalizedPath,
   );
