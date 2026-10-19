@@ -163,10 +163,12 @@ export const OrderFiltersBar = memo(function OrderFiltersBar({
           )}
         </label>
 
-        {/* Dropdown Filters: 2 per row grid on mobile, flex on desktop */}
-        <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:flex-wrap sm:w-auto sm:items-center sm:gap-2.5">
+        {/* Dropdown filters: always one line, scrolled sideways when they
+            do not fit (a phone, or the order panel open beside the list).
+            The padding keeps the focus ring inside the scroller's clip. */}
+        <div className="-m-1 flex max-w-[calc(100%+0.5rem)] min-w-0 flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain p-1 [scrollbar-width:none] sm:gap-2.5 [&::-webkit-scrollbar]:hidden">
           {/* Date Range Select */}
-          <div className={`${selectBoxContainerClass} min-w-0 sm:min-w-38`}>
+          <div className={`${selectBoxContainerClass} shrink-0 min-w-38`}>
             <ThemedSelect
               id="orders-date-filter"
               value={datePreset}
@@ -180,7 +182,7 @@ export const OrderFiltersBar = memo(function OrderFiltersBar({
           </div>
 
           {/* Course Filter Dropdown */}
-          <div className={`${selectBoxContainerClass} min-w-0 sm:min-w-40`}>
+          <div className={`${selectBoxContainerClass} shrink-0 min-w-40`}>
             <ThemedSelect
               id="orders-course-filter"
               value={courseFilter || "all"}
@@ -199,7 +201,7 @@ export const OrderFiltersBar = memo(function OrderFiltersBar({
           </div>
 
           {/* Coupon Filter Dropdown */}
-          <div className={`${selectBoxContainerClass} min-w-0 sm:min-w-36`}>
+          <div className={`${selectBoxContainerClass} shrink-0 min-w-36`}>
             <ThemedSelect
               id="orders-coupon-filter"
               value={couponFilter || "all"}
@@ -218,7 +220,7 @@ export const OrderFiltersBar = memo(function OrderFiltersBar({
           </div>
 
           {/* Status Filter Dropdown */}
-          <div className={`${selectBoxContainerClass} min-w-0 sm:min-w-36`}>
+          <div className={`${selectBoxContainerClass} shrink-0 min-w-36`}>
             <ThemedSelect
               id="orders-status-filter"
               value={statusFilter || "all"}

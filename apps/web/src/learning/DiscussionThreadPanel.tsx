@@ -89,6 +89,7 @@ import {
 import { SurfaceTopRightAccentGlow } from "./SurfaceTopRightAccentGlow";
 import { ThreadReplyComposer } from "./ThreadReplyComposer";
 import type { LessonParticipationState } from "./Discussion";
+import { TimeAgo } from "../components/TimeAgo";
 
 const THREAD_PANEL_MIN_HEIGHT = 360;
 const THREAD_PANEL_PHONE_QUERY = "(max-width: 639px)";
@@ -1400,9 +1401,11 @@ function ThreadRootEntry({
               <span aria-hidden="true" className="text-(--muted)">
                 ·
               </span>
-              <span className="text-xs text-(--muted) sm:text-sm">
-                {entry.time}
-              </span>
+              <TimeAgo
+                value={entry.createdAt}
+                label={entry.time}
+                className="text-xs text-(--muted) sm:text-sm"
+              />
             </div>
             <CommentActionMenu
               name={entry.name}
@@ -1654,9 +1657,11 @@ function ThreadReplyEntry({
                   <span aria-hidden="true" className="text-(--muted)">
                     ·
                   </span>
-                  <span className="text-xs text-(--muted) sm:text-sm">
-                    {reply.time}
-                  </span>
+                  <TimeAgo
+                    value={reply.createdAt}
+                    label={reply.time}
+                    className="text-xs text-(--muted) sm:text-sm"
+                  />
                 </div>
                 <CommentActionMenu
                   name={reply.name}

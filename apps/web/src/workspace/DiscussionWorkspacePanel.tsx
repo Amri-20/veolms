@@ -1,11 +1,12 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
-  type PointerEvent as ReactPointerEvent,
+  type CSSProperties,
 } from "react";
 import { SlideOverFrame } from "../components/SlideOverPanel";
+import { useSidePanelVariant } from "../components/useSidePanelVariant";
 import {
   SplitFrameGutter,
   SplitFramePane,
@@ -27,38 +28,8 @@ import {
   DiscussionPanelEmpty,
   DiscussionPanelContent,
   type DiscussionPanelStep,
-  type DiscussionPanelVariant,
 } from "./DiscussionWorkspacePanelContent";
 import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
-
-// Desktop is Tailwind's `lg`; a phone is the Discussions list's own phone
-// width (see DiscussionWorkspaceVirtualFeed).
-const DESKTOP_QUERY = "(min-width: 64rem)";
-const PHONE_QUERY = "(max-width: 780px)";
-
-const subscribeToPanelVariant = (listener: () => void) => {
-  const queries = [DESKTOP_QUERY, PHONE_QUERY].map((query) =>
-    window.matchMedia(query),
-  );
-  queries.forEach((media) => media.addEventListener("change", listener));
-  return () =>
-    queries.forEach((media) => media.removeEventListener("change", listener));
-};
-
-const getPanelVariant = (): DiscussionPanelVariant =>
-  window.matchMedia(DESKTOP_QUERY).matches
-    ? "desktop"
-    : window.matchMedia(PHONE_QUERY).matches
-      ? "phone"
-      : "tablet";
-
-function usePanelVariant(): DiscussionPanelVariant {
-  return useSyncExternalStore(
-    subscribeToPanelVariant,
-    getPanelVariant,
-    () => "desktop",
-  );
-}
 
 interface DiscussionWorkspacePanelProps {
   /** The discussion shown; none while the list has nothing to show. */
@@ -88,7 +59,7 @@ interface DiscussionWorkspacePanelProps {
  * bottom on a phone, where a sideways swipe moves through the list.
  */
 export function DiscussionWorkspacePanel(props: DiscussionWorkspacePanelProps) {
-  const variant = usePanelVariant();
+  const variant = useSidePanelVariant();
   if (variant === "desktop") return <DesktopPanel {...props} />;
   if (!props.open) return null;
   if (variant === "tablet") return <TabletPanel {...props} />;
@@ -227,92 +198,144 @@ function TabletPanel({
 
 /** How far a finger has to travel sideways to move to the next discussion. */
 const STEP_SWIPE_DISTANCE = 72;
+/** How far a finger travels before the gesture is given a direction. */
+const AXIS_DECISION_DISTANCE = 10;
+/** A gesture counts as vertical only when it is clearly steeper than this. */
+const VERTICAL_STEEPNESS = 1.5;
+/** The sheet follows a sideways finger at this share of its travel. */
+const STEP_SWIPE_FOLLOW = 0.5;
 
 /**
  * A sideways swipe on the phone sheet moves to the discussion before or
- * after this one. The sheet follows the finger, and the new discussion
- * slides in from the side it was swiped towards. A swipe that starts in the
- * reply box, a code block or a menu is left to them.
+ * after this one, as on the lesson page's thread sheet
+ * (useThreadSwipeAxisLock): touches are read on the window before the
+ * drawer sees them, held back until the finger has travelled far enough to
+ * tell the direction, and then a clearly vertical gesture is left to the
+ * drawer (and the content's scrolling) while any other is kept from it for
+ * the rest of the touch. Without that the drawer dragged up and down with a
+ * sideways swipe, and the content followed the finger one to one, so the
+ * whole sheet moved too much. The content trails the finger at half its
+ * travel, and the new discussion slides in from the side swiped towards. A
+ * swipe that starts in the reply box, a code block or a menu is left to
+ * them.
  */
 function usePhoneStepSwipe(step: DiscussionPanelStep | undefined) {
-  const surfaceRef = useRef<HTMLDivElement>(null);
-  const gestureRef = useRef<{
-    pointerId: number;
-    x: number;
-    y: number;
-    axis: "x" | "y" | null;
-    dx: number;
-  } | null>(null);
+  // State, not a ref: the drawer can put its content on the page after this
+  // hook's first effect, and the listeners must follow the element.
+  const [surface, surfaceRef] = useState<HTMLDivElement | null>(null);
+  const stepRef = useRef(step);
+  useEffect(() => {
+    stepRef.current = step;
+  });
   const [enterFrom, setEnterFrom] = useState<"left" | "right" | null>(null);
 
-  const setOffset = (dx: number, animate: boolean) => {
-    const surface = surfaceRef.current;
-    if (!surface) return;
-    surface.style.transition = animate ? "transform 160ms ease-out" : "none";
-    surface.style.transform = dx ? `translate3d(${dx}px,0,0)` : "";
-  };
+  useEffect(() => {
+    const win = surface?.ownerDocument.defaultView;
+    if (!surface || !win) return undefined;
 
-  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!step || event.pointerType !== "touch") return;
-    const target = event.target as Element;
-    if (
-      target.closest(
-        "[data-thread-reply-composer], pre, .cm-editor, [role=menu], input, textarea",
-      )
-    )
-      return;
-    gestureRef.current = {
-      pointerId: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      axis: null,
-      dx: 0,
+    let gesture: {
+      x: number;
+      y: number;
+      axis: "x" | "y" | null;
+      dx: number;
+    } | null = null;
+
+    const setOffset = (dx: number, animate: boolean) => {
+      surface.style.transition = animate ? "transform 160ms ease-out" : "none";
+      surface.style.transform = dx ? `translate3d(${dx}px,0,0)` : "";
     };
-  };
 
-  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const gesture = gestureRef.current;
-    if (!gesture || gesture.pointerId !== event.pointerId || !step) return;
-    const dx = event.clientX - gesture.x;
-    const dy = event.clientY - gesture.y;
-    if (gesture.axis === null) {
-      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
-      gesture.axis = Math.abs(dx) > Math.abs(dy) * 1.2 ? "x" : "y";
-    }
-    if (gesture.axis !== "x") return;
-    gesture.dx = dx;
-    const canGo = dx < 0 ? step.index < step.count - 1 : step.index > 0;
-    // At either end of the list the sheet only gives a little.
-    setOffset(canGo ? dx : dx * 0.25, false);
-  };
+    const onTouchStart = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      const target = event.target as Element | null;
+      gesture =
+        stepRef.current &&
+        touch &&
+        event.touches.length === 1 &&
+        !target?.closest(
+          "[data-thread-reply-composer], pre, .cm-editor, [role=menu], input, textarea",
+        )
+          ? { x: touch.clientX, y: touch.clientY, axis: null, dx: 0 }
+          : null;
+    };
 
-  const finish = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const gesture = gestureRef.current;
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
-    gestureRef.current = null;
-    if (gesture.axis !== "x" || !step) return;
-    setOffset(0, false);
-    if (gesture.dx <= -STEP_SWIPE_DISTANCE && step.index < step.count - 1) {
-      setEnterFrom("right");
-      step.onNext();
-    } else if (gesture.dx >= STEP_SWIPE_DISTANCE && step.index > 0) {
-      setEnterFrom("left");
-      step.onPrev();
-    } else {
-      setOffset(0, true);
-    }
-  };
+    const onTouchMove = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      const current = stepRef.current;
+      if (!gesture || !touch || !current || event.touches.length !== 1) return;
+      const dx = touch.clientX - gesture.x;
+      const dy = touch.clientY - gesture.y;
+      if (gesture.axis === null) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < AXIS_DECISION_DISTANCE) {
+          // Not yet known: kept from the drawer so it does not start.
+          event.stopPropagation();
+          return;
+        }
+        gesture.axis =
+          Math.abs(dy) > Math.abs(dx) * VERTICAL_STEEPNESS ? "y" : "x";
+      }
+      if (gesture.axis === "y") return;
+      event.stopPropagation();
+      if (event.cancelable) event.preventDefault();
+      gesture.dx = dx;
+      const canGo =
+        dx < 0 ? current.index < current.count - 1 : current.index > 0;
+      // At either end of the list the sheet only gives a little.
+      setOffset(dx * (canGo ? STEP_SWIPE_FOLLOW : 0.15), false);
+    };
 
-  return {
-    surfaceRef,
-    enterFrom,
-    handlers: {
-      onPointerDown,
-      onPointerMove,
-      onPointerUp: finish,
-      onPointerCancel: finish,
-    },
-  };
+    const onTouchEnd = () => {
+      const ended = gesture;
+      gesture = null;
+      const current = stepRef.current;
+      if (!ended || ended.axis !== "x" || !current) return;
+      if (
+        ended.dx <= -STEP_SWIPE_DISTANCE &&
+        current.index < current.count - 1
+      ) {
+        setOffset(0, false);
+        setEnterFrom("right");
+        current.onNext();
+      } else if (ended.dx >= STEP_SWIPE_DISTANCE && current.index > 0) {
+        setOffset(0, false);
+        setEnterFrom("left");
+        current.onPrev();
+      } else {
+        setOffset(0, true);
+      }
+    };
+
+    surface.addEventListener("touchstart", onTouchStart, { passive: true });
+    // Window capture runs before the drawer's own listener on the document.
+    win.addEventListener("touchmove", onTouchMove, {
+      capture: true,
+      passive: false,
+    });
+    win.addEventListener("touchend", onTouchEnd, { capture: true });
+    win.addEventListener("touchcancel", onTouchEnd, { capture: true });
+    return () => {
+      surface.removeEventListener("touchstart", onTouchStart);
+      win.removeEventListener("touchmove", onTouchMove, { capture: true });
+      win.removeEventListener("touchend", onTouchEnd, { capture: true });
+      win.removeEventListener("touchcancel", onTouchEnd, { capture: true });
+    };
+  }, [surface]);
+
+  return { surfaceRef, enterFrom };
+}
+
+/** The window's height, kept current. */
+function useWindowHeight() {
+  const [height, setHeight] = useState(() =>
+    typeof window === "undefined" ? 800 : window.innerHeight,
+  );
+  useEffect(() => {
+    const sync = () => setHeight(window.innerHeight);
+    window.addEventListener("resize", sync);
+    sync();
+    return () => window.removeEventListener("resize", sync);
+  }, []);
+  return height;
 }
 
 function PhonePanel({
@@ -328,6 +351,16 @@ function PhonePanel({
   const [open, setOpen] = useState(true);
   const dismissThenRef = useRef<DrawerDismissThen | null>(null);
   const swipe = usePhoneStepSwipe(step);
+  // Two stops, as the lesson's thread sheet: the sheet opens 40px short of
+  // the top, and a swipe up (on the handle, or on the content when there is
+  // nothing to scroll) takes it to full screen; down goes back, then closes.
+  const viewportHeight = useWindowHeight();
+  const collapsedSnapPoint = Math.max(320, viewportHeight - 40);
+  const snapPoints = useMemo(
+    () => [collapsedSnapPoint, 1],
+    [collapsedSnapPoint],
+  );
+  const [snapPoint, setSnapPoint] = useState<number | null>(collapsedSnapPoint);
 
   return (
     <Drawer
@@ -338,18 +371,29 @@ function PhonePanel({
       onOpenChangeComplete={(nextOpen) => {
         if (!nextOpen) onClose();
       }}
+      snapPoints={snapPoints}
+      snapPoint={snapPoint}
+      onSnapPointChange={(next) => {
+        if (typeof next === "number" || next === null) setSnapPoint(next);
+      }}
+      snapToSequentialPoints
       showSwipeHandle
       dismissThenRef={dismissThenRef}
     >
       <DrawerContent
         aria-label="Discussion details"
         finalFocus={false}
-        // The drawer sizes a bottom sheet under this same variant.
-        className="bg-(--surface) data-[swipe-axis=y]:[--drawer-content-height:calc(100dvh-2.5rem)] data-[swipe-axis=y]:[--drawer-content-max-height:calc(100dvh-2.5rem)]"
+        // Full height; the snap point decides how much of it shows.
+        style={
+          {
+            "--drawer-content-height": `${viewportHeight}px`,
+            "--drawer-content-max-height": `${viewportHeight}px`,
+          } as CSSProperties
+        }
+        className="bg-(--surface) data-expanded:rounded-none!"
       >
         <div
           ref={swipe.surfaceRef}
-          {...swipe.handlers}
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
           <div

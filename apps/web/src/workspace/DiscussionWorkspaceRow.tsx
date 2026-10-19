@@ -1,6 +1,5 @@
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
-import { CaretRightIcon as CaretRight } from "@phosphor-icons/react/CaretRight";
 import { ChatCircleIcon as ChatCircle } from "@phosphor-icons/react/ChatCircle";
 import { PaperclipIcon as Paperclip } from "@phosphor-icons/react/Paperclip";
 import { DiscussionAvatar } from "../learning/DiscussionAvatar";
@@ -11,6 +10,8 @@ import { DiscussionWorkspaceActionMenu } from "./DiscussionWorkspaceActionMenu";
 import { useDiscussionWorkspaceCardLongPress } from "./useDiscussionWorkspaceCardLongPress";
 import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
 import { useDiscussionWorkspaceCardActions } from "./useDiscussionWorkspaceCardActions";
+import { TimeAgo } from "../components/TimeAgo";
+import { requestDiscussionReplyFocus } from "./discussionReplyFocus";
 
 /** What the row's small label says next to the time, if anything. */
 function getKindLabel(card: DiscussionWorkspaceCard): string | null {
@@ -102,10 +103,15 @@ export function DiscussionWorkspaceRow({
     <article
       {...onLongPressHandlers}
       aria-current={selected ? "true" : undefined}
-      className={`group/row relative flex cursor-pointer gap-4 rounded-2xl px-4 py-5 transition-colors after:pointer-events-none after:absolute after:inset-x-4 after:-bottom-px after:h-px after:bg-[color-mix(in_srgb,var(--text)_8%,transparent)] after:content-[""] ${
+      // As the comments under a lesson video: the row's background runs
+      // out through the tab panel's side padding to the frame's edges while its
+      // content stays in line with the search bar, no corners, no dividers
+      // (the gap between rows separates them). The open row is marked like
+      // a linked comment there: an accent tint and a straight accent bar.
+      className={`group/row relative -ms-(--swipeable-tab-panel-inline-start) -me-(--swipeable-tab-panel-inline-end) flex cursor-pointer gap-4 ps-(--swipeable-tab-panel-inline-start) pe-(--swipeable-tab-panel-inline-end) py-5 transition-colors ${
         selected
-          ? "bg-[color-mix(in_srgb,var(--text)_5%,transparent)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--text)_10%,transparent)]"
-          : "hover:bg-[color-mix(in_srgb,var(--text)_3.5%,transparent)]"
+          ? "bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] shadow-[inset_3px_0_0_var(--accent)]"
+          : "hover:bg-[color-mix(in_srgb,var(--text)_4%,transparent)]"
       }`}
       onClick={open}
     >
@@ -140,9 +146,11 @@ export function DiscussionWorkspaceRow({
           <span className="text-[0.8125rem] text-(--muted)" aria-hidden="true">
             ·
           </span>
-          <time className="text-[0.8125rem] text-(--muted)">
-            {card.activity}
-          </time>
+          <TimeAgo
+            value={card.activityAt}
+            label={card.activity}
+            className="text-[0.8125rem] text-(--muted)"
+          />
           {kindLabel && (
             <span className="self-center rounded-md bg-[color-mix(in_srgb,var(--text)_7%,transparent)] px-1.5 py-0.5 text-[0.6875rem] font-bold tracking-wide text-(--muted) uppercase">
               {kindLabel}
@@ -170,32 +178,31 @@ export function DiscussionWorkspaceRow({
         )}
 
         {(card.course || card.lesson) && (
-          <div className="flex min-w-0 items-center gap-2 text-sm">
-            <BookOpen
-              size={15}
-              className="shrink-0 text-(--accent)"
+          // Course above, lecture below, beside a square book tile as tall
+          // as the two lines.
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span
+              className="grid size-9 shrink-0 place-items-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-(--accent)"
               aria-hidden="true"
-            />
-            <span className="truncate font-bold text-(--accent)">
-              {card.course}
+            >
+              <BookOpen size={18} weight="duotone" />
             </span>
-            {card.lesson && (
-              <>
-                <CaretRight
-                  size={12}
-                  weight="bold"
-                  className="shrink-0 text-(--muted) opacity-60"
-                  aria-hidden="true"
-                />
-                <span className="truncate font-semibold text-(--muted)">
+            <div className="min-w-0 flex-1 leading-snug">
+              {card.course && (
+                <p className="m-0 truncate text-xs font-semibold text-(--muted)">
+                  {card.course}
+                </p>
+              )}
+              {card.lesson && (
+                <p className="m-0 truncate text-sm font-semibold text-(--text)">
                   {card.lesson}
-                </span>
-              </>
-            )}
+                </p>
+              )}
+            </div>
           </div>
         )}
 
-        <div className="-ml-2.5 flex items-center gap-1">
+        <div className="flex items-center gap-1">
           {actions.canLike && (
             <DiscussionLikeButton
               liked={Boolean(card.isLiked)}
@@ -211,14 +218,19 @@ export function DiscussionWorkspaceRow({
                   ? `${card.replies} ${card.replies === 1 ? "reply" : "replies"}`
                   : "Reply"
               }
-              onClick={() => onOpen(card)}
+              onClick={() => {
+                // Opens the panel when it is not already this discussion's,
+                // then takes the learner to its reply box.
+                if (!selected) onOpen(card);
+                requestDiscussionReplyFocus(card.id);
+              }}
             />
           )}
         </div>
       </div>
 
       {menu && (
-        <div className="absolute top-4 right-3 opacity-60 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100">
+        <div className="absolute top-4 right-[calc(var(--swipeable-tab-panel-inline-end,0px)-0.5rem)] opacity-60 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100">
           {menu}
         </div>
       )}

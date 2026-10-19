@@ -96,7 +96,7 @@ export function DiscussionsEditor({
               : "There are no public discussions yet."}
           </p>
         ) : (
-          <ul className="mt-3 grid gap-2">
+          <ul className="mt-3 grid grid-cols-1 gap-2">
             {discussions.map((discussion) => {
               const placement: DiscussionPlacement = hidden.has(discussion.id)
                 ? "hidden"
@@ -107,7 +107,7 @@ export function DiscussionsEditor({
               return (
                 <li
                   key={discussion.id}
-                  className={`flex flex-wrap items-center gap-x-4 gap-y-2 p-3 ${insetRowClass} ${
+                  className={`flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 p-3 ${insetRowClass} ${
                     placement === "hidden" ? "opacity-60" : ""
                   }`}
                 >

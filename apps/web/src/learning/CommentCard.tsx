@@ -62,6 +62,7 @@ import {
   flattenReplyPages,
   getReplyTotalCount,
 } from "../services/learning-interactions/reply-pagination";
+import { TimeAgo } from "../components/TimeAgo";
 
 export interface CommentReply {
   id: string | number;
@@ -72,6 +73,8 @@ export interface CommentReply {
   /** Opens their profile from the name and picture when present. */
   authorUsername?: string;
   time: string;
+  /** When it was written, for the exact time on hover or tap. */
+  createdAt?: string | number;
   avatar: string;
   text: string;
   content?: DiscussionContent;
@@ -613,12 +616,11 @@ export const CommentCard = React.memo(function CommentCard({
                   </span>
                   {/* The date alone is shown; the pointer brings up the
                       full moment it was written, to the second. */}
-                  <span
+                  <TimeAgo
+                    value={comment.createdAt}
+                    label={comment.time}
                     className="text-xs text-(--muted) sm:text-sm"
-                    title={getFullTimestamp(comment.createdAt)}
-                  >
-                    {comment.time}
-                  </span>
+                  />
                   <span
                     role="img"
                     aria-label={entryLabel}
@@ -1165,9 +1167,11 @@ function ReplyCard({
                   >
                     ·
                   </span>
-                  <span className="text-xs text-(--muted) sm:text-sm">
-                    {reply.time}
-                  </span>
+                  <TimeAgo
+                    value={reply.createdAt}
+                    label={reply.time}
+                    className="text-xs text-(--muted) sm:text-sm"
+                  />
                 </div>
                 <CommentActionMenu
                   name={reply.name}
@@ -1782,19 +1786,4 @@ export async function shareDiscussionEntry(
     }
     return false;
   }
-}
-
-/**
- * The moment an entry was written, in full and to the second, in the
- * reader's own locale and time zone: what the pointer shows over the short
- * date. Nothing when the entry carries no time or one that cannot be read.
- */
-function getFullTimestamp(createdAt: string | number | undefined) {
-  if (createdAt === undefined) return undefined;
-  const date = new Date(createdAt);
-  if (Number.isNaN(date.getTime())) return undefined;
-  return date.toLocaleString(undefined, {
-    dateStyle: "long",
-    timeStyle: "medium",
-  });
 }

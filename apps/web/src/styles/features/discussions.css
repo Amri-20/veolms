@@ -1,10 +1,16 @@
 /* Discussion workspace views */
 .discussion-hub {
-  --swipeable-tab-panel-inline-start: var(
-    --application-page-inline-gutter,
-    0px
+  /* The tab panel bleeds through the page gutter and the hub's own side
+     padding (phones), so the list's rows can reach the screen's edges; its
+     slides pad by the same amount, which keeps their content in line. */
+  --swipeable-tab-panel-inline-start: calc(
+    var(--application-page-inline-gutter, 0px) +
+      var(--discussion-hub-inline-padding, 0px)
   );
-  --swipeable-tab-panel-inline-end: var(--application-page-inline-gutter, 0px);
+  --swipeable-tab-panel-inline-end: calc(
+    var(--application-page-inline-gutter, 0px) +
+      var(--discussion-hub-inline-padding, 0px)
+  );
   --discussion-badge-qna-ink: #8b5cf6;
   --discussion-badge-qna-fill: color-mix(in srgb, #8b5cf6 20%, var(--surface));
   --discussion-badge-comment-ink: #3b82f6;
@@ -943,8 +949,9 @@
 
 @media (max-width: 520px) {
   .discussion-hub {
-    padding-right: 12px;
-    padding-left: 12px;
+    --discussion-hub-inline-padding: 12px;
+    padding-right: var(--discussion-hub-inline-padding);
+    padding-left: var(--discussion-hub-inline-padding);
   }
   .discussion-hub__header-icon {
     width: 52px;
