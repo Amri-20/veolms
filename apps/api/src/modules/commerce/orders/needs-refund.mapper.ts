@@ -7,7 +7,6 @@ import type {
   SurplusPaymentNeedsRefund,
 } from "@veolms/contracts";
 import { refundedSoFar } from "../payments/surplus-payment.ts";
-import { toMinorUnits } from "../shared/currency.ts";
 import {
   CLOSED_UNPAID_ORDER_STATUSES,
   type ClosedUnpaidOrderStatus,
@@ -19,9 +18,8 @@ import {
 
 /**
  * Rows of the "needs a manual refund" list as the staff screen receives
- * them. Every amount leaves in MINOR units: payments and refunds are stored
- * that way, and the order and item columns (major units) are converted here
- * and nowhere else, as order.mapper.ts does for order responses.
+ * them. Every amount leaves in MINOR units, as payments, refunds, orders and
+ * order items are all stored.
  */
 
 interface BuyerRowLike {
@@ -72,17 +70,17 @@ export function toDuplicatePurchaseEntry(
     courseId: row.course_id,
     bundleTitle: row.bundle_title,
     order: { id: row.order_id, orderNumber: row.order_number },
-    orderTotalAmount: toMinorUnits(row.total_amount, row.currency),
+    orderTotalAmount: Number(row.total_amount),
     earlierOrder: {
       id: row.earlier_order_id,
       orderNumber: row.earlier_order_number,
-      amount: toMinorUnits(row.earlier_final_amount, row.currency),
+      amount: Number(row.earlier_final_amount),
       bundleTitle: row.earlier_bundle_title,
       paidAt: row.earlier_paid_at,
     },
     // The item's price: the course's, or the whole bundle's when the course
     // is inside one (a bundle's courses are not priced one by one).
-    amount: toMinorUnits(row.final_amount, row.currency),
+    amount: Number(row.final_amount),
     refundedAmount: Number(row.refunded_amount),
     currency: row.currency,
     gatewayProvider: row.gateway_provider,
@@ -102,14 +100,14 @@ export function toDuplicateBundlePurchaseEntry(
     bundleTitle: row.title_snapshot,
     bundleId: row.bundle_id,
     order: { id: row.order_id, orderNumber: row.order_number },
-    orderTotalAmount: toMinorUnits(row.total_amount, row.currency),
+    orderTotalAmount: Number(row.total_amount),
     earlierOrder: {
       id: row.earlier_order_id,
       orderNumber: row.earlier_order_number,
-      amount: toMinorUnits(row.earlier_final_amount, row.currency),
+      amount: Number(row.earlier_final_amount),
       paidAt: row.earlier_paid_at,
     },
-    amount: toMinorUnits(row.final_amount, row.currency),
+    amount: Number(row.final_amount),
     refundedAmount: Number(row.refunded_amount),
     currency: row.currency,
     gatewayProvider: row.gateway_provider,
@@ -138,7 +136,7 @@ export function toStuckManualTransferEntry(
     courseTitle: row.item_titles ?? "",
     order: { id: row.order_id, orderNumber: row.order_number },
     // A request carries no amount: the buyer was paying for the order.
-    amount: toMinorUnits(row.total_amount, row.currency),
+    amount: Number(row.total_amount),
     currency: row.currency,
     paymentMethod: row.payment_method,
     transactionReference: row.transaction_reference,
@@ -168,9 +166,7 @@ export function isDuplicateStillOwed(
     "final_amount" | "refunded_amount" | "currency"
   >,
 ): boolean {
-  return (
-    Number(row.refunded_amount) < toMinorUnits(row.final_amount, row.currency)
-  );
+  return Number(row.refunded_amount) < Number(row.final_amount);
 }
 
 /**

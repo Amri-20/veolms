@@ -7,16 +7,14 @@ import type {
   OrderPaymentSummary,
 } from "@veolms/contracts";
 import type { OrderStatus } from "@veolms/database";
-import { toMinorUnits } from "../shared/currency.ts";
 
 /**
  * The order columns every order response is built from. Structural rather
  * than tied to a Kysely row type, so each caller can select just these.
  *
- * Order rows store major units (499 = ₹499) while the payments and refunds
- * shown alongside them are minor units (49900 paise). An order response
- * exposes ONE unit — minor — so a client never has to know which field came
- * from which table; the conversion happens in this file and nowhere else.
+ * Order rows, and the payments and refunds shown alongside them, are all
+ * stored in minor units (49900 paise = ₹499), and an order response exposes
+ * that one unit.
  */
 interface OrderRowLike {
   id: string;
@@ -96,9 +94,9 @@ export function toLearnerOrder(
     invoiceNumber: row.invoice_number,
     status: row.status,
     currency: row.currency,
-    subtotalAmount: toMinorUnits(row.subtotal_amount, row.currency),
-    taxAmount: toMinorUnits(row.tax_amount, row.currency),
-    totalAmount: toMinorUnits(row.total_amount, row.currency),
+    subtotalAmount: row.subtotal_amount,
+    taxAmount: row.tax_amount,
+    totalAmount: row.total_amount,
     paymentSummary: toOrderPaymentSummary(payment),
     items: items.map(toOrderItemSummary),
     createdAt: row.created_at,
@@ -130,10 +128,10 @@ export function toAdminOrder(
     invoiceNumber: row.invoice_number,
     status: row.status,
     currency: row.currency,
-    subtotalAmount: toMinorUnits(row.subtotal_amount, row.currency),
-    discountAmount: toMinorUnits(row.discount_amount, row.currency),
-    taxAmount: toMinorUnits(row.tax_amount, row.currency),
-    totalAmount: toMinorUnits(row.total_amount, row.currency),
+    subtotalAmount: row.subtotal_amount,
+    discountAmount: row.discount_amount,
+    taxAmount: row.tax_amount,
+    totalAmount: row.total_amount,
     // Already stored in minor units.
     afterCommissionAmount: row.after_commission_amount ?? null,
     items: items.map(toOrderItemSummary),

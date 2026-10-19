@@ -48,6 +48,7 @@ import {
 } from "../payments/captured-gateway-payment.ts";
 import { createExtraPaymentRefundService } from "../payments/extra-payment-refund.service.ts";
 import { courseSaleState } from "../pricing/purchasable.ts";
+import { toMinorUnits } from "../shared/currency.ts";
 import {
   createPaymentReconciliationService,
   type PaymentReconciliationService,
@@ -566,7 +567,8 @@ export function createCheckoutService({
           overlaps: coverageOverlaps(held, wanted),
           coveredByRequest: coverageCovers(wanted, held),
           sameTerms:
-            openOrder.total_amount === pricing.totalAmount &&
+            openOrder.total_amount ===
+              toMinorUnits(pricing.totalAmount, pricing.currency) &&
             openOrder.currency === pricing.currency &&
             openOrder.coupon_id === (pricing.couponId ?? null),
           manualPaymentPending: Boolean(openOrder.manual_payment_pending),
@@ -801,10 +803,18 @@ export function createCheckoutService({
           user_id: user.id,
           status: "pending",
           currency: pricing.currency,
-          subtotal_amount: pricing.subtotalAmount,
-          discount_amount: pricing.discountAmount,
-          tax_amount: pricing.taxAmount,
-          total_amount: pricing.totalAmount,
+          // The pricing is whole major units, as catalog prices are set;
+          // the order stores the money it transacts in minor units.
+          subtotal_amount: toMinorUnits(
+            pricing.subtotalAmount,
+            pricing.currency,
+          ),
+          discount_amount: toMinorUnits(
+            pricing.discountAmount,
+            pricing.currency,
+          ),
+          tax_amount: toMinorUnits(pricing.taxAmount, pricing.currency),
+          total_amount: toMinorUnits(pricing.totalAmount, pricing.currency),
           coupon_id: pricing.couponId ?? null,
           idempotency_key: idempotencyKey ?? null,
           expires_at: expiresAt,
@@ -820,10 +830,10 @@ export function createCheckoutService({
           bundle_id: it.itemType === "bundle" ? it.itemId : null,
           quiz_pricing_id: it.itemType === "quiz" ? it.itemId : null,
           title_snapshot: it.title,
-          unit_price: it.unitPrice,
-          discount_amount: it.discountAmount,
-          tax_amount: it.taxAmount,
-          final_amount: it.finalAmount,
+          unit_price: toMinorUnits(it.unitPrice, pricing.currency),
+          discount_amount: toMinorUnits(it.discountAmount, pricing.currency),
+          tax_amount: toMinorUnits(it.taxAmount, pricing.currency),
+          final_amount: toMinorUnits(it.finalAmount, pricing.currency),
           created_at: now,
         }));
 

@@ -11,7 +11,6 @@ import type {
 } from "@veolms/contracts";
 import { AppError } from "../../../lib/errors.ts";
 import { CommerceErrors } from "../shared/commerce.errors.ts";
-import { toMinorUnits } from "../shared/currency.ts";
 import { isUniqueViolation } from "../shared/db-errors.ts";
 import { listHeldItemTitles } from "../shared/order-holdings.ts";
 import { recordCouponRedemptionForPaidOrder } from "../coupons/coupon-redemption.service.ts";
@@ -328,9 +327,9 @@ export function createManualPaymentService({
             gateway_order_id: `manual_ord_${order.id}`,
             gateway_payment_id: gatewayPaymentId,
             gateway_key_id: null,
-            // payments.amount is minor units for every provider; this row
-            // used to store the major-unit order total.
-            amount: toMinorUnits(order.total_amount, order.currency),
+            // payments.amount is minor units for every provider, as is the
+            // order total it copies.
+            amount: order.total_amount,
             currency: order.currency,
             status: "captured",
             payment_method: {

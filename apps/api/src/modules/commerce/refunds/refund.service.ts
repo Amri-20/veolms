@@ -12,7 +12,6 @@ import {
   CommerceErrors,
   toClientGatewayError,
 } from "../shared/commerce.errors.ts";
-import { toMinorUnits } from "../shared/currency.ts";
 import { isUniqueViolation } from "../shared/db-errors.ts";
 import { outsideRefundId, refundChannelRefusal } from "./outside-refund.ts";
 import * as refundRepo from "./refund.repository.ts";
@@ -256,17 +255,12 @@ export function createRefundService({
       }
 
       // If orderItemId was provided without an explicit amount, default to
-      // the target item's final amount. `order_items.final_amount` is in
-      // major units while `payment.amount` / refund amounts are gateway
-      // minor units (see shared/currency.ts) — convert before comparing,
-      // otherwise this default refunds 1/100 of the item's price.
+      // the target item's final amount (minor units, like the payment and
+      // refund amounts it is compared with).
       const requestedAmount =
         amount ??
         (targetItem
-          ? Math.min(
-              toMinorUnits(targetItem.final_amount, payment.currency),
-              maxRefundable,
-            )
+          ? Math.min(targetItem.final_amount, maxRefundable)
           : maxRefundable);
       if (requestedAmount > maxRefundable) {
         throw CommerceErrors.REFUND_NOT_ALLOWED(
