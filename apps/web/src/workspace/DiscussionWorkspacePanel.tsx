@@ -8,6 +8,7 @@ import {
   useSyncExternalStore,
   type CSSProperties,
 } from "react";
+import { createPortal } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRightIcon as ArrowRight } from "@phosphor-icons/react/ArrowRight";
 import { ArrowSquareOutIcon as ArrowSquareOut } from "@phosphor-icons/react/ArrowSquareOut";
@@ -319,6 +320,15 @@ export function DiscussionWorkspacePanel({
     open: true,
     onDismiss: onClose,
   });
+  // Full screen, the panel has to cover the sidebar, which sits outside the
+  // page's frame. The frame is a layer of its own (a grid item with a
+  // z-index), so nothing inside it can rise above the sidebar however high
+  // its z-index: between phone width and `lg` the sidebar was drawn over the
+  // panel. The panel is drawn in the shell's own layer instead, beside the
+  // sidebar. Wide, it stays in the frame, along its right edge.
+  const fullScreenHost = isFullScreen
+    ? document.querySelector<HTMLElement>(".courses-app")
+    : null;
   const openInCourse = (path: string) => {
     if (!onNavigatePage) return;
     // The panel's Back entry is taken off first, so Back from the lesson
@@ -443,7 +453,7 @@ export function DiscussionWorkspacePanel({
 
   const firstName = (authorName ?? "").split(" ")[0];
 
-  return (
+  const panel = (
     <aside
       aria-label={`${kindName} details`}
       style={frameBox}
@@ -643,4 +653,5 @@ export function DiscussionWorkspacePanel({
       )}
     </aside>
   );
+  return fullScreenHost ? createPortal(panel, fullScreenHost) : panel;
 }
