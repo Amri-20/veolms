@@ -200,3 +200,13 @@ export const CouponsAccessDenied = lazy(() =>
     default: module.CouponsAccessDenied,
   })),
 );
+export const TeamPage = lazy(() =>
+  import("../team/TeamPage").then((module) => ({
+    default: module.TeamPage,
+  })),
+);
+export const InvitePage = lazy(() =>
+  import("../team/invite/InvitePage").then((module) => ({
+    default: module.InvitePage,
+  })),
+);

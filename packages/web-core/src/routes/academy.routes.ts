@@ -122,6 +122,11 @@ export function getAcademyRoutes(): RouteConfigEntry {
       id: "platform",
       caseSensitive: true,
     }),
+    route("team/:teamTab?", "routes/platform-marker.tsx", {
+      id: "team",
+      caseSensitive: true,
+    }),
+    route("invite/:token", marker, { id: "invite", caseSensitive: true }),
     route("coupons/create", marker, {
       id: "coupon-create",
       caseSensitive: true,

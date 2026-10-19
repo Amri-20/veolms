@@ -30,6 +30,8 @@ export type ShellPage =
   | "coupon-builder"
   | "home-page-settings"
   | "platform"
+  | "team"
+  | "invite"
   | "reviews"
   | "quizzes"
   | "quiz-builder"
@@ -416,6 +418,19 @@ export const routeDescriptors = {
     description:
       "Manage academy-wide settings: the home page, the default look and the student rules.",
   },
+  team: {
+    kind: "shell",
+    page: "team",
+    section: "Team",
+    title: "Team",
+    description: "Who works on the academy and what each person may do.",
+  },
+  invite: {
+    kind: "shell",
+    page: "invite",
+    title: "Team invitation",
+    description: "Accept an invitation to join the academy's team.",
+  },
   "coupon-create": {
     kind: "shell",
     page: "coupon-builder",
@@ -454,6 +469,7 @@ export const destinationPaths: Readonly<Record<string, string>> = {
   coupons: "/coupons",
   "home-page-settings": "/platform/home",
   platform: "/platform",
+  team: "/team",
   "coupon-create": "/coupons/create",
   "coupon-edit": "/coupons/:couponId",
   "create-course": "/courses/create",
@@ -483,6 +499,7 @@ export const destinationPaths: Readonly<Record<string, string>> = {
   "/coupons": "/coupons",
   "Home Page": "/platform/home",
   Platform: "/platform",
+  Team: "/team",
   "/my-learning": "/courses",
   Students: "/students",
   Progress: "/progress",
@@ -589,6 +606,18 @@ export const getEffectiveRouteId = (
     if (normalizedPath === "/platform") return routeId;
     const tab = /^\/platform\/([^/]+)$/.exec(normalizedPath)?.[1];
     return tab && isPlatformTab(tab) ? `platform-${tab}` : "home-fallback";
+  }
+
+  if (routeId === "team") {
+    return /^\/team(?:\/(?:members|roles|invitations))?$/.test(normalizedPath)
+      ? routeId
+      : "home-fallback";
+  }
+
+  if (routeId === "invite") {
+    return /^\/invite\/[A-Za-z0-9_-]{32,128}$/.test(normalizedPath)
+      ? routeId
+      : "home-fallback";
   }
 
   if (routeId === "learning" || routeId === "legacy-learning") {

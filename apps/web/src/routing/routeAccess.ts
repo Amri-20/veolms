@@ -46,6 +46,8 @@ const RESERVED_PROFILE_PATHS = new Set([
   "/coupons",
   "/home-page",
   "/platform",
+  "/team",
+  "/invite",
   "/logout",
   LOGIN_PATH,
   "/register",
@@ -154,9 +156,15 @@ export function isLearningPath(pathname: string): boolean {
   return /^\/courses\/[^/]+(?:\/[^/]+)?$/.test(path);
 }
 
+/** A team invitation link: open signed out, so the invitee can sign in. */
+export function isInvitePath(pathname: string): boolean {
+  return /^\/invite\/[^/]+$/.test(normalizeAppPath(pathname));
+}
+
 export function isPublicAcademyPath(pathname: string): boolean {
   return (
     normalizeAppPath(pathname) === "/home" ||
+    isInvitePath(pathname) ||
     isSettingsPath(pathname) ||
     isCoursesPublicPath(pathname) ||
     isPublicProfilePath(pathname) ||
@@ -178,6 +186,7 @@ const LOGIN_PROMPT_PATH_ROOTS = [
   "/coupons",
   "/home-page",
   "/platform",
+  "/team",
 ] as const;
 
 /**

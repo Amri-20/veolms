@@ -4,6 +4,7 @@ import { GearSixIcon as GearSix } from "@phosphor-icons/react/GearSix";
 import { HouseIcon as House } from "@phosphor-icons/react/House";
 import { ToteIcon as Tote } from "@phosphor-icons/react/Tote";
 import { UsersIcon as Users } from "@phosphor-icons/react/Users";
+import { UsersThreeIcon as UsersThree } from "@phosphor-icons/react/UsersThree";
 import { ChatCircleDotsIcon as ChatCircleDots } from "@phosphor-icons/react/ChatCircleDots";
 import { SlidersHorizontalIcon as SlidersHorizontal } from "@phosphor-icons/react/SlidersHorizontal";
 import { SquaresFourIcon as SquaresFour } from "@phosphor-icons/react/SquaresFour";
@@ -96,6 +97,8 @@ const adminNavigation: readonly NavigationItem[] = [
     SlidersHorizontal,
     "/platform",
   ),
+  // Who works on the academy and what each person may do.
+  createNavigationItem("admin-team", "Team", UsersThree, "/team"),
   createNavigationItem("creator-settings", "Settings", GearSix, "/settings"),
 ];
 
@@ -120,6 +123,7 @@ const navigationTones: Record<string, string> = {
   Courses: "#f472b6",
   Coupons: "#fbbf24",
   Platform: "#38bdf8",
+  Team: "#818cf8",
   Students: "#2dd4bf",
   Reviews: "#f1be4b",
   "My Quiz": "#f87171",

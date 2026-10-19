@@ -65,6 +65,8 @@ import {
   ProgressPage,
   PublicProfilePageRoute,
   PlatformPage,
+  TeamPage,
+  InvitePage,
   CouponBuilderPage,
   CouponsAccessDenied,
 } from "../academyLazyPages";
@@ -633,6 +635,22 @@ export function useAcademyPageContent({
             onNavigatePage={onNavigatePage}
             setNotice={setNotice}
           />
+        </Suspense>
+      );
+    }
+    if (surfacePage === "team") {
+      if (!isAuthReady) return <AcademyPageFallback />;
+      return (
+        <Suspense fallback={<AcademyPageFallback />}>
+          <TeamPage onNavigatePage={onNavigatePage} setNotice={setNotice} />
+        </Suspense>
+      );
+    }
+    if (surfacePage === "invite") {
+      if (!isAuthReady) return <AcademyPageFallback />;
+      return (
+        <Suspense fallback={<AcademyPageFallback />}>
+          <InvitePage onNavigatePage={onNavigatePage} />
         </Suspense>
       );
     }
