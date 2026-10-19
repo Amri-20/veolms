@@ -25,6 +25,8 @@ export * from "./error.ts";
 export * from "./quiz.ts";
 export * from "./quiz-answer-rules.ts";
 export * from "./permissions.ts";
+export * from "./permission-catalogue.ts";
+export * from "./team.ts";
 export * from "./student.ts";
 export * from "./analytics.ts";
 export * from "./dashboard.ts";

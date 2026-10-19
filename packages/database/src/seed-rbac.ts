@@ -101,6 +101,13 @@ export const STANDARD_FEATURES = [
     description: "Advanced reporting and analytics",
     enabled: true,
   },
+  {
+    // Off until every route and page checks permissions instead of role
+    // names; a custom-role member would otherwise see mixed results.
+    feature_key: "team_custom_roles",
+    description: "Custom team roles built from permissions",
+    enabled: false,
+  },
 ] as const;
 
 export const ROLE_CAPABILITY_MAPPINGS: Record<
@@ -176,9 +183,16 @@ export const ROLE_CAPABILITY_MAPPINGS: Record<
     "lesson.read",
     "lesson.thumbnail.update",
   ],
+  // Course routes check these platform-wide; the course services still
+  // limit an instructor to the courses they own.
   instructor: [
     "course.read",
     "course.preview",
+    "course.create",
+    "course.publish",
+    "course.unpublish",
+    "course.archive",
+    "course.delete",
     "course.details.update",
     "course.thumbnail.update",
     "course.pricing.update",

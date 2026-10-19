@@ -41,6 +41,8 @@ import type {
   RolePermissionTable,
   RoleAssignmentTable,
   FeatureTable,
+  TeamInvitationTable,
+  TeamInvitationRoleTable,
 } from "./authorization.schema.ts";
 
 import type {
@@ -145,6 +147,8 @@ export interface Database {
   role_permissions: RolePermissionTable;
   role_assignments: RoleAssignmentTable;
   features: FeatureTable;
+  team_invitations: TeamInvitationTable;
+  team_invitation_roles: TeamInvitationRoleTable;
   sessions: SessionTable;
   oauth_accounts: OauthAccountTable;
   otp_codes: OtpCodeTable;
