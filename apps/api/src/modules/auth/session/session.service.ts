@@ -7,11 +7,14 @@ import type { Kysely } from "kysely";
 import { config } from "../../../config.ts";
 import { AppError } from "../../../lib/errors.ts";
 import {
-  ADMIN_ROLE,
   SESSION_TTL_MS,
   SESSION_USER_AGENT_MAX_LENGTH,
 } from "../shared/auth.constants.ts";
-import { isMfaMandatoryAccount, isStaffAccount } from "../shared/mfa-policy.ts";
+import {
+  isMfaMandatoryAccount,
+  isStaffAccount,
+  skipsStaffMfa,
+} from "../shared/mfa-policy.ts";
 import type {
   AuthenticatedRequestContext,
   EstablishedSession,
@@ -80,10 +83,7 @@ export function createSessionService({ database }: SessionServiceOptions) {
     factors: { totpEnabled: boolean; passkeyCount: number },
     twoFactorOff = false,
   ): MfaState {
-    const isAdmin = Boolean(
-      roles?.some((role) => role.toLowerCase() === ADMIN_ROLE),
-    );
-    if ((config.SKIP_ADMIN_MFA && isAdmin) || twoFactorOff) {
+    if (skipsStaffMfa(config.SKIP_ADMIN_MFA, roles) || twoFactorOff) {
       return {
         totpEnabled: false,
         passkeyEnabled: false,
@@ -108,10 +108,7 @@ export function createSessionService({ database }: SessionServiceOptions) {
     mfaMandatory: boolean,
     roles?: readonly string[] | null,
   ): Promise<MfaState> {
-    const isAdmin = Boolean(
-      roles?.some((role) => role.toLowerCase() === ADMIN_ROLE),
-    );
-    if (config.SKIP_ADMIN_MFA && isAdmin) {
+    if (skipsStaffMfa(config.SKIP_ADMIN_MFA, roles)) {
       return {
         totpEnabled: false,
         passkeyEnabled: false,
@@ -189,7 +186,7 @@ export function createSessionService({ database }: SessionServiceOptions) {
       (await loadSessionPrerequisites(user.id, request.existingSessionToken));
     const mfa = buildMfaState(
       isMfaMandatoryAccount(Boolean(user.mfa_mandatory), roles, {
-        skipAdminMfa: config.SKIP_ADMIN_MFA,
+        skipStaffMfa: config.SKIP_ADMIN_MFA,
       }),
       roles,
       factors,
@@ -355,12 +352,11 @@ export function createSessionService({ database }: SessionServiceOptions) {
       return null;
     }
 
-    const isAdmin = roles.some((role) => role.toLowerCase() === ADMIN_ROLE);
-    // An admin skipped by configuration, or a student while the academy has
+    // Staff skipped by configuration (SKIP_ADMIN_MFA), or a student while the academy has
     // turned two-factor sign-in off for students: a session waiting for its
     // second step counts as complete.
     const skipMfa = Boolean(
-      (config.SKIP_ADMIN_MFA && isAdmin) ||
+      skipsStaffMfa(config.SKIP_ADMIN_MFA, roles) ||
       (!studentTwoFactorEnabled && !isStaffAccount(roles)),
     );
 

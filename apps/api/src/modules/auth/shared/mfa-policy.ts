@@ -1,14 +1,22 @@
-import { ADMIN_ROLE, STUDENT_ROLE } from "./auth.constants.ts";
+import { STUDENT_ROLE } from "./auth.constants.ts";
+
+/**
+ * SKIP_ADMIN_MFA set: every staff account (admins, instructors and every
+ * team role) signs in without two-factor, for development and testing.
+ */
+export function skipsStaffMfa(
+  skip: boolean,
+  roles: readonly string[] | null | undefined,
+): boolean {
+  return skip && isStaffAccount(roles);
+}
 
 export function isMfaMandatoryAccount(
   storedFlag: boolean,
   roles: readonly string[] | null | undefined,
-  options?: { skipAdminMfa?: boolean },
+  options?: { skipStaffMfa?: boolean },
 ): boolean {
-  const isAdmin = Boolean(
-    roles?.some((role) => role.toLowerCase() === ADMIN_ROLE),
-  );
-  if (options?.skipAdminMfa && isAdmin) {
+  if (skipsStaffMfa(Boolean(options?.skipStaffMfa), roles)) {
     return false;
   }
 
