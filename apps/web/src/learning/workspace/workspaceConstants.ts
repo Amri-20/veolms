@@ -1,8 +1,8 @@
 import type { LessonPlayerMinimizeGestureState } from "../player";
-import { CURRICULUM_MIN_WIDTH } from "../learningShellPreferences";
+import { SPLIT_FRAME_SNAP_WIDTH } from "../../components/splitFrame";
 import { LESSON_DRAWER_MIN_FLOATING_WIDTH } from "../useLessonDrawerHeroControl";
 
-export const CURRICULUM_SNAP_WIDTH = CURRICULUM_MIN_WIDTH / 2;
+export const CURRICULUM_SNAP_WIDTH = SPLIT_FRAME_SNAP_WIDTH;
 export const FLOATING_LESSON_DRAWER_SNAP_WIDTH =
   LESSON_DRAWER_MIN_FLOATING_WIDTH / 2;
 export const LESSON_DRAWER_FALLBACK_SNAP_POINT = 0.72;

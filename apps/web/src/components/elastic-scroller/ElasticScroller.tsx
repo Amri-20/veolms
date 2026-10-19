@@ -58,6 +58,7 @@ export const ElasticScroller = forwardRef<
     contentRevision,
     lockSide: preferences.lockSide,
     unlockSide: preferences.unlockSide,
+    hideDelaySeconds: preferences.hideDelaySeconds,
     disabled,
   });
   // Held still and then dragged, the control is moved instead of scrolling.

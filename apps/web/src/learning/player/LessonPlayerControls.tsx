@@ -35,6 +35,7 @@ import {
   LEARNING_PLAYER_MINIMIZE_SHORTCUT,
   LEARNING_PLAYER_MINIMIZE_TITLE,
 } from "./learningPlayerShortcuts";
+import { COURSE_CONTENT_SHORTCUT_ARIA } from "../../keyboardShortcuts";
 import { cn } from "../../lib/utils";
 import { getPhoneLessonDrawerCollapsedSnapPoint } from "../useLessonDrawerHeroControl";
 import {
@@ -548,7 +549,9 @@ export function CourseLessonsButton({
       aria-label={open ? "Close lessons" : "Open lessons"}
       aria-expanded={open}
       aria-controls={controlsId}
-      aria-keyshortcuts={shortcutLabel ? "Alt+C" : undefined}
+      aria-keyshortcuts={
+        shortcutLabel ? COURSE_CONTENT_SHORTCUT_ARIA : undefined
+      }
       title={
         shortcutLabel
           ? `${open ? "Close" : "Open"} lessons (${shortcutLabel})`

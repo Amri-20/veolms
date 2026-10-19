@@ -1,5 +1,8 @@
 import { useEffect, type Dispatch, type SetStateAction } from "react";
-import type { ShortcutPlatform } from "../../../keyboardShortcuts";
+import {
+  getRightPanelShortcutLabel,
+  type ShortcutPlatform,
+} from "../../../keyboardShortcuts";
 import { getLessonReading } from "../../lessonWithoutVideo";
 import type { useCourseOverview } from "../../../services/courses";
 import type { CourseLesson } from "@veolms/contracts";
@@ -29,7 +32,7 @@ export interface UseLearningDeepLinkStateResult {
   isLearningDeepLinkReady: boolean;
   isLearningDeepLinkError: boolean;
   isLearningBootstrapLoading: boolean;
-  curriculumShortcutLabel: "⌥+C" | "Alt+C";
+  curriculumShortcutLabel: ReturnType<typeof getRightPanelShortcutLabel>;
 }
 
 export function useLearningDeepLinkState({
@@ -95,7 +98,7 @@ export function useLearningDeepLinkState({
     deepLinkInitializationPending,
     setDeepLinkInitializationPending,
   ]);
-  const curriculumShortcutLabel = shortcutPlatform === "mac" ? "⌥+C" : "Alt+C";
+  const curriculumShortcutLabel = getRightPanelShortcutLabel(shortcutPlatform);
   return {
     selectedLessonRecord,
     selectedLessonDescription,

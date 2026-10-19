@@ -208,6 +208,12 @@ export function useDiscussionWorkspaceCardActions({
       });
   };
 
+  // As on the lesson page: authors edit their own posts, and anyone reports
+  // somebody else's comment, Q&A or reply (notes are not reported).
+  const isSaved = Boolean(card.id) && !card.id.startsWith("client-");
+  const canEdit = isSaved && Boolean(card.isOwn);
+  const canReport = isSaved && !card.isOwn && !isNote;
+
   // Admins can take a comment, Q&A or reply out of view (it can be shown
   // again from moderation, so this asks for no confirmation).
   const canHide = isAdmin && !isNote && canDelete;
@@ -282,9 +288,13 @@ export function useDiscussionWorkspaceCardActions({
     canCopyLink: Boolean(destination),
     canCopyText: Boolean(copyTextValue.trim()),
     canDelete,
+    canEdit,
     canFollow,
     canHide,
     canLike,
+    canReport,
+    editLabel: `Edit ${deleteNoun}`,
+    reportLabel: `Report ${deleteNoun}`,
     hide,
     hideLabel: `Hide ${deleteNoun}`,
     like,

@@ -4,13 +4,21 @@ import type {
   PointerEvent as ReactPointerEvent,
 } from "react";
 import type { Lesson } from "../courseContent";
+import {
+  SplitFrameGutter,
+  SplitFramePane,
+} from "../../components/SplitFramePane";
+import {
+  COURSE_CONTENT_SHORTCUT_ARIA,
+  type getRightPanelShortcutLabel,
+} from "../../keyboardShortcuts";
 import { Curriculum } from "../Curriculum";
-import { CurriculumResizeGrip } from "../CurriculumResizeGrip";
 import type { AdaptedCurriculumSection } from "../courseCurriculumAdapter";
 import {
   CURRICULUM_COLLAPSED_WIDTH,
   CURRICULUM_MAX_WIDTH,
   CURRICULUM_MIN_WIDTH,
+  LEARNING_SPLIT_MEDIA,
 } from "../learningShellPreferences";
 import type { CurriculumPointerEvent } from "./workspaceGestureTypes";
 
@@ -18,7 +26,7 @@ export interface CurriculumColumnProps {
   splitPaneRef: RefObject<HTMLDivElement | null>;
   theaterMode: boolean;
   curriculumCollapsed: boolean;
-  curriculumShortcutLabel: "⌥+C" | "Alt+C";
+  curriculumShortcutLabel: ReturnType<typeof getRightPanelShortcutLabel>;
   curriculumAccessibleWidth: number;
   curriculumResizing: boolean;
   curriculumResizePreviewWidth: number | null;
@@ -114,21 +122,23 @@ export function CurriculumColumn({
 }: CurriculumColumnProps) {
   // prettier-ignore
   return (
-    <div
-      ref={splitPaneRef}
+    <SplitFramePane
+      element="div"
+      paneRef={splitPaneRef}
       className="learning-workspace__curriculum-clip"
-      data-learning-split-pane={theaterMode ? undefined : ""}
+      split={!theaterMode}
+      media={LEARNING_SPLIT_MEDIA}
+      card={false}
     >
       <div
         className={`learning-workspace__curriculum-column ${curriculumCollapsed ? "is-collapsed" : ""}`}
-        data-learning-split-card=""
+        data-split-frame-card=""
       >
-        <div
-          className="learning-curriculum__resize-rail group/rail"
-          role="separator"
-          aria-orientation="vertical"
+        <SplitFrameGutter
+          className="learning-curriculum__resize-rail"
+          resizing={curriculumResizing}
           aria-label="Resize course curriculum"
-          aria-keyshortcuts="Alt+C"
+          aria-keyshortcuts={COURSE_CONTENT_SHORTCUT_ARIA}
           title={`Resize course content | ${curriculumShortcutLabel}`}
           aria-valuemin={CURRICULUM_MIN_WIDTH}
           aria-valuemax={CURRICULUM_MAX_WIDTH}
@@ -150,16 +160,13 @@ export function CurriculumColumn({
                     : ""
                 }`
           }
-          tabIndex={0}
           onKeyDown={handleCurriculumResizeKeyDown}
           onDoubleClick={toggleCurriculumFromResizeRail}
           onPointerDown={startCurriculumResize}
           onPointerMove={moveCurriculumResize}
           onPointerUp={endCurriculumResize}
           onPointerCancel={(event) => endCurriculumResize(event, true)}
-        >
-          <CurriculumResizeGrip />
-        </div>
+        />
         <div
           id="learning-course-content"
           className="learning-curriculum__viewport"
@@ -198,6 +205,6 @@ export function CurriculumColumn({
           className="pointer-events-none absolute inset-0 z-11 overflow-hidden rounded-[inherit]"
         />
       </div>
-    </div>
+    </SplitFramePane>
   );
 }

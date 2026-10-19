@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useId, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import widths from "../assets/octopus/widths.json";
 
 /**
@@ -57,9 +57,10 @@ const fittedToOctopus: Partial<Record<PictureName, string>> = {
 const HEIGHTS = [160, 320, 480] as const;
 
 /**
- * Which drawing of each kind this visit shows: picked once when the page
- * loads, so every place that shows the kind shows the same one, and a
- * reload may bring another.
+ * Which drawing of each kind this visit shows first: picked once when the
+ * page loads, so a reload may bring another. Two of the same kind on screen
+ * at once (a lesson that failed, beside its course content that failed too)
+ * do not show the same drawing; see `usePickedPicture`.
  */
 const picked: Record<OctopusKind, number> = {
   "went-wrong": Math.floor(Math.random() * pictures["went-wrong"].length),
@@ -68,17 +69,43 @@ const picked: Record<OctopusKind, number> = {
 
 const subscribeToNothing = () => () => {};
 
+/** The drawings of each kind on screen now, by the illustration showing it. */
+const shownNow: Record<OctopusKind, Map<string, number>> = {
+  "went-wrong": new Map(),
+  "not-found": new Map(),
+};
+
 /**
  * The drawing to show. A page built ahead of time has to say the same thing
  * the browser first does, so both start from the first drawing and the
- * browser then moves to its pick.
+ * browser then moves to its pick. An illustration that finds its pick
+ * already on screen takes one of the others at random, before it is painted.
  */
 function usePickedPicture(kind: OctopusKind): PictureName {
-  const index = useSyncExternalStore(
+  const id = useId();
+  const visitPick = useSyncExternalStore(
     subscribeToNothing,
     () => picked[kind],
     () => 0,
   );
+  const [index, setIndex] = useState(visitPick);
+  useLayoutEffect(() => {
+    const onScreen = new Set(shownNow[kind].values());
+    let next = visitPick;
+    if (onScreen.has(next)) {
+      const others = pictures[kind]
+        .map((_, candidate) => candidate)
+        .filter((candidate) => !onScreen.has(candidate));
+      if (others.length > 0) {
+        next = others[Math.floor(Math.random() * others.length)] ?? next;
+      }
+    }
+    shownNow[kind].set(id, next);
+    setIndex(next);
+    return () => {
+      shownNow[kind].delete(id);
+    };
+  }, [id, kind, visitPick]);
   return pictures[kind][index] ?? pictures[kind][0];
 }
 

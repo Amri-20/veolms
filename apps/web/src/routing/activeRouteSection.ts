@@ -55,6 +55,8 @@ export function getNavigationMatch(
  * For an address a page does answer to, the order is unchanged: the section
  * navigated from, then the sidebar entry the address sits under, then the
  * route's own section when it is a sidebar entry, then the first entry.
+ * The first entry is left out while `navigationItems` is only a stand-in for
+ * a menu not known yet (see `menuKnown`).
  */
 export function resolveActiveRouteSection(input: {
   routeSection: string | undefined;
@@ -62,15 +64,28 @@ export function resolveActiveRouteSection(input: {
   originSection: string | undefined;
   navigationMatch: Pick<NavigationMatch, "label"> | undefined;
   navigationItems: readonly NavigationItemWithMetadata[];
+  /**
+   * False while the signed-in user is still being fetched and the menu is
+   * the signed-out one: a reload of /orders then matched no entry and lit
+   * the first one, Home, until the user arrived.
+   */
+  menuKnown?: boolean;
 }): string | undefined {
-  const { routeSection, originSection, navigationMatch, navigationItems } =
-    input;
+  const {
+    routeSection,
+    originSection,
+    navigationMatch,
+    navigationItems,
+    menuKnown = true,
+  } = input;
   if (routeSection === NOT_FOUND_SECTION) return NOT_FOUND_SECTION;
   if (originSection !== undefined) return originSection;
   return (
     navigationMatch?.label ??
     (navigationItems.some(([label]) => label === routeSection)
       ? routeSection
-      : navigationItems[0]?.[0])
+      : menuKnown
+        ? navigationItems[0]?.[0]
+        : undefined)
   );
 }

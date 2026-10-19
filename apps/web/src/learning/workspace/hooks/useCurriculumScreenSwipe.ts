@@ -9,7 +9,11 @@ import {
   getLearningPlayerSwipeSplitX,
   isFullLearningPlayerSwipeTarget,
 } from "../../../gestures/pointerGestureOwnership";
-import { isEditingShortcutTarget } from "../../../keyboardShortcuts";
+import {
+  isEditingShortcutTarget,
+  isLegacyCourseContentShortcut,
+  isRightPanelShortcut,
+} from "../../../keyboardShortcuts";
 import { CURRICULUM_COLLAPSED_WIDTH } from "../../learningShellPreferences";
 import {
   CURRICULUM_SWIPE_ACTIVATION_DISTANCE,
@@ -338,11 +342,9 @@ export function useCurriculumScreenSwipe({
       if (
         event.defaultPrevented ||
         event.isComposing ||
-        !event.altKey ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.shiftKey ||
-        (event.code !== "KeyC" && event.key.toLowerCase() !== "c") ||
+        !(
+          isRightPanelShortcut(event) || isLegacyCourseContentShortcut(event)
+        ) ||
         isEditingShortcutTarget(event.target)
       )
         return;

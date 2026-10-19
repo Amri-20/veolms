@@ -74,7 +74,8 @@ export function PlaybackFeedback({
     >
       <span
         key={feedback.id}
-        className="grid size-12 place-items-center rounded-full border-0 bg-black/60 text-white shadow-none backdrop-blur-[16px]"
+        // A see-through dark circle: the video shows through it, unblurred.
+        className="grid size-12 place-items-center rounded-full border-0 bg-black/40 text-white shadow-none lg:size-15"
         data-playback-feedback-bezel=""
         data-playback-feedback-duration={durationMs}
         data-playback-feedback-surface=""
@@ -87,10 +88,10 @@ export function PlaybackFeedback({
         <Icon
           active
           aria-hidden="true"
-          className={classNames(
-            "size-6",
-            feedback.kind === "play" && "translate-x-0.5",
-          )}
+          // Not nudged: the play triangle is already drawn right of its
+          // box's middle, which is where the eye puts a triangle's centre;
+          // a further 2px left it visibly off to the right.
+          className="size-6 lg:size-7.5"
           data-playback-feedback-icon={feedback.kind}
           size={26}
         />

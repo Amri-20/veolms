@@ -38,7 +38,7 @@
 @media (min-width: 900px) and (pointer: coarse) {
   :root[data-content-layout="framed"]
     .courses-app--resizing:not(.courses-app--hidden):not(
-      :is([data-learning-split], :has([data-learning-split-pane]))
+      :is([data-split-frame], :has([data-split-frame-pane]))
     ) {
     background: none;
 

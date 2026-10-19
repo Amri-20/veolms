@@ -270,11 +270,18 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
             </button>
           ) : null}
           {showResources && resources && resourceCourseKey ? (
-            // Shown while the card is hovered, focused or the menu is open,
-            // so a list of lessons is not a column of buttons. A screen with
-            // no hover (touch) always shows it. The space stays taken, so the
-            // actions to its right never move.
-            <span className="flex opacity-0 transition-opacity duration-150 pointer-events-none group-hover/lesson:pointer-events-auto group-hover/lesson:opacity-100 focus-within:opacity-100 has-data-popup-open:pointer-events-auto has-data-popup-open:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
+            // Shown on the lesson being played, and on others while the card
+            // is hovered, focused or the menu is open, so a list of lessons
+            // is not a column of buttons. A screen with no hover (touch)
+            // always shows it. The space stays taken, so the actions to its
+            // right never move.
+            <span
+              className={`flex transition-opacity duration-150 ${
+                isActive
+                  ? "opacity-100"
+                  : "opacity-0 pointer-events-none group-hover/lesson:pointer-events-auto group-hover/lesson:opacity-100 focus-within:opacity-100 has-data-popup-open:pointer-events-auto has-data-popup-open:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
+              }`}
+            >
               <LessonResourcesMenu
                 courseKey={resourceCourseKey}
                 lessonNumber={number}

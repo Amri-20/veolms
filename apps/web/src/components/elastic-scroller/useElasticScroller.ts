@@ -8,7 +8,6 @@ import type { ElasticScrollGestureSide } from "../../settings/settingsPreference
 import {
   ELASTIC_SCROLL_CONTROL_DRAG_DEAD_ZONE,
   ELASTIC_SCROLL_CONTROL_DRAG_MAX_DISTANCE,
-  ELASTIC_SCROLL_CONTROL_IDLE_DELAY_MS,
   ELASTIC_SCROLL_CONTROL_INLINE_MAX_DISTANCE,
   ELASTIC_SCROLL_CONTROL_LOCK_THRESHOLD,
   ELASTIC_SCROLL_CONTROL_LONG_PRESS_DELAY_MS,
@@ -28,6 +27,9 @@ interface UseElasticScrollerOptions {
   contentRevision: string | number;
   lockSide: ElasticScrollGestureSide;
   unlockSide: ElasticScrollGestureSide;
+  /** How long the control stays after scrolling stops (the viewer's
+   * setting, 1-10 seconds). */
+  hideDelaySeconds: number;
   disabled?: boolean;
 }
 
@@ -48,6 +50,7 @@ export function useElasticScroller({
   contentRevision,
   lockSide,
   unlockSide,
+  hideDelaySeconds,
   disabled = false,
 }: UseElasticScrollerOptions) {
   const [visible, setVisible] = useState(false);
@@ -103,8 +106,8 @@ export function useElasticScroller({
         return;
       }
       setVisible(false);
-    }, ELASTIC_SCROLL_CONTROL_IDLE_DELAY_MS);
-  }, [clearIdleTimer]);
+    }, hideDelaySeconds * 1000);
+  }, [clearIdleTimer, hideDelaySeconds]);
 
   const clearLongPressTimer = useCallback(() => {
     if (longPressTimerRef.current === null) return;

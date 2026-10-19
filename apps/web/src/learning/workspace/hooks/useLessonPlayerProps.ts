@@ -1,3 +1,4 @@
+import type { getRightPanelShortcutLabel } from "../../../keyboardShortcuts";
 import { useCallback, useMemo, useRef, type JSX } from "react";
 import type {
   LessonPlayerMinimizeGestureState,
@@ -65,7 +66,7 @@ export interface UseLessonPlayerPropsArgs {
   seekTimeOnly: boolean;
   selectedLessonRecord: CourseLesson | null;
   selectedLessonDescription: string | null;
-  curriculumShortcutLabel: "⌥+C" | "Alt+C";
+  curriculumShortcutLabel: ReturnType<typeof getRightPanelShortcutLabel>;
   updateAutoplayEnabled: (enabled: boolean) => void;
   goToPreviousLesson: () => void;
   goToNextLesson: () => void;

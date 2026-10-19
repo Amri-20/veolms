@@ -258,7 +258,7 @@ export const routeDescriptors = {
   },
   discussions: {
     ...discussionsRouteBase,
-    discussionTab: "q-and-a",
+    discussionTab: "all",
   },
   "discussions-all": {
     ...discussionsRouteBase,

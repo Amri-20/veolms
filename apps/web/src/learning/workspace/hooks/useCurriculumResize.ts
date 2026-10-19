@@ -13,16 +13,15 @@ import type {
 import { useSecondPressHold } from "../../../gestures/useSecondPressHold";
 import { FLOATING_SCROLLBAR_HORIZONTAL_DRAG_EVENT } from "../../../shell/FloatingScrollbar";
 import type { FloatingScrollbarHorizontalDragDetail } from "../../../shell/FloatingScrollbar";
+import {
+  moveSplitFrameDrag,
+  settleSplitFrameDrag,
+  splitFrameKeyStep,
+  startSplitFrameDrag,
+} from "../../../components/splitFrame";
 import { applyCurriculumDragWidth } from "../../curriculumDragWidth";
-import {
-  CURRICULUM_COLLAPSED_WIDTH,
-  CURRICULUM_MAX_WIDTH,
-  CURRICULUM_MIN_WIDTH,
-} from "../../learningShellPreferences";
-import {
-  CURRICULUM_SNAP_WIDTH,
-  CURRICULUM_RESIZE_STATE_SYNC_MS,
-} from "../workspaceConstants";
+import { CURRICULUM_COLLAPSED_WIDTH } from "../../learningShellPreferences";
+import { CURRICULUM_RESIZE_STATE_SYNC_MS } from "../workspaceConstants";
 import type {
   CurriculumResize,
   CurriculumPointerEvent,
@@ -105,18 +104,12 @@ export function useCurriculumResize({
     (pointerId: number, clientX: number, handle: HTMLElement) => {
       if (isCourseContentDrawerLayout()) return;
       curriculumResizeRef.current = {
-        pointerId,
-        startX: clientX,
-        startWidth: curriculumCollapsed
-          ? CURRICULUM_COLLAPSED_WIDTH
-          : curriculumWidth,
-        expandedWidthAtStart: curriculumWidth,
-        collapsedAtStart: curriculumCollapsed,
-        collapsed: curriculumCollapsed,
-        previewWidth: curriculumCollapsed
-          ? CURRICULUM_COLLAPSED_WIDTH
-          : curriculumWidth,
-        expandedWidth: curriculumWidth,
+        ...startSplitFrameDrag(
+          pointerId,
+          clientX,
+          curriculumWidth,
+          curriculumCollapsed,
+        ),
         handle,
       };
       setCurriculumResizePreviewWidth(
@@ -147,9 +140,9 @@ export function useCurriculumResize({
   };
 
   // While the gutter is held, the course content is exactly as wide as the
-  // pointer makes it, from nothing to the maximum: it never jumps to a
-  // width of its own. Where it settles (closed, its minimum, or the width
-  // it was dragged to) is decided when the pointer is released.
+  // pointer makes it (the rules every SplitFramePane follows, splitFrame.ts).
+  // Where it settles (closed, its minimum, or the width it was dragged to)
+  // is decided when the pointer is released.
   //
   // The width is written directly onto the elements sized from it (see
   // curriculumDragWidth.ts), so the split is laid out for it in this same
@@ -164,27 +157,9 @@ export function useCurriculumResize({
       const resize = curriculumResizeRef.current;
       if (!resize || resize.pointerId !== event.pointerId) return;
 
-      const previewWidth = Math.min(
-        CURRICULUM_MAX_WIDTH,
-        Math.max(
-          CURRICULUM_COLLAPSED_WIDTH,
-          resize.startWidth + resize.startX - event.clientX,
-        ),
-      );
-
-      // The content itself shows for as long as there is any width to show it
-      // in, so it slides out from the edge instead of appearing at a threshold.
-      const hidden = previewWidth <= CURRICULUM_COLLAPSED_WIDTH;
-      if (resize.collapsed !== hidden) {
-        resize.collapsed = hidden;
-        setCurriculumCollapsed(hidden);
-      }
-
-      const slidingClosed = previewWidth < CURRICULUM_MIN_WIDTH;
-      const rendersDifferently =
-        resize.previewWidth < CURRICULUM_MIN_WIDTH !== slidingClosed;
-      resize.previewWidth = previewWidth;
-      if (!slidingClosed) resize.expandedWidth = previewWidth;
+      const { collapsedChanged, slidingChanged: rendersDifferently } =
+        moveSplitFrameDrag(resize, event.clientX);
+      if (collapsedChanged) setCurriculumCollapsed(resize.collapsed);
       const workspace = workspaceRef.current;
       if (workspace) {
         curriculumDragWidthAppliedRef.current = true;
@@ -232,21 +207,10 @@ export function useCurriculumResize({
         curriculumScreenSwipeConsumedUntilRef.current = performance.now() + 450;
       }
 
-      if (cancelled) {
-        setCurriculumCollapsed(resize.collapsedAtStart);
-        setCurriculumWidth(resize.expandedWidthAtStart);
-        return;
-      }
-      // Let go less than half-way to the minimum width, it closes (and
-      // keeps the width it had for next time). Anything wider stays open,
-      // at the minimum width if it was let go narrower than that.
-      if (resize.previewWidth < CURRICULUM_SNAP_WIDTH) {
-        setCurriculumCollapsed(true);
-        setCurriculumWidth(resize.expandedWidthAtStart);
-        return;
-      }
-      setCurriculumCollapsed(false);
-      commitCurriculumWidth(resize.previewWidth);
+      const settled = settleSplitFrameDrag(resize, cancelled);
+      setCurriculumCollapsed(settled.collapsed);
+      if (cancelled || settled.collapsed) setCurriculumWidth(settled.width);
+      else commitCurriculumWidth(settled.width);
     },
     [
       commitCurriculumWidth,
@@ -326,25 +290,15 @@ export function useCurriculumResize({
   const handleCurriculumResizeKeyDown = (
     event: ReactKeyboardEvent<HTMLDivElement>,
   ) => {
-    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
-      event.preventDefault();
-      if (curriculumCollapsed && event.key === "ArrowLeft") {
-        setCurriculumCollapsed(false);
-        commitCurriculumWidth(CURRICULUM_MIN_WIDTH);
-        return;
-      }
-      if (!curriculumCollapsed) {
-        const direction = event.key === "ArrowRight" ? -16 : 16;
-        commitCurriculumWidth(curriculumWidth + direction);
-      }
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      setCurriculumCollapsed(true);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      setCurriculumCollapsed(false);
-      commitCurriculumWidth(CURRICULUM_MAX_WIDTH);
-    }
+    const next = splitFrameKeyStep(
+      event.key,
+      curriculumWidth,
+      curriculumCollapsed,
+    );
+    if (!next) return;
+    event.preventDefault();
+    setCurriculumCollapsed(next.collapsed);
+    if (next.width !== curriculumWidth) commitCurriculumWidth(next.width);
   };
 
   const toggleCurriculumFromResizeRail = () => {

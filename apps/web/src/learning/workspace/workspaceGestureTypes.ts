@@ -1,13 +1,6 @@
-export interface CurriculumResize {
-  pointerId: number;
-  startX: number;
-  startWidth: number;
-  expandedWidthAtStart: number;
-  collapsedAtStart: boolean;
-  collapsed: boolean;
-  previewWidth: number;
-  /** The width its content is laid out at: the last one at or over the minimum. */
-  expandedWidth: number;
+import type { SplitFrameDrag } from "../../components/splitFrame";
+
+export interface CurriculumResize extends SplitFrameDrag {
   handle: HTMLElement;
 }
 

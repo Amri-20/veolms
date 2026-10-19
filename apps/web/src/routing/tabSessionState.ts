@@ -15,7 +15,7 @@ export type DiscussionTab =
   "all" | "q-and-a" | "comments" | "notes" | "mentions" | "following" | "saved";
 
 export const SETTINGS_DEFAULT_TAB: SettingsTab = "appearance";
-export const DISCUSSIONS_DEFAULT_TAB: DiscussionTab = "q-and-a";
+export const DISCUSSIONS_DEFAULT_TAB: DiscussionTab = "all";
 export const PLATFORM_DEFAULT_TAB: PlatformTab = "home";
 export const SETTINGS_TAB_SESSION_KEY = "veolms-session-settings-tab";
 export const PLATFORM_TAB_SESSION_KEY = "veolms-session-platform-tab";

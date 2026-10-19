@@ -711,6 +711,7 @@ export function LearningWorkspace({
         ref={mainRef}
         data-learning-motion-surface=""
         data-learning-split-lesson=""
+        data-split-frame-sized=""
         data-learning-quiz-active={showingQuiz ? "true" : undefined}
         className={`learning-workspace__main ${curriculumCollapsed ? "is-curriculum-collapsed" : ""}`}
         inert={lessonDrawer ? true : undefined}

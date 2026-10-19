@@ -3,9 +3,10 @@ import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { CaretRightIcon as CaretRight } from "@phosphor-icons/react/CaretRight";
 import { ChatCircleIcon as ChatCircle } from "@phosphor-icons/react/ChatCircle";
 import { PaperclipIcon as Paperclip } from "@phosphor-icons/react/Paperclip";
-import { ThumbsUpIcon as ThumbsUp } from "@phosphor-icons/react/ThumbsUp";
 import { DiscussionAvatar } from "../learning/DiscussionAvatar";
 import type { NavigateTo } from "../routing/navigation";
+import { DiscussionLikeButton } from "./DiscussionLikeButton";
+import { DiscussionRowAction } from "./DiscussionRowAction";
 import { DiscussionWorkspaceActionMenu } from "./DiscussionWorkspaceActionMenu";
 import { useDiscussionWorkspaceCardLongPress } from "./useDiscussionWorkspaceCardLongPress";
 import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
@@ -37,41 +38,6 @@ export function getDiscussionAttachmentLabel(
   return "1 attachment";
 }
 
-/** Small text buttons under a post: Like, Reply. */
-export function DiscussionRowAction({
-  icon,
-  label,
-  pressed,
-  onClick,
-  ariaLabel,
-}: {
-  icon: ReactNode;
-  label: ReactNode;
-  pressed?: boolean;
-  onClick: () => void;
-  ariaLabel?: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      aria-label={ariaLabel}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[0.8125rem] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-(--accent) ${
-        pressed
-          ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-(--accent)"
-          : "text-(--muted) hover:bg-(--hover) hover:text-(--text)"
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
 /**
  * One discussion on the Discussions page: a flat row in a list split by thin
  * lines. Pressing it opens the discussion beside the list; its course and
@@ -82,6 +48,7 @@ export function DiscussionWorkspaceRow({
   destination,
   selected,
   onOpen,
+  onClose,
   menu,
   setNotice,
   onLongPressHandlers,
@@ -90,6 +57,8 @@ export function DiscussionWorkspaceRow({
   destination: string | null;
   selected: boolean;
   onOpen: (card: DiscussionWorkspaceCard) => void;
+  /** Closes the panel when the selected row is pressed again. */
+  onClose?: () => void;
   /** The three-dot menu, already built for this card. */
   menu?: ReactNode;
   setNotice?: (message: string) => void;
@@ -107,17 +76,26 @@ export function DiscussionWorkspaceRow({
   const isNote = card.itemType === "note" || card.kind === "note";
   const username = card.authorUsername.replace(/^@+/, "");
 
+  // The row, its name and Enter select it; pressed again while it is the
+  // open discussion, they close the panel. "Reply" always opens it.
+  const select = () => {
+    if (selected && onClose) onClose();
+    else onOpen(card);
+  };
   const open = (event: MouseEvent<HTMLElement>) => {
+    // A double click acts as one: the first click opens (or closes) and
+    // the second is ignored, instead of undoing it.
+    if (event.detail > 1) return;
     // Selecting text in a row must not open it.
     if (window.getSelection()?.toString()) return;
     if ((event.target as HTMLElement).closest("a,button,[role=menu]")) return;
-    onOpen(card);
+    select();
   };
   const openFromKey = (event: KeyboardEvent<HTMLElement>) => {
     if (event.target !== event.currentTarget) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    onOpen(card);
+    select();
   };
 
   return (
@@ -145,7 +123,8 @@ export function DiscussionWorkspaceRow({
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              onOpen(card);
+              if (event.detail > 1) return;
+              select();
             }}
             onKeyDown={openFromKey}
             className="rounded text-[0.9375rem] font-bold text-(--text) focus-visible:outline-2 focus-visible:outline-(--accent)"
@@ -218,20 +197,10 @@ export function DiscussionWorkspaceRow({
 
         <div className="-ml-2.5 flex items-center gap-1">
           {actions.canLike && (
-            <DiscussionRowAction
-              icon={
-                <ThumbsUp
-                  size={15}
-                  weight={card.isLiked ? "fill" : "regular"}
-                  aria-hidden="true"
-                />
-              }
-              label={card.likes > 0 ? card.likes : "Like"}
-              ariaLabel={`${card.isLiked ? "Unlike" : "Like"}${
-                card.likes > 0 ? `, ${card.likes} likes` : ""
-              }`}
-              pressed={Boolean(card.isLiked)}
-              onClick={actions.like}
+            <DiscussionLikeButton
+              liked={Boolean(card.isLiked)}
+              count={card.likes}
+              onToggle={actions.like}
             />
           )}
           {!isNote && (
@@ -266,16 +235,22 @@ export function DiscussionWorkspaceListRow({
   destination,
   selected,
   onOpen,
+  onClose,
   onNavigatePage,
   showActions,
   onRequestMobileActions,
   setNotice,
+  onEdit,
+  onReport,
 }: {
   card: DiscussionWorkspaceCard;
   destination: string | null;
   selected: boolean;
   onOpen: (card: DiscussionWorkspaceCard) => void;
+  onClose?: () => void;
   onNavigatePage?: NavigateTo;
+  onEdit?: (card: DiscussionWorkspaceCard) => void;
+  onReport?: (card: DiscussionWorkspaceCard) => void;
   showActions: boolean;
   onRequestMobileActions?: (
     card: DiscussionWorkspaceCard,
@@ -295,6 +270,7 @@ export function DiscussionWorkspaceListRow({
       destination={destination}
       selected={selected}
       onOpen={onOpen}
+      onClose={onClose}
       setNotice={setNotice}
       onLongPressHandlers={longPressHandlers}
       menu={
@@ -304,6 +280,8 @@ export function DiscussionWorkspaceListRow({
             destination={destination}
             setNotice={setNotice}
             onNavigatePage={onNavigatePage}
+            onEdit={onEdit}
+            onReport={onReport}
           />
         ) : undefined
       }
