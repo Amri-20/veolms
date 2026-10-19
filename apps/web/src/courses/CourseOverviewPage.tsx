@@ -58,6 +58,7 @@ import { useAuthStore } from "../store/auth.store";
 import { useCourseOverview } from "../services/courses";
 import { useEnrolledCourses } from "../services/enrollments";
 import { getApiError } from "../lib/api-error";
+import { trackAnalyticsEvent } from "../lib/analytics-track";
 import {
   readCheckoutStartError,
   CHECKOUT_WINDOW_BLOCKED_MESSAGE,
@@ -349,6 +350,10 @@ function CoursePurchaseSection({
   const user = useAuthStore((state) => state.user);
   const preview = useCheckoutPreview();
   const createOrder = useCreateCheckoutOrder();
+  // The course page being opened, for the conversion funnel.
+  useEffect(() => {
+    trackAnalyticsEvent("course_view", { courseId: course.id });
+  }, [course.id]);
   const checkoutIntentRef = useRef<{ intent: string; key: string } | null>(
     null,
   );
@@ -748,6 +753,12 @@ function CoursePurchaseSection({
     { phoneChecked = false }: { phoneChecked?: boolean } = {},
   ) => {
     if (isReadOnlyPreview) return;
+    if (!phoneChecked) {
+      trackAnalyticsEvent("enroll_click", {
+        courseId: course.id,
+        outcome: user ? "signed_in" : "guest",
+      });
+    }
     if (!user) {
       // Opens the login pop-up over this course page, so the visitor is back
       // on the price card as soon as they are signed in.
@@ -763,6 +774,10 @@ function CoursePurchaseSection({
     ) {
       setPaymentError(null);
       setPhoneGate({ amount: voluntaryContributionAmount });
+      trackAnalyticsEvent("checkout_step", {
+        courseId: course.id,
+        step: "phone_verification",
+      });
       return;
     }
 
@@ -789,8 +804,18 @@ function CoursePurchaseSection({
         ...(couponCode ? { couponCode } : {}),
         idempotencyKey: checkoutIntentRef.current.key,
       });
+      trackAnalyticsEvent("checkout_start", {
+        courseId: course.id,
+        orderId: order.order.id,
+        outcome: order.gateway ? "payment" : "free",
+      });
 
       if (!order.gateway) {
+        trackAnalyticsEvent("payment_result", {
+          courseId: course.id,
+          orderId: order.order.id,
+          outcome: "free",
+        });
         setIsPaymentBusy(false);
         onNavigatePage?.(
           `/learn/${encodeURIComponent(getCourseRouteKey(course))}`,
@@ -811,6 +836,11 @@ function CoursePurchaseSection({
         throw new Error("Payment checkout is unavailable.");
       }
 
+      trackAnalyticsEvent("checkout_step", {
+        courseId: course.id,
+        orderId: order.order.id,
+        step: "gateway_opened",
+      });
       // Whether the gateway's window has told the page how it ended.
       let checkoutAnswered = false;
       // The gateway refused to load its window here (see
@@ -840,6 +870,11 @@ function CoursePurchaseSection({
           razorpay_signature: string;
         }) => {
           checkoutAnswered = true;
+          trackAnalyticsEvent("payment_result", {
+            courseId: course.id,
+            orderId: order.order.id,
+            outcome: "paid",
+          });
           try {
             await verify.mutateAsync({
               orderId: order.order.id,
@@ -867,6 +902,11 @@ function CoursePurchaseSection({
             // closing its own window afterwards is not a cancellation.
             const confirmation = paymentConfirmationRef.current;
             if (confirmation && !confirmation.signal.aborted) return;
+            trackAnalyticsEvent("payment_result", {
+              courseId: course.id,
+              orderId: order.order.id,
+              outcome: "dismissed",
+            });
             setPaymentError(
               "The payment window was closed before the payment was completed. You can try again whenever you are ready.",
             );
@@ -894,6 +934,11 @@ function CoursePurchaseSection({
         windowBlocked = true;
         checkoutAnswered = true;
         stopCheckoutWatch();
+        trackAnalyticsEvent("payment_result", {
+          courseId: course.id,
+          orderId: order.order.id,
+          outcome: "blocked",
+        });
         setPaymentError(CHECKOUT_WINDOW_BLOCKED_MESSAGE);
         void releaseOrder
           .mutateAsync(order.order.id)
@@ -913,8 +958,17 @@ function CoursePurchaseSection({
       ) {
         setIsPaymentBusy(false);
         setPhoneGate({ amount: voluntaryContributionAmount });
+        trackAnalyticsEvent("checkout_step", {
+          courseId: course.id,
+          step: "phone_verification",
+        });
         return;
       }
+      trackAnalyticsEvent("checkout_step", {
+        courseId: course.id,
+        step: "order_failed",
+        outcome: (error as { code?: string } | null)?.code ?? "error",
+      });
       setPaymentError(
         readCheckoutStartError(
           error,
