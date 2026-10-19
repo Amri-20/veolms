@@ -9,6 +9,9 @@
 export const NAVIGATION_PERMISSIONS: Readonly<
   Record<string, readonly string[]>
 > = {
+  // The dashboard home shows revenue; without it a team member lands on
+  // their courses instead.
+  "/": ["analytics.revenue.read"],
   "/orders": ["billing.read"],
   "/coupons": ["coupon.read"],
   "/students": ["student.read"],
@@ -22,6 +25,15 @@ export const NAVIGATION_PERMISSIONS: Readonly<
   "/team": ["team.read", "role.read"],
 };
 
+/**
+ * Pages inside a section that take more than reading it: starting a course,
+ * creating or editing a coupon.
+ */
+const ACTION_PAGE_PERMISSIONS: readonly (readonly [string, string])[] = [
+  ["/courses/create", "course.create"],
+  ["/coupons/", "coupon.manage"],
+];
+
 /** "/coupons/abc" → "/coupons". */
 export function navigationRoot(path: string): string {
   return `/${path.split(/[?#]/, 1)[0]?.split("/")[1] ?? ""}`;
@@ -30,16 +42,17 @@ export function navigationRoot(path: string): string {
 export function canOpenNavigationPath(
   path: string,
   permissions: ReadonlySet<string>,
-  roles: readonly string[] = [],
 ): boolean {
+  const pathname = path.split(/[?#]/, 1)[0] ?? "";
+  // "/courses/create?edit=<id>" is the older address of a course's editor.
+  const editsCourse = /[?&]edit=/.test(path);
+  const action = ACTION_PAGE_PERMISSIONS.find(
+    ([prefix]) =>
+      pathname.startsWith(prefix) &&
+      !(prefix === "/courses/create" && editsCourse),
+  );
+  if (action) return permissions.has(action[1]);
   const root = navigationRoot(path);
-  // Instructors see their own courses' orders without billing.read.
-  if (
-    root === "/orders" &&
-    roles.some((role) => role.trim().toLowerCase() === "instructor")
-  ) {
-    return true;
-  }
   const required = NAVIGATION_PERMISSIONS[root];
   return !required || required.some((key) => permissions.has(key));
 }

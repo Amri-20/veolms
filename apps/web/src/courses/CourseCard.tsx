@@ -35,6 +35,9 @@ import { CourseCardThumbnail } from "./CourseCardThumbnail";
 import { PinToHomeMenuAction } from "./PinToHomeMenuAction";
 import { CourseThumbnailPlaceholder } from "./CourseThumbnailPlaceholder";
 import { raisedCourseCardClasses } from "../components/cardElevation";
+import type { Permission } from "@veolms/contracts";
+import { useCapabilities } from "../services/authorization/authorization.queries";
+import { canOpenNavigationPath } from "../shell/navigationPermissions";
 export {
   courseThumbnailSizes,
   getCourseThumbnailSrcSet,
@@ -95,7 +98,6 @@ export interface CourseCardProps {
   isBin?: boolean;
   isDeleting?: boolean;
   isAdmin?: boolean;
-  currentUserId?: string;
   /** Which figures the line under the title shows, in order. */
   facts?: readonly CourseCardFactName[];
   /** Whether each of those figures is led by its icon. */
@@ -128,7 +130,6 @@ export function CourseCard({
   isBin = false,
   isDeleting = false,
   isAdmin = false,
-  currentUserId,
   facts = DEFAULT_COURSE_CARD_FACTS,
   factIcons = false,
 }: CourseCardProps) {
@@ -145,11 +146,36 @@ export function CourseCard({
     ...cardOffer,
     enrolled: course.enrolled,
   });
-  const canEdit =
-    isAdmin ||
-    (Boolean(currentUserId) &&
-      Boolean(course.creatorId) &&
-      course.creatorId === currentUserId);
+  // Each action shows only to whoever may take it on this course: the
+  // creator through any of their roles, anyone else through a role that
+  // reaches every course (a course manager, a content editor).
+  const capabilities = useCapabilities({ enabled: role === "creator" });
+  const mayOnCourse = (permission: Permission) =>
+    isAdmin || capabilities.canOnCourse(permission, course);
+  const canEdit = (
+    [
+      "course.details.update",
+      "course.curriculum.update",
+      "course.thumbnail.update",
+      "course.pricing.update",
+    ] as const
+  ).some(mayOnCourse);
+  const canManageCurriculum = mayOnCourse("course.curriculum.update");
+  const canChangePublication = mayOnCourse(
+    course.lifecycleStatus === "published"
+      ? "course.unpublish"
+      : "course.publish",
+  );
+  const canDelete = mayOnCourse("course.delete");
+  // Restoring from the bin is academy-wide, even for one's own course.
+  const canRestore =
+    isAdmin || capabilities.canOnCourse("course.restore", null);
+  const staffPermissions = new Set(capabilities.permissions);
+  const canOpenAnalytics = canOpenNavigationPath(
+    "/analytics",
+    staffPermissions,
+  );
+  const canOpenStudents = canOpenNavigationPath("/students", staffPermissions);
   const progress = course.progress ?? 0;
   const begun = hasBegunCourse(course);
   const progressText = formatCourseProgress(progress);
@@ -370,7 +396,7 @@ export function CourseCard({
             >
               {role === "creator" ? (
                 isBin || course.deletedAt ? (
-                  onRestoreRequested && canEdit ? (
+                  onRestoreRequested && canRestore ? (
                     <MenuAction
                       Icon={ArrowCounterClockwise}
                       label="Restore Course"
@@ -387,71 +413,81 @@ export function CourseCard({
                       onIntent={() => onEditIntent?.(course)}
                       onClick={() => closeThen(() => onEdit?.(course))}
                     />
-                    <MenuAction
-                      Icon={ListBullets}
-                      label="Manage Curriculum"
-                      onIntent={() => onEditIntent?.(course)}
-                      onClick={() => closeThen(() => onManage?.(course))}
-                    />
+                    {canManageCurriculum && (
+                      <MenuAction
+                        Icon={ListBullets}
+                        label="Manage Curriculum"
+                        onIntent={() => onEditIntent?.(course)}
+                        onClick={() => closeThen(() => onManage?.(course))}
+                      />
+                    )}
                     <MenuAction
                       Icon={Eye}
                       label="Course Overview"
                       onClick={() => closeThen(() => onExplore(course))}
                     />
-                    <MenuAction
-                      Icon={ChartBar}
-                      label="Analytics"
-                      onClick={() =>
-                        closeThen(() =>
-                          onNavigatePage(`/analytics?course=${course.id}`),
-                        )
-                      }
-                    />
-                    <MenuAction
-                      Icon={UsersThree}
-                      label="Manage Students"
-                      onClick={() =>
-                        closeThen(() =>
-                          onNavigatePage(`/students?course=${course.id}`),
-                        )
-                      }
-                    />
+                    {canOpenAnalytics && (
+                      <MenuAction
+                        Icon={ChartBar}
+                        label="Analytics"
+                        onClick={() =>
+                          closeThen(() =>
+                            onNavigatePage(`/analytics?course=${course.id}`),
+                          )
+                        }
+                      />
+                    )}
+                    {canOpenStudents && (
+                      <MenuAction
+                        Icon={UsersThree}
+                        label="Manage Students"
+                        onClick={() =>
+                          closeThen(() =>
+                            onNavigatePage(`/students?course=${course.id}`),
+                          )
+                        }
+                      />
+                    )}
                     <MenuDivider />
                     <MenuAction
                       Icon={CopySimple}
                       label="Copy Course Link"
                       onClick={() => closeThen(() => void copyCourseLink())}
                     />
-                    <MenuDivider />
-                    <MenuAction
-                      Icon={UploadSimple}
-                      label={
-                        course.lifecycleStatus === "published"
-                          ? "Unpublish Course"
-                          : "Publish Course"
-                      }
-                      onIntent={() => onEditIntent?.(course)}
-                      onClick={() =>
-                        closeThen(() => {
-                          if (onPublish) {
-                            onPublish(course);
-                          } else {
-                            onNavigatePage(
-                              `/courses/${encodeURIComponent(course.id)}/edit/publish`,
-                            );
-                          }
-                        })
-                      }
-                    />
-                    <MenuDivider />
-                    <MenuAction
-                      Icon={Trash}
-                      label="Delete Course"
-                      destructive
-                      onClick={() =>
-                        closeThen(() => onDeleteRequested?.(course))
-                      }
-                    />
+                    {canChangePublication && <MenuDivider />}
+                    {canChangePublication && (
+                      <MenuAction
+                        Icon={UploadSimple}
+                        label={
+                          course.lifecycleStatus === "published"
+                            ? "Unpublish Course"
+                            : "Publish Course"
+                        }
+                        onIntent={() => onEditIntent?.(course)}
+                        onClick={() =>
+                          closeThen(() => {
+                            if (onPublish) {
+                              onPublish(course);
+                            } else {
+                              onNavigatePage(
+                                `/courses/${encodeURIComponent(course.id)}/edit/publish`,
+                              );
+                            }
+                          })
+                        }
+                      />
+                    )}
+                    {canDelete && <MenuDivider />}
+                    {canDelete && (
+                      <MenuAction
+                        Icon={Trash}
+                        label="Delete Course"
+                        destructive
+                        onClick={() =>
+                          closeThen(() => onDeleteRequested?.(course))
+                        }
+                      />
+                    )}
                   </>
                 ) : (
                   <>
@@ -460,15 +496,17 @@ export function CourseCard({
                       label="View Curriculum"
                       onClick={() => closeThen(() => onExplore(course))}
                     />
-                    <MenuAction
-                      Icon={ChartBar}
-                      label="Analytics"
-                      onClick={() =>
-                        closeThen(() =>
-                          onNavigatePage(`/analytics?course=${course.id}`),
-                        )
-                      }
-                    />
+                    {canOpenAnalytics && (
+                      <MenuAction
+                        Icon={ChartBar}
+                        label="Analytics"
+                        onClick={() =>
+                          closeThen(() =>
+                            onNavigatePage(`/analytics?course=${course.id}`),
+                          )
+                        }
+                      />
+                    )}
                     <MenuDivider />
                     <MenuAction
                       Icon={CopySimple}
@@ -641,14 +679,14 @@ export function CourseCard({
 
           {role === "creator" &&
           (isBin || course.deletedAt) &&
-          (!onRestoreRequested || !canEdit) ? null : (
+          (!onRestoreRequested || !canRestore) ? null : (
             <button
               type="button"
               disabled={
                 isDeleting ||
                 (role === "creator" &&
                   Boolean(isBin || course.deletedAt) &&
-                  (!onRestoreRequested || !canEdit))
+                  (!onRestoreRequested || !canRestore))
               }
               className={`relative z-20 min-h-11 w-full items-center !rounded-[10px] border border-[color-mix(in_srgb,var(--accent)_70%,transparent)] bg-(--accent) px-3.25 text-[15px]! font-semibold! text-(--on-accent) shadow-[0_10px_22px_color-mix(in_srgb,var(--accent-shadow)_48%,transparent)] transition-[color,background-color,box-shadow] duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) ${
                 role === "creator"
@@ -690,7 +728,7 @@ export function CourseCard({
                 if (isDeleting) return;
                 if (role === "creator") {
                   if (isBin || course.deletedAt) {
-                    if (onRestoreRequested && canEdit) {
+                    if (onRestoreRequested && canRestore) {
                       void handleRestore(course);
                     }
                     return;

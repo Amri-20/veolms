@@ -31,9 +31,10 @@ export interface CouponsTableProps {
    * a narrow search downloaded the whole library. "Load more" stays.
    */
   autoLoadMore?: boolean;
-  onEditCoupon: (coupon: CouponListItem) => void;
-  onToggleStatus: (coupon: CouponListItem) => void;
-  onCreateNew: () => void;
+  /** Left out for someone who may read coupons but not change them. */
+  onEditCoupon?: (coupon: CouponListItem) => void;
+  onToggleStatus?: (coupon: CouponListItem) => void;
+  onCreateNew?: () => void;
   setNotice?: (message: string) => void;
 }
 
@@ -118,7 +119,9 @@ export function CouponsTable({
           )}
           {!hasNextPage && !isFetchingNextPage ? (
             <div className="mt-3.5 sm:mt-4">
-              <Button onClick={onCreateNew}>Create coupon</Button>
+              {onCreateNew ? (
+                <Button onClick={onCreateNew}>Create coupon</Button>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -218,34 +221,38 @@ export function CouponsTable({
                   <Copy size={15} weight="bold" />
                 )}
               </button>
-              <button
-                type="button"
-                onClick={() => onToggleStatus(coupon)}
-                title={coupon.isActive ? "Deactivate" : "Activate"}
-                className="inline-flex size-8 sm:size-9 items-center justify-center rounded-[8px] border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-[color-mix(in_srgb,var(--surface)_80%,var(--canvas))] text-(--text) shadow-[var(--card-compact-shadow)] hover:bg-(--hover) cursor-pointer"
-              >
-                {coupon.isActive ? (
-                  <ToggleRight
-                    size={16}
-                    weight="bold"
-                    className="text-emerald-500"
-                  />
-                ) : (
-                  <ToggleLeft
-                    size={16}
-                    weight="bold"
-                    className="text-(--muted)"
-                  />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => onEditCoupon(coupon)}
-                className="inline-flex h-8 sm:h-9 items-center justify-center gap-1.5 rounded-[8px] sm:rounded-[9px] border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-[color-mix(in_srgb,var(--surface)_80%,var(--canvas))] px-2.5 sm:px-3.5 text-xs font-semibold text-(--text) shadow-[var(--card-compact-shadow)] hover:border-[color-mix(in_srgb,var(--text)_25%,transparent)] hover:bg-(--hover) transition-all cursor-pointer"
-              >
-                <span>Open</span>
-                <ArrowRight size={14} weight="bold" />
-              </button>
+              {onToggleStatus ? (
+                <button
+                  type="button"
+                  onClick={() => onToggleStatus(coupon)}
+                  title={coupon.isActive ? "Deactivate" : "Activate"}
+                  className="inline-flex size-8 sm:size-9 items-center justify-center rounded-[8px] border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-[color-mix(in_srgb,var(--surface)_80%,var(--canvas))] text-(--text) shadow-[var(--card-compact-shadow)] hover:bg-(--hover) cursor-pointer"
+                >
+                  {coupon.isActive ? (
+                    <ToggleRight
+                      size={16}
+                      weight="bold"
+                      className="text-emerald-500"
+                    />
+                  ) : (
+                    <ToggleLeft
+                      size={16}
+                      weight="bold"
+                      className="text-(--muted)"
+                    />
+                  )}
+                </button>
+              ) : null}
+              {onEditCoupon ? (
+                <button
+                  type="button"
+                  onClick={() => onEditCoupon(coupon)}
+                  className="inline-flex h-8 sm:h-9 items-center justify-center gap-1.5 rounded-[8px] sm:rounded-[9px] border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-[color-mix(in_srgb,var(--surface)_80%,var(--canvas))] px-2.5 sm:px-3.5 text-xs font-semibold text-(--text) shadow-[var(--card-compact-shadow)] hover:border-[color-mix(in_srgb,var(--text)_25%,transparent)] hover:bg-(--hover) transition-all cursor-pointer"
+                >
+                  <span>Open</span>
+                  <ArrowRight size={14} weight="bold" />
+                </button>
+              ) : null}
             </div>
           </div>
         );

@@ -16,6 +16,11 @@ export interface PermissionCheckContext {
 export interface ScopeCheckContext {
   userId: string;
   courseId?: string | null;
+  /**
+   * Leave out roles limited to their holder's own courses (instructor):
+   * what is left is what the user may do on every course.
+   */
+  excludeOwnCoursesOnlyRoles?: boolean;
 }
 
 export interface ResourceScope {
@@ -119,14 +124,18 @@ export async function getUserEffectivePermissions(
   database: Executor,
   context: ScopeCheckContext,
 ): Promise<string[]> {
-  const { userId, courseId } = context;
+  const { userId, courseId, excludeOwnCoursesOnlyRoles } = context;
 
   let query = database
     .selectFrom("role_assignments as ra")
+    .innerJoin("roles as r", "r.id", "ra.role_id")
     .innerJoin("role_permissions as rp", "rp.role_id", "ra.role_id")
     .innerJoin("permissions as p", "p.id", "rp.permission_id")
     .select(["p.permission_key", "rp.effect"])
     .where("ra.user_id", "=", userId)
+    .$if(Boolean(excludeOwnCoursesOnlyRoles), (qb) =>
+      qb.where("r.own_courses_only", "=", false),
+    )
     .where((eb) =>
       eb.or([
         eb("ra.expires_at", "is", null),
@@ -151,10 +160,14 @@ export async function getUserEffectivePermissions(
 
   const userRolesQuery = database
     .selectFrom("user_roles as ur")
+    .innerJoin("roles as r", "r.id", "ur.role_id")
     .innerJoin("role_permissions as rp", "rp.role_id", "ur.role_id")
     .innerJoin("permissions as p", "p.id", "rp.permission_id")
     .select(["p.permission_key", "rp.effect"])
-    .where("ur.user_id", "=", userId);
+    .where("ur.user_id", "=", userId)
+    .$if(Boolean(excludeOwnCoursesOnlyRoles), (qb) =>
+      qb.where("r.own_courses_only", "=", false),
+    );
 
   const [scopedRows, directRows] = await Promise.all([
     query.execute(),

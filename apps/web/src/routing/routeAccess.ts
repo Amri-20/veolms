@@ -120,7 +120,11 @@ export function shouldRedirectFromCourseAuthorPath(
 
 export function resolveCourseAuthorRouteFallback(pathname: string): string {
   const path = normalizeAppPath(pathname);
-  return path === "/dashboard" || path === "/" ? "/courses" : "/";
+  // A course editor refused (no course.create, say) returns to the
+  // courses rather than to a home that may be refused in turn.
+  return path === "/dashboard" || path === "/" || isCourseEditorPath(path)
+    ? "/courses"
+    : "/";
 }
 
 export function isCoursesPublicPath(pathname: string): boolean {

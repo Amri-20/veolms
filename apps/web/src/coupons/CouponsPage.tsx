@@ -33,6 +33,8 @@ export function CouponsPage({ onNavigatePage, setNotice }: CouponsPageProps) {
   const isAuthorized = Boolean(
     user && isStaffRole(userRoles) && can("coupon.read"),
   );
+  // Reading coupons and changing them are separate permissions.
+  const managesCoupons = can("coupon.manage");
 
   const {
     coupons,
@@ -117,12 +119,14 @@ export function CouponsPage({ onNavigatePage, setNotice }: CouponsPageProps) {
             from one library.
           </p>
         </div>
-        <div className="shrink-0 pt-2 pb-0.5 sm:py-0">
-          <Button onClick={handleOpenCreate}>
-            <Plus size={16} weight="bold" />
-            Create coupon
-          </Button>
-        </div>
+        {managesCoupons ? (
+          <div className="shrink-0 pt-2 pb-0.5 sm:py-0">
+            <Button onClick={handleOpenCreate}>
+              <Plus size={16} weight="bold" />
+              Create coupon
+            </Button>
+          </div>
+        ) : null}
       </header>
 
       <CouponSummaryCards
@@ -138,13 +142,20 @@ export function CouponsPage({ onNavigatePage, setNotice }: CouponsPageProps) {
               Coupon library
             </h2>
             <p className="mt-0.5 text-xs text-(--muted)">
-              Search, filter, and open any coupon to edit it.
+              {managesCoupons
+                ? "Search, filter, and open any coupon to edit it."
+                : "Search and filter the academy's coupons."}
             </p>
           </div>
-          <Button className="hidden sm:inline-flex" onClick={handleOpenCreate}>
-            <Plus size={16} weight="bold" />
-            New coupon
-          </Button>
+          {managesCoupons ? (
+            <Button
+              className="hidden sm:inline-flex"
+              onClick={handleOpenCreate}
+            >
+              <Plus size={16} weight="bold" />
+              New coupon
+            </Button>
+          ) : null}
         </div>
 
         <CouponFiltersBar
@@ -186,9 +197,9 @@ export function CouponsPage({ onNavigatePage, setNotice }: CouponsPageProps) {
               discountTypeFilter === "all" &&
               !searchQuery.trim()
             }
-            onEditCoupon={handleOpenEdit}
-            onToggleStatus={handleToggleStatus}
-            onCreateNew={handleOpenCreate}
+            onEditCoupon={managesCoupons ? handleOpenEdit : undefined}
+            onToggleStatus={managesCoupons ? handleToggleStatus : undefined}
+            onCreateNew={managesCoupons ? handleOpenCreate : undefined}
             setNotice={setNotice}
           />
         )}

@@ -1,6 +1,6 @@
 import { ShieldWarningIcon as ShieldWarning } from "@phosphor-icons/react/ShieldWarning";
 import { SlidersHorizontalIcon as SlidersHorizontal } from "@phosphor-icons/react/SlidersHorizontal";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../components/Button";
 import { PageHeading } from "../components/PageHeading";
 import { AcademyBrandSection } from "../home-page-settings/AcademyBrandSection";
@@ -20,7 +20,11 @@ import { useSettingsTabShortcuts } from "../settings/useSettingsTabShortcuts";
 import { PlatformAppearanceTab } from "./PlatformAppearanceTab";
 import { PlatformInvoiceTab } from "./PlatformInvoiceTab";
 import { PlatformSecurityTab } from "./PlatformSecurityTab";
-import { PLATFORM_TAB_DEFINITIONS } from "./platformTabs";
+import {
+  PLATFORM_TAB_DEFINITIONS,
+  PLATFORM_TAB_PERMISSIONS,
+} from "./platformTabs";
+import { useCapabilities } from "../services/authorization/authorization.queries";
 import "../styles/features/settings/foundation.css";
 import "../styles/features/settings/preferences-responsive.css";
 
@@ -122,8 +126,20 @@ function PlatformSettings({
   onNavigatePage,
   setNotice,
 }: Omit<PlatformPageProps, "canManage">) {
-  const activeTab = normalizePlatformTab(tab ?? readPlatformTab());
-  const activeTabIndex = PLATFORM_TABS.indexOf(activeTab);
+  const { data: capabilities } = useCapabilities();
+  // Only the sections this person may change; an administrator sees all.
+  const visibleTabs = useMemo(() => {
+    const held = new Set(capabilities?.permissions ?? []);
+    const tabs = PLATFORM_TABS.filter((id) =>
+      held.has(PLATFORM_TAB_PERMISSIONS[id]),
+    );
+    return tabs.length ? tabs : PLATFORM_TABS;
+  }, [capabilities?.permissions]);
+  const requestedTab = normalizePlatformTab(tab ?? readPlatformTab());
+  const activeTab = visibleTabs.includes(requestedTab)
+    ? requestedTab
+    : (visibleTabs[0] ?? requestedTab);
+  const activeTabIndex = visibleTabs.indexOf(activeTab);
   const tabListRef = useRef<HTMLElement>(null);
   // Read as the page opens, so the Appearance and Security tabs are ready
   // when they are opened.
@@ -170,13 +186,13 @@ function PlatformSettings({
   const prepareSwipeNeighbors = useCallback(() => {
     setPreparedTabs((current) => {
       const next = new Set(current);
-      const previous = PLATFORM_TABS[activeTabIndex - 1];
-      const following = PLATFORM_TABS[activeTabIndex + 1];
+      const previous = visibleTabs[activeTabIndex - 1];
+      const following = visibleTabs[activeTabIndex + 1];
       if (previous) next.add(previous);
       if (following) next.add(following);
       return next.size === current.size ? current : next;
     });
-  }, [activeTabIndex]);
+  }, [activeTabIndex, visibleTabs]);
 
   useEffect(() => {
     rememberPlatformTab(activeTab);
@@ -184,7 +200,7 @@ function PlatformSettings({
   }, [activeTab, prepareTab]);
 
   useSettingsTabShortcuts({
-    tabIds: PLATFORM_TABS,
+    tabIds: visibleTabs,
     getCurrentTab: readPlatformTab,
     onNavigate: navigateTabShortcut,
   });
@@ -207,7 +223,9 @@ function PlatformSettings({
         </div>
 
         <SettingsTabBar
-          tabs={PLATFORM_TAB_DEFINITIONS}
+          tabs={PLATFORM_TAB_DEFINITIONS.filter(({ id }) =>
+            visibleTabs.includes(id),
+          )}
           activeTab={activeTab}
           idPrefix="platform-tab"
           panelId="platform-tab-panel"
@@ -219,7 +237,7 @@ function PlatformSettings({
       </header>
 
       <SwipeableTabPanel
-        tabs={PLATFORM_TABS}
+        tabs={visibleTabs}
         activeTab={activeTab}
         onTabChange={(nextTab) => navigateTab(nextTab)}
         tabListRef={tabListRef}

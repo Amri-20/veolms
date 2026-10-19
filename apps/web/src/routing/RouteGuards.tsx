@@ -145,9 +145,8 @@ export function AcademyRouteGuard({ children }: { children: ReactNode }) {
     hasTeamRole(user?.roles) &&
     !hasAdminRole(user?.roles) &&
     !canOpenNavigationPath(
-      path,
+      `${path}${location.search}`,
       new Set(dashboardCapabilities.permissions),
-      user?.roles ?? [],
     );
   const courseAuthorRouteDenied =
     access.isSessionReady &&

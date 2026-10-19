@@ -95,12 +95,14 @@ export function createAuthorizationService(
     }): Promise<CapabilitiesResponse> {
       const { userId, courseId } = params;
 
-      return {
-        permissions: await repo.getUserEffectivePermissions(database, {
+      const [permissions, academyPermissions] = await Promise.all([
+        repo.getUserEffectivePermissions(database, { userId, courseId }),
+        repo.getUserEffectivePermissions(database, {
           userId,
-          courseId,
+          excludeOwnCoursesOnlyRoles: true,
         }),
-      };
+      ]);
+      return { permissions, academyPermissions };
     },
 
     async resolveScope(

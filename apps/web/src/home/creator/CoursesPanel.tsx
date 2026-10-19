@@ -10,6 +10,7 @@ import { CourseThumbnailPlaceholder } from "../../courses/CourseThumbnailPlaceho
 import { DashboardPanel } from "./DashboardPanel";
 import { DashboardInfoPopover } from "./DashboardInfoPopover";
 import type { NavigateProps } from "./dashboardTypes";
+import { useCapabilities } from "../../services/authorization/authorization.queries";
 import {
   formatDashboardNumber,
   formatDashboardPercent,
@@ -99,6 +100,7 @@ export function CoursesPanel({
   isManualRefresh: boolean;
   onRetry: () => void;
 }) {
+  const canCreateCourse = useCapabilities().can("course.create");
   const courseRows = courses ?? [];
   const hasCourseData = courses !== undefined;
   const showInitialLoading = isManualRefresh || (isLoading && !hasCourseData);
@@ -159,13 +161,15 @@ export function CoursesPanel({
                 Create your first course to start tracking students and
                 progress.
               </small>
-              <button
-                type="button"
-                className="creator-panel-link"
-                onClick={() => onNavigatePage?.("Create Course")}
-              >
-                Create course <ArrowRight size={16} />
-              </button>
+              {canCreateCourse && (
+                <button
+                  type="button"
+                  className="creator-panel-link"
+                  onClick={() => onNavigatePage?.("Create Course")}
+                >
+                  Create course <ArrowRight size={16} />
+                </button>
+              )}
             </span>
           </div>
         ) : (

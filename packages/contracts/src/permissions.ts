@@ -164,6 +164,12 @@ export type CapabilitiesQuery = z.infer<typeof capabilitiesQuerySchema>;
 
 export const capabilitiesResponseSchema = z.object({
   permissions: z.array(z.string()),
+  /**
+   * The permissions held through a role that reaches every course. An
+   * instructor's course permissions are in `permissions` but not here:
+   * they cover only the instructor's own courses.
+   */
+  academyPermissions: z.array(z.string()),
 });
 
 export type CapabilitiesResponse = z.infer<typeof capabilitiesResponseSchema>;

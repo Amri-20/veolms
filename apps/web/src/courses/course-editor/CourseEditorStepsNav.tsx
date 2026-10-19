@@ -16,6 +16,8 @@ export interface CourseEditorStepsNavProps {
   actionLoading: "publish" | "draft" | "save" | "unpublish" | "validate" | null;
   isInitialLoadingCourse: boolean;
   navigateToStep: (destination: CourseWizardStepId) => Promise<void>;
+  /** Whether this person's roles let them change the step. */
+  isStepAllowed: (stepId: CourseWizardStepId) => boolean;
 }
 
 export function CourseEditorStepsNav({
@@ -32,6 +34,7 @@ export function CourseEditorStepsNav({
   actionLoading,
   isInitialLoadingCourse,
   navigateToStep,
+  isStepAllowed,
 }: CourseEditorStepsNavProps) {
   // prettier-ignore
   return (
@@ -53,6 +56,7 @@ export function CourseEditorStepsNav({
         const Icon = step.Icon;
         const isActive = activeStep === step.id;
         const isDirty = isStepDirty(step.id);
+        const isAllowed = isStepAllowed(step.id);
         return (
           <button
             key={step.id}
@@ -69,12 +73,15 @@ export function CourseEditorStepsNav({
             data-page-tab-tone={step.tone}
             data-swipe-tab-id={step.id}
             title={
-              !isDownstreamUnlocked && step.id !== "basics"
-                ? "Add a course title to continue."
-                : undefined
+              !isAllowed
+                ? "Your role cannot change this step."
+                : !isDownstreamUnlocked && step.id !== "basics"
+                  ? "Add a course title to continue."
+                  : undefined
             }
             disabled={
               actionLoading !== null ||
+              (!isAllowed && !isActive) ||
               (!isDownstreamUnlocked && step.id !== "basics")
             }
             className={`inline-flex flex-row items-center gap-2 !border-b-transparent shrink-0 whitespace-nowrap disabled:!opacity-50 disabled:!cursor-not-allowed ${isActive ? "is-active" : ""}`}

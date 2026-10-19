@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { UserCircleIcon as UserCircle } from "@phosphor-icons/react/UserCircle";
 import { UserPlusIcon as UserPlus } from "@phosphor-icons/react/UserPlus";
 import { useRecentEnrollments } from "../../services/enrollments";
+import { useCapabilities } from "../../services/authorization/authorization.queries";
 import { formatRelativeTime } from "../../learning/learning-notes.adapter";
 import { DashboardPanel } from "./DashboardPanel";
 import { DashboardInfoPopover } from "./DashboardInfoPopover";
@@ -106,18 +107,27 @@ export function EnrollmentsPanel({
   onNavigatePage,
   isManualRefresh,
 }: NavigateProps & { isManualRefresh: boolean }) {
+  // Who enrolled is enrollment.read; a dashboard without it (an analytics
+  // viewer's) leaves the panel out.
+  const capabilities = useCapabilities();
+  const readsEnrollments = capabilities.can("enrollment.read");
   const {
     data: enrollmentsResponse,
     isLoading,
     isError,
     isFetching,
     refetch,
-  } = useRecentEnrollments({ limit: CREATOR_DASHBOARD_ENROLLMENT_LIMIT });
+  } = useRecentEnrollments({
+    limit: CREATOR_DASHBOARD_ENROLLMENT_LIMIT,
+    enabled: readsEnrollments,
+  });
   const hasEnrollmentData = enrollmentsResponse !== undefined;
   const showInitialLoading =
     isManualRefresh || (isLoading && !hasEnrollmentData);
   const showInitialError = isError && !hasEnrollmentData;
   const enrollments = enrollmentsResponse?.items ?? [];
+
+  if (capabilities.isFetched && !readsEnrollments) return null;
 
   return (
     <DashboardPanel

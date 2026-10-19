@@ -43,7 +43,12 @@ import {
   type CurriculumLessonItem,
   isLessonDirty,
 } from "./course-editor/curriculumItems";
-import { WIZARD_STEPS, WIZARD_STEP_IDS } from "./course-editor/wizardSteps";
+import {
+  WIZARD_STEPS,
+  WIZARD_STEP_IDS,
+  WIZARD_STEP_PERMISSIONS,
+  type CourseWizardStepId,
+} from "./course-editor/wizardSteps";
 import { type BasicsFieldKey } from "./course-editor/statusIndicators";
 import { CourseWizardSkeleton } from "./course-editor/CourseWizardSkeleton";
 import { PricingStepPanel } from "./course-editor/PricingStepPanel";
@@ -79,6 +84,8 @@ import { usePricingHandlers } from "./course-editor/hooks/usePricingHandlers";
 import { usePreviewAndChecklist } from "./course-editor/hooks/usePreviewAndChecklist";
 import { useBasicsPersistence } from "./course-editor/hooks/useBasicsPersistence";
 import { useStepSavesAndNavigation } from "./course-editor/hooks/useStepSavesAndNavigation";
+import { useCapabilities } from "../services/authorization/authorization.queries";
+import { useAuthStore } from "../store/auth.store";
 
 const getCurriculumLessonKey = (lesson: CurriculumLessonItem) => lesson.id;
 
@@ -514,6 +521,24 @@ export function CourseCreatePage({
   } = useCourseEditor(currentCourseId);
   const isInitialLoadingCourse =
     isEditing && (isLoadingEditor || isFetchingEditor) && !editorData;
+  // Steps open to whoever may change them on this course; a new course is
+  // the user's own.
+  const capabilities = useCapabilities();
+  const currentUserId = useAuthStore((state) => state.user?.id);
+  const editedCourse = isEditing
+    ? editorData?.course
+    : { creatorId: currentUserId ?? null };
+  const isStepAllowed = (stepId: CourseWizardStepId) =>
+    !capabilities.isFetched ||
+    !editedCourse ||
+    WIZARD_STEP_PERMISSIONS[stepId].some((permission) =>
+      capabilities.canOnCourse(permission, editedCourse),
+    );
+  // The public page's rebuild status is read with course.details.update.
+  const followsPageRefresh =
+    capabilities.isFetched &&
+    Boolean(editedCourse) &&
+    capabilities.canOnCourse("course.details.update", editedCourse);
   const {
     data: previewData,
     isLoading: isPreviewLoading,
@@ -1464,7 +1489,9 @@ export function CourseCreatePage({
       className="relative flex w-full flex-1 flex-col min-h-full p-0 text-[--text] box-border"
       data-course-wizard
     >
-      <CourseStaticPageRefreshNotice courseId={currentCourseId} />
+      <CourseStaticPageRefreshNotice
+        courseId={followsPageRefresh ? currentCourseId : null}
+      />
       {/* Wizard Header */}
       <CourseEditorHeader
         handleBack={handleBack}
@@ -1489,6 +1516,7 @@ export function CourseCreatePage({
         actionLoading={actionLoading}
         isInitialLoadingCourse={isInitialLoadingCourse}
         navigateToStep={navigateToStep}
+        isStepAllowed={isStepAllowed}
       />
 
       {/* Wizard Step Panels using SwipeableTabPanel */}

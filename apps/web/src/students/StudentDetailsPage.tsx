@@ -65,6 +65,7 @@ export function StudentDetailsPage({
   const { can } = useCapabilities();
   const canEditContact = can("student.contact.update");
   const canManageAccess = can("student.access.manage");
+  const canIssueRefunds = can("billing.manage");
   const canAssignRoles = can("role.assign");
   const [makingTeamMember, setMakingTeamMember] = useState(false);
 
@@ -513,6 +514,7 @@ export function StudentDetailsPage({
                     key={course.courseId}
                     course={course}
                     canManageAccess={canManageAccess}
+                    canIssueRefunds={canIssueRefunds}
                     onOpenCourse={openCourse}
                     onRefund={startRefund}
                     onRevokeAccess={(target) =>

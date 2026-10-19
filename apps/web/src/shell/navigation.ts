@@ -125,14 +125,20 @@ export function getRoleNavigationItems(
 ): readonly NavigationItem[] {
   if (role === "student") return studentNavigation;
   if (isAdmin) return adminNavigation;
-  // An instructor alone keeps their usual menu. Any other team role gets the
-  // staff menu, cut down to the pages its permissions open; until those are
+  if (!team) return creatorNavigation;
+  // An instructor alone keeps their usual menu, less any page their
+  // permissions do not open; it shows whole while those load. Any other team
+  // role gets the staff menu, cut down the same way; until permissions are
   // known, only pages that need none, so nothing appears and then vanishes.
-  if (!team || !holdsOtherTeamRole(team.roles)) return creatorNavigation;
   const permissions = new Set(team.permissions ?? []);
-  return adminNavigation.filter(([, , metadata]) =>
-    canOpenNavigationPath(metadata?.routeLink ?? "/", permissions, team.roles),
-  );
+  const opens = ([, , metadata]: NavigationItem) =>
+    canOpenNavigationPath(metadata?.routeLink ?? "/", permissions);
+  if (!holdsOtherTeamRole(team.roles)) {
+    return team.permissions
+      ? creatorNavigation.filter(opens)
+      : creatorNavigation;
+  }
+  return adminNavigation.filter(opens);
 }
 
 /** Public visitors get the same navigation as a student while `/auth/me` is resolving. */

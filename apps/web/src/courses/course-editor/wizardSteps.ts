@@ -4,6 +4,7 @@ import { LockKeyIcon as LockKey } from "@phosphor-icons/react/LockKey";
 import { PuzzlePieceIcon as PuzzlePiece } from "@phosphor-icons/react/PuzzlePiece";
 import { TagIcon as Tag } from "@phosphor-icons/react/Tag";
 import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
+import type { Permission } from "@veolms/contracts";
 import type { ComponentType } from "react";
 
 export type CourseWizardStepId =
@@ -30,6 +31,21 @@ export const WIZARD_STEPS: readonly WizardStepDefinition[] = [
   { id: "extras", label: "Extras", Icon: PuzzlePiece, tone: "orange" },
   { id: "publish", label: "Publish", Icon: Lightning, tone: "rose" },
 ];
+
+/**
+ * What changing each step takes (any one of them). Basics holds the
+ * thumbnail, so a thumbnail editor opens it too.
+ */
+export const WIZARD_STEP_PERMISSIONS: Readonly<
+  Record<CourseWizardStepId, readonly Permission[]>
+> = {
+  basics: ["course.details.update", "course.thumbnail.update"],
+  curriculum: ["course.curriculum.update"],
+  "access-rules": ["course.details.update"],
+  pricing: ["course.pricing.update"],
+  extras: ["course.details.update"],
+  publish: ["course.publish", "course.unpublish"],
+};
 
 export const WIZARD_STEP_IDS: readonly CourseWizardStepId[] = WIZARD_STEPS.map(
   ({ id }) => id,
