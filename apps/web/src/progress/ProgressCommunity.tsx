@@ -1,8 +1,9 @@
 import { UsersThreeIcon as UsersThree } from "@phosphor-icons/react/UsersThree";
 import type { LearningCommunityLearner } from "@veolms/contracts";
+import { ElevatedCard } from "../components/ElevatedCard";
 import { EmptyState } from "../components/analytics/StatTiles";
 import { LearnerAvatar } from "./LearnerAvatar";
-import { formatDuration, progressPanelClasses } from "./progressFormat";
+import { formatDuration, hairlineClasses } from "./progressFormat";
 
 function LearnerRow({
   entry,
@@ -25,8 +26,8 @@ function LearnerRow({
         type="button"
         onClick={() => onOpen(entry)}
         aria-current={current ? "true" : undefined}
-        className={`flex w-full cursor-pointer items-center gap-3 rounded-xl border p-3 text-left transition-colors hover:bg-(--text)/4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) ${
-          current ? "border-(--accent)/60 bg-(--accent)/6" : "border-(--text)/8"
+        className={`-mx-2 flex w-[calc(100%+1rem)] cursor-pointer items-center gap-3.5 rounded-lg px-2 py-3 text-left transition-colors hover:bg-(--text)/4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) ${
+          current ? "bg-(--accent)/6" : ""
         }`}
       >
         <LearnerAvatar learner={entry.learner} />
@@ -36,24 +37,24 @@ function LearnerRow({
               {entry.learner.name}
             </strong>
             {entry.isYou ? (
-              <span className="shrink-0 rounded-full bg-(--accent)/15 px-2 py-0.5 text-[0.65rem] font-semibold text-(--accent)">
+              <span className="shrink-0 rounded-full bg-(--accent)/12 px-2 py-0.5 text-[0.65rem] font-semibold text-(--accent)">
                 You
               </span>
             ) : null}
           </span>
-          <span className="mt-0.5 block truncate text-xs text-(--muted)">
+          <span className="mt-0.5 block truncate text-xs text-(--muted) tabular-nums">
             {formatDuration(entry.weekSeconds)} this week · {entry.weekGoalsMet}{" "}
             of 7 goals
           </span>
+        </span>
+        <span
+          aria-hidden="true"
+          className="hidden h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-(--text)/10 sm:block"
+        >
           <span
-            aria-hidden="true"
-            className="mt-2 block h-1.5 overflow-hidden rounded-full bg-(--text)/10"
-          >
-            <span
-              style={{ width: `${weekShare}%` }}
-              className="block h-full rounded-full bg-(--accent)"
-            />
-          </span>
+            style={{ width: `${weekShare}%` }}
+            className="block h-full rounded-full bg-(--accent)"
+          />
         </span>
       </button>
     </li>
@@ -78,24 +79,28 @@ export function ProgressCommunity({
   onOpenLearner: (entry: LearningCommunityLearner) => void;
 }) {
   return (
-    <section
-      className={`${progressPanelClasses} p-4 sm:p-6`}
+    <ElevatedCard
+      className="p-5 sm:p-7"
       aria-labelledby="progress-community-title"
       aria-busy={loading}
     >
-      <h2 id="progress-community-title" className="text-base font-semibold">
-        Learners sharing their progress
+      <h2
+        id="progress-community-title"
+        className="text-base font-semibold text-(--text)"
+      >
+        Learning together
       </h2>
-      <p className="mt-0.5 text-xs text-(--muted)">
-        The last seven days of everyone who has chosen to share.
+      <p className="mt-1 text-sm text-(--muted)">
+        Members who share their progress, by time learned in the last seven
+        days.
       </p>
 
       {loading ? (
-        <ul aria-hidden="true" className="mt-4 grid gap-2.5 md:grid-cols-2">
+        <ul aria-hidden="true" className="mt-4 grid gap-1 md:grid-cols-2">
           {[0, 1].map((item) => (
             <li
               key={item}
-              className="h-19.5 animate-pulse rounded-xl bg-(--text)/6 motion-reduce:animate-none"
+              className="h-16 animate-pulse rounded-lg bg-(--text)/5 motion-reduce:animate-none"
             />
           ))}
         </ul>
@@ -108,10 +113,12 @@ export function ProgressCommunity({
           compact
           icon={<UsersThree size={20} weight="duotone" aria-hidden="true" />}
           title="No one is sharing yet"
-          message="When a learner turns on sharing, their week shows up here."
+          message="When a member turns on sharing, their week shows up here."
         />
       ) : (
-        <ul className="mt-4 grid gap-2.5 md:grid-cols-2 2xl:grid-cols-3">
+        <ul
+          className={`mt-3 divide-y ${hairlineClasses} md:grid md:grid-cols-2 md:gap-x-10 md:divide-y-0`}
+        >
           {learners.map((entry) => (
             <LearnerRow
               key={entry.learner.id}
@@ -122,6 +129,6 @@ export function ProgressCommunity({
           ))}
         </ul>
       )}
-    </section>
+    </ElevatedCard>
   );
 }

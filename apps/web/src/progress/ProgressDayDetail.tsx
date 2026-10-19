@@ -9,9 +9,10 @@ import { formatDay } from "./progressDates";
 import {
   dayStanding,
   describeStanding,
+  eyebrowClasses,
   formatDuration,
   formatGoal,
-  progressPanelClasses,
+  formatLessons,
 } from "./progressFormat";
 
 function CourseThumbnail({ course }: { course: LearningHistoryCourse }) {
@@ -19,9 +20,9 @@ function CourseThumbnail({ course }: { course: LearningHistoryCourse }) {
     return (
       <span
         aria-hidden="true"
-        className="grid aspect-video w-20 shrink-0 place-items-center rounded-lg bg-(--accent)/12 text-(--accent)"
+        className="grid aspect-video w-16 shrink-0 place-items-center rounded-md bg-(--accent)/12 text-(--accent)"
       >
-        <BookOpen size={18} weight="duotone" />
+        <BookOpen size={16} weight="duotone" />
       </span>
     );
   }
@@ -29,18 +30,23 @@ function CourseThumbnail({ course }: { course: LearningHistoryCourse }) {
     <img
       src={course.thumbnailUrl}
       alt=""
-      width={80}
-      height={45}
+      width={64}
+      height={36}
       loading="lazy"
       decoding="async"
-      className="aspect-video w-20 shrink-0 rounded-lg object-cover"
+      className="aspect-video w-16 shrink-0 rounded-md object-cover"
     />
   );
 }
 
+function coursePath(course: LearningHistoryCourse) {
+  return `/courses/${encodeURIComponent(course.slug)}/overview`;
+}
+
 /**
  * One day in full: the time against that day's goal, and the courses it
- * went to. A day recorded before courses were kept has a total only.
+ * went to, each a link to the course. A day recorded before courses were
+ * kept has a total only.
  */
 export function ProgressDayDetail({
   date,
@@ -48,6 +54,7 @@ export function ProgressDayDetail({
   goalMinutes,
   courseById,
   onNavigatePage,
+  className = "",
 }: {
   date: string | null;
   day: LearningHistoryDay | undefined;
@@ -55,14 +62,16 @@ export function ProgressDayDetail({
   goalMinutes: number;
   courseById: ReadonlyMap<string, LearningHistoryCourse>;
   onNavigatePage?: (path: string) => void;
+  className?: string;
 }) {
   if (!date) {
     return (
-      <section className={`${progressPanelClasses} p-4 sm:p-6`}>
-        <p className="text-sm text-(--muted)">
+      <div className={className}>
+        <p className={eyebrowClasses}>Day</p>
+        <p className="mt-2 text-sm text-(--muted)">
           Choose a day on the calendar to see what it went to.
         </p>
-      </section>
+      </div>
     );
   }
 
@@ -75,51 +84,52 @@ export function ProgressDayDetail({
   });
 
   return (
-    <section
-      className={`${progressPanelClasses} p-4 sm:p-6`}
+    <div
+      className={`min-w-0 ${className}`}
       aria-labelledby="progress-day-title"
       aria-live="polite"
     >
-      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0">
-          <h2 id="progress-day-title" className="text-base font-semibold">
-            {formatDay(date)}
-          </h2>
-          <p className="mt-1 text-sm text-(--muted)">
-            <strong className="font-semibold text-(--text)">
-              {formatDuration(seconds)}
-            </strong>{" "}
-            of the {formatGoal(dayGoalMinutes)} goal
-            {day && day.completions > 0
-              ? ` · ${day.completions} ${day.completions === 1 ? "lesson" : "lessons"} finished`
-              : ""}
-          </p>
-        </div>
+      <p className={eyebrowClasses}>Day</p>
+      <h3
+        id="progress-day-title"
+        className="mt-1.5 text-base font-semibold text-(--text)"
+      >
+        {formatDay(date)}
+      </h3>
+      <p className="mt-1 text-sm text-(--muted)">
+        <strong className="font-semibold text-(--text) tabular-nums">
+          {formatDuration(seconds)}
+        </strong>{" "}
+        of the {formatGoal(dayGoalMinutes)} goal
+        {day && day.completions > 0
+          ? ` · ${formatLessons(day.completions)} finished`
+          : ""}
+      </p>
+      {standing !== "none" ? (
         <p
-          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
+          className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
             standing === "beyond"
-              ? "bg-emerald-500/15 text-emerald-500"
+              ? "bg-emerald-500/12 text-emerald-500"
               : standing === "completed"
-                ? "bg-(--accent)/15 text-(--accent)"
-                : "bg-(--text)/8 text-(--muted)"
+                ? "bg-(--accent)/12 text-(--accent)"
+                : "bg-(--text)/6 text-(--muted)"
           }`}
         >
           {standing === "beyond" ? (
-            <Confetti size={15} weight="fill" aria-hidden="true" />
-          ) : null}
-          {standing === "completed" ? (
-            <CheckCircle size={15} weight="fill" aria-hidden="true" />
+            <Confetti size={14} weight="fill" aria-hidden="true" />
+          ) : standing === "completed" ? (
+            <CheckCircle size={14} weight="fill" aria-hidden="true" />
           ) : null}
           {describeStanding(day)}
         </p>
-      </div>
+      ) : null}
 
       {shares.length > 0 ? (
-        <ul className="mt-4 grid gap-2.5">
+        <ul className="mt-4 grid gap-2">
           {shares.map(({ course, seconds: courseSeconds, completions }) => (
             <li key={course.id}>
               <a
-                href={`/courses/${encodeURIComponent(course.slug)}/overview`}
+                href={coursePath(course)}
                 onClick={(event) => {
                   if (
                     !onNavigatePage ||
@@ -131,21 +141,19 @@ export function ProgressDayDetail({
                     return;
                   }
                   event.preventDefault();
-                  onNavigatePage(
-                    `/courses/${encodeURIComponent(course.slug)}/overview`,
-                  );
+                  onNavigatePage(coursePath(course));
                 }}
-                className="flex items-center gap-3 rounded-xl border border-(--text)/8 p-2.5 transition-colors hover:bg-(--text)/4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
+                className="flex items-center gap-3 rounded-xl bg-(--text)/4 p-2.5 transition-colors hover:bg-(--text)/8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
               >
                 <CourseThumbnail course={course} />
                 <span className="min-w-0 flex-1">
                   <strong className="block truncate text-sm font-semibold text-(--text)">
                     {course.title}
                   </strong>
-                  <span className="mt-0.5 block text-xs text-(--muted)">
+                  <span className="mt-0.5 block text-xs text-(--muted) tabular-nums">
                     {formatDuration(courseSeconds)}
                     {completions > 0
-                      ? ` · ${completions} ${completions === 1 ? "lesson" : "lessons"} finished`
+                      ? ` · ${formatLessons(completions)} finished`
                       : ""}
                   </span>
                 </span>
@@ -153,11 +161,13 @@ export function ProgressDayDetail({
             </li>
           ))}
         </ul>
-      ) : standing !== "none" ? (
-        <p className="mt-4 text-xs text-(--muted)">
-          The courses of this day were not recorded.
+      ) : (
+        <p className="mt-4 text-sm leading-6 text-(--muted)">
+          {standing === "none"
+            ? "No learning was recorded on this day."
+            : "The courses of this day were not recorded."}
         </p>
-      ) : null}
-    </section>
+      )}
+    </div>
   );
 }

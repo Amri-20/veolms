@@ -7,6 +7,7 @@ import type {
 } from "@veolms/contracts";
 import { useMemo, useState } from "react";
 import { Button } from "../components/Button";
+import { ElevatedCard } from "../components/ElevatedCard";
 import { PageHeading } from "../components/PageHeading";
 import { EmptyState } from "../components/analytics/StatTiles";
 import { getApiError } from "../lib/api-error";
@@ -18,21 +19,22 @@ import { LearnerAvatar } from "./LearnerAvatar";
 import { ProgressCalendar } from "./ProgressCalendar";
 import { ProgressCommunity } from "./ProgressCommunity";
 import { ProgressDayDetail } from "./ProgressDayDetail";
-import { ProgressFigures } from "./ProgressFigures";
+import { ProgressMonthFigures } from "./ProgressMonthFigures";
 import { ProgressPageSkeleton } from "./ProgressPageSkeleton";
 import { ProgressSharingSwitch } from "./ProgressSharingSwitch";
-import { ProgressWeekChart } from "./ProgressWeekChart";
+import { ProgressToday } from "./ProgressToday";
+import { ProgressWeekBars } from "./ProgressWeekBars";
 import {
   addDays,
   dayOfMonth,
   daysBetween,
   deviceToday,
   firstDayOf,
-  formatMonth,
   lastDayOf,
   monthOf,
 } from "./progressDates";
-import { monthFigures, progressPanelClasses } from "./progressFormat";
+import { hairlineClasses, monthFigures } from "./progressFormat";
+import { progressPageClasses } from "./progressLayout";
 
 interface ProgressPageProps {
   /** Whose progress, from `/progress/:username`. The viewer's own without. */
@@ -42,16 +44,14 @@ interface ProgressPageProps {
   setNotice?: (message: string) => void;
 }
 
-const pageClasses =
-  "mx-auto flex w-full min-w-0 max-w-[1800px] flex-col gap-6 font-sans";
-
 const quietLinkClasses =
-  "inline-flex h-9 shrink-0 cursor-pointer items-center rounded-lg border border-(--text)/12 px-3 text-sm font-semibold text-(--text) transition-colors hover:bg-(--text)/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)";
+  "inline-flex h-9 shrink-0 cursor-pointer items-center rounded-lg bg-(--text)/6 px-3.5 text-sm font-semibold text-(--text) transition-colors hover:bg-(--text)/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)";
 
 /**
- * A learner's progress over time: the month in figures, the last seven
- * days against the goal, a calendar of every day, the chosen day in full
- * with the courses it went to, and the members who share theirs.
+ * A learner's progress over time, in three cards: today and the last
+ * seven days against the goal; a month, its figures, its calendar and
+ * the chosen day with the courses it went to; and the members who share
+ * theirs.
  *
  * It is the viewer's own unless the address names someone else, who must
  * have chosen to share (an admin can see anyone's).
@@ -119,14 +119,17 @@ function ProgressView({
     const isPrivate = error.status === 403;
     const isMissing = error.status === 404;
     return (
-      <main className={pageClasses} aria-labelledby="progress-page-title">
+      <main
+        className={progressPageClasses}
+        aria-labelledby="progress-page-title"
+      >
         <PageHeading
           id="progress-page-title"
           title="Progress"
           description="A learner's days of learning and the goals they have met."
           onNavigateBack={onNavigateBack}
         />
-        <section className={progressPanelClasses}>
+        <ElevatedCard>
           <EmptyState
             icon={
               isPrivate ? (
@@ -171,7 +174,7 @@ function ProgressView({
               )
             }
           />
-        </section>
+        </ElevatedCard>
       </main>
     );
   }
@@ -216,15 +219,16 @@ function ProgressView({
     );
 
   return (
-    <main className={pageClasses} aria-labelledby="progress-page-title">
-      <header className="flex flex-wrap items-start justify-between gap-x-5 gap-y-4 pt-1">
-        <div className="flex min-w-0 items-center gap-3.5">
+    <main className={progressPageClasses} aria-labelledby="progress-page-title">
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 pt-1">
+        <div className="flex min-w-0 items-center gap-4">
+          {isOwn ? null : <LearnerAvatar learner={learner} size="lg" />}
           <PageHeading
             id="progress-page-title"
             title={isOwn ? "Progress" : `${learner.name}'s progress`}
             description={
               isOwn
-                ? "Your learning day by day, and the goals you have met."
+                ? "Your learning, day by day."
                 : shared
                   ? "Shared with the academy's members."
                   : "Private. You can see it as an admin."
@@ -235,50 +239,65 @@ function ProgressView({
         {isOwn ? (
           <ProgressSharingSwitch shared={shared} setNotice={setNotice} />
         ) : (
-          <div className="flex shrink-0 items-center gap-3">
-            <button
-              type="button"
-              className={quietLinkClasses}
-              onClick={() => onNavigatePage?.("/progress")}
-            >
-              Your progress
-            </button>
-            <LearnerAvatar learner={learner} size="lg" />
-          </div>
+          <button
+            type="button"
+            className={quietLinkClasses}
+            onClick={() => onNavigatePage?.("/progress")}
+          >
+            Your progress
+          </button>
         )}
       </header>
 
-      <ProgressFigures
-        figures={monthData ? monthFigures(monthDays, daysSoFar) : undefined}
-        monthLabel={formatMonth(shownMonth)}
-      />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ProgressWeekChart
+      <ElevatedCard
+        aria-label="Today and this week"
+        className="grid gap-7 p-5 sm:p-7 lg:grid-cols-[auto_minmax(0,1fr)] lg:gap-10"
+      >
+        <ProgressToday
+          day={dayByDate.get(today)}
+          goalMinutes={goalMinutes}
+          isOwn={isOwn}
+        />
+        <ProgressWeekBars
           dates={weekDates}
+          today={today}
           dayByDate={dayByDate}
           goalMinutes={goalMinutes}
           selectedDate={selectedDate}
           onSelectDate={selectDate}
+          className={`border-t ${hairlineClasses} pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-10`}
         />
-        <ProgressCalendar
-          month={shownMonth}
-          today={today}
-          dayByDate={dayByDate}
-          selectedDate={selectedDate}
-          loading={!monthData}
-          onSelectDate={selectDate}
-          onChangeMonth={changeMonth}
-        />
-      </div>
+      </ElevatedCard>
 
-      <ProgressDayDetail
-        date={selectedDate}
-        day={selectedDate ? dayByDate.get(selectedDate) : undefined}
-        goalMinutes={goalMinutes}
-        courseById={courseById}
-        onNavigatePage={onNavigatePage}
-      />
+      <ElevatedCard
+        aria-labelledby="progress-calendar-title"
+        className="p-5 sm:p-7"
+      >
+        <ProgressMonthFigures
+          figures={monthData ? monthFigures(monthDays, daysSoFar) : undefined}
+        />
+        <div
+          className={`mt-6 grid gap-7 border-t ${hairlineClasses} pt-6 lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)] lg:gap-10`}
+        >
+          <ProgressCalendar
+            month={shownMonth}
+            today={today}
+            dayByDate={dayByDate}
+            selectedDate={selectedDate}
+            loading={!monthData}
+            onSelectDate={selectDate}
+            onChangeMonth={changeMonth}
+          />
+          <ProgressDayDetail
+            date={selectedDate}
+            day={selectedDate ? dayByDate.get(selectedDate) : undefined}
+            goalMinutes={goalMinutes}
+            courseById={courseById}
+            onNavigatePage={onNavigatePage}
+            className={`border-t ${hairlineClasses} pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-10`}
+          />
+        </div>
+      </ElevatedCard>
 
       <ProgressCommunity
         learners={community.data?.learners}

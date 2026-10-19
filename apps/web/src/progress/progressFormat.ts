@@ -1,13 +1,6 @@
 import type { LearningHistoryDay } from "@veolms/contracts";
 import { goalStanding, type GoalStanding } from "../services/learning-goals";
 
-import { elevatedCardClasses } from "../components/ElevatedCard";
-/**
- * The panels of the Progress page: the surface the app's other pages give
- * their sections (the analytics pages' `surfaceClass` is the same).
- */
-export const progressPanelClasses = `${elevatedCardClasses} text-(--text)`;
-
 /** "45 min", "1h 20m", "2h": rounded down, never an unearned minute. */
 export function formatDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60);
@@ -24,6 +17,11 @@ export function formatGoal(goalMinutes: number) {
     : formatDuration(goalMinutes * 60);
 }
 
+/** "1 lesson", "3 lessons". */
+export function formatLessons(completions: number) {
+  return `${completions} ${completions === 1 ? "lesson" : "lessons"}`;
+}
+
 /** A day with nothing recorded, or where it stands against its goal. */
 export type DayStanding = GoalStanding | "none";
 
@@ -32,16 +30,27 @@ export function dayStanding(day: LearningHistoryDay | undefined): DayStanding {
   return goalStanding(day.seconds, day.goalMinutes);
 }
 
+/** How much of a goal a day's time is, 0 to 1. */
+export function goalShare(seconds: number, goalMinutes: number) {
+  return Math.max(0, Math.min(1, seconds / (goalMinutes * 60)));
+}
+
 /**
- * How each standing is filled in, on the calendar and in the week's bars:
- * a day of learning in a tint of the accent, a goal met in the accent, and
- * the time past a goal in green (as on the laptop on the learner's home).
+ * One colour language for the page, the one the laptop on the learner's
+ * home speaks: time short of the goal in a tint of the accent, a goal met
+ * in the accent, and time past a goal in green.
  */
-export const standingFillClasses: Record<DayStanding, string> = {
+export const standingBarClasses: Record<DayStanding, string> = {
   none: "",
-  under: "bg-(--accent)/25",
+  under: "bg-(--accent)/30",
   completed: "bg-(--accent)",
   beyond: "bg-emerald-500",
+};
+
+/** A day's circle on the calendar once its goal is met. */
+export const standingDiscClasses: Record<"completed" | "beyond", string> = {
+  completed: "bg-(--accent) text-(--on-accent)",
+  beyond: "bg-emerald-500 text-white",
 };
 
 /** What a day is called. Praise for a goal passed; no blame for one missed. */
@@ -81,3 +90,10 @@ export function monthFigures(
   }
   return { daysSoFar, daysStudied, goalsCompleted, seconds, completions };
 }
+
+/** A small, quiet heading over a block: "TODAY", "THIS WEEK". */
+export const eyebrowClasses =
+  "text-[0.68rem] font-semibold tracking-[0.14em] text-(--muted) uppercase";
+
+/** The faint line that parts the blocks of a card. */
+export const hairlineClasses = "border-(--text)/8";

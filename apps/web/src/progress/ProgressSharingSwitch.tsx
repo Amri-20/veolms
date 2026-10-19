@@ -39,8 +39,8 @@ export function ProgressSharingSwitch({
   };
 
   return (
-    <div className="flex max-w-full items-center gap-3 rounded-xl border border-(--text)/10 bg-(--card-surface,var(--surface)) px-3.5 py-2.5">
-      <span className="min-w-0">
+    <div className="flex max-w-full items-center gap-3.5">
+      <span className="min-w-0 text-right">
         <strong
           id="progress-sharing-label"
           className="block text-sm font-semibold text-(--text)"
@@ -52,8 +52,8 @@ export function ProgressSharingSwitch({
           className="block text-xs leading-5 text-(--muted)"
         >
           {checked
-            ? "Other members can see your days and courses."
-            : "Only you and the academy's admins can see it."}
+            ? "Other members can see your days."
+            : "Only you and the admins can see it."}
         </span>
       </span>
       <button
