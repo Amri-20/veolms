@@ -4,17 +4,15 @@ import {
   createAuthMiddleware,
   type AuthMiddleware,
 } from "../../../middlewares/auth.middleware.ts";
-import {
-  ADMIN_ROLE,
-  INSTRUCTOR_ROLE,
-  createSessionService,
-} from "../../auth/index.ts";
+import { createSessionService } from "../../auth/index.ts";
 import {
   createAuthorizationGuard,
   createAuthorizationService,
   type AuthorizationGuard,
   type ResourceType,
 } from "../../authorization/index.ts";
+
+type PreHandler = AuthMiddleware["authenticate"];
 
 export interface CoursesContext {
   middleware: AuthMiddleware;
@@ -24,11 +22,13 @@ export interface CoursesContext {
     permission: Permission,
     resourceType?: ResourceType,
     featureKey?: string,
-  ) => AuthMiddleware["authenticate"][];
-  /** Course authoring is restricted to administrators and instructors. */
-  requireCourseAuthor: AuthMiddleware["authenticate"][];
-  /** Administrator-only access. */
-  requireAdmin: AuthMiddleware["authenticate"][];
+  ) => PreHandler[];
+  /** As `authorize`, allowed by any one of the permissions. */
+  authorizeAny: (
+    permissions: readonly Permission[],
+    resourceType?: ResourceType,
+    featureKey?: string,
+  ) => PreHandler[];
 }
 
 export function createCoursesContext({
@@ -38,37 +38,31 @@ export function createCoursesContext({
   const middleware = createAuthMiddleware(sessionService);
   const authorizationService = createAuthorizationService(database);
   const authGuard = createAuthorizationGuard(authorizationService);
-
-  const requireCourseAuthor = [
+  const signedIn = [
     middleware.authenticate,
     middleware.requireAuthenticated,
     middleware.requireMfaVerified,
-    middleware.requireRoles([ADMIN_ROLE, INSTRUCTOR_ROLE]),
   ];
 
-  const requireAdmin = [
-    middleware.authenticate,
-    middleware.requireAuthenticated,
-    middleware.requireMfaVerified,
-    middleware.requireRoles([ADMIN_ROLE]),
+  const authorizeAny = (
+    permissions: readonly Permission[],
+    resourceType: ResourceType = "course",
+    featureKey?: string,
+  ) => [
+    ...signedIn,
+    authGuard.authorizeAny(permissions, resourceType, featureKey),
   ];
 
   const authorize = (
     permission: Permission,
     resourceType: ResourceType = "course",
     featureKey?: string,
-  ) => [
-    middleware.authenticate,
-    middleware.requireAuthenticated,
-    middleware.requireMfaVerified,
-    authGuard.authorize(permission, resourceType, featureKey),
-  ];
+  ) => authorizeAny([permission], resourceType, featureKey);
 
   return {
     middleware,
     authGuard,
     authorize,
-    requireCourseAuthor,
-    requireAdmin,
+    authorizeAny,
   };
 }

@@ -294,7 +294,7 @@ const moderationRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/moderation/reports",
     {
-      preHandler: permissions.requireAdmin,
+      preHandler: permissions.requirePlatformModerator,
       schema: {
         operationId: "listPlatformModerationReports",
         tags: ["Platform Moderation"],
@@ -317,7 +317,7 @@ const moderationRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/moderation/reports/:reportId/status",
     {
-      preHandler: permissions.requireAdmin,
+      preHandler: permissions.requirePlatformModerator,
       schema: {
         operationId: "updatePlatformReportStatus",
         tags: ["Platform Moderation"],
@@ -343,7 +343,7 @@ const moderationRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/moderation/threads/:threadId",
     {
-      preHandler: permissions.requireAdmin,
+      preHandler: permissions.requirePlatformModerator,
       schema: {
         operationId: "moderatePlatformThread",
         tags: ["Platform Moderation"],
@@ -368,7 +368,7 @@ const moderationRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/moderation/replies/:replyId",
     {
-      preHandler: permissions.requireAdmin,
+      preHandler: permissions.requirePlatformModerator,
       schema: {
         operationId: "moderatePlatformReply",
         tags: ["Platform Moderation"],
@@ -393,7 +393,7 @@ const moderationRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/moderation/notes/:noteId",
     {
-      preHandler: permissions.requireAdmin,
+      preHandler: permissions.requirePlatformModerator,
       schema: {
         operationId: "moderatePlatformNote",
         tags: ["Platform Moderation"],
@@ -418,7 +418,7 @@ const moderationRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/moderation/users/:userId/suspend",
     {
-      preHandler: permissions.requireAdmin,
+      preHandler: permissions.requirePlatformModerator,
       schema: {
         operationId: "suspendPlatformUser",
         tags: ["Platform Moderation"],
@@ -439,7 +439,7 @@ const moderationRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/moderation/users/:userId/unsuspend",
     {
-      preHandler: permissions.requireAdmin,
+      preHandler: permissions.requirePlatformModerator,
       schema: {
         operationId: "unsuspendPlatformUser",
         tags: ["Platform Moderation"],
@@ -463,7 +463,7 @@ const moderationRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/moderation/audit-logs",
     {
-      preHandler: permissions.requireAdmin,
+      preHandler: permissions.requirePlatformModerator,
       schema: {
         operationId: "listPlatformAuditLogs",
         tags: ["Platform Moderation"],

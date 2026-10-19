@@ -1,13 +1,6 @@
 import type { RoutePluginOptions } from "../../../../lib/route-plugin.ts";
-import {
-  createAuthMiddleware,
-  type AuthMiddleware,
-} from "../../../../middlewares/auth.middleware.ts";
-import {
-  ADMIN_ROLE,
-  INSTRUCTOR_ROLE,
-  createSessionService,
-} from "../../../auth/index.ts";
+import type { AuthMiddleware } from "../../../../middlewares/auth.middleware.ts";
+import { createPermissionPreHandlers } from "../../../authorization/index.ts";
 
 export interface DiscussionPermissionsContext {
   middleware: AuthMiddleware;
@@ -15,15 +8,14 @@ export interface DiscussionPermissionsContext {
   /** Anonymous callers pass; a signed-in caller must have completed MFA. */
   optionalAuthenticated: AuthMiddleware["authenticate"][];
   requireAuthenticated: AuthMiddleware["authenticate"][];
-  requireModerator: AuthMiddleware["authenticate"][];
-  requireAdmin: AuthMiddleware["authenticate"][];
+  /** Academy-wide moderation: reports, any post, suspensions. */
+  requirePlatformModerator: AuthMiddleware["authenticate"][];
 }
 
 export function createDiscussionPermissions({
   database,
 }: RoutePluginOptions): DiscussionPermissionsContext {
-  const sessionService = createSessionService({ database });
-  const middleware = createAuthMiddleware(sessionService);
+  const { middleware, requires } = createPermissionPreHandlers(database);
 
   // Every chain enforces MFA step-up, like the courses and commerce
   // contexts. Without it a session that had only passed the first factor
@@ -40,26 +32,15 @@ export function createDiscussionPermissions({
     middleware.requireMfaVerifiedIfAuthenticated,
   ];
 
-  const requireModerator = [
-    middleware.authenticate,
-    middleware.requireAuthenticated,
-    middleware.requireMfaVerified,
-    middleware.requireRoles([ADMIN_ROLE, INSTRUCTOR_ROLE]),
-  ];
-
-  const requireAdmin = [
-    middleware.authenticate,
-    middleware.requireAuthenticated,
-    middleware.requireMfaVerified,
-    middleware.requireRoles([ADMIN_ROLE]),
-  ];
+  // "academy": an instructor moderates in their own courses only, never
+  // the platform-wide queue.
+  const requirePlatformModerator = requires("discussion.moderate", "academy");
 
   return {
     middleware,
     authenticate: middleware.authenticate,
     optionalAuthenticated,
     requireAuthenticated,
-    requireModerator,
-    requireAdmin,
+    requirePlatformModerator,
   };
 }

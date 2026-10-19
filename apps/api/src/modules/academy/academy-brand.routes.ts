@@ -13,8 +13,7 @@ import type { FastifyRequest } from "fastify";
 import { errorResponse } from "../../lib/errors.ts";
 import { jsonResponse } from "../../lib/responses.ts";
 import type { RoutePlugin } from "../../lib/route-plugin.ts";
-import { createAuthMiddleware } from "../../middlewares/auth.middleware.ts";
-import { ADMIN_ROLE, createSessionService } from "../auth/index.ts";
+import { createPermissionPreHandlers } from "../authorization/index.ts";
 import { createAcademyBrandService } from "./academy-brand.service.ts";
 
 /**
@@ -22,15 +21,7 @@ import { createAcademyBrandService } from "./academy-brand.service.ts";
  * set during setup, changed here afterwards.
  */
 const academyBrandRoutes: RoutePlugin = async (app, options) => {
-  const middleware = createAuthMiddleware(
-    createSessionService({ database: options.database }),
-  );
-  const requireAdmin = [
-    middleware.authenticate,
-    middleware.requireAuthenticated,
-    middleware.requireMfaVerified,
-    middleware.requireRoles([ADMIN_ROLE]),
-  ];
+  const { requires } = createPermissionPreHandlers(options.database);
   const service = createAcademyBrandService({
     database: options.database,
     storage: options.services.storage,
@@ -39,7 +30,7 @@ const academyBrandRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/academy/brand",
     {
-      preHandler: requireAdmin,
+      preHandler: requires("platform.settings.read"),
       schema: {
         operationId: "getAcademyBrand",
         tags: ["Academy"],
@@ -57,7 +48,7 @@ const academyBrandRoutes: RoutePlugin = async (app, options) => {
   app.put(
     "/academy/brand",
     {
-      preHandler: requireAdmin,
+      preHandler: requires("platform.branding.update"),
       schema: {
         operationId: "updateAcademyBrand",
         tags: ["Academy"],
@@ -79,7 +70,7 @@ const academyBrandRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/academy/brand/logo/presign",
     {
-      preHandler: requireAdmin,
+      preHandler: requires("platform.branding.update"),
       schema: {
         operationId: "presignAcademyLogoUpload",
         tags: ["Academy"],
@@ -106,7 +97,7 @@ const academyBrandRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/academy/brand/logo/complete",
     {
-      preHandler: requireAdmin,
+      preHandler: requires("platform.branding.update"),
       schema: {
         operationId: "completeAcademyLogoUpload",
         tags: ["Academy"],
@@ -128,7 +119,7 @@ const academyBrandRoutes: RoutePlugin = async (app, options) => {
   app.delete(
     "/academy/brand/logo",
     {
-      preHandler: requireAdmin,
+      preHandler: requires("platform.branding.update"),
       schema: {
         operationId: "removeAcademyLogo",
         tags: ["Academy"],

@@ -41,6 +41,26 @@ export async function canActOnCourseWith(
   return result.allowed;
 }
 
+/**
+ * Whether the user holds `permission` through a role that reaches every
+ * course: what the old "is admin" checks meant on academy-wide lists
+ * (every student, every coupon, every order). An instructor's own-course
+ * role does not count, so their lists stay limited to their courses.
+ */
+export async function hasAcademyPermission(
+  database: Executor,
+  userId: string | null | undefined,
+  permission: Permission,
+): Promise<boolean> {
+  if (!userId) return false;
+  const result = await checkUserPermission(database, {
+    userId,
+    permissionKey: permission,
+    excludeOwnCoursesOnlyRoles: true,
+  });
+  return result.allowed;
+}
+
 export function canActOnCourse(
   database: Executor,
   request: CourseActionRequest,

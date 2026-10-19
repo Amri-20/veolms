@@ -28,7 +28,7 @@ const couponRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/coupons",
     {
-      preHandler: ctx.requireStaff,
+      preHandler: ctx.requires("coupon.read", "platform"),
       schema: {
         operationId: "listCoupons",
         tags: ["Commerce - Coupons"],
@@ -49,7 +49,7 @@ const couponRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/coupons/:couponId",
     {
-      preHandler: ctx.requireStaff,
+      preHandler: ctx.requires("coupon.read", "platform"),
       schema: {
         operationId: "getCouponById",
         tags: ["Commerce - Coupons"],
@@ -69,7 +69,7 @@ const couponRoutes: RoutePlugin = async (app, options) => {
   app.post(
     "/coupons",
     {
-      preHandler: ctx.requireStaff,
+      preHandler: ctx.requires("coupon.manage", "platform"),
       schema: {
         operationId: "createCoupon",
         tags: ["Commerce - Coupons"],
@@ -92,7 +92,7 @@ const couponRoutes: RoutePlugin = async (app, options) => {
   app.patch(
     "/coupons/:couponId",
     {
-      preHandler: ctx.requireStaff,
+      preHandler: ctx.requires("coupon.manage", "platform"),
       schema: {
         operationId: "updateCoupon",
         tags: ["Commerce - Coupons"],
@@ -114,7 +114,7 @@ const couponRoutes: RoutePlugin = async (app, options) => {
   app.delete(
     "/coupons/:couponId",
     {
-      preHandler: ctx.requireAdmin,
+      preHandler: ctx.requires("coupon.delete"),
       schema: {
         operationId: "deleteCoupon",
         tags: ["Commerce - Coupons"],

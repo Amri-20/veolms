@@ -209,6 +209,7 @@ export const ROLE_CAPABILITY_MAPPINGS: Record<
     "quiz.settings.update",
     "quiz.questions.manage",
     "quiz.publish",
+    "quiz.delete",
     "assignment.read",
     "assignment.create",
     "assignment.update",
@@ -219,6 +220,11 @@ export const ROLE_CAPABILITY_MAPPINGS: Record<
     "discussion.moderate",
     "analytics.course.read",
     "certificate.issue",
+    // Scoped to their own courses by the services.
+    "student.read",
+    "coupon.read",
+    "coupon.manage",
+    "enrollment.read",
   ],
   teaching_assistant: [
     "course.read",
