@@ -1,16 +1,35 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useSearchParams } from "react-router";
-import { handleRovingTabKeyDown } from "../accessibility/rovingTabFocus";
-import { LoadingCards } from "../components/analytics/StatTiles";
-import { Button } from "../components/Button";
-import { ThemedSelect, type ThemedSelectOption } from "../ThemedSelect";
-import { useMyCourses } from "../services/courses";
 import {
-  useAdminAnalyticsOverview,
-  useInstructorAnalyticsOverview,
-} from "../services/analytics";
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { useSearchParams } from "react-router";
+import { DownloadSimpleIcon as DownloadSimple } from "@phosphor-icons/react/DownloadSimple";
+import { ArrowCounterClockwiseIcon as ArrowCounterClockwise } from "@phosphor-icons/react/ArrowCounterClockwise";
+import { LoadingTab, downloadCsv } from "@veolms/analytics-ui";
+import type {
+  AnalyticsExportSection,
+  AnalyticsTabContribution,
+  AnalyticsTabFilters,
+} from "@veolms/web-core";
+import { handleRovingTabKeyDown } from "../accessibility/rovingTabFocus";
+import { elevatedCardTokenScopeClasses } from "../components/ElevatedCard";
+import { PageHeading } from "../components/PageHeading";
+import { SwipeableTabPanel } from "../navigation/SwipeableTabPanel";
+import { ThemedSelect, type ThemedSelectOption } from "../ThemedSelect";
+import { useWebContributions } from "../lib/web-contributions";
+import { useMyCourses } from "../services/courses";
+import { SettingsTabBar } from "../settings/SettingsTabBar";
+import type { PageTabDefinition } from "../settings/settingsTabs";
+import { useSettingsTabShortcuts } from "../settings/useSettingsTabShortcuts";
 import { selectTriggerClass } from "./analyticsShared";
-import { OverviewTab } from "./tabs/OverviewTab";
+import { CORE_ANALYTICS_TABS } from "./analyticsTabs";
+import "../styles/features/settings/foundation.css";
+import "../styles/features/settings/preferences-responsive.css";
 
 interface Props {
   role: "student" | "creator";
@@ -18,7 +37,7 @@ interface Props {
   onNavigatePage?: (destination: string) => void;
 }
 
-type RangeKey = "7d" | "30d" | "3m" | "1y";
+type RangeKey = AnalyticsTabFilters["rangeKey"];
 
 const RANGE_OPTIONS: ReadonlyArray<{
   key: RangeKey;
@@ -30,6 +49,12 @@ const RANGE_OPTIONS: ReadonlyArray<{
   { key: "3m", label: "3M", days: 90 },
   { key: "1y", label: "1Y", days: 365 },
 ];
+const DEFAULT_RANGE: RangeKey = "30d";
+const DEFAULT_TAB = "overview";
+
+function isRangeKey(value: string | null): value is RangeKey {
+  return RANGE_OPTIONS.some((option) => option.key === value);
+}
 
 function useDateRangeParams(rangeKey: RangeKey) {
   return useMemo(() => {
@@ -56,7 +81,7 @@ function DateRangeTabs({
 }) {
   return (
     <div
-      role="tablist"
+      role="radiogroup"
       aria-label="Date range"
       className="flex gap-1 sm:gap-1.5 rounded-[12px] sm:rounded-[14px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--canvas)_80%,var(--surface))] p-1 sm:p-1.5"
     >
@@ -64,8 +89,8 @@ function DateRangeTabs({
         <button
           key={option.key}
           type="button"
-          role="tab"
-          aria-selected={value === option.key}
+          role="radio"
+          aria-checked={value === option.key}
           tabIndex={value === option.key ? 0 : -1}
           onClick={() => onChange(option.key)}
           onKeyDown={handleRovingTabKeyDown}
@@ -82,45 +107,116 @@ function DateRangeTabs({
   );
 }
 
-function PageHeader({
-  title,
-  description,
-  action,
+function ToolbarButton({
+  icon,
+  label,
+  onClick,
+  disabled = false,
+  primary = false,
 }: {
-  eyebrow?: string;
-  title: string;
-  description: string;
-  action?: ReactNode;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  primary?: boolean;
 }) {
   return (
-    <header className="pt-2 sm:pt-0 flex flex-col gap-3.5 sm:gap-5 border-b border-(--border) pb-4.5 sm:pb-7 lg:flex-row lg:items-end lg:justify-between">
-      <div>
-        <h1 className="text-[clamp(1.8rem,2.4vw,2.15rem)] font-bold leading-tight tracking-[-0.035em] text-(--text)">
-          {title}
-        </h1>
-        <p className="mt-1.5 max-w-2xl text-[0.88rem] leading-6 text-(--muted)">
-          {description}
-        </p>
-      </div>
-      {action ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 pt-2 pb-0.5 sm:py-0">
-          {action}
-        </div>
-      ) : null}
-    </header>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex h-9 sm:h-10 shrink-0 items-center gap-2 rounded-[9px] sm:rounded-[10px] px-3 sm:px-3.5 text-xs sm:text-sm font-semibold transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50 ${
+        primary
+          ? "bg-(--accent) text-(--on-accent) hover:bg-(--accent-hover)"
+          : "border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-[color-mix(in_srgb,var(--canvas)_75%,var(--surface))] text-(--text) hover:bg-[color-mix(in_srgb,var(--text)_5%,var(--surface))]"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 
+const TAB_DESCRIPTIONS: Record<string, string> = {
+  overview: "Track your academy's performance with actionable insights.",
+  revenue: "Dive deep into your academy's revenue performance.",
+  courses: "Measure how your courses and content drive learning outcomes.",
+};
+
+const noop = () => {};
+
+/**
+ * The analytics page, laid out like Settings: the heading scrolls away, the
+ * section tabs stay pinned (same bar, same colours, same Alt+1… and arrow
+ * shortcuts, same swipe between sections on touch), and the filters and
+ * the open section scroll under them.
+ */
 function AnalyticsContent({ isAdmin }: { isAdmin: boolean }) {
-  const [range, setRange] = useState<RangeKey>("30d");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const contributions = useWebContributions();
+  const tabListRef = useRef<HTMLElement>(null);
+
+  const tabs = useMemo(() => {
+    const extra = contributions.analyticsTabs.filter(
+      (tab) => isAdmin || !tab.adminOnly,
+    );
+    return [...CORE_ANALYTICS_TABS, ...extra].sort(
+      (a, b) => (a.order ?? 0) - (b.order ?? 0),
+    );
+  }, [contributions.analyticsTabs, isAdmin]);
+  const tabIds = useMemo(() => tabs.map((tab) => tab.id), [tabs]);
+  const tabDefinitions = useMemo<PageTabDefinition<string>[]>(
+    () => tabs.map(({ id, label, Icon, tone }) => ({ id, label, Icon, tone })),
+    [tabs],
+  );
+
+  const requestedTab = searchParams.get("tab");
+  const activeTab: AnalyticsTabContribution =
+    tabs.find((tab) => tab.id === requestedTab) ??
+    tabs.find((tab) => tab.id === DEFAULT_TAB) ??
+    tabs[0]!;
+  const activeTabRef = useRef(activeTab.id);
+  activeTabRef.current = activeTab.id;
+
+  const requestedRange = searchParams.get("range");
+  const range: RangeKey = isRangeKey(requestedRange)
+    ? requestedRange
+    : DEFAULT_RANGE;
   const [courseId, setCourseId] = useState<string>("all");
   const dateRangeParams = useDateRangeParams(range);
   const myCourses = useMyCourses();
 
+  const updateParams = useCallback(
+    (changes: Record<string, string | null>) => {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          for (const [key, value] of Object.entries(changes)) {
+            if (value === null) next.delete(key);
+            else next.set(key, value);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const selectTab = useCallback(
+    (id: string) => updateParams({ tab: id === DEFAULT_TAB ? null : id }),
+    [updateParams],
+  );
+  const getCurrentTab = useCallback(() => activeTabRef.current, []);
+  useSettingsTabShortcuts({
+    tabIds,
+    getCurrentTab,
+    onNavigate: selectTab,
+  });
+
   // A course card's "Analytics" link opens this page with ?course=<id>, which
   // used to be ignored. It is read once and becomes the selected course only
   // if it is one of the courses in the list below.
-  const [searchParams] = useSearchParams();
   const [requestedCourseId, setRequestedCourseId] = useState(
     () => searchParams.get("course") || null,
   );
@@ -138,17 +234,14 @@ function AnalyticsContent({ isAdmin }: { isAdmin: boolean }) {
     setCourseId(nextCourseId);
   };
 
-  const params = {
-    ...dateRangeParams,
-    courseId: courseId === "all" ? undefined : courseId,
-  };
-  const adminQuery = useAdminAnalyticsOverview(params, { enabled: isAdmin });
-  const instructorQuery = useInstructorAnalyticsOverview(params, {
-    enabled: !isAdmin,
-  });
-  const { data, isLoading, isError, refetch } = isAdmin
-    ? adminQuery
-    : instructorQuery;
+  const filters: AnalyticsTabFilters = useMemo(
+    () => ({
+      ...dateRangeParams,
+      courseId: courseId === "all" ? undefined : courseId,
+      rangeKey: range,
+    }),
+    [dateRangeParams, courseId, range],
+  );
 
   const courseOptions: ThemedSelectOption<string>[] = [
     [
@@ -160,58 +253,136 @@ function AnalyticsContent({ isAdmin }: { isAdmin: boolean }) {
     ),
   ];
 
-  return (
-    <main className="mx-auto grid w-full max-w-[1800px] gap-6">
-      <PageHeader
-        title="Analytics"
-        description={
-          isAdmin
-            ? "Track your academy's performance with actionable insights."
-            : "See how your courses are performing — revenue, enrollments, completion, and engagement."
-        }
-        action={
-          <>
-            <ThemedSelect
-              value={courseId}
-              onValueChange={changeCourse}
-              options={courseOptions}
-              ariaLabel="Course"
-              searchable
-              triggerClassName={selectTriggerClass}
-            />
-            <DateRangeTabs value={range} onChange={setRange} />
-          </>
-        }
-      />
+  const [exportSections, setExportSections] = useState<
+    AnalyticsExportSection[] | null
+  >(null);
+  const handleExportChange = useCallback(
+    (sections: AnalyticsExportSection[] | null) => setExportSections(sections),
+    [],
+  );
+  const exportCsv = () => {
+    if (!exportSections) return;
+    const day = (iso: string) => iso.slice(0, 10);
+    downloadCsv(
+      `analytics-${activeTab.id}-${day(filters.from)}-to-${day(filters.to)}.csv`,
+      exportSections,
+    );
+  };
 
-      {isError && !data ? (
-        // Without this a failed load left the loading cards up for good.
-        <div
-          role="alert"
-          className="rounded-xl border border-[color-mix(in_srgb,var(--text)_10%,transparent)] bg-(--card-surface,var(--surface)) p-6 text-sm text-(--muted)"
-        >
-          <p className="font-semibold text-(--text)">
-            Analytics could not be loaded.
-          </p>
-          <p className="mt-1">
-            Check your connection and try again. Nothing has been changed.
-          </p>
-          <Button
-            motion="static"
-            className="mt-4 h-9 text-xs"
-            onClick={() => void refetch()}
-          >
-            Try again
-          </Button>
+  const isFiltered = range !== DEFAULT_RANGE || courseId !== "all";
+  const resetFilters = () => {
+    setRequestedCourseId(null);
+    setCourseId("all");
+    updateParams({ range: null, course: null });
+  };
+
+  const rangeDays = RANGE_OPTIONS.find((option) => option.key === range)!.days;
+  const TabComponent = activeTab.component;
+
+  return (
+    <div
+      className={`settings-page ${elevatedCardTokenScopeClasses}`}
+      aria-labelledby="analytics-page-title"
+    >
+      {/* As in Settings, only the tabs stay pinned; the heading scrolls
+          away, so the header takes no box of its own. */}
+      <header className="settings-page__topbar contents!">
+        <div className="settings-page__heading mb-2">
+          <PageHeading
+            id="analytics-page-title"
+            title="Analytics"
+            description={
+              TAB_DESCRIPTIONS[activeTab.id] ??
+              (isAdmin
+                ? "Track your academy's performance with actionable insights."
+                : "See how your courses are performing.")
+            }
+            copyClassName="settings-page__heading-copy"
+          />
+          <ToolbarButton
+            icon={<DownloadSimple size={16} weight="bold" aria-hidden="true" />}
+            label="Export CSV"
+            onClick={exportCsv}
+            disabled={!exportSections}
+            primary
+          />
         </div>
-      ) : isLoading || !data ? (
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3 xl:grid-cols-6">
-          <LoadingCards />
+
+        <SettingsTabBar
+          tabs={tabDefinitions}
+          activeTab={activeTab.id}
+          idPrefix="analytics-tab"
+          panelId="analytics-tab-panel"
+          label="Analytics sections"
+          navRef={tabListRef}
+          onPrepare={noop}
+          onSelect={selectTab}
+        />
+      </header>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3">
+        <DateRangeTabs
+          value={range}
+          onChange={(next) =>
+            updateParams({ range: next === DEFAULT_RANGE ? null : next })
+          }
+        />
+        <div className="w-full sm:w-72">
+          <ThemedSelect
+            value={courseId}
+            onValueChange={changeCourse}
+            options={courseOptions}
+            ariaLabel="Course"
+            searchable
+            triggerClassName={selectTriggerClass}
+          />
         </div>
-      ) : (
-        <OverviewTab data={data} />
-      )}
-    </main>
+        <p className="hidden md:block text-xs text-(--muted)">
+          Compared with the previous {rangeDays} days
+        </p>
+        {isFiltered ? (
+          <div className="ml-auto">
+            <ToolbarButton
+              icon={
+                <ArrowCounterClockwise
+                  size={15}
+                  weight="bold"
+                  aria-hidden="true"
+                />
+              }
+              label="Reset"
+              onClick={resetFilters}
+            />
+          </div>
+        ) : null}
+      </div>
+
+      <SwipeableTabPanel
+        tabs={tabIds}
+        activeTab={activeTab.id}
+        onTabChange={selectTab}
+        tabListRef={tabListRef}
+        id="analytics-tab-panel"
+        className="settings-tab-content pb-8"
+        stateAttribute="data-analytics-tab"
+        labelledBy={`analytics-tab-${activeTab.id}`}
+        nativeOnFinePointer
+        focusable={false}
+      >
+        {(panelTab) =>
+          panelTab === activeTab.id ? (
+            <Suspense fallback={<LoadingTab />}>
+              <TabComponent
+                key={activeTab.id}
+                filters={filters}
+                isAdmin={isAdmin}
+                onExportChange={handleExportChange}
+              />
+            </Suspense>
+          ) : null
+        }
+      </SwipeableTabPanel>
+    </div>
   );
 }
 

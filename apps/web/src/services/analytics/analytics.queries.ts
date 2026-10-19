@@ -4,29 +4,41 @@ import { analyticsKeys } from "./analytics.keys";
 import {
   analyticsService,
   type AnalyticsFilterParams,
+  type AnalyticsScope,
 } from "./analytics.service";
 
-export function useAdminAnalyticsOverview(
-  params: AnalyticsFilterParams = {},
-  options?: { enabled?: boolean },
+const TAB_STALE_MS = 30_000;
+
+export function useAnalyticsOverview(
+  scope: AnalyticsScope,
+  params: AnalyticsFilterParams,
 ) {
   return useQuery({
-    queryKey: analyticsKeys.adminOverview(params),
-    queryFn: () => analyticsService.getAdminOverview(params),
-    enabled: options?.enabled ?? true,
-    staleTime: 30_000,
+    queryKey: analyticsKeys.tab("overview", scope, params),
+    queryFn: () => analyticsService.getOverview(scope, params),
+    staleTime: TAB_STALE_MS,
   });
 }
 
-export function useInstructorAnalyticsOverview(
-  params: AnalyticsFilterParams = {},
-  options?: { enabled?: boolean },
+export function useAnalyticsRevenue(
+  scope: AnalyticsScope,
+  params: AnalyticsFilterParams,
 ) {
   return useQuery({
-    queryKey: analyticsKeys.instructorOverview(params),
-    queryFn: () => analyticsService.getInstructorOverview(params),
-    enabled: options?.enabled ?? true,
-    staleTime: 30_000,
+    queryKey: analyticsKeys.tab("revenue", scope, params),
+    queryFn: () => analyticsService.getRevenue(scope, params),
+    staleTime: TAB_STALE_MS,
+  });
+}
+
+export function useAnalyticsCourses(
+  scope: AnalyticsScope,
+  params: AnalyticsFilterParams,
+) {
+  return useQuery({
+    queryKey: analyticsKeys.tab("courses", scope, params),
+    queryFn: () => analyticsService.getCourses(scope, params),
+    staleTime: TAB_STALE_MS,
   });
 }
 

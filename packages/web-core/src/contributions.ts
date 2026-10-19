@@ -77,9 +77,61 @@ export interface OfflineDataProvider {
   playbackBootstrap(courseSlug: string, lessonNumber: number): Promise<unknown>;
 }
 
+/** The filter the analytics page passes to every tab. */
+export interface AnalyticsTabFilters {
+  /** ISO instants; the range the page shows. */
+  from: string;
+  to: string;
+  /** One course, or every course the viewer may see when absent. */
+  courseId?: string;
+  /** The range's preset, for a tab that wants to label it. */
+  rangeKey: "7d" | "30d" | "3m" | "1y";
+}
+
+/** One table of a tab, as a CSV export wants it. */
+export interface AnalyticsExportSection {
+  title: string;
+  headers: string[];
+  rows: Array<Array<string | number | null | undefined>>;
+}
+
+export interface AnalyticsTabProps {
+  filters: AnalyticsTabFilters;
+  /** The viewer sees the whole academy (admin), or their own courses. */
+  isAdmin: boolean;
+  /**
+   * Hands the page what the tab would export. Called with the tab's
+   * tables once they are loaded, and with `null` while they are not.
+   */
+  onExportChange: (sections: AnalyticsExportSection[] | null) => void;
+}
+
+/**
+ * A tab a plugin adds to the analytics page beside Overview, Revenue and
+ * Courses. The page renders the tab's component with the shared filters
+ * when it is selected.
+ */
+export interface AnalyticsTabContribution {
+  /** The `?tab=` value; letters, digits and dashes. */
+  id: string;
+  label: string;
+  order?: number;
+  /** Drawn as the Settings page draws its tab icons (a Phosphor icon fits). */
+  Icon: ComponentType<{
+    size?: number;
+    weight?: "duotone" | "fill" | "regular";
+  }>;
+  /** The tab's colour when page tabs are multicolour, as on Settings. */
+  tone: "blue" | "cyan" | "gold" | "green" | "orange" | "rose" | "violet";
+  component: ComponentType<AnalyticsTabProps>;
+  /** Shown to admins only when true (an instructor never sees it). */
+  adminOnly?: boolean;
+}
+
 export interface WebContributions {
   lessonCardActions: readonly LessonCardActionContribution[];
   profileMenuLinks: readonly ProfileMenuLinkContribution[];
+  analyticsTabs: readonly AnalyticsTabContribution[];
 }
 
 type Listener = () => void;
@@ -100,7 +152,11 @@ function getStore(): ContributionStore {
     [STORE_KEY]?: ContributionStore;
   };
   host[STORE_KEY] ??= {
-    snapshot: { lessonCardActions: [], profileMenuLinks: [] },
+    snapshot: {
+      lessonCardActions: [],
+      profileMenuLinks: [],
+      analyticsTabs: [],
+    },
     listeners: new Set(),
   };
   return host[STORE_KEY];
@@ -149,6 +205,25 @@ export function registerProfileMenuLink(
   return () =>
     update({
       profileMenuLinks: getStore().snapshot.profileMenuLinks.filter(
+        (entry) => entry !== contribution,
+      ),
+    });
+}
+
+/**
+ * Adds (or replaces, by id) a tab on the analytics page.
+ * Returns a function that removes it again.
+ */
+export function registerAnalyticsTab(
+  contribution: AnalyticsTabContribution,
+): () => void {
+  const others = getStore().snapshot.analyticsTabs.filter(
+    (entry) => entry.id !== contribution.id,
+  );
+  update({ analyticsTabs: [...others, contribution].sort(byOrder) });
+  return () =>
+    update({
+      analyticsTabs: getStore().snapshot.analyticsTabs.filter(
         (entry) => entry !== contribution,
       ),
     });

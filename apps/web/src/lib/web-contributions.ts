@@ -30,6 +30,7 @@ export function useWebContributions(): WebContributions {
 const SERVER_CONTRIBUTIONS: WebContributions = {
   lessonCardActions: [],
   profileMenuLinks: [],
+  analyticsTabs: [],
 };
 
 function getServerWebContributions(): WebContributions {

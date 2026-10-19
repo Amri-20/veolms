@@ -13,18 +13,26 @@ const actor = (request: FastifyRequest) => ({
   id: context(request).user.id,
   roles: context(request).user.roles,
 });
+
+type TabRequest = FastifyRequest<{ Querystring: AnalyticsFilterQuery }>;
+
+/**
+ * The admin and instructor routes of a tab share a handler: the service
+ * widens an admin's scope to the whole academy by their role, and the
+ * route's permission guard is what tells the two apart.
+ */
 export function createAnalyticsController({
   service,
 }: {
   service: AnalyticsService;
 }) {
   return {
-    adminOverview: async (
-      request: FastifyRequest<{ Querystring: AnalyticsFilterQuery }>,
-    ) => service.adminOverview(actor(request), request.query),
-    instructorOverview: async (
-      request: FastifyRequest<{ Querystring: AnalyticsFilterQuery }>,
-    ) => service.instructorOverview(actor(request), request.query),
+    overview: async (request: TabRequest) =>
+      service.overview(actor(request), request.query),
+    revenue: async (request: TabRequest) =>
+      service.revenue(actor(request), request.query),
+    courses: async (request: TabRequest) =>
+      service.courses(actor(request), request.query),
     dashboard: async (
       request: FastifyRequest<{ Querystring: DashboardQuery }>,
     ) => service.dashboard(actor(request), request.query.range),

@@ -116,7 +116,8 @@ export function ShellMainFrame({
               ? "student-surface-main"
               : "",
           !renderMain && page === "courses" ? "max-[640px]:px-0!" : "",
-          !renderMain && (page === "settings" || page === "platform")
+          !renderMain &&
+          (page === "settings" || page === "platform" || page === "analytics")
             ? "courses-main--settings"
             : "",
           mobileSidebarNavigationActive
@@ -175,7 +176,8 @@ export function ShellMainFrame({
                   learningBackground.page === "courses"
                     ? "max-[640px]:px-0!"
                     : learningBackground.page === "settings" ||
-                        learningBackground.page === "platform"
+                        learningBackground.page === "platform" ||
+                        learningBackground.page === "analytics"
                       ? "student-surface-main courses-main--settings"
                       : "student-surface-main"
                 }
