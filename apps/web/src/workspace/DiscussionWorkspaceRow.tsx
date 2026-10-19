@@ -108,7 +108,7 @@ export function DiscussionWorkspaceRow({
       // content stays in line with the search bar, no corners, no dividers
       // (the gap between rows separates them). The open row is marked like
       // a linked comment there: an accent tint and a straight accent bar.
-      className={`group/row relative -ms-(--swipeable-tab-panel-inline-start) -me-(--swipeable-tab-panel-inline-end) flex cursor-pointer gap-4 ps-(--swipeable-tab-panel-inline-start) pe-(--swipeable-tab-panel-inline-end) py-5 transition-colors ${
+      className={`group/row relative -ms-(--swipeable-tab-panel-inline-start) -me-(--swipeable-tab-panel-inline-end) flex cursor-pointer gap-4 ps-(--swipeable-tab-panel-inline-start) pe-(--swipeable-tab-panel-inline-end) py-5 transition-colors max-[48.75rem]:grid max-[48.75rem]:grid-cols-[2.5rem_minmax(0,1fr)] max-[48.75rem]:gap-x-3 max-[48.75rem]:gap-y-2 ${
         selected
           ? "bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] shadow-[inset_3px_0_0_var(--accent)]"
           : "hover:bg-[color-mix(in_srgb,var(--text)_4%,transparent)]"
@@ -120,9 +120,12 @@ export function DiscussionWorkspaceRow({
         className="size-10 shrink-0 rounded-full object-cover"
         loading="lazy"
       />
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
+      {/* On a phone the name line sits beside the picture and the rest
+          runs under both, from the picture's left edge (the list's phone
+          width, as in DiscussionWorkspaceVirtualFeed). */}
+      <div className="flex min-w-0 flex-1 flex-col gap-2 max-[48.75rem]:contents max-[48.75rem]:[&>*:not(:first-child)]:col-span-2">
         <div
-          className={`flex flex-wrap items-baseline gap-x-2 gap-y-0.5 ${menu ? "pr-10" : ""}`}
+          className={`flex flex-wrap items-baseline gap-x-2 gap-y-0.5 max-[48.75rem]:self-center ${menu ? "pr-10" : ""}`}
         >
           {/* The row's own keyboard target: the name opens it. */}
           <button
