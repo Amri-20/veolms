@@ -139,12 +139,15 @@ function TeamWorkspace({ tab, onNavigatePage, setNotice }: TeamPageProps) {
               type="button"
               role="tab"
               aria-selected={active}
+              // A square tab: the global control rounding would bend the
+              // underline up at both ends.
+              data-fixed-radius
               onClick={() =>
                 onNavigatePage?.(`/team/${definition.id}`, {
                   resetScroll: true,
                 })
               }
-              className={`-mb-px flex cursor-pointer items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors ${active ? "border-(--accent) text-(--accent)" : "border-transparent text-(--muted) hover:text-(--text)"}`}
+              className={`-mb-px flex h-11 cursor-pointer items-center gap-2 rounded-none border-b-2 px-3 text-sm font-semibold whitespace-nowrap transition-colors ${active ? "border-(--accent) text-(--accent)" : "border-transparent text-(--muted) hover:text-(--text)"}`}
             >
               {definition.label}
               {typeof count === "number" ? (

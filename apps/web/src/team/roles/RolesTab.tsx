@@ -1,11 +1,88 @@
+import { CopyIcon as Copy } from "@phosphor-icons/react/Copy";
+import { PencilSimpleIcon as PencilSimple } from "@phosphor-icons/react/PencilSimple";
+import { PlusIcon as Plus } from "@phosphor-icons/react/Plus";
 import { ShieldCheckIcon as ShieldCheck } from "@phosphor-icons/react/ShieldCheck";
+import {
+  permissionCatalogue,
+  permissions as allPermissions,
+  type TeamRole,
+} from "@veolms/contracts";
 import { useState } from "react";
-import { ElevatedCard } from "../../components/ElevatedCard";
+import { Button } from "../../components/Button";
 import { useTeamRoles } from "../../services/team";
 import type { ToastMessage } from "../../ToastNotification";
 import { roleLabel } from "../teamFormat";
-import { EmptyState, StatusChip } from "../TeamBits";
+import { EmptyState, secondaryButtonClassName } from "../TeamBits";
+import { useTeamAccess } from "../useTeamAccess";
 import { RoleEditorPanel, type RoleEditorTarget } from "./RoleEditorPanel";
+
+const line = "border-[color-mix(in_srgb,var(--text)_9%,transparent)]";
+const card = `rounded-2xl border ${line} bg-[color-mix(in_srgb,var(--text)_2%,transparent)]`;
+
+/** Broadest first, as the list in the side column reads. */
+const byReach = (a: TeamRole, b: TeamRole) =>
+  b.permissions.length - a.permissions.length || a.name.localeCompare(b.name);
+
+function RoleListItem({
+  role,
+  active,
+  onSelect,
+}: {
+  role: TeamRole;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        aria-current={active ? "true" : undefined}
+        onClick={onSelect}
+        className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${active ? "bg-(--accent)/12 font-semibold text-(--accent)" : "font-medium text-(--text) hover:bg-(--hover)"}`}
+      >
+        <span className="truncate">{roleLabel(role.name)}</span>
+        <span
+          className={`shrink-0 font-mono text-[0.7rem] tabular-nums ${active ? "text-(--accent)" : "text-(--muted)"}`}
+        >
+          {role.permissions.length}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/** How much of each area of the catalogue the role holds. */
+function AreaBars({ role }: { role: TeamRole }) {
+  const held = new Set<string>(role.permissions);
+  return (
+    <ul className="m-0 grid list-none gap-x-6 gap-y-4 p-0 sm:grid-cols-2 xl:grid-cols-3">
+      {permissionCatalogue.map((group) => {
+        const total = group.entries.length;
+        const count = group.entries.filter((entry) =>
+          held.has(entry.key),
+        ).length;
+        return (
+          <li key={group.area}>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="truncate text-sm font-semibold text-(--text)">
+                {group.label}
+              </span>
+              <span className="font-mono text-[0.7rem] text-(--muted) tabular-nums">
+                {count}/{total}
+              </span>
+            </div>
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--text)_10%,transparent)]">
+              <div
+                className="h-full rounded-full bg-(--accent)"
+                style={{ width: `${(count / total) * 100}%` }}
+              />
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 export function RolesTab({
   setNotice,
@@ -13,78 +90,148 @@ export function RolesTab({
   setNotice?: (message: ToastMessage) => void;
 }) {
   const rolesQuery = useTeamRoles();
+  const { can } = useTeamAccess();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editor, setEditor] = useState<RoleEditorTarget | null>(null);
   const roles = rolesQuery.data?.roles ?? [];
   const customRolesEnabled = rolesQuery.data?.customRolesEnabled ?? false;
+  const canCreate = customRolesEnabled && can("role.create");
+
+  const builtIn = roles.filter((role) => role.isSystem).sort(byReach);
+  const custom = roles.filter((role) => !role.isSystem).sort(byReach);
+  const selected =
+    roles.find((role) => role.id === selectedId) ?? builtIn[0] ?? custom[0];
+
+  if (rolesQuery.isPending) {
+    return (
+      <div
+        className="grid gap-4 lg:grid-cols-[19rem_minmax(0,1fr)]"
+        aria-busy="true"
+      >
+        <div className="h-96 animate-pulse rounded-2xl bg-(--hover)" />
+        <div className="h-64 animate-pulse rounded-2xl bg-(--hover)" />
+      </div>
+    );
+  }
+
+  if (rolesQuery.isError) {
+    return (
+      <p className="text-sm text-rose-500">
+        Roles could not be loaded. {rolesQuery.error.message}
+      </p>
+    );
+  }
+
+  if (!selected) return <EmptyState icon={ShieldCheck} title="No roles yet" />;
+
+  const editable = !selected.isSystem && can("role.update");
+  const total = allPermissions.length;
 
   return (
-    <div>
-      <p className="mb-4 text-xs text-(--muted)">
-        Each role is a set of permissions. Built-in roles are fixed
-        {customRolesEnabled
-          ? "; duplicate one, or start a new role, to make your own."
-          : "."}
-      </p>
-
-      {rolesQuery.isPending ? (
-        <div
-          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
-          aria-busy="true"
-        >
-          {[0, 1, 2, 3, 4, 5].map((index) => (
-            <div
-              key={index}
-              className="h-32 animate-pulse rounded-2xl bg-(--hover)"
+    <div className="grid items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)]">
+      <nav aria-label="Roles" className={`${card} p-2`}>
+        <p className="px-3 pt-2 pb-1.5 text-[0.68rem] font-semibold tracking-wider text-(--muted) uppercase">
+          Built-in
+        </p>
+        <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+          {builtIn.map((role) => (
+            <RoleListItem
+              key={role.id}
+              role={role}
+              active={role.id === selected.id}
+              onSelect={() => setSelectedId(role.id)}
             />
           ))}
-        </div>
-      ) : rolesQuery.isError ? (
-        <p className="text-sm text-rose-500">
-          Roles could not be loaded. {rolesQuery.error.message}
-        </p>
-      ) : roles.length === 0 ? (
-        <EmptyState icon={ShieldCheck} title="No roles yet" />
-      ) : (
-        <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3">
-          {roles.map((role) => (
-            <li key={role.id}>
-              <ElevatedCard
-                as="button"
-                type="button"
-                padded
-                onClick={() => setEditor({ mode: "edit", role })}
-                className="flex h-full w-full cursor-pointer flex-col items-start gap-2 text-left transition-transform hover:-translate-y-0.5"
-              >
-                <span className="flex w-full items-center justify-between gap-2">
-                  <span className="truncate text-base font-semibold text-(--text)">
-                    {roleLabel(role.name)}
-                  </span>
-                  {role.isSystem ? (
-                    <StatusChip tone="neutral">Built-in</StatusChip>
-                  ) : null}
-                </span>
-                <span className="line-clamp-2 text-sm text-(--muted)">
-                  {role.description || "No description."}
-                </span>
-                <span className="mt-auto flex gap-3 pt-1 text-xs text-(--muted)">
-                  <span>
-                    <strong className="text-(--text)">
-                      {role.permissions.length}
-                    </strong>{" "}
-                    permissions
-                  </span>
-                  <span>
-                    <strong className="text-(--text)">
-                      {role.memberCount}
-                    </strong>{" "}
-                    {role.memberCount === 1 ? "member" : "members"}
-                  </span>
-                </span>
-              </ElevatedCard>
-            </li>
-          ))}
         </ul>
-      )}
+
+        {custom.length > 0 ? (
+          <>
+            <p className="px-3 pt-4 pb-1.5 text-[0.68rem] font-semibold tracking-wider text-(--muted) uppercase">
+              Custom
+            </p>
+            <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+              {custom.map((role) => (
+                <RoleListItem
+                  key={role.id}
+                  role={role}
+                  active={role.id === selected.id}
+                  onSelect={() => setSelectedId(role.id)}
+                />
+              ))}
+            </ul>
+          </>
+        ) : null}
+
+        {canCreate ? (
+          <div className={`mt-2 border-t pt-2 ${line}`}>
+            <button
+              type="button"
+              onClick={() => setEditor({ mode: "create" })}
+              className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-(--accent) hover:bg-(--hover)"
+            >
+              <Plus size={14} weight="bold" />
+              Custom role
+            </button>
+          </div>
+        ) : null}
+      </nav>
+
+      <section aria-label={roleLabel(selected.name)} className={`${card} p-6`}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="flex flex-wrap items-center gap-2 text-xl font-bold text-(--text)">
+              {roleLabel(selected.name)}
+              <span className="rounded-md bg-[color-mix(in_srgb,var(--text)_9%,transparent)] px-1.5 py-0.5 text-[0.7rem] font-semibold text-(--muted)">
+                {selected.isSystem ? "Built-in" : "Custom"}
+              </span>
+            </h2>
+            <p className="mt-1 text-sm text-(--muted)">
+              {selected.description || "No description."}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={secondaryButtonClassName}
+              onClick={() => setEditor({ mode: "edit", role: selected })}
+            >
+              {editable ? (
+                <>
+                  <PencilSimple size={15} weight="bold" />
+                  Edit role
+                </>
+              ) : (
+                "View all permissions"
+              )}
+            </button>
+            {canCreate ? (
+              <Button
+                onClick={() => setEditor({ mode: "create", from: selected })}
+              >
+                <Copy size={15} weight="bold" />
+                Duplicate
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-5 mb-6 flex flex-wrap gap-8">
+          <span className="text-sm text-(--muted)">
+            <strong className="text-2xl font-bold text-(--text)">
+              {selected.permissions.length}
+            </strong>{" "}
+            of {total} permissions
+          </span>
+          <span className="text-sm text-(--muted)">
+            <strong className="text-2xl font-bold text-(--text)">
+              {selected.memberCount}
+            </strong>{" "}
+            {selected.memberCount === 1 ? "member" : "members"}
+          </span>
+        </div>
+
+        <AreaBars role={selected} />
+      </section>
 
       {editor ? (
         <RoleEditorPanel

@@ -198,7 +198,7 @@ export function RoleEditorPanel({
   const title = existing ? roleLabel(existing.name) : "New role";
 
   return (
-    <SlideOverFrame label={title} onClose={onClose} className="max-w-[560px]">
+    <SlideOverFrame label={title} onClose={onClose} className="max-w-[720px]">
       {/* Header */}
       <div className={`shrink-0 border-b px-6 pt-6 pb-5 ${line}`}>
         <div className="flex items-start justify-between gap-3">
