@@ -149,6 +149,8 @@ export interface UseAcademyPageContentArgs {
   discussionsWhileSessionPending: boolean;
   isWorkspaceRoleHydrated: boolean;
   dashboardHomeExpected: boolean;
+  /** A creator view is on its way (see useShellSession) though the role still reads student. */
+  creatorViewExpected: boolean;
   routeContentHeld: boolean;
   enrollmentFilter: CourseEnrollmentFilter;
   needsCompleteCourseList: boolean;
@@ -278,6 +280,7 @@ export function useAcademyPageContent({
   discussionsWhileSessionPending,
   isWorkspaceRoleHydrated,
   dashboardHomeExpected,
+  creatorViewExpected,
   routeContentHeld,
   enrollmentFilter,
   needsCompleteCourseList,
@@ -359,6 +362,8 @@ export function useAcademyPageContent({
           page={surfacePage}
           role={effectiveRole}
           quizId={quizId}
+          isAdmin={isAdmin}
+          analyticsTab={surfaceAnalyticsTab}
         />
       );
     }
@@ -761,10 +766,27 @@ export function useAcademyPageContent({
     }
     if (surfacePage === "analytics" || isSectionPage("Analytics")) {
       if (effectiveRole !== "creator") {
-        return null;
+        // Until the session has answered and the saved view is in, the
+        // page's own frame stays up rather than a blank; a learner (never a
+        // creator) still gets nothing.
+        return isAuthReady && !creatorViewExpected ? null : (
+          <AcademyRouteSkeleton
+            page="analytics"
+            isAdmin={isAdmin}
+            analyticsTab={surfaceAnalyticsTab}
+          />
+        );
       }
       return (
-        <Suspense fallback={<AcademyRouteSkeleton page="analytics" />}>
+        <Suspense
+          fallback={
+            <AcademyRouteSkeleton
+              page="analytics"
+              isAdmin={isAdmin}
+              analyticsTab={surfaceAnalyticsTab}
+            />
+          }
+        >
           <AnalyticsDashboardPage
             role={role}
             isAdmin={isAdmin}

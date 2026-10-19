@@ -376,6 +376,9 @@ importers:
       '@veolms/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@veolms/web-core':
+        specifier: workspace:*
+        version: link:../web-core
       recharts:
         specifier: ^2.15.4
         version: 2.15.4(react-dom@19.2.8(react@19.2.8))(react@19.2.8)

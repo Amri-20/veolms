@@ -7,6 +7,7 @@ export * from "./BarList";
 export * from "./InsightsPanel";
 export * from "./DataTable";
 export * from "./csv";
+export * from "./skeletons";
 export * from "./charts/Sparkline";
 export * from "./charts/TrendChart";
 export * from "./charts/SeriesChart";

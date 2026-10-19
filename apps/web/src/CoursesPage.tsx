@@ -305,6 +305,7 @@ export function CoursesPage({
     allowedWorkspaceRoles,
     canSwitchWorkspace,
     effectiveRole,
+    creatorViewExpected,
     canAccessDashboard,
     dashboardCapabilitiesResolved,
     routeContentBlocked,
@@ -1033,6 +1034,7 @@ export function CoursesPage({
     discussionsWhileSessionPending,
     isWorkspaceRoleHydrated,
     dashboardHomeExpected,
+    creatorViewExpected,
     routeContentHeld,
     enrollmentFilter,
     needsCompleteCourseList,
@@ -1348,6 +1350,8 @@ export function CoursesPage({
         keepLessonPageBoxes={keepLessonPageBoxes}
         routeContentBlocked={routeContentBlocked}
         effectiveRole={effectiveRole}
+        isAdmin={isAdmin}
+        analyticsTab={analyticsTab}
         quizId={quizId}
         learningBackground={learningBackground}
         renderPageContent={renderPageContent}

@@ -19,6 +19,9 @@ export interface ShellMainFrameProps {
   keepLessonPageBoxes: boolean;
   routeContentBlocked: boolean;
   effectiveRole: CourseRole;
+  /** For the analytics page's loading frame: which sections, which one open. */
+  isAdmin?: boolean;
+  analyticsTab?: string;
   quizId: string | undefined;
   learningBackground: {
     courseSlug?: string;
@@ -66,6 +69,8 @@ export function ShellMainFrame({
   keepLessonPageBoxes,
   routeContentBlocked,
   effectiveRole,
+  isAdmin = false,
+  analyticsTab,
   quizId,
   learningBackground,
   renderPageContent,
@@ -170,6 +175,8 @@ export function ShellMainFrame({
                 page={page}
                 role={effectiveRole}
                 quizId={quizId}
+                isAdmin={isAdmin}
+                analyticsTab={analyticsTab}
               />
             ) : learningBackground ? (
               <LearningBackgroundSurface
@@ -202,6 +209,8 @@ export function ShellMainFrame({
               page={page}
               role={effectiveRole}
               quizId={quizId}
+              isAdmin={isAdmin}
+              analyticsTab={analyticsTab}
             />
           ) : (
             // The same element as the page behind the lesson above, so a

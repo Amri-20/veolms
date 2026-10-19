@@ -96,7 +96,7 @@ export function getAcademyRoutes(): RouteConfigEntry {
       id: "discussions-saved",
       caseSensitive: true,
     }),
-    route("analytics/:analyticsTab?", marker, {
+    route("analytics/:analyticsTab?", "routes/analytics-marker.tsx", {
       id: "analytics",
       caseSensitive: true,
     }),
