@@ -102,11 +102,9 @@ export const STANDARD_FEATURES = [
     enabled: true,
   },
   {
-    // Off until every route and page checks permissions instead of role
-    // names; a custom-role member would otherwise see mixed results.
     feature_key: "team_custom_roles",
     description: "Custom team roles built from permissions",
-    enabled: false,
+    enabled: true,
   },
 ] as const;
 
@@ -686,9 +684,10 @@ export async function seedRolesAndPermissions(
       .insertInto("features")
       .values(feature)
       .onConflict((conflict) =>
+        // `enabled` is the default for a new academy only: re-running the
+        // seed must not undo a feature an admin switched on or off.
         conflict.column("feature_key").doUpdateSet({
           description: feature.description,
-          enabled: feature.enabled,
         }),
       )
       .execute();
