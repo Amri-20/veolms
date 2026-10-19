@@ -542,6 +542,20 @@ export function createLearningProgressService({
       }
     }
 
+    // Announced after the write, for listeners such as a plugin's
+    // analytics; a listener's failure is its own.
+    try {
+      services.analyticsEvents?.emit("learning.activity", {
+        userId: user.id,
+        courseId: course.id,
+        lessonIds: rowsToUpsert.map((row) => row.lesson_id),
+        seconds: watchedSeconds ?? 0,
+        at: now,
+      });
+    } catch {
+      // See above.
+    }
+
     return { synced: true };
   }
 

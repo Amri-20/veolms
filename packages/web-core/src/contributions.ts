@@ -77,9 +77,126 @@ export interface OfflineDataProvider {
   playbackBootstrap(courseSlug: string, lessonNumber: number): Promise<unknown>;
 }
 
+/** The filter the analytics page passes to every tab. */
+export interface AnalyticsTabFilters {
+  /** ISO instants; the range the page shows. */
+  from: string;
+  to: string;
+  /** One course, or every course the viewer may see when absent. */
+  courseId?: string;
+  /** The range's preset, for a tab that wants to label it. */
+  rangeKey: "7d" | "30d" | "3m" | "1y";
+}
+
+/** One table of a tab, as a CSV export wants it. */
+export interface AnalyticsExportSection {
+  title: string;
+  headers: string[];
+  rows: Array<Array<string | number | null | undefined>>;
+}
+
+export interface AnalyticsTabProps {
+  filters: AnalyticsTabFilters;
+  /** The viewer sees the whole academy (admin), or their own courses. */
+  isAdmin: boolean;
+  /**
+   * Hands the page what the tab would export. Called with the tab's
+   * tables once they are loaded, and with `null` while they are not.
+   */
+  onExportChange: (sections: AnalyticsExportSection[] | null) => void;
+}
+
+/**
+ * A tab a plugin adds to the analytics page beside Overview, Revenue and
+ * Courses. The page renders the tab's component with the shared filters
+ * when it is selected.
+ */
+export interface AnalyticsTabContribution {
+  /** The `?tab=` value; letters, digits and dashes. */
+  id: string;
+  label: string;
+  order?: number;
+  /** Drawn as the Settings page draws its tab icons (a Phosphor icon fits). */
+  Icon: ComponentType<{
+    size?: number;
+    weight?: "duotone" | "fill" | "regular";
+  }>;
+  /** The tab's colour when page tabs are multicolour, as on Settings. */
+  tone: "blue" | "cyan" | "gold" | "green" | "orange" | "rose" | "violet";
+  component: ComponentType<AnalyticsTabProps>;
+  /** Shown to admins only when true (an instructor never sees it). */
+  adminOnly?: boolean;
+}
+
 export interface WebContributions {
   lessonCardActions: readonly LessonCardActionContribution[];
   profileMenuLinks: readonly ProfileMenuLinkContribution[];
+  analyticsTabs: readonly AnalyticsTabContribution[];
+}
+
+/**
+ * Something a visitor did, as core reports it. Core names the moments
+ * (a page opened, a course page opened, the enrol button pressed, a
+ * checkout started and its steps, how a payment ended); what is done with
+ * them is the sink's business. Nothing is recorded when no sink is
+ * registered, and nothing here identifies the visitor: the sink adds that.
+ */
+export interface AnalyticsEvent {
+  name:
+    | "page_view"
+    | "course_view"
+    | "enroll_click"
+    | "checkout_start"
+    | "checkout_step"
+    | "payment_result"
+    | (string & {});
+  /** ISO instant. */
+  at: string;
+  /** Path and query of the page the event happened on. */
+  path: string;
+  courseId?: string;
+  orderId?: string;
+  /** For checkout_step: which step. */
+  step?: string;
+  /** For payment_result and some steps: how it ended. */
+  outcome?: string;
+  /** For page_view: where the visitor came from, the first page only. */
+  referrer?: string;
+  /** For page_view: utm_* parameters of the page's address. */
+  utm?: Record<string, string>;
+  props?: Record<string, string | number | boolean>;
+}
+
+/** One playback of a lesson video, summarised when it ends. */
+export interface PlaybackSummary {
+  /** Random id for this playback. */
+  playbackId: string;
+  /** The course's route key (slug or id), as the progress heartbeat uses. */
+  courseKey: string;
+  /** The lesson's number in the course, when the player knows it. */
+  lessonNumber: number | null;
+  /** The player's key for the media (the resume key or file name). */
+  mediaKey: string;
+  startedAt: string;
+  endedAt: string;
+  /** Milliseconds from the load starting to the first frame playing. */
+  startupMs: number | null;
+  /** The video never reached its first frame. */
+  startFailed: boolean;
+  errorCode?: string;
+  /** Rebuffering after the first frame: how often and for how long. */
+  bufferingCount: number;
+  bufferingMs: number;
+  /** Seconds of video actually played. */
+  watchedSeconds: number;
+  /** Seconds played at each rendition height. */
+  qualities: Array<{ height: number; seconds: number }>;
+}
+
+/** Where core hands its events; one sink at a time. */
+export interface AnalyticsSink {
+  track(event: AnalyticsEvent): void;
+  playback(summary: PlaybackSummary): void;
 }
 
 type Listener = () => void;
@@ -89,6 +206,7 @@ interface ContributionStore {
   listeners: Set<Listener>;
   shellPages?: Map<string, ShellPageContribution>;
   offlineData?: OfflineDataProvider | null;
+  analyticsSink?: AnalyticsSink | null;
 }
 
 // One store per page, shared even when the module is bundled twice (core
@@ -100,7 +218,11 @@ function getStore(): ContributionStore {
     [STORE_KEY]?: ContributionStore;
   };
   host[STORE_KEY] ??= {
-    snapshot: { lessonCardActions: [], profileMenuLinks: [] },
+    snapshot: {
+      lessonCardActions: [],
+      profileMenuLinks: [],
+      analyticsTabs: [],
+    },
     listeners: new Set(),
   };
   return host[STORE_KEY];
@@ -154,6 +276,25 @@ export function registerProfileMenuLink(
     });
 }
 
+/**
+ * Adds (or replaces, by id) a tab on the analytics page.
+ * Returns a function that removes it again.
+ */
+export function registerAnalyticsTab(
+  contribution: AnalyticsTabContribution,
+): () => void {
+  const others = getStore().snapshot.analyticsTabs.filter(
+    (entry) => entry.id !== contribution.id,
+  );
+  update({ analyticsTabs: [...others, contribution].sort(byOrder) });
+  return () =>
+    update({
+      analyticsTabs: getStore().snapshot.analyticsTabs.filter(
+        (entry) => entry !== contribution,
+      ),
+    });
+}
+
 /** Current contributions; the same object until something changes. */
 export function getWebContributions(): WebContributions {
   return getStore().snapshot;
@@ -197,4 +338,17 @@ export function registerOfflineDataProvider(
 
 export function getOfflineDataProvider(): OfflineDataProvider | null {
   return getStore().offlineData ?? null;
+}
+
+/** Sets the sink core's analytics events go to (one at a time). */
+export function registerAnalyticsSink(sink: AnalyticsSink): () => void {
+  const store = getStore();
+  store.analyticsSink = sink;
+  return () => {
+    if (store.analyticsSink === sink) store.analyticsSink = null;
+  };
+}
+
+export function getAnalyticsSink(): AnalyticsSink | null {
+  return getStore().analyticsSink ?? null;
 }

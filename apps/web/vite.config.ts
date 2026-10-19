@@ -665,6 +665,7 @@ export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
         // The analytics charts. Recharts imports CommonJS lodash modules
         // (`lodash/get` and others) by their default export.
         "recharts",
+        "@veolms/analytics-ui > recharts",
         "@veolms/video-player > shaka-player",
       ],
       holdUntilCrawlEnd: false,

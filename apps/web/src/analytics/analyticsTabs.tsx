@@ -1,0 +1,45 @@
+import { lazy, type ComponentType } from "react";
+import { ChartPieSliceIcon as ChartPieSlice } from "@phosphor-icons/react/ChartPieSlice";
+import { CurrencyInrIcon as CurrencyInr } from "@phosphor-icons/react/CurrencyInr";
+import { BooksIcon as Books } from "@phosphor-icons/react/Books";
+import type {
+  AnalyticsTabContribution,
+  AnalyticsTabProps,
+} from "@veolms/web-core";
+
+/**
+ * The page's own tabs. Plugins add theirs through `registerAnalyticsTab`
+ * (web-core); the page shows both lists in `order`. Each tab's module is
+ * loaded when it is first opened, so the Overview does not pay for the
+ * charts of the others.
+ */
+const lazyTab = (
+  load: () => Promise<{ default: ComponentType<AnalyticsTabProps> }>,
+) => lazy(load);
+
+export const CORE_ANALYTICS_TABS: readonly AnalyticsTabContribution[] = [
+  {
+    id: "overview",
+    label: "Overview",
+    order: 0,
+    Icon: ChartPieSlice,
+    tone: "blue",
+    component: lazyTab(() => import("./tabs/OverviewTab")),
+  },
+  {
+    id: "revenue",
+    label: "Revenue",
+    order: 10,
+    Icon: CurrencyInr,
+    tone: "green",
+    component: lazyTab(() => import("./tabs/RevenueTab")),
+  },
+  {
+    id: "courses",
+    label: "Courses & Content",
+    order: 20,
+    Icon: Books,
+    tone: "violet",
+    component: lazyTab(() => import("./tabs/CoursesTab")),
+  },
+];
