@@ -102,11 +102,10 @@ export function renderNotificationTemplate(
     }
     case "purchase.completed": {
       const orderNumber = stringValue(data, "orderNumber");
-      // payment.completed carries the stored order total, which is in major
-      // units (499 = ₹499) — unlike refund events, which carry minor units.
+      // payment.completed carries the stored order total, in minor units
+      // like every transacted amount.
       const total = formatMoney(numberValue(data, "totalAmount"), {
         currency: stringValue(data, "currency"),
-        unit: "major",
       });
       const itemTitles = stringListValue(data, "itemTitles");
       inApp = {

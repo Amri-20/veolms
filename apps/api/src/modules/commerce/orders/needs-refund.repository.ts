@@ -126,7 +126,7 @@ export interface StuckManualTransferRow {
   /** Why the request can no longer be verified. */
   order_status: (typeof PAID_ORDER_STATUSES)[number] | ClosedUnpaidOrderStatus;
   user_id: string;
-  /** Major units, as order columns are stored. */
+  /** Minor units, as order columns are stored. */
   total_amount: number;
   currency: string;
   payment_method: string;
@@ -245,15 +245,15 @@ interface DuplicateOrdersRow {
   /** The later-paid order: the one to refund. */
   order_id: string;
   order_number: string;
-  /** Major units, as order and item columns are stored. */
+  /** Minor units, as order and item columns are stored. */
   final_amount: number;
-  /** Major units. */
+  /** Minor units. */
   total_amount: number;
   paid_at: Date;
   paid_at_cursor: string;
   earlier_order_id: string;
   earlier_order_number: string;
-  /** Major units. */
+  /** Minor units. */
   earlier_final_amount: number;
   earlier_paid_at: Date;
   /**

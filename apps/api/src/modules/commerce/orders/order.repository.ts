@@ -6,7 +6,6 @@ import type {
   OrderSortOrder,
 } from "@veolms/contracts";
 import type { Executor } from "../shared/repository.types.ts";
-import { toMinorUnits } from "../shared/currency.ts";
 import { CHECKOUT_HAND_OUT_ATTEMPT_STATUS } from "../shared/open-orders.ts";
 import { escapeLikePattern } from "../../../lib/like-pattern.ts";
 import { SURPLUS_CAPTURE_ERROR_CODE } from "../payments/surplus-payment.ts";
@@ -439,20 +438,13 @@ export async function getOrderStatsByCurrency(
     currency: row.currency,
     totalOrders: Number(row.total_orders),
     uniqueBuyers: Number(row.unique_buyers),
-    // Every amount in this row is MINOR units. orders.total_amount is stored
-    // in major units while refunds and after_commission_amount are minor, so
-    // the gross is converted here; subtracting the raw values gave nonsense
-    // (a ₹499 order with a ₹100 refund netted to -9501).
-    grossPaid: toMinorUnits(Number(row.gross_paid), row.currency),
+    // Every amount in this row is minor units, as stored.
+    grossPaid: Number(row.gross_paid),
     // Never below zero: refunds cannot exceed what an order was paid, and
     // the response does not allow a negative figure.
     totalEarnings:
       Number(row.stored_earnings) +
-      Math.max(
-        0,
-        toMinorUnits(Number(row.unstored_gross), row.currency) -
-          Number(row.unstored_refunded),
-      ),
+      Math.max(0, Number(row.unstored_gross) - Number(row.unstored_refunded)),
     refundedAmount: Number(row.refunded_amount),
     refundedAgainstPaid: Number(row.refunded_against_paid),
   }));
@@ -518,11 +510,8 @@ export async function getRevenueTrend(
   const rows = await query.execute();
   return rows.map((row) => ({
     date: row.date,
-    // Minor units: the major-unit gross is converted before the minor-unit
-    // refunds are subtracted.
-    value:
-      toMinorUnits(Number(row.gross_paid), filters.currency) -
-      Number(row.refunded_amount),
+    // Minor units, like the refunds subtracted from it.
+    value: Number(row.gross_paid) - Number(row.refunded_amount),
   }));
 }
 

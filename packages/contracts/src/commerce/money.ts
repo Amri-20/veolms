@@ -6,15 +6,15 @@
  * Amounts are always whole numbers, in one of two units:
  *
  * - **minor** — the currency's smallest unit (49900 = ₹499.00). Everything
- *   that describes money that actually moved uses it: payments, refunds,
- *   gateway and webhook amounts, credit notes, order responses, invoices,
- *   order statistics and revenue analytics. All arithmetic and all
- *   aggregates on transacted money are done in minor units.
+ *   that describes money that actually moved uses it, in storage and on the
+ *   wire: orders, order items, coupon redemptions, payments, refunds,
+ *   gateway and webhook amounts, credit notes, invoices, order statistics
+ *   and revenue analytics. All arithmetic and all aggregates on transacted
+ *   money are done in minor units.
  *
  * - **major** — whole currency units (499 = ₹499). List prices use it: course,
- *   bundle and quiz prices, coupon discount/min/max amounts, the checkout
- *   preview, and — in storage only — the `orders` and `order_items` columns,
- *   which are converted to minor units before they leave the API.
+ *   bundle and quiz prices, coupon discount/min/max amounts and the checkout
+ *   preview. Checkout converts them once, when it writes the order.
  *
  * Mixing the two without converting is how a partial refund once looked like
  * a full one and how invoices showed ₹4.99 for a ₹499 order. Convert with
@@ -50,7 +50,7 @@ export function minorUnitsPerMajor(currency: string): number {
 }
 
 /**
- * Converts a whole major-unit amount (a list price, a stored order total) to
+ * Converts a whole major-unit amount (a list price, a checkout preview) to
  * minor units. Throws on a negative, fractional or unsafe value rather than
  * guessing — a wrong amount here is a wrong charge.
  */

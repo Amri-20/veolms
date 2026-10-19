@@ -5,7 +5,6 @@ import type { GatewayRefundDetails, PaymentGateway } from "@veolms/contracts";
 import * as refundRepo from "../refunds/refund.repository.ts";
 import * as orderRepo from "../orders/order.repository.ts";
 import * as paymentRepo from "../payments/payment.repository.ts";
-import { toMinorUnits } from "../shared/currency.ts";
 import { createCourseAccessService } from "../shared/course-access.service.ts";
 import { mapWithConcurrency } from "../../../lib/concurrency.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
@@ -197,18 +196,13 @@ export function createRefundReconciliationWorker({
             });
           const totalProcessed = totalOtherRefundsAlready + refund.amount;
 
-          // Refund amounts are gateway minor units (paise), while
-          // `orders.total_amount` is major units (rupees) — see
-          // shared/currency.ts. Compare against the captured payment's
-          // amount, which is already stored in minor units; fall back to
-          // converting the order total only if the payment row is missing.
+          // Compare against the captured payment's amount; fall back to the
+          // order total (also minor units) only if the payment row is missing.
           const payment = await paymentRepo.findPaymentById(
             database,
             refund.payment_id,
           );
-          const orderTotalMinorUnits =
-            payment?.amount ??
-            toMinorUnits(order.total_amount, refund.currency);
+          const orderTotalMinorUnits = payment?.amount ?? order.total_amount;
 
           await database.transaction().execute(async (trx) => {
             await refundRepo.updateRefundStatus(trx, refund.id, {

@@ -1,7 +1,6 @@
 import { sql } from "kysely";
 import type { OrderScope } from "@veolms/contracts";
 import type { Executor } from "../commerce/shared/repository.types.ts";
-import { toMinorUnits } from "../commerce/shared/currency.ts";
 import { SURPLUS_CAPTURE_ERROR_CODE } from "../commerce/payments/surplus-payment.ts";
 
 /**
@@ -10,8 +9,8 @@ import { SURPLUS_CAPTURE_ERROR_CODE } from "../commerce/payments/surplus-payment
  * cohort rule as `order.repository.ts`'s stats: an order belongs to the
  * day and range it was created in, a successful order is one in `paid` or
  * `partially_refunded`, and a refund counts against the order it refunds.
- * Order columns are major units and refunds minor; every amount leaves
- * here in minor units.
+ * Order columns, refunds and payments are all minor units (paise), and so
+ * is every amount that leaves here.
  */
 
 export interface OrderWindow {
@@ -89,7 +88,7 @@ export async function getDailyOrderSeries(
 
   const rows = await query.execute();
   return rows.map((row) => {
-    const grossSales = toMinorUnits(Number(row.gross), window.currency);
+    const grossSales = Number(row.gross);
     const refundedAmount = Number(row.refunded);
     return {
       date: row.date,
@@ -154,8 +153,7 @@ export async function getRevenueByProduct(
     id: row.product_id,
     type: row.type,
     title: row.title,
-    netRevenue:
-      toMinorUnits(Number(row.gross), window.currency) - Number(row.refunded),
+    netRevenue: Number(row.gross) - Number(row.refunded),
     orders: Number(row.orders),
   }));
 }
@@ -199,9 +197,7 @@ export async function getRevenueSources(
       {
         source: row.source,
         orders: Number(row.orders),
-        netRevenue:
-          toMinorUnits(Number(row.gross), window.currency) -
-          Number(row.refunded),
+        netRevenue: Number(row.gross) - Number(row.refunded),
       },
     ]),
   );
@@ -264,7 +260,7 @@ export async function getPaymentMethods(
   return result.rows.map((row) => ({
     method: row.method,
     orders: Number(row.orders),
-    amount: toMinorUnits(Number(row.gross), window.currency),
+    amount: Number(row.gross),
   }));
 }
 
@@ -306,13 +302,13 @@ export async function getCouponPerformance(
 
   const rows = await query.execute();
   return rows.map((row) => {
-    const grossSales = toMinorUnits(Number(row.gross), window.currency);
+    const grossSales = Number(row.gross);
     return {
       couponId: row.coupon_id,
       code: row.code,
       orders: Number(row.orders),
       grossSales,
-      discountGiven: toMinorUnits(Number(row.discount), window.currency),
+      discountGiven: Number(row.discount),
       netRevenue: grossSales - Number(row.refunded),
     };
   });
@@ -377,7 +373,7 @@ export async function getTopRevenueCourses(
 
   const rows = await query.execute();
   return rows.map((row) => {
-    const grossSales = toMinorUnits(Number(row.gross), window.currency);
+    const grossSales = Number(row.gross);
     const refundedAmount = Number(row.refunded);
     const orders = Number(row.orders);
     return {
