@@ -248,3 +248,62 @@ export function otpVerificationEmail({
     }),
   };
 }
+
+/** A link styled as the app's primary button. `href` must be an https or http URL. */
+function button(href: string, label: string): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 8px"><tr><td bgcolor="${colors.accent}" style="background-color:${colors.accent};border-radius:12px"><a href="${escapeHtml(href)}" style="display:inline-block;padding:13px 22px;font-size:15px;line-height:20px;font-weight:700;color:#FFFFFF;text-decoration:none">${escapeHtml(label)}</a></td></tr></table>`;
+}
+
+function roleList(roleNames: readonly string[]): string {
+  return roleNames.length === 0 ? "a team role" : roleNames.join(", ");
+}
+
+export interface TeamMemberAddedInput {
+  academyName: string;
+  logoUrl?: string | null;
+  /** Who made the change, when known. */
+  addedByName: string | null;
+  roleNames: readonly string[];
+  /** Where the person continues: the app's sign-in or workspace page. */
+  openUrl: string;
+}
+
+/**
+ * Sent when an existing account is put on the team. Nothing to accept: the
+ * roles already apply, and the next sign-in asks for two-factor setup.
+ */
+export function teamMemberAddedEmail({
+  academyName,
+  logoUrl = null,
+  addedByName,
+  roleNames,
+  openUrl,
+}: TeamMemberAddedInput): EmailContent {
+  const title = `You've been added to the ${academyName} team`;
+  const who = addedByName ? `${addedByName} added you` : "You were added";
+  const intro = `${who} to the ${academyName} team as ${roleList(roleNames)}.`;
+  const next =
+    "Your new access applies the next time you open the academy. Team members sign in with two-factor verification, so you may be asked to set it up.";
+
+  return {
+    subject: title,
+    text: `${intro}\n\n${next}\n\nOpen ${academyName}: ${openUrl}\n\nIf you did not expect this, contact the ${academyName} team.`,
+    html: layout({
+      academyName,
+      logoUrl,
+      title,
+      preheader: intro,
+      bodyHtml: [
+        heading(title),
+        paragraph(escapeHtml(intro)),
+        paragraph(escapeHtml(next), { last: true }),
+        button(openUrl, `Open ${academyName}`),
+        divider(),
+        smallPrint(
+          `If you did not expect this, contact the ${escapeHtml(academyName)} team.`,
+        ),
+      ].join(""),
+      footer: `Sent by ${escapeHtml(academyName)} because your account was added to its team.`,
+    }),
+  };
+}

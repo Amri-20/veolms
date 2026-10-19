@@ -1,6 +1,4 @@
-import { ADMIN_ROLE, INSTRUCTOR_ROLE } from "./auth.constants.ts";
-
-const MANDATORY_MFA_ROLES = new Set([ADMIN_ROLE, INSTRUCTOR_ROLE]);
+import { ADMIN_ROLE, STUDENT_ROLE } from "./auth.constants.ts";
 
 export function isMfaMandatoryAccount(
   storedFlag: boolean,
@@ -22,15 +20,14 @@ export function isMfaMandatoryAccount(
 }
 
 /**
- * Admins and instructors: two-factor sign-in is always required of them,
- * whatever the academy decides for students.
+ * Anyone holding a role other than student (admins, instructors and every
+ * team role, custom ones included): two-factor sign-in is always required of
+ * them, whatever the academy decides for students.
  */
 export function isStaffAccount(
   roles: readonly string[] | null | undefined,
 ): boolean {
-  return Boolean(
-    roles?.some((role) => MANDATORY_MFA_ROLES.has(role.toLowerCase())),
-  );
+  return Boolean(roles?.some((role) => role.toLowerCase() !== STUDENT_ROLE));
 }
 
 export function sessionNeedsMfaChallenge(input: {

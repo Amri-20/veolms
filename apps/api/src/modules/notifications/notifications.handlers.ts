@@ -472,6 +472,9 @@ export async function createNotificationIntents(
   payload: Json,
   dependencies: NotificationHandlerDependencies,
 ): Promise<NotificationIntent[]> {
+  // Team events are kept for the audit trail; the team module emails the
+  // people concerned itself, so they raise no notifications.
+  if (eventType.startsWith("team.")) return [];
   const handler = notificationHandlers[eventType];
   if (!handler) throw new UnknownNotificationEventError(eventType);
   return await handler(payload, dependencies);
