@@ -1,5 +1,4 @@
 import {
-  lazy,
   Suspense,
   useCallback,
   useEffect,
@@ -23,6 +22,13 @@ import {
 } from "../learning/learningHlsBootstrap";
 import { resolveLessonIdentifier } from "../learning/courseContent";
 import { LearningWorkspaceFallback } from "../learning/LearningWorkspaceFallback";
+// Imported with the route, not lazily: a lesson page is built with the
+// workspace drawn, and the route's code is loaded before the page hydrates,
+// so the built page is hydrated as it is and its stylesheets are linked in
+// the document's head. Loaded lazily, the workspace was not there when the
+// page hydrated: the page painted it unstyled, dropped it for the loading
+// placeholder, then drew it again.
+import { LearningWorkspace } from "../learning/LearningWorkspace";
 import {
   getCoursePlayerNote,
   getCoursePlayerPath,
@@ -57,12 +63,6 @@ import type { AcademyOutletContext } from "./academy-layout";
 import type { LearningMiniPlayerRequest } from "../learning/player/learningMiniPlayerTypes";
 import { getVideoPlaybackApiOrigin } from "../learning/videoPlaybackBootstrap";
 import { useMyQuizAssignments } from "../services/quizzes";
-
-const LearningWorkspace = lazy(() =>
-  import("../learning/LearningWorkspace").then((module) => ({
-    default: module.LearningWorkspace,
-  })),
-);
 
 export function meta({ location, matches, params }: Route.MetaArgs) {
   const descriptors = Object.entries(
