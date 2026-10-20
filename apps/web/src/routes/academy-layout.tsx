@@ -1978,7 +1978,7 @@ export default function AcademyLayout() {
           initialPublishedCoursePageNeedsRefresh={
             staticCourseRouteData?.publishedCoursePageNeedsRefresh
           }
-          initialCourseOverview={staticCourseRouteData?.courseOverview}
+          initialCourseCurriculum={staticCourseRouteData?.courseCurriculum}
           initialGuestHomePage={staticCourseRouteData?.guestHomePage}
           initialGuestHomeCopy={staticCourseRouteData?.guestHomeCopy}
           page={route.page}

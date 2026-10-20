@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { inlineCriticalCss } from "./inline-critical-css.mjs";
+import { writeStaticCurricula } from "./write-static-curricula.mjs";
 
 export const FIRST_SECTION_FLAG = "--first-section";
 export const NO_LESSONS_FLAG = "--no-lessons";
@@ -82,13 +83,23 @@ export const runPerformanceBuild = async (
       // Prerendered pages paint from inline critical CSS instead of waiting
       // for the app's large stylesheets. A page that cannot be processed
       // fails the build rather than shipping half-rewritten.
-      inlineCriticalCss(clientBuildDirectory).then(
-        () => resolve(0),
-        (error) => {
-          console.error(error instanceof Error ? error.message : error);
-          resolve(1);
-        },
-      );
+      inlineCriticalCss(clientBuildDirectory)
+        // Each course page's whole curriculum, beside the page.
+        .then(() =>
+          writeStaticCurricula(
+            clientBuildDirectory,
+            // The API the pages were just built from.
+            environmentOverrides.STATIC_BUILD_API_URL ??
+              process.env.STATIC_BUILD_API_URL,
+          ),
+        )
+        .then(
+          () => resolve(0),
+          (error) => {
+            console.error(error instanceof Error ? error.message : error);
+            resolve(1);
+          },
+        );
     });
   });
 };

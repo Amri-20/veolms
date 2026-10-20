@@ -1,9 +1,12 @@
+import { coursePublicCurriculumSchema } from "@veolms/contracts";
 import { api } from "../../lib/api-client";
+import { staticCurriculumUrl } from "../../courses/staticCurriculum";
 import type {
   Category,
   CourseAccessListResponse,
   CourseAccessResponse,
   CourseAccessRule,
+  CoursePublicCurriculum,
   CourseBasicsResponse,
   CourseCreatedResponse,
   CourseDeleteResponse,
@@ -106,6 +109,31 @@ export const coursesService = {
   /** The same for every published course, for the catalogue's cards. */
   listAccess: (): Promise<CourseAccessListResponse> =>
     api.get<CourseAccessListResponse>("/courses/access"),
+  /** A published course as every visitor sees it, from the API. */
+  getPublicCurriculum: (idOrSlug: string): Promise<CoursePublicCurriculum> =>
+    api.get<CoursePublicCurriculum>(
+      `/courses/${encodeURIComponent(idOrSlug)}/curriculum`,
+    ),
+  /**
+   * The same, as the site was built with it: a file served with the site's
+   * own pages, not an API call. Null when this build has no such file (a
+   * course published since, or the dev server), and for a copy of another
+   * version than the one asked for.
+   */
+  getStaticCurriculum: async (
+    courseSlug: string,
+    version: string,
+  ): Promise<CoursePublicCurriculum | null> => {
+    const response = await fetch(staticCurriculumUrl(courseSlug, version), {
+      credentials: "omit",
+    });
+    if (!response.ok) return null;
+    const parsed = coursePublicCurriculumSchema.safeParse(
+      await response.json().catch(() => null),
+    );
+    if (!parsed.success || parsed.data.version !== version) return null;
+    return parsed.data;
+  },
   getLessonDescription: (
     courseId: string,
     lessonId: string,

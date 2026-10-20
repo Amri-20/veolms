@@ -1,11 +1,11 @@
 import {
+  courseAccessResponseSchema,
   courseListResponseSchema,
-  courseOverviewSchema,
+  coursePublicCurriculumSchema,
   guestHomePageResponseSchema,
   homeDiscoveryResponseSchema,
   publicPopularDiscussionsResponseSchema,
   type CourseListResponse,
-  type CourseOverviewResponse,
   type GuestHomePageResponse,
   type HomeDiscoveryResponse,
 } from "@veolms/contracts";
@@ -15,11 +15,19 @@ import {
   selectGuestHomeCourses,
 } from "../home/guestHomeLimits";
 import { fetchStaticBuildApi } from "./staticBuildApi";
+import {
+  toCurriculumPreview,
+  type CourseCurriculumPreview,
+} from "../courses/staticCurriculum";
 
 export interface AcademyStaticPageData {
   publishedCoursePage?: CourseListResponse;
   publishedCoursePageNeedsRefresh?: boolean;
-  courseOverview?: CourseOverviewResponse;
+  /**
+   * A course page's course, as every visitor sees it: its first sections
+   * only (the rest is a file of its own), with the price at build time.
+   */
+  courseCurriculum?: CourseCurriculumPreview;
   guestHomePage?: GuestHomePageResponse;
   /**
    * The home page's words without its courses and discussions, carried by
@@ -230,13 +238,13 @@ export async function loadDevelopmentHomePageData(request: Request) {
   const pathname = new URL(request.url).pathname.replace(/[/]$/u, "") || "/";
   const refresh = refreshDevelopmentGuestHomePage();
   const courseSlug = readCourseOverviewSlug(pathname);
-  const [courseOverview] = await Promise.all([
+  const [courseCurriculum] = await Promise.all([
     courseSlug ? loadDevelopmentCourseOverview(courseSlug) : undefined,
     developmentGuestHomePage ? undefined : refresh,
   ]);
   if (!developmentGuestHomePage) {
-    return courseOverview
-      ? ({ courseOverview } satisfies AcademyStaticPageData)
+    return courseCurriculum
+      ? ({ courseCurriculum } satisfies AcademyStaticPageData)
       : null;
   }
   return (
@@ -244,7 +252,7 @@ export async function loadDevelopmentHomePageData(request: Request) {
       ? { guestHomePage: developmentGuestHomePage }
       : {
           guestHomeCopy: toGuestHomeCopy(developmentGuestHomePage),
-          ...(courseOverview ? { courseOverview } : {}),
+          ...(courseCurriculum ? { courseCurriculum } : {}),
         }
   ) satisfies AcademyStaticPageData;
 }
@@ -260,20 +268,49 @@ function readCourseOverviewSlug(pathname: string) {
   }
 }
 
-function parseCourseOverview(courseSlug: string) {
+function parseWith<T>(
+  schema: { safeParse: (value: unknown) => { success: boolean; data?: T } },
+  what: string,
+) {
   return (value: unknown) => {
-    const result = courseOverviewSchema.safeParse(value);
+    const result = schema.safeParse(value);
     if (!result.success) {
-      throw new Error(
-        `The build API returned invalid overview data for ${courseSlug}.`,
-      );
+      throw new Error(`The build API returned invalid ${what}.`);
     }
-    return result.data as CourseOverviewResponse;
+    return result.data as T;
   };
 }
 
-/** The last overview read for each course the dev server has been asked for. */
-const developmentCourseOverviews = new Map<string, CourseOverviewResponse>();
+/**
+ * A course page's course: its public curriculum, the same for everyone,
+ * and the price a visitor is offered (asked without a session, so it is
+ * the price, not anyone's access).
+ */
+async function loadCourseCurriculumPreview(
+  courseSlug: string,
+  retryBudgetMs?: number,
+): Promise<CourseCurriculumPreview> {
+  const key = encodeURIComponent(courseSlug);
+  const [curriculum, access] = await Promise.all([
+    fetchStaticApiData(
+      `/courses/${key}/curriculum`,
+      parseWith(
+        coursePublicCurriculumSchema,
+        `public curriculum for ${courseSlug}`,
+      ),
+      retryBudgetMs,
+    ),
+    fetchStaticApiData(
+      `/courses/${key}/access`,
+      parseWith(courseAccessResponseSchema, `access for ${courseSlug}`),
+      retryBudgetMs,
+    ),
+  ]);
+  return toCurriculumPreview(curriculum, access.pricing);
+}
+
+/** The last course read for each course page the dev server has served. */
+const developmentCourseOverviews = new Map<string, CourseCurriculumPreview>();
 const developmentCourseOverviewRefreshes = new Map<string, Promise<void>>();
 /** A handful of pages are open in development; this only stops it growing. */
 const DEVELOPMENT_COURSE_OVERVIEW_LIMIT = 50;
@@ -281,27 +318,24 @@ const DEVELOPMENT_COURSE_OVERVIEW_LIMIT = 50;
 /**
  * A course page on the dev server, as the production build has it: the
  * course is handed to the document, so the first render already holds the
- * title, the curriculum and the About text, and only the parts that depend
+ * title, the first sections of the curriculum and the About text, and only
+ * the parts that depend
  * on the viewer wait (see `courseViewerState`). Without this the dev
  * server's course page was one whole placeholder until its own request
  * answered, which is not what a visitor of the built site sees.
  *
- * It is the guest's overview, as the build's is: no session goes with it.
- * As with the home page, the last one read is served at once and refreshed
- * behind it, so only the first load of a course waits for the API, and the
- * page checks it against the API once it is in the browser.
+ * It is the course as every visitor sees it, as the build's is: no session
+ * goes with it. As with the home page, the last one read is served at once
+ * and refreshed behind it, so only the first load of a course waits for the
+ * API; the viewer's access answer says when the page is behind the course.
  */
 async function loadDevelopmentCourseOverview(courseSlug: string) {
   let refresh = developmentCourseOverviewRefreshes.get(courseSlug);
   if (!refresh) {
-    refresh = fetchStaticApiData(
-      `/courses/${encodeURIComponent(courseSlug)}/overview`,
-      parseCourseOverview(courseSlug),
-      0,
-    )
-      .then((overview) => {
+    refresh = loadCourseCurriculumPreview(courseSlug, 0)
+      .then((preview) => {
         developmentCourseOverviews.delete(courseSlug);
-        developmentCourseOverviews.set(courseSlug, overview);
+        developmentCourseOverviews.set(courseSlug, preview);
         if (
           developmentCourseOverviews.size > DEVELOPMENT_COURSE_OVERVIEW_LIMIT
         ) {
@@ -362,10 +396,7 @@ async function loadStaticPageData(
   if (pathname.startsWith("/courses/") && pathname.endsWith("/overview")) {
     if (!courseSlug) return null;
     return {
-      courseOverview: await fetchStaticApiData(
-        `/courses/${encodeURIComponent(courseSlug)}/overview`,
-        parseCourseOverview(courseSlug),
-      ),
+      courseCurriculum: await loadCourseCurriculumPreview(courseSlug),
     } satisfies AcademyStaticPageData;
   }
   return null;

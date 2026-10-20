@@ -3,9 +3,9 @@ import { PrefetchPageLinks } from "react-router";
 import type { CSSProperties, ReactNode, Ref } from "react";
 import type {
   CourseListResponse,
-  CourseOverviewResponse,
   GuestHomePageResponse,
 } from "@veolms/contracts";
+import type { CourseCurriculumPreview } from "./courses/staticCurriculum";
 import {
   SETTINGS_DEFAULT_TAB,
   normalizeSettingsTab,
@@ -80,7 +80,7 @@ import { useShellPageEffects } from "./shell/hooks/useShellPageEffects";
 interface CoursesPageProps {
   initialPublishedCoursePage?: CourseListResponse;
   initialPublishedCoursePageNeedsRefresh?: boolean;
-  initialCourseOverview?: CourseOverviewResponse;
+  initialCourseCurriculum?: CourseCurriculumPreview;
   initialGuestHomePage?: GuestHomePageResponse;
   initialGuestHomeCopy?: GuestHomePageResponse;
   onOpenCourse: (
@@ -135,7 +135,7 @@ interface CoursesPageProps {
 export function CoursesPage({
   initialPublishedCoursePage,
   initialPublishedCoursePageNeedsRefresh = false,
-  initialCourseOverview,
+  initialCourseCurriculum,
   initialGuestHomePage,
   initialGuestHomeCopy,
   onOpenCourse,
@@ -975,7 +975,7 @@ export function CoursesPage({
     couponId,
     courseSlug,
     discussionTab,
-    initialCourseOverview,
+    initialCourseCurriculum,
     initialGuestHomeCopy,
     initialGuestHomePage,
     initialPublishedCoursePage,

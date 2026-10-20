@@ -376,6 +376,16 @@ interface CourseOverviewCurriculumProps {
   isPaidCourse?: boolean;
   /** For someone who manages the course: opens the curriculum editor. */
   onEdit?: () => void;
+  /**
+   * How many sections the whole curriculum has, when `courseSections` holds
+   * only the first ones (the page was built with those, see
+   * `useCoursePageData`).
+   */
+  totalSections?: number;
+  /** Whether `courseSections` holds every section. */
+  sectionsComplete?: boolean;
+  /** Asks for the sections not yet here. */
+  onRequestAllSections?: () => void;
 }
 
 export function CourseOverviewCurriculum({
@@ -388,12 +398,16 @@ export function CourseOverviewCurriculum({
   isReadOnlyPreview = false,
   isPaidCourse = false,
   onEdit,
+  totalSections,
+  sectionsComplete = true,
+  onRequestAllSections,
 }: CourseOverviewCurriculumProps) {
+  const sectionCount = Math.max(courseSections.length, totalSections ?? 0);
   // Whether the last change was to every section at once (see `animate`).
   const [changedTogether, setChangedTogether] = useState(false);
   const [showingAllSections, setShowingAllSections] = useState(false);
   const sectionsCut =
-    !showingAllSections && courseSections.length > SECTIONS_SHOWN_IN_FULL;
+    !showingAllSections && sectionCount > SECTIONS_SHOWN_IN_FULL;
   const shownSections = sectionsCut
     ? courseSections.slice(0, SECTIONS_SHOWN_FIRST)
     : courseSections;
@@ -500,7 +514,7 @@ export function CourseOverviewCurriculum({
         </div>
       )}
 
-      {courseSections.length > SECTIONS_SHOWN_IN_FULL ? (
+      {sectionCount > SECTIONS_SHOWN_IN_FULL ? (
         // The rest of the outline, in one press, and the way back to the
         // first few. The rest comes in under the sections already shown, so
         // nothing on screen moves. Hiding them again keeps this button where
@@ -518,8 +532,13 @@ export function CourseOverviewCurriculum({
           // the card's bottom edge (past the card's own padding there).
           data-fixed-radius
           className="mt-3 flex min-h-16 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--text)_2%,transparent)] px-4 text-[0.92rem] font-semibold text-(--accent-ink,var(--accent)) transition-colors duration-140 hover:border-[color-mix(in_srgb,var(--text)_14%,transparent)] hover:bg-[color-mix(in_srgb,var(--text)_4%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) active:bg-[color-mix(in_srgb,var(--text)_6%,transparent)] max-[640px]:-mx-[15px] max-[640px]:mt-1 max-[640px]:-mb-5 max-[640px]:min-h-16 max-[640px]:w-[calc(100%+30px)] max-[640px]:border-transparent max-[640px]:bg-transparent max-[640px]:active:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)]"
+          // The rest of the outline is usually here already (fetched while
+          // the page was idle); pointing at the button asks for it if not.
+          onPointerEnter={onRequestAllSections}
+          onFocus={onRequestAllSections}
           onClick={(event) => {
             if (!showingAllSections) {
+              onRequestAllSections?.();
               setShowingAllSections(true);
               return;
             }
@@ -537,8 +556,10 @@ export function CourseOverviewCurriculum({
         >
           <span>
             {showingAllSections
-              ? `Show first ${SECTIONS_SHOWN_FIRST} sections`
-              : `Show all ${courseSections.length} sections`}
+              ? sectionsComplete
+                ? `Show first ${SECTIONS_SHOWN_FIRST} sections`
+                : `Loading all ${sectionCount} sections…`
+              : `Show all ${sectionCount} sections`}
           </span>
           <CaretDown
             size={15}
