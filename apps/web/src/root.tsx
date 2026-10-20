@@ -59,6 +59,7 @@ import {
 import { AuthPageFrame } from "./auth/AuthPageFrame";
 import { GlobalGoogleOneTap } from "./auth/GoogleOneTap";
 import { AnalyticsPageViews } from "./lib/AnalyticsPageViews";
+import { AnalyticsIdentity } from "./lib/AnalyticsIdentity";
 import {
   OAUTH_REDIRECT_RESULT_STORAGE_KEY,
   getOauthDialogReturnScript,
@@ -473,6 +474,7 @@ export default function Root() {
       <SessionInitializer>
         <GlobalGoogleOneTap />
         <AnalyticsPageViews />
+        <AnalyticsIdentity />
         <Outlet />
       </SessionInitializer>
     </QueryProvider>

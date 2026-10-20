@@ -27,6 +27,7 @@ import {
   paymentConfirmationDelayedMessage,
 } from "../services/payments/paymentConfirmation";
 import { quizKeys } from "../services/quizzes/quizzes.keys";
+import { trackAnalyticsEvent } from "../lib/analytics-track";
 import { useQuizPricingPreview } from "../services/quizzes/quizzes.queries";
 import {
   QUIZ_EYEBROW,
@@ -172,7 +173,18 @@ export function QuizEnrollmentCard({
   const isFree = pricingType === "free";
 
   /** Access is in place: refresh what the page knows and hand over. */
-  const finishEnrollment = async () => {
+  const finishEnrollment = async (kind: "free" | "paid", orderId: string) => {
+    if (kind === "paid") {
+      trackAnalyticsEvent("payment_confirmed", {
+        courseId,
+        orderId,
+        props: { item: "quiz" },
+      });
+    }
+    trackAnalyticsEvent("enrollment_completed", {
+      courseId,
+      props: { kind, item: "quiz" },
+    });
     await queryClient.invalidateQueries({ queryKey: quizKeys.all });
     await pricingPreviewQuery.refetch();
     setIsProcessing(false);
@@ -200,7 +212,7 @@ export function QuizEnrollmentCard({
 
     setConfirmationNotice(null);
     if (paid) {
-      await finishEnrollment();
+      await finishEnrollment("paid", orderId);
       return;
     }
     setIsProcessing(false);
@@ -234,13 +246,19 @@ export function QuizEnrollmentCard({
         ],
         idempotencyKey: checkoutIntentRef.current.key,
       });
+      trackAnalyticsEvent("checkout_start", {
+        courseId,
+        orderId: order.order.id,
+        outcome: order.gateway ? "payment" : "free",
+        props: { item: "quiz" },
+      });
 
       // No payment step (nothing to pay), or the same purchase was already
       // paid on an earlier attempt whose confirmation did not reach this
       // page: access is granted, and reopening the gateway would only show
       // an error for an order that is complete.
       if (!order.gateway || order.order.status === "paid") {
-        await finishEnrollment();
+        await finishEnrollment(order.gateway ? "paid" : "free", order.order.id);
         return;
       }
 
@@ -278,7 +296,7 @@ export function QuizEnrollmentCard({
               gatewayPaymentId: response.razorpay_payment_id,
               gatewaySignature: response.razorpay_signature,
             });
-            await finishEnrollment();
+            await finishEnrollment("paid", order.order.id);
           } catch {
             // The gateway has taken the payment; only our confirmation call
             // failed. This used to read "Payment verification failed.
@@ -295,6 +313,12 @@ export function QuizEnrollmentCard({
             // closing its own window afterwards is not a cancellation.
             const confirmation = paymentConfirmationRef.current;
             if (confirmation && !confirmation.signal.aborted) return;
+            trackAnalyticsEvent("payment_result", {
+              courseId,
+              orderId: order.order.id,
+              outcome: "dismissed",
+              props: { item: "quiz" },
+            });
             // As on the course page: the order is cancelled on the server
             // (unless a payment for it may still arrive), so buying again
             // is not refused while the closed window's time runs out.
@@ -314,6 +338,12 @@ export function QuizEnrollmentCard({
       // reason.
       openCheckoutWindow(rzp, () => {
         windowBlocked = true;
+        trackAnalyticsEvent("payment_result", {
+          courseId,
+          orderId: order.order.id,
+          outcome: "blocked",
+          props: { item: "quiz" },
+        });
         setErrorMessage(CHECKOUT_WINDOW_BLOCKED_MESSAGE);
         void releaseOrder
           .mutateAsync(order.order.id)

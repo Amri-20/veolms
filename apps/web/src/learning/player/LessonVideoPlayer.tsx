@@ -94,6 +94,7 @@ import {
   createWatchTimeTracker,
 } from "../learningWatchTime";
 import { createPlaybackTelemetry } from "./playbackTelemetry";
+import { trackAnalyticsEvent } from "../../lib/analytics-track";
 
 const RESUME_PERSIST_INTERVAL_MS = 5_000;
 // A lesson left this close to its end counts as finished when it is reopened.
@@ -813,6 +814,12 @@ export function LessonVideoPlayer({
         latestPositionRef.current = 0;
         clearResumePosition(activeMediaKeyRef.current);
         if (activeMediaKeyRef.current === requestedMediaKeyRef.current) {
+          trackAnalyticsEvent("lesson_video_completed", {
+            props: {
+              courseKey: watchTimeCourseKeyRef.current ?? "",
+              lessonNumber: lessonIndexRef.current ?? -1,
+            },
+          });
           onProgressChange?.(100);
           onLessonEnded?.();
           if (showCompletionOverlay) setShowEndScreen(true);

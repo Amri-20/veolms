@@ -48,10 +48,12 @@ import { authService, type TotpSetupResponse } from "./auth.service";
 import { courseKeys } from "../courses/courses.keys";
 import { learningInteractionKeys } from "../learning-interactions/learning-interactions.keys";
 import { resetRegisteredInteractionState } from "../learning-interactions/interaction-reset-registry";
+import { trackAnalyticsEvent } from "../../lib/analytics-track";
 
 function persistAuthenticatedSession(
   queryClient: QueryClient,
   data: LoginResponse,
+  method: "otp" | "google" | "oauth",
 ) {
   const currentUser: NonNullable<CurrentUserResponse> = {
     id: data.user.id,
@@ -104,6 +106,10 @@ function persistAuthenticatedSession(
   // is the visitor's.
   void queryClient.invalidateQueries({ queryKey: courseKeys.overviews() });
   queryClient.setQueryData(authKeys.me(), currentUser);
+  // A sign-in still owing its second step is not complete yet.
+  if (!data.mfaRequired) {
+    trackAnalyticsEvent("login_completed", { props: { method } });
+  }
 }
 
 /**
@@ -229,7 +235,7 @@ export function useLogin() {
   return useMutation<LoginResponse, ApiError, LoginRequest>({
     mutationFn: (payload) => authService.login(payload),
     onSuccess: (data) => {
-      persistAuthenticatedSession(queryClient, data);
+      persistAuthenticatedSession(queryClient, data, "otp");
     },
   });
 }
@@ -240,7 +246,8 @@ export function useRegister() {
   return useMutation<LoginResponse, ApiError, RegisterRequest>({
     mutationFn: (payload) => authService.register(payload),
     onSuccess: (data) => {
-      persistAuthenticatedSession(queryClient, data);
+      persistAuthenticatedSession(queryClient, data, "otp");
+      trackAnalyticsEvent("signup_completed");
     },
   });
 }
@@ -295,7 +302,7 @@ export function useOauthLogin() {
   return useMutation<LoginResponse, ApiError, OauthLoginRequest>({
     mutationFn: (payload) => authService.oauthLogin(payload),
     onSuccess: (data) => {
-      persistAuthenticatedSession(queryClient, data);
+      persistAuthenticatedSession(queryClient, data, "oauth");
     },
   });
 }
@@ -306,7 +313,7 @@ export function useGoogleOneTapLogin() {
   return useMutation<LoginResponse, ApiError, GoogleOneTapLoginRequest>({
     mutationFn: (payload) => authService.googleOneTapLogin(payload),
     onSuccess: (data) => {
-      persistAuthenticatedSession(queryClient, data);
+      persistAuthenticatedSession(queryClient, data, "google");
     },
   });
 }

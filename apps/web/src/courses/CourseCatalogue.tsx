@@ -41,6 +41,7 @@ import { useCurrentUser } from "../services/auth";
 import { useCapabilities } from "../services/authorization/authorization.queries";
 import { hasAdminRole } from "../shell/workspaceRole";
 import { courseMatchesWishlist, getCourseRouteKey } from "./catalogue";
+import { useCatalogSearchTracking } from "./useCatalogSearchTracking";
 
 // Only a learner leaving a free course needs this, so it stays out of the
 // catalogue's own code.
@@ -143,6 +144,11 @@ export function CourseCatalogue({
   const canCreateCourse = useCapabilities({
     enabled: role === "creator",
   }).can("course.create");
+  useCatalogSearchTracking(
+    search,
+    isLoading,
+    totalCoursesCount ?? visibleCourses.length,
+  );
   const [pendingDelete, setPendingDelete] = useState<Course | null>(null);
   const [pendingUnenroll, setPendingUnenroll] = useState<Course | null>(null);
   // An admin in Student view can leave any course they enrolled in, and

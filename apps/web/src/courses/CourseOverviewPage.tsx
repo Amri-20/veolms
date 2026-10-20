@@ -625,6 +625,8 @@ function CoursePurchaseSection({
       });
 
       if (res.couponValidation && !res.couponValidation.valid) {
+        // Never the code itself: a private code is the creator's to share.
+        trackAnalyticsEvent("coupon_rejected", { courseId: course.id });
         setCouponError(
           (res.couponValidation.message || "Invalid coupon code.") +
             stillApplied,
@@ -636,6 +638,7 @@ function CoursePurchaseSection({
       // buyer changed theirs while it was in flight, the total is stale on
       // arrival and the effect above asks again.
       setAppliedCoupon(appliedCouponFromPreview(code, res, payableAmount));
+      trackAnalyticsEvent("coupon_applied", { courseId: course.id });
       setCouponInputOpen(false);
       setCouponCodeInput("");
     } catch (err) {
@@ -662,6 +665,20 @@ function CoursePurchaseSection({
     setCouponCodeInput("");
   };
 
+  // The server has the money: unlike `payment_result: paid`, which the
+  // gateway's window reports before the server has checked anything.
+  const trackPaidEnrollment = (orderId: string) => {
+    trackAnalyticsEvent("payment_confirmed", {
+      courseId: course.id,
+      orderId,
+      props: { item: "course" },
+    });
+    trackAnalyticsEvent("enrollment_completed", {
+      courseId: course.id,
+      props: { kind: "paid", item: "course" },
+    });
+  };
+
   const confirmPaidOrder = async (orderId: string) => {
     paymentConfirmationRef.current?.abort();
     const confirmation = new AbortController();
@@ -680,6 +697,7 @@ function CoursePurchaseSection({
     setPaymentNotice(null);
     setIsPaymentBusy(false);
     if (paid) {
+      trackPaidEnrollment(orderId);
       onNavigatePage?.(
         `/learn/${encodeURIComponent(getCourseRouteKey(course))}`,
       );
@@ -741,6 +759,7 @@ function CoursePurchaseSection({
     if (confirmation.signal.aborted) return;
     paymentConfirmationRef.current = null;
     if (paid) {
+      trackPaidEnrollment(orderId);
       setPaymentError(null);
       onNavigatePage?.(
         `/learn/${encodeURIComponent(getCourseRouteKey(course))}`,
@@ -816,6 +835,10 @@ function CoursePurchaseSection({
           orderId: order.order.id,
           outcome: "free",
         });
+        trackAnalyticsEvent("enrollment_completed", {
+          courseId: course.id,
+          props: { kind: "free", item: "course" },
+        });
         setIsPaymentBusy(false);
         onNavigatePage?.(
           `/learn/${encodeURIComponent(getCourseRouteKey(course))}`,
@@ -882,6 +905,7 @@ function CoursePurchaseSection({
               gatewayPaymentId: response.razorpay_payment_id,
               gatewaySignature: response.razorpay_signature,
             });
+            trackPaidEnrollment(order.order.id);
             setIsPaymentBusy(false);
             onNavigatePage?.(
               `/learn/${encodeURIComponent(getCourseRouteKey(course))}`,
