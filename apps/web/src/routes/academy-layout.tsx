@@ -502,11 +502,12 @@ export default function AcademyLayout() {
     workspaceNavigationItems.some(([label]) => label === originSectionValue);
   const lessonReturnPathValue =
     currentNavigationState[ACADEMY_NAVIGATION_LESSON_RETURN_PATH];
-  // Only a course's page or a profile returns to a lesson, and only to a
-  // lesson address.
+  // Only a profile returns to a lesson, and only to a lesson address. A
+  // course's page goes back to the menu section the reader is in (Courses,
+  // Home), not to the lesson it was opened from.
   const lessonReturnPath =
-    (route.kind === "course-overview" ||
-      (route.kind === "shell" && route.page === "public-profile")) &&
+    route.kind === "shell" &&
+    route.page === "public-profile" &&
     typeof lessonReturnPathValue === "string" &&
     isLearningRoutePath(lessonReturnPathValue)
       ? lessonReturnPathValue
@@ -790,21 +791,15 @@ export default function AcademyLayout() {
             navigationState[ACADEMY_NAVIGATION_ORIGIN_SECTION] = originSection;
           }
         }
-        // A course's page or a profile opened from a lesson remembers the
-        // lesson, and a course's page keeps it while it only changes its own
-        // address. Any other move forgets it.
-        const targetCourseOverviewKey = getCourseOverviewRouteKey(path);
+        // A profile opened from a lesson remembers the lesson. Any other
+        // move forgets it (a course's page goes back to the menu section).
         if (
-          (targetCourseOverviewKey || isPublicProfilePath(path)) &&
+          isPublicProfilePath(path) &&
           isLearningRoutePath(activeLocationPath)
         ) {
           navigationState[ACADEMY_NAVIGATION_LESSON_RETURN_PATH] =
             activeLocationPath;
-        } else if (
-          !targetCourseOverviewKey ||
-          getCourseOverviewRouteKey(activeLocationPath) !==
-            targetCourseOverviewKey
-        ) {
+        } else {
           delete navigationState[ACADEMY_NAVIGATION_LESSON_RETURN_PATH];
         }
         if (
@@ -955,10 +950,26 @@ export default function AcademyLayout() {
     navigateToRef.current = navigateTo;
   }, [navigateTo]);
   const navigateBackToOrigin = useCallback(() => {
+    // A lesson opened straight from its address is recorded as its own
+    // origin. Going "back" from a course's page to it is what the reader
+    // left, so the origin's menu section is gone to instead.
+    const originSectionPath = workspaceNavigationItems.find(
+      ([label]) => label === originSectionValue,
+    )?.[2]?.routeLink;
+    const originPath =
+      hasValidNavigationOrigin &&
+      route.kind === "course-overview" &&
+      isLearningRoutePath(originPathValue as string)
+        ? (originSectionPath ??
+          getFallbackNavigationPath(
+            location.pathname,
+            workspaceNavigationItems,
+          ))
+        : (originPathValue as string);
     const targetPath =
       lessonReturnPath ??
       (hasValidNavigationOrigin
-        ? (originPathValue as string)
+        ? originPath
         : getFallbackNavigationPath(
             location.pathname,
             workspaceNavigationItems,
@@ -970,6 +981,8 @@ export default function AcademyLayout() {
     location.pathname,
     navigateTo,
     originPathValue,
+    originSectionValue,
+    route.kind,
     workspaceNavigationItems,
   ]);
   const exitSettings = useCallback(() => {
