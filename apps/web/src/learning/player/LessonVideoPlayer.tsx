@@ -550,6 +550,36 @@ export function LessonVideoPlayer({
     refreshPlaybackToken,
   ]);
 
+  // The element in full screen is the player itself. A lesson opened from
+  // full screen (the next button, the end screen's countdown, the lessons
+  // panel) whose playback is not ready yet used to swap the player for the
+  // loading stage: the element left the page, the browser left full screen
+  // and the phone turned back upright. Until the new lesson can play, the
+  // player stays, paused on the lesson before, under the loading stage's
+  // black and spinner; then it switches source as it does for a prepared
+  // lesson. Its events still count for the lesson that is loaded
+  // (`activeMediaKeyRef`), so nothing is saved against the new one.
+  const [playerFullscreen, setPlayerFullscreen] = useState(false);
+  const heldPlaybackRef = useRef<{
+    source: VideoSource;
+    description: string | null | undefined;
+    chapterThumbnails: Record<number, string>;
+    spriteStoryboardUrl: string | undefined;
+  } | null>(null);
+  const holdPlaybackInFullscreen =
+    presentation === "full" &&
+    playerFullscreen &&
+    playerRef.current !== null &&
+    heldPlaybackRef.current !== null &&
+    !playbackAccessError &&
+    !playbackUnavailableMessage &&
+    (playbackBootstrapPending || !playbackMedia.src);
+  const playbackPaused = playbackSuspended || holdPlaybackInFullscreen;
+  // Read by the player's events, which can arrive (the new lesson loading)
+  // before the callback that handles them is replaced.
+  const holdingPlaybackRef = useRef(holdPlaybackInFullscreen);
+  holdingPlaybackRef.current = holdPlaybackInFullscreen;
+
   useEffect(() => {
     setShowEndScreen(false);
     setAutoplayCancelled(false);
@@ -560,10 +590,10 @@ export function LessonVideoPlayer({
   }, [showCompletionOverlay]);
 
   useEffect(() => {
-    if (playbackSuspended) {
+    if (playbackPaused) {
       playerRef.current?.pause();
     }
-  }, [playbackSuspended]);
+  }, [playbackPaused]);
 
   const persistResumePosition = useCallback((force = false) => {
     const position = latestPositionRef.current;
@@ -684,7 +714,10 @@ export function LessonVideoPlayer({
     (event: VideoPlayerEvent) => {
       trackWatchTime(event);
       playbackTelemetry.handle(event);
-      if (playbackSuspended) {
+      if (event.type === "fullscreenchange") {
+        setPlayerFullscreen(event.detail.active);
+      }
+      if (playbackSuspended || holdingPlaybackRef.current) {
         if (
           event.type === "playing" ||
           event.type === "play" ||
@@ -1226,7 +1259,10 @@ export function LessonVideoPlayer({
       } as FullscreenCoursePanelStyle)
     : undefined;
 
-  if (playbackBootstrapPending || playbackAccessError) {
+  if (
+    (playbackBootstrapPending || playbackAccessError) &&
+    !holdPlaybackInFullscreen
+  ) {
     const MinimizeIcon = playerTheme.icons.minimize;
     const FullscreenEnterIcon = playerTheme.icons.fullscreenEnter;
     const FullscreenExitIcon = playerTheme.icons.fullscreenExit;
@@ -1518,7 +1554,7 @@ export function LessonVideoPlayer({
     );
   }
 
-  if (!playbackMedia.src) {
+  if (!playbackMedia.src && !holdPlaybackInFullscreen) {
     // API lessons have no playable source until their playback bootstrap
     // resolves. Show the lesson poster instead of handing the engine an
     // empty URL or a placeholder video, and the failure when loading failed.
@@ -1579,22 +1615,38 @@ export function LessonVideoPlayer({
     showEndScreen;
   const chromeSuppressed = minimizeGesture.controlsSuppressed;
 
+  if (!holdPlaybackInFullscreen) {
+    heldPlaybackRef.current = {
+      source,
+      description,
+      chapterThumbnails,
+      spriteStoryboardUrl: playbackBootstrap?.storyboardUrl,
+    };
+  }
+  const playerPlayback = heldPlaybackRef.current ?? {
+    source,
+    description,
+    chapterThumbnails,
+    spriteStoryboardUrl: playbackBootstrap?.storyboardUrl,
+  };
+  const playerSource = playerPlayback.source;
+
   return (
     <VeoVideoPlayer
       ref={playerRef}
-      source={source}
-      description={description ?? undefined}
-      chapterThumbnails={chapterThumbnails}
-      spriteStoryboardUrl={playbackBootstrap?.storyboardUrl}
+      source={playerSource}
+      description={playerPlayback.description ?? undefined}
+      chapterThumbnails={playerPlayback.chapterThumbnails}
+      spriteStoryboardUrl={playerPlayback.spriteStoryboardUrl}
       theme={playerTheme}
       engine="shaka"
       engineFactory={engineFactory}
       autoPlay={
-        playbackSuspended
+        playbackPaused
           ? false
           : autoPlayOnMediaChange || restoreAutoplayRef.current === true
       }
-      keyboardEnabled={presentation === "full" && !playbackSuspended}
+      keyboardEnabled={presentation === "full" && !playbackPaused}
       zoomEnabled={presentation === "full"}
       zoomOverflowBoundary={
         presentation === "full" && mobileLandscapeFullscreen
@@ -1622,7 +1674,7 @@ export function LessonVideoPlayer({
           false
         ) : (
           <PlayerErrorNotice
-            source={source}
+            source={playerSource}
             backdrop={false}
             // The lesson's own picture behind the message, as on the
             // surface that asks the learner to sign in.
@@ -1728,7 +1780,7 @@ export function LessonVideoPlayer({
             onGoPrevious={onGoPrevious}
             onClose={onMiniClose ?? (() => undefined)}
             onRestore={onMiniRestore ?? (() => undefined)}
-            source={source}
+            source={playerSource}
           />
         ) : (
           <LessonPlayerControls
@@ -1769,6 +1821,17 @@ export function LessonVideoPlayer({
         presentation === "full" && !minimizeGesture.controlsSuppressed ? (
           <>
             <LessonAmbientProjection enabled={ambientEnabled} />
+            {holdPlaybackInFullscreen ? (
+              // The loading stage, drawn over the lesson before while the
+              // player keeps full screen; the controls stay above it.
+              <div
+                role="status"
+                aria-label="Loading video"
+                className="pointer-events-none absolute inset-0 z-20 grid place-items-center bg-black text-white"
+              >
+                <VideoLoadingSpinner />
+              </div>
+            ) : null}
             {endScreenVisible ? (
               <LessonEndScreenOverlay
                 nextLesson={
