@@ -187,6 +187,21 @@ export interface AnalyticsEvent {
     | "checkout_start"
     | "checkout_step"
     | "payment_result"
+    /** The server verified a payment; `props.item` is "course" or "quiz". */
+    | "payment_confirmed"
+    /** Access granted; `props.kind` is "free" or "paid". */
+    | "enrollment_completed"
+    | "coupon_applied"
+    | "coupon_rejected"
+    | "signup_completed"
+    /** `props.method`: "otp", "password", "google", "oauth" or "passkey". */
+    | "login_completed"
+    | "quiz_started"
+    /** `props.passed`. */
+    | "quiz_submitted"
+    | "lesson_video_completed"
+    /** `props.has_results`; the search text itself is never reported. */
+    | "catalog_search"
     | (string & {});
   /** ISO instant. */
   at: string;
@@ -231,10 +246,25 @@ export interface PlaybackSummary {
   qualities: Array<{ height: number; seconds: number }>;
 }
 
+/**
+ * Who is signed in, as far as analytics needs to know: the account id and
+ * its roles. `null` means a guest. The sink decides what, if anything, of
+ * this leaves the browser.
+ */
+export interface AnalyticsVisitor {
+  id: string;
+  roles: string[];
+}
+
 /** Where core hands its events; one sink at a time. */
 export interface AnalyticsSink {
   track(event: AnalyticsEvent): void;
   playback(summary: PlaybackSummary): void;
+  /**
+   * Called once the session is known and again on every sign-in or
+   * sign-out. A sink registered later gets the current visitor at once.
+   */
+  identify?(visitor: AnalyticsVisitor | null): void;
 }
 
 type Listener = () => void;
@@ -245,6 +275,8 @@ interface ContributionStore {
   shellPages?: Map<string, ShellPageContribution>;
   offlineData?: OfflineDataProvider | null;
   analyticsSink?: AnalyticsSink | null;
+  /** Unset until the session is known; `null` is a guest. */
+  analyticsVisitor?: AnalyticsVisitor | null;
 }
 
 // One store per page, shared even when the module is bundled twice (core
@@ -382,6 +414,9 @@ export function getOfflineDataProvider(): OfflineDataProvider | null {
 export function registerAnalyticsSink(sink: AnalyticsSink): () => void {
   const store = getStore();
   store.analyticsSink = sink;
+  if (store.analyticsVisitor !== undefined) {
+    sink.identify?.(store.analyticsVisitor);
+  }
   return () => {
     if (store.analyticsSink === sink) store.analyticsSink = null;
   };
@@ -389,4 +424,11 @@ export function registerAnalyticsSink(sink: AnalyticsSink): () => void {
 
 export function getAnalyticsSink(): AnalyticsSink | null {
   return getStore().analyticsSink ?? null;
+}
+
+/** Core reports the signed-in visitor here; see `AnalyticsSink.identify`. */
+export function reportAnalyticsVisitor(visitor: AnalyticsVisitor | null): void {
+  const store = getStore();
+  store.analyticsVisitor = visitor;
+  store.analyticsSink?.identify?.(visitor);
 }
