@@ -9,6 +9,7 @@ import { PageBackButton } from "../../components/PageBackButton";
 import { CourseWishlistHeartButton } from "../CourseWishlistHeartButton";
 import { CourseHeroArtwork } from "./CourseHeroArtwork";
 import { presumedGuestOnlyClasses } from "./courseViewerState";
+import { useCurriculumIntent } from "./curriculumIntent";
 
 export interface CourseOverviewHeroProps {
   title: string;
@@ -199,6 +200,8 @@ export function CourseOverviewHero({
   viewerPlaceholders,
   placement = "card",
 }: CourseOverviewHeroProps) {
+  // The way into the lessons, whose pages use the whole curriculum.
+  const curriculumIntent = useCurriculumIntent();
   const placed = heroPlacementClasses[placement];
   // The guest's own controls step aside for their placeholders on a browser
   // that remembers a session.
@@ -365,6 +368,7 @@ export function CourseOverviewHero({
           <button
             type="button"
             className={`${previewPillClasses} mt-1 inline-flex self-start ${previewGuestOnly}`}
+            {...curriculumIntent}
             onClick={preview.onOpen}
             disabled={preview.disabled}
           >
@@ -387,6 +391,7 @@ export function CourseOverviewHero({
             <button
               type="button"
               className={`${heroControlClasses} hidden size-12 rounded-full @3xl/hero:inline-flex`}
+              {...curriculumIntent}
               onClick={preview.onOpen}
               disabled={preview.disabled}
               aria-label="Open course"
@@ -398,6 +403,7 @@ export function CourseOverviewHero({
             <button
               type="button"
               className={`${previewPillClasses} hidden @3xl/hero:inline-flex ${previewGuestOnly}`}
+              {...curriculumIntent}
               onClick={preview.onOpen}
               disabled={preview.disabled}
             >

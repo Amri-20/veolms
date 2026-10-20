@@ -9,6 +9,7 @@ import {
 } from "../../learning/courseProgressFormat";
 import type { CourseAccessResume } from "@veolms/contracts";
 import { useLearningProgressResumeContext } from "../../services/learning-progress";
+import { useCurriculumIntent } from "./curriculumIntent";
 import {
   priceBarActionClasses,
   priceBarPaddingClasses,
@@ -60,6 +61,7 @@ export function CourseLearnerProgressBar({
     enabled: !resume,
   });
   const place = resume ?? resumeQuery.data;
+  const curriculumIntent = useCurriculumIntent();
   const percent = roundCourseProgress(progress);
   const lessonCount = place?.totalLessons ?? totalLessons;
   const isComplete = percent >= 100;
@@ -158,6 +160,7 @@ export function CourseLearnerProgressBar({
         <Button
           motion="static"
           className={`${priceBarActionClasses} w-full @2xl/price:w-auto @2xl/price:min-w-60`}
+          {...curriculumIntent}
           onClick={openCourse}
         >
           <Play

@@ -56,6 +56,7 @@ import type { NavigateTo } from "../routing/navigation";
 import { productName } from "../routing/routeDescriptors";
 import { useAuthStore } from "../store/auth.store";
 import { useCoursePageData } from "./overview/useCoursePageData";
+import { CurriculumIntentContext } from "./overview/curriculumIntent";
 import type { CourseCurriculumPreview } from "./staticCurriculum";
 import { getApiError } from "../lib/api-error";
 import { trackAnalyticsEvent } from "../lib/analytics-track";
@@ -1758,6 +1759,7 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
     totalSections,
     sectionsComplete,
     requestAllSections,
+    prefetchAllSections,
   } = useCoursePageData({
     courseSlug,
     preview: props.initialCurriculum,
@@ -1882,19 +1884,25 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
         : isCourseOwner);
 
   return (
-    <CourseOverviewContent
-      {...props}
-      key={courseWithEnrollment.id}
-      course={courseWithEnrollment}
-      courseSlug={courseSlug}
-      adaptedFromPreview={activeAdapted}
-      isCreator={isCreator}
-      viewer={viewer}
-      totalSections={totalSections}
-      sectionsComplete={sectionsComplete}
-      onRequestAllSections={requestAllSections}
-      resume={access?.resume}
-    />
+    // A built page holds its first sections only; the controls that show or
+    // use the rest fetch it as the reader reaches for them.
+    <CurriculumIntentContext.Provider
+      value={sectionsComplete ? null : prefetchAllSections}
+    >
+      <CourseOverviewContent
+        {...props}
+        key={courseWithEnrollment.id}
+        course={courseWithEnrollment}
+        courseSlug={courseSlug}
+        adaptedFromPreview={activeAdapted}
+        isCreator={isCreator}
+        viewer={viewer}
+        totalSections={totalSections}
+        sectionsComplete={sectionsComplete}
+        onRequestAllSections={requestAllSections}
+        resume={access?.resume}
+      />
+    </CurriculumIntentContext.Provider>
   );
 }
 

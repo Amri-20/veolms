@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type {
   CourseAccessResponse,
   CourseOverviewResponse,
 } from "@veolms/contracts";
 import type { ApiError } from "../../lib/api-error";
+import { prefersReducedData } from "../../lib/reduced-data";
 import {
   useCourseAccess,
   useCourseOverview,
@@ -28,33 +29,23 @@ export interface CoursePageData {
   totalSections: number | undefined;
   /** Whether `overview` holds every section, or the first ones only. */
   sectionsComplete: boolean;
-  /** Asks for the sections the page was not built with. */
+  /** Fetches the sections the page was not built with: the reader asked. */
   requestAllSections: () => void;
-}
-
-type IdleHandle = number;
-
-function onIdle(callback: () => void): () => void {
-  const host = window as Window & {
-    requestIdleCallback?: (
-      callback: () => void,
-      options?: { timeout: number },
-    ) => IdleHandle;
-    cancelIdleCallback?: (handle: IdleHandle) => void;
-  };
-  if (host.requestIdleCallback && host.cancelIdleCallback) {
-    const handle = host.requestIdleCallback(callback, { timeout: 4000 });
-    return () => host.cancelIdleCallback?.(handle);
-  }
-  const handle = window.setTimeout(callback, 1500);
-  return () => window.clearTimeout(handle);
+  /**
+   * The same, ahead of a press that looks likely (see
+   * `useCurriculumIntent`); skipped when the connection asks to save data.
+   */
+  prefetchAllSections: () => void;
 }
 
 /**
  * Where a course page's course comes from. What every visitor sees is in
  * the page itself, built ahead of time: the course and its first sections.
  * The rest of the curriculum is a file the site was built with, fetched
- * once the page is idle or when the reader asks for it. The viewer's own
+ * when the reader is about to use it (a moment's hover on what shows or
+ * uses it, a touch, the "Show all" button nearing the screen on a phone)
+ * or asks for it. A visitor who only reads the top of the page never
+ * downloads it. The viewer's own
  * part (the price in force, whether they hold the course, their progress,
  * whether they manage it) is one small answer from the API.
  *
@@ -101,12 +92,6 @@ export function useCoursePageData({
     !seeded?.complete &&
     !builtBeforeChange &&
     !isManager;
-  // The rest of the curriculum is fetched while the reader is still looking
-  // at the top of the page, so "Show all sections" usually finds it there.
-  useEffect(() => {
-    if (!needsFile || wantsAllSections) return;
-    return onIdle(() => setWantsAllSections(true));
-  }, [needsFile, wantsAllSections]);
   const fileQuery = useStaticCurriculum(
     seeded?.curriculum.course.slug,
     seeded?.curriculum.version,
@@ -153,6 +138,11 @@ export function useCoursePageData({
     ? overview?.sections.length
     : seeded?.totalSections;
 
+  const requestAllSections = useCallback(() => setWantsAllSections(true), []);
+  const prefetchAllSections = useCallback(() => {
+    if (!prefersReducedData()) setWantsAllSections(true);
+  }, []);
+
   const isLoading =
     !overview &&
     (accessQuery.isLoading || apiCurriculum.isLoading || personal.isLoading);
@@ -176,6 +166,7 @@ export function useCoursePageData({
     accessPending: awaitsAccess && enabled && accessQuery.isPending,
     totalSections,
     sectionsComplete: overviewIsWhole,
-    requestAllSections: () => setWantsAllSections(true),
+    requestAllSections,
+    prefetchAllSections,
   };
 }
