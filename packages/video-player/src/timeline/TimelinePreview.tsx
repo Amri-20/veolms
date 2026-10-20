@@ -90,6 +90,51 @@ function SpriteFrame({ frame }: { frame: StoryboardFrame }) {
   );
 }
 
+/**
+ * The storyboard frame of the hovered moment, large, with the time in a
+ * chip on its lower left (and the chapter, when there is one, above it).
+ * About a third of the player wide, between 14rem and 24rem. It follows
+ * the pointer but stops at either end of the timeline instead of running
+ * off the player.
+ */
+function FramePreviewCard({
+  chapterTitle,
+  frame,
+  position,
+  previewTime,
+}: {
+  chapterTitle: string | null;
+  frame: StoryboardFrame;
+  position: number;
+  previewTime: number;
+}) {
+  return (
+    <div
+      className="pointer-events-none absolute bottom-full z-30 mb-3 w-(--preview-card-width) max-w-full -translate-x-1/2 [--preview-card-width:clamp(14rem,36%,24rem)]"
+      style={{
+        left: `clamp(min(50%, calc(var(--preview-card-width) / 2)), ${position}%, max(50%, calc(100% - var(--preview-card-width) / 2)))`,
+      }}
+      data-video-player-preview=""
+      data-video-player-preview-mode="frame"
+    >
+      {chapterTitle ? (
+        <p className="mb-1.5 truncate text-center text-sm font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
+          {chapterTitle}
+        </p>
+      ) : null}
+      <div
+        data-video-player-preview-frame=""
+        className="relative overflow-hidden rounded-2xl border-2 border-white/25 bg-black shadow-[0_12px_32px_rgba(0,0,0,0.45)]"
+      >
+        <StoryboardImage frame={frame} />
+        <span className="absolute bottom-2 left-2 rounded-lg border border-white/15 bg-[rgb(8_10_16/0.85)] px-2 py-0.5 text-base font-bold tabular-nums text-white">
+          {formatMediaTime(previewTime)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export type TimelinePreviewLayout = "follow" | "follow-pill" | "centered-pill";
 
 interface TimelinePreviewProps {
@@ -129,6 +174,23 @@ export function TimelinePreview({
   previewTime,
 }: TimelinePreviewProps) {
   const controllerData = useTimelinePreviewData(previewTime);
+  if (
+    controllerData.frame &&
+    (layout === "centered-pill" || layout === "follow-pill")
+  ) {
+    return (
+      <FramePreviewCard
+        frame={controllerData.frame}
+        chapterTitle={controllerData.chapterTitle}
+        previewTime={previewTime}
+        position={
+          layout === "follow-pill"
+            ? timeToPositionPercent(previewTime, duration)
+            : 50
+        }
+      />
+    );
+  }
   if (layout === "centered-pill" || layout === "follow-pill") {
     // One line: the time, then the chapter it falls in. The pill grows with
     // the chapter's name; only a name too long for the player is cut short.
