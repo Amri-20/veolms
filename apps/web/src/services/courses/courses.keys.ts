@@ -23,6 +23,12 @@ export const courseKeys = {
   access: (idOrSlug: string) =>
     [...courseKeys.overviews(), idOrSlug, "access"] as const,
   accessList: () => [...courseKeys.overviews(), "access-list"] as const,
+  // Under the overviews too, so a course edit makes them stale.
+  publicCurriculum: (idOrSlug: string) =>
+    [...courseKeys.overviews(), idOrSlug, "public-curriculum"] as const,
+  // Never stale: a version names one curriculum for good.
+  staticCurriculum: (courseSlug: string, version: string) =>
+    [...courseKeys.all, "static-curriculum", courseSlug, version] as const,
   editor: (id: string) => [...courseKeys.all, "editor", id] as const,
   preview: (id: string) => [...courseKeys.all, "preview", id] as const,
   validation: (id: string) => [...courseKeys.all, "validation", id] as const,

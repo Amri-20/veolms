@@ -36,9 +36,13 @@ export function useCourseOverviewDocumentTitle(active: boolean): void {
   const getCourse = useCallback(
     () =>
       slug
-        ? queryClient.getQueryData<CourseOverviewResponse>(
+        ? (queryClient.getQueryData<CourseOverviewResponse>(
             courseKeys.overview(slug),
-          )?.course
+          )?.course ??
+          // Visitors' pages read the public curriculum, not the overview.
+          queryClient.getQueryData<CourseOverviewResponse>(
+            courseKeys.publicCurriculum(slug),
+          )?.course)
         : undefined,
     [queryClient, slug],
   );

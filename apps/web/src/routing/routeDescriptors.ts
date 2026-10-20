@@ -877,7 +877,7 @@ const getRouteCourse = (
   const pageData = matches?.find((match) => match?.id === "root")
     ?.loaderData as AcademyStaticPageData | null | undefined;
   return [
-    pageData?.courseOverview?.course,
+    pageData?.courseCurriculum?.curriculum.course,
     ...(pageData?.publishedCoursePage?.courses ?? []),
   ].find((course) => course?.slug === courseSlug || course?.id === courseSlug);
 };

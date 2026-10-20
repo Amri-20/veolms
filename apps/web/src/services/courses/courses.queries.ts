@@ -6,6 +6,7 @@ import type {
   CourseAccessResponse,
   CourseEditorDataResponse,
   CourseOverviewResponse,
+  CoursePublicCurriculum,
   CourseStaticPageRefreshStatusResponse,
   CourseListResponse,
   CourseOptionsResponse,
@@ -93,6 +94,47 @@ export function useCourseAccess(
     enabled: Boolean(idOrSlug && (options?.enabled ?? true)),
     staleTime: 60 * 1000,
     retry: false,
+  });
+}
+
+/**
+ * A published course as every visitor sees it, from the API: for a page
+ * that was not built with it (a course published since the build, the dev
+ * server) or was built before the course last changed.
+ */
+export function useCoursePublicCurriculum(
+  idOrSlug: string | null | undefined,
+  options?: { enabled?: boolean },
+) {
+  return useQuery<CoursePublicCurriculum, ApiError>({
+    queryKey: idOrSlug
+      ? courseKeys.publicCurriculum(idOrSlug)
+      : ["courses", "overview", null, "public-curriculum"],
+    queryFn: () => coursesService.getPublicCurriculum(idOrSlug!),
+    enabled: Boolean(idOrSlug && (options?.enabled ?? true)),
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+}
+
+/**
+ * A course's whole public curriculum as the site was built with it (see
+ * `staticCurriculumUrl`). Null when the build has no copy of that version.
+ */
+export function useStaticCurriculum(
+  courseSlug: string | null | undefined,
+  version: string | null | undefined,
+  options?: { enabled?: boolean },
+) {
+  return useQuery<CoursePublicCurriculum | null, ApiError>({
+    queryKey:
+      courseSlug && version
+        ? courseKeys.staticCurriculum(courseSlug, version)
+        : ["courses", "static-curriculum", null],
+    queryFn: () => coursesService.getStaticCurriculum(courseSlug!, version!),
+    enabled: Boolean(courseSlug && version && (options?.enabled ?? true)),
+    staleTime: Infinity,
+    retry: 1,
   });
 }
 
