@@ -274,6 +274,10 @@ export async function createVeoLMSApi<
       callback(null, corsMatcher.isAllowedOrigin(origin)),
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    // Browsers may keep a preflight answer this long (Chrome caps it at two
+    // hours). Without it every licence and progress POST was preceded by its
+    // own OPTIONS request (55k of 485k API requests in 48 hours).
+    maxAge: 7200,
   });
 
   // Bootstrap background jobs and get the payment event queue reference.
