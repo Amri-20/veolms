@@ -2,11 +2,28 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { formatMediaTime } from "../accessibility/formatMediaTime";
 import { getActiveChapter } from "../chapters/getChapterAtTime";
 import { usePlayerState } from "../react/usePlayerState";
+import { SpriteFrameCanvas } from "../react/SpriteFrameCanvas";
 import { getThumbnailAtTime } from "../storyboard/getThumbnailAtTime";
+import { isKeptSpriteSheet } from "../storyboard/spriteSheetStore";
 import type { StoryboardFrame } from "../storyboard/storyboardTypes";
 import { timeToPositionPercent } from "./timelineMath";
 
-function StoryboardImage({ frame }: { frame: StoryboardFrame }) {
+function StoryboardImage({
+  frame,
+  onDrawn,
+}: {
+  frame: StoryboardFrame;
+  onDrawn?: () => void;
+}) {
+  if (isKeptSpriteSheet(frame.imageUrl)) {
+    return (
+      <SpriteFrameCanvas
+        frame={frame}
+        onDrawn={onDrawn}
+        className="block w-full bg-black"
+      />
+    );
+  }
   const isSprite =
     frame.x !== undefined &&
     frame.y !== undefined &&
@@ -92,10 +109,11 @@ function SpriteFrame({ frame }: { frame: StoryboardFrame }) {
 
 /**
  * The storyboard frame of the hovered moment, large, with the time in a
- * chip on its lower left (and the chapter, when there is one, above it).
- * About a third of the player wide, between 14rem and 24rem. It follows
- * the pointer but stops at either end of the timeline instead of running
- * off the player.
+ * chip in its middle (and the chapter, when there is one, above it).
+ * About 30% of the player wide, between 12rem and 20rem. It follows the
+ * pointer but stops at either end of the timeline instead of running off
+ * the player. A frame drawn on a canvas keeps the card hidden until its
+ * first picture is in, so it never opens on a black box.
  */
 function FramePreviewCard({
   chapterTitle,
@@ -108,11 +126,14 @@ function FramePreviewCard({
   position: number;
   previewTime: number;
 }) {
+  const drawnOnCanvas = isKeptSpriteSheet(frame.imageUrl);
+  const [drawn, setDrawn] = useState(false);
   return (
     <div
-      className="pointer-events-none absolute bottom-full z-30 mb-3 w-(--preview-card-width) max-w-full -translate-x-1/2 [--preview-card-width:clamp(14rem,36%,24rem)]"
+      className="pointer-events-none absolute bottom-full z-30 mb-3 w-(--preview-card-width) max-w-full -translate-x-1/2 [--preview-card-width:clamp(12rem,30%,20rem)]"
       style={{
         left: `clamp(min(50%, calc(var(--preview-card-width) / 2)), ${position}%, max(50%, calc(100% - var(--preview-card-width) / 2)))`,
+        visibility: drawnOnCanvas && !drawn ? "hidden" : undefined,
       }}
       data-video-player-preview=""
       data-video-player-preview-mode="frame"
@@ -126,8 +147,8 @@ function FramePreviewCard({
         data-video-player-preview-frame=""
         className="relative overflow-hidden rounded-2xl border-2 border-white/25 bg-black shadow-[0_12px_32px_rgba(0,0,0,0.45)]"
       >
-        <StoryboardImage frame={frame} />
-        <span className="absolute bottom-2 left-2 rounded-lg border border-white/15 bg-[rgb(8_10_16/0.85)] px-2 py-0.5 text-base font-bold tabular-nums text-white">
+        <StoryboardImage frame={frame} onDrawn={() => setDrawn(true)} />
+        <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-lg border border-white/15 bg-[rgb(8_10_16/0.75)] px-2.5 py-0.5 text-base font-bold tabular-nums text-white">
           {formatMediaTime(previewTime)}
         </span>
       </div>

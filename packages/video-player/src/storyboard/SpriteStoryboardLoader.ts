@@ -6,13 +6,14 @@ import {
   type SpriteStoryboardIndex,
   type SpriteStoryboardLevel,
 } from "./spriteStoryboardIndex.ts";
+import { registerSpriteSheet, releaseSpriteSheet } from "./spriteSheetStore.ts";
 import type { StoryboardFrame } from "./storyboardTypes.ts";
 
 export interface SpriteStoryboardLoaderOptions {
   indexUrl: string;
   /**
    * Turns a storyboard URL into the one to request (adds the playback
-   * token, for one). Applied to the index and to every sheet.
+   * token, for one). Applied to the index and to every sheet, on every try.
    */
   prepareUrl?: (url: string) => Promise<string> | string;
   /** Called whenever the set of frames that can be shown changes. */
@@ -23,25 +24,56 @@ export interface SpriteStoryboardLoaderOptions {
 /** A detail sheet this close to the pointer's sheet edge brings its neighbour. */
 const NEIGHBOUR_PREFETCH_SECONDS = 5;
 const MAX_DETAIL_REQUESTS_IN_FLIGHT = 2;
+/** Waits before the second and third try of a request. */
+const RETRY_DELAYS_MS = [400, 1_500];
+/** After a failed index, the next hover tries again no sooner than this. */
+const INDEX_RETRY_COOLDOWN_MS = 5_000;
+
+class HttpStatusError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super(`Storyboard request failed with ${status}.`);
+    this.status = status;
+  }
+}
+
+function wait(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      },
+      { once: true },
+    );
+  });
+}
 
 /**
  * Loads a two-level sprite storyboard on demand: nothing until the viewer
  * first points at the timeline, then every coarse sheet (the whole video in
  * a few small images), then single detail sheets where the viewer slows
- * down. Only sheets that have finished decoding are handed out, so a frame
- * can always be drawn the moment it is chosen.
+ * down. Sheets are kept by the page (`spriteSheetStore`) and handed out only
+ * once decoded, so a frame can be drawn the moment it is chosen. A request
+ * that fails is tried again, and a sheet that still failed is asked for
+ * again the next time the viewer points there.
  */
 export class SpriteStoryboardLoader {
   readonly #options: SpriteStoryboardLoaderOptions;
   readonly #abort = new AbortController();
   #index: SpriteStoryboardIndex | null = null;
   #indexPromise: Promise<SpriteStoryboardIndex | null> | null = null;
-  #coarseFrames: StoryboardFrame[] = [];
+  #indexRetryAt = 0;
+  readonly #coarseFrames = new Map<number, StoryboardFrame[]>();
+  readonly #coarseInFlight = new Set<number>();
   readonly #detailFrames = new Map<number, StoryboardFrame[]>();
   readonly #detailRequested = new Set<number>();
   #detailQueue: number[] = [];
   #detailInFlight = 0;
-  #failed = false;
+  readonly #keptSheets: string[] = [];
 
   constructor(options: SpriteStoryboardLoaderOptions) {
     this.#options = options;
@@ -54,17 +86,32 @@ export class SpriteStoryboardLoader {
   destroy(): void {
     this.#abort.abort();
     this.#detailQueue = [];
+    for (const key of this.#keptSheets.splice(0)) releaseSpriteSheet(key);
   }
 
-  /** Starts loading the index and the coarse level (once). */
+  /**
+   * Loads the index and every coarse sheet not loaded yet. Cheap to call on
+   * every pointer move: it only starts what is missing.
+   */
   start(): Promise<SpriteStoryboardIndex | null> {
-    this.#indexPromise ??= this.#loadIndexAndCoarse();
-    return this.#indexPromise;
+    if (this.destroyed) return Promise.resolve(null);
+    if (!this.#indexPromise) {
+      if (Date.now() < this.#indexRetryAt) return Promise.resolve(null);
+      this.#indexPromise = this.#loadIndex().then((index) => {
+        // A failed index is asked for again by a later hover.
+        if (!index) this.#indexPromise = null;
+        return index;
+      });
+    }
+    return this.#indexPromise.then((index) => {
+      if (index) this.#loadMissingCoarse(index);
+      return index;
+    });
   }
 
   /** Asks for the detail sheet covering `time` (and a close neighbour). */
   requestDetail(time: number): void {
-    if (this.#failed || this.destroyed || !Number.isFinite(time)) return;
+    if (this.destroyed || !Number.isFinite(time)) return;
     void this.start().then((index) => {
       const level = index?.detail;
       if (!index || !level || this.destroyed) return;
@@ -91,50 +138,51 @@ export class SpriteStoryboardLoader {
     });
   }
 
-  async #loadIndexAndCoarse(): Promise<SpriteStoryboardIndex | null> {
+  async #loadIndex(): Promise<SpriteStoryboardIndex | null> {
     try {
-      const indexUrl = await this.#prepare(this.#options.indexUrl);
-      const response = await fetch(indexUrl, {
-        signal: this.#abort.signal,
-        credentials: "omit",
-      });
-      if (!response.ok) {
-        throw new Error(
-          `Storyboard index request failed with ${response.status}.`,
-        );
-      }
+      const response = await this.#fetchWithRetry(this.#options.indexUrl);
       const index = parseSpriteStoryboardIndex(await response.json());
       if (!index) throw new Error("The storyboard index is not valid.");
       if (this.destroyed) return null;
       this.#index = index;
+      return index;
+    } catch (error) {
+      // No index at all (404): this video has no storyboard yet.
+      this.#indexRetryAt =
+        error instanceof HttpStatusError && error.status === 404
+          ? Number.POSITIVE_INFINITY
+          : Date.now() + INDEX_RETRY_COOLDOWN_MS;
+      if (!this.destroyed) this.#options.onError?.(error);
+      return null;
+    }
+  }
 
-      // Sheets are shown as each one decodes, the first part of the video
-      // first.
-      await Promise.all(
-        index.coarse.sheets.map(async (_, sheet) => {
-          const url = await this.#loadSheet(index.coarse, sheet);
+  #loadMissingCoarse(index: SpriteStoryboardIndex): void {
+    index.coarse.sheets.forEach((_, sheet) => {
+      if (this.#coarseFrames.has(sheet) || this.#coarseInFlight.has(sheet)) {
+        return;
+      }
+      this.#coarseInFlight.add(sheet);
+      void this.#loadSheet(index.coarse, sheet)
+        .then((key) => {
           if (this.destroyed) return;
-          this.#coarseFrames = [
-            ...this.#coarseFrames,
-            ...spriteSheetFrames(
+          this.#coarseFrames.set(
+            sheet,
+            spriteSheetFrames(
               index.coarse,
               sheet,
-              url,
+              key,
               index.duration,
               "sprite-coarse",
             ),
-          ];
+          );
           this.#publish();
-        }),
-      );
-      return index;
-    } catch (error) {
-      if (!this.destroyed) {
-        this.#failed = true;
-        this.#options.onError?.(error);
-      }
-      return null;
-    }
+        })
+        .catch((error: unknown) => {
+          if (!this.destroyed) this.#options.onError?.(error);
+        })
+        .finally(() => this.#coarseInFlight.delete(sheet));
+    });
   }
 
   #pumpDetail(index: SpriteStoryboardIndex, level: SpriteStoryboardLevel) {
@@ -148,14 +196,14 @@ export class SpriteStoryboardLoader {
       this.#detailRequested.add(sheet);
       this.#detailInFlight += 1;
       void this.#loadSheet(level, sheet)
-        .then((url) => {
+        .then((key) => {
           if (this.destroyed) return;
           this.#detailFrames.set(
             sheet,
             spriteSheetFrames(
               level,
               sheet,
-              url,
+              key,
               index.duration,
               "sprite-detail",
             ),
@@ -163,7 +211,7 @@ export class SpriteStoryboardLoader {
           this.#publish();
         })
         .catch((error: unknown) => {
-          // Allow a later linger over the same part to try again.
+          // A later linger over the same part tries again.
           this.#detailRequested.delete(sheet);
           if (!this.destroyed) this.#options.onError?.(error);
         })
@@ -174,20 +222,52 @@ export class SpriteStoryboardLoader {
     }
   }
 
+  /** Fetches, decodes and keeps one sheet; resolves with its store key. */
   async #loadSheet(
     level: SpriteStoryboardLevel,
     sheet: number,
   ): Promise<string> {
     const relative = level.sheets[sheet];
     if (!relative) throw new Error(`Storyboard sheet ${sheet} is missing.`);
-    const url = await this.#prepare(
+    const response = await this.#fetchWithRetry(
       new URL(relative, this.#options.indexUrl).href,
     );
-    const image = new Image();
-    image.decoding = "async";
-    image.src = url;
-    await image.decode();
-    return url;
+    const blob = await response.blob();
+    // Decoded once here, so a sheet that cannot be read is never handed out.
+    const bitmap = await createImageBitmap(blob);
+    if (this.destroyed) {
+      bitmap.close();
+      throw new Error("The storyboard was closed.");
+    }
+    const key = registerSpriteSheet(blob, bitmap);
+    this.#keptSheets.push(key);
+    return key;
+  }
+
+  /**
+   * GET with a fresh token on each try. A missing file (404) or a refused
+   * one (401/403 after the token was renewed) is not tried again here.
+   */
+  async #fetchWithRetry(url: string): Promise<Response> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
+      if (attempt > 0) {
+        await wait(RETRY_DELAYS_MS[attempt - 1]!, this.#abort.signal);
+      }
+      try {
+        const response = await fetch(await this.#prepare(url), {
+          signal: this.#abort.signal,
+          credentials: "omit",
+        });
+        if (response.ok) return response;
+        lastError = new HttpStatusError(response.status);
+        if (response.status === 404) break;
+      } catch (error) {
+        if (this.destroyed) throw error;
+        lastError = error;
+      }
+    }
+    throw lastError;
   }
 
   async #prepare(url: string): Promise<string> {
@@ -196,10 +276,11 @@ export class SpriteStoryboardLoader {
 
   #publish(): void {
     if (this.destroyed) return;
+    const coarse = [...this.#coarseFrames.values()].flat();
     const detail = [...this.#detailFrames.values()].flat();
     // Where both levels cover a moment, the detail frame starts later and
     // so wins in `getThumbnailAtTime`.
-    this.#options.onFrames([...this.#coarseFrames, ...detail]);
+    this.#options.onFrames([...coarse, ...detail]);
   }
 
   /** The index, once loaded. */

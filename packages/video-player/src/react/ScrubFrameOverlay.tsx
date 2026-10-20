@@ -1,13 +1,16 @@
 import { useId } from "react";
 import { getThumbnailAtTime } from "../storyboard/getThumbnailAtTime";
+import { isKeptSpriteSheet } from "../storyboard/spriteSheetStore";
+import { SpriteFrameCanvas } from "./SpriteFrameCanvas";
 import { usePlayerState } from "./usePlayerState";
 
 /**
  * While a drag is over a part of the video not downloaded yet, the
  * storyboard frame for that moment is drawn over the whole video, scaled up
- * (and so soft), the way YouTube does. Drawn only from sheets already
- * decoded, so it never shows a blank; with no frame for the moment the
- * video keeps its last picture.
+ * (and so soft), the way YouTube does. Sheets the player keeps itself are
+ * drawn on a canvas that holds its last picture between frames, so it
+ * never shows a blank; with no frame for the moment the video keeps its
+ * last picture.
  */
 export function ScrubFrameOverlay() {
   const clipId = useId();
@@ -18,6 +21,16 @@ export function ScrubFrameOverlay() {
         : getThumbnailAtTime(storyboard, ui.scrubFrameTime),
     (left, right) => left?.id === right?.id,
   );
+
+  if (frame && isKeptSpriteSheet(frame.imageUrl)) {
+    return (
+      <SpriteFrameCanvas
+        frame={frame}
+        data-video-player-scrub-frame=""
+        className="pointer-events-none absolute inset-0 z-[1] size-full bg-black object-contain"
+      />
+    );
+  }
 
   if (
     !frame ||

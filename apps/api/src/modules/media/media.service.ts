@@ -1435,15 +1435,20 @@ export function createMediaService({
   ): Promise<string | undefined> {
     const indexKey = storyboardIndexKeyFor(manifestKey);
     try {
-      const present = await STORYBOARD_PRESENCE_CACHE.resolve(
+      const indexPath = await STORYBOARD_PRESENCE_CACHE.resolve(
         indexKey,
         outputVersion,
         (key) =>
           readStorageText(services.storage, key, STORYBOARD_INDEX_MAX_BYTES),
       );
-      return present
-        ? (services.storage.getCdnObjectUrl(indexKey) ?? undefined)
-        : undefined;
+      if (indexPath === false) return undefined;
+      // Not known yet (slow or failed read) is offered too, as the folder's
+      // own index; see storyboard-presence-cache.ts.
+      const playerIndexKey =
+        indexPath === null
+          ? indexKey
+          : indexKey.replace(/index\.json$/u, indexPath);
+      return services.storage.getCdnObjectUrl(playerIndexKey) ?? undefined;
     } catch (error) {
       logger?.warn({ err: error, indexKey }, "Storyboard lookup failed.");
       return undefined;
