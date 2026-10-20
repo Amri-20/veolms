@@ -587,7 +587,7 @@ export async function findLatestVideoOutput(
 ) {
   return await database
     .selectFrom("video_outputs")
-    .select("master_playlist_path")
+    .select(["id", "master_playlist_path"])
     .where("video_id", "=", videoId)
     .orderBy("created_at", "desc")
     .limit(1)

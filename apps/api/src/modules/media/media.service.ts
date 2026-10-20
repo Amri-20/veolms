@@ -1105,7 +1105,8 @@ export function createMediaService({
       }
     }
 
-    return { outputPrefix, manifestKey };
+    // A new transcode adds a new output row; its id tells the copies apart.
+    return { outputPrefix, manifestKey, outputVersion: latestOutput?.id ?? "" };
   }
 
   function getDirectDelivery(storageKey: string) {
@@ -1384,12 +1385,21 @@ export function createMediaService({
    */
   async function readInlinedMasterManifest(
     manifestKey: string,
+    outputVersion: string,
     logger?: FastifyBaseLogger,
   ): Promise<string | undefined> {
     if (!/\.(?:m3u8|mpd)$/iu.test(manifestKey)) return undefined;
     try {
-      const text = await MASTER_MANIFEST_CACHE.resolve(manifestKey, (key) =>
-        readStorageText(services.storage, key, MASTER_MANIFEST_MAX_BYTES),
+      // Keyed by output too: a re-transcode writes the same key, and the
+      // cached copy of the old manifest must not outlive it.
+      const text = await MASTER_MANIFEST_CACHE.resolve(
+        `${manifestKey}#${outputVersion}`,
+        () =>
+          readStorageText(
+            services.storage,
+            manifestKey,
+            MASTER_MANIFEST_MAX_BYTES,
+          ),
       );
       if (text === undefined) {
         logger?.debug(
@@ -1430,7 +1440,7 @@ export function createMediaService({
     // The transcode worker only marks a job completed after publishing its
     // output. Avoid an extra storage HEAD round-trip on every first play;
     // the CDN manifest request itself remains the authoritative final check.
-    const { manifestKey } = await getReadyPlaybackOutput(
+    const { manifestKey, outputVersion } = await getReadyPlaybackOutput(
       context.content_media_id!,
       context,
       { verifyManifest: false },
@@ -1446,7 +1456,7 @@ export function createMediaService({
     const playbackToken = createPlaybackSegmentToken(manifestKey);
     // Read alongside the chapters; access has already been checked above.
     const inlinedMasterManifestPromise = options.inlineManifest
-      ? readInlinedMasterManifest(manifestKey, options.logger)
+      ? readInlinedMasterManifest(manifestKey, outputVersion, options.logger)
       : Promise.resolve(undefined);
     const [chapterRows, inlinedMasterManifest] = await Promise.all([
       chapterRowsPromise,
