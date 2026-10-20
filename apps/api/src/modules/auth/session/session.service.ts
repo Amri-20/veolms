@@ -36,7 +36,6 @@ import {
   setCachedAuthContext,
 } from "../shared/session-auth-cache.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
-import { createPlatformSettingsService } from "../../platform/index.ts";
 import type { Executor } from "../shared/repository.types.ts";
 import { runSignInClaim } from "../shared/sign-in-claim.ts";
 
@@ -59,23 +58,19 @@ export interface SessionPrerequisites {
 
 export function createSessionService({ database }: SessionServiceOptions) {
   const outbox = createOutboxService();
-  const platformSettings = createPlatformSettingsService({ database });
 
   /**
-   * Whether two-factor sign-in is off for this account: a student's, while
-   * the academy has turned it off for students. Their factors stay enrolled
-   * and count again if it is turned back on.
+   * Whether two-factor sign-in is off for this account: it is for staff
+   * only (admins and every team role), so a student is never asked for a
+   * second step, whatever factor an older version let them enrol.
    */
-  async function isTwoFactorOffFor(roles: readonly string[]) {
-    return (
-      !isStaffAccount(roles) &&
-      !(await platformSettings.isStudentTwoFactorEnabled())
-    );
+  function isTwoFactorOffFor(roles: readonly string[]) {
+    return !isStaffAccount(roles);
   }
 
   /**
    * Same rules as resolveMfaState, for factor facts that are already loaded.
-   * `twoFactorOff` is the academy's student rule (see isTwoFactorOffFor).
+   * `twoFactorOff` is the student rule (see isTwoFactorOffFor).
    */
   function buildMfaState(
     mfaMandatory: boolean,
@@ -190,7 +185,7 @@ export function createSessionService({ database }: SessionServiceOptions) {
       }),
       roles,
       factors,
-      await isTwoFactorOffFor(roles),
+      isTwoFactorOffFor(roles),
     );
 
     // Stored within what the session list is allowed to return. A longer
@@ -337,27 +332,20 @@ export function createSessionService({ database }: SessionServiceOptions) {
     // The session row carries the user id, so the user, role and factor
     // reads need nothing from each other: one parallel round trip instead of
     // a serial user read followed by a second batch.
-    const [
-      user,
-      roles,
-      { totpEnabled, passkeyCount },
-      studentTwoFactorEnabled,
-    ] = await Promise.all([
+    const [user, roles, { totpEnabled, passkeyCount }] = await Promise.all([
       userRepository.findUserById(database, session.user_id),
       userRepository.listUserRoleNames(database, session.user_id),
       mfaRepository.findMfaFactorState(database, session.user_id),
-      platformSettings.isStudentTwoFactorEnabled(),
     ]);
     if (!user) {
       return null;
     }
 
-    // Staff skipped by configuration (SKIP_ADMIN_MFA), or a student while the academy has
-    // turned two-factor sign-in off for students: a session waiting for its
-    // second step counts as complete.
+    // Staff skipped by configuration (SKIP_ADMIN_MFA), or a student, who
+    // has no two-factor sign-in: a session waiting for its second step
+    // counts as complete.
     const skipMfa = Boolean(
-      skipsStaffMfa(config.SKIP_ADMIN_MFA, roles) ||
-      (!studentTwoFactorEnabled && !isStaffAccount(roles)),
+      skipsStaffMfa(config.SKIP_ADMIN_MFA, roles) || isTwoFactorOffFor(roles),
     );
 
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
@@ -395,7 +383,7 @@ export function createSessionService({ database }: SessionServiceOptions) {
     userHasAnyMfaFactor,
     /**
      * Drops every cached sign-in answer, after a change to the rules they
-     * were worked out under (the academy's student two-factor setting).
+     * were worked out under (the academy's security settings).
      */
     forgetCachedAuthContexts: clearSessionAuthCache,
     loadSessionPrerequisites,

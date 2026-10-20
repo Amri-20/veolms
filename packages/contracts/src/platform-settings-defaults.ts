@@ -22,12 +22,6 @@ export interface PlatformAppearanceSettings {
 }
 
 export interface PlatformSecuritySettings {
-  /**
-   * Students may turn on two-factor sign-in and are asked for it when they
-   * sign in. When off, students are never asked for a second step and cannot
-   * turn it on. Admins and instructors always need it.
-   */
-  studentTwoFactorEnabled: boolean;
   /** Enrolling in a course, free or paid, needs a verified mobile number. */
   requireVerifiedPhoneForEnrollment: boolean;
 }
