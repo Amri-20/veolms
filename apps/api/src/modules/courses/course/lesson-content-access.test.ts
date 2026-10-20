@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   createLessonContentAccess,
   findFirstPublishedLessonId,
+  isLessonDescriptionPublic,
 } from "./lesson-content-access.ts";
 
 const OWNER = "00000000-0000-4000-8000-000000000001";
@@ -117,4 +118,10 @@ await test("the first published lesson follows section, then lesson, order", () 
   ];
   assert.equal(findFirstPublishedLessonId(sections, lessons), "b");
   assert.equal(findFirstPublishedLessonId(sections, []), undefined);
+});
+
+await test("a video's or a quiz's description is for everyone; a reading lesson's text is not", () => {
+  assert.equal(isLessonDescriptionPublic({ content_type: "video" }), true);
+  assert.equal(isLessonDescriptionPublic({ content_type: "quiz" }), true);
+  assert.equal(isLessonDescriptionPublic({ content_type: "document" }), false);
 });

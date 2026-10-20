@@ -4,8 +4,10 @@ import {
   coursePublicCurriculumSchema,
   guestHomePageResponseSchema,
   homeDiscoveryResponseSchema,
+  lessonDiscussionsListResponseSchema,
   publicPopularDiscussionsResponseSchema,
   type CourseListResponse,
+  type CoursePublicCurriculum,
   type GuestHomePageResponse,
   type HomeDiscoveryResponse,
 } from "@veolms/contracts";
@@ -19,6 +21,14 @@ import {
   toCurriculumPreview,
   type CourseCurriculumPreview,
 } from "../courses/staticCurriculum";
+import { resolveLessonIdentifier } from "../learning/courseContent";
+import {
+  DISCUSSIONS_IN_LESSON_PAGE,
+  findCurriculumLesson,
+  openingDiscussionKind,
+  toLessonPageSeed,
+  type LessonPageSeed,
+} from "../learning/staticLessonPage";
 
 export interface AcademyStaticPageData {
   publishedCoursePage?: CourseListResponse;
@@ -28,6 +38,11 @@ export interface AcademyStaticPageData {
    * only (the rest is a file of its own), with the price at build time.
    */
   courseCurriculum?: CourseCurriculumPreview;
+  /**
+   * A lesson page's lesson, as every visitor sees it: the course with its
+   * section headings, the lesson's own section, its first discussions.
+   */
+  lessonPage?: LessonPageSeed;
   guestHomePage?: GuestHomePageResponse;
   /**
    * The home page's words without its courses and discussions, carried by
@@ -238,21 +253,25 @@ export async function loadDevelopmentHomePageData(request: Request) {
   const pathname = new URL(request.url).pathname.replace(/[/]$/u, "") || "/";
   const refresh = refreshDevelopmentGuestHomePage();
   const courseSlug = readCourseOverviewSlug(pathname);
-  const [courseCurriculum] = await Promise.all([
+  const lessonAddress = readLessonPageAddress(pathname);
+  const [courseCurriculum, lessonPage] = await Promise.all([
     courseSlug ? loadDevelopmentCourseOverview(courseSlug) : undefined,
+    lessonAddress ? loadDevelopmentLessonPage(lessonAddress) : undefined,
     developmentGuestHomePage ? undefined : refresh,
   ]);
+  const coursePageData = {
+    ...(courseCurriculum ? { courseCurriculum } : {}),
+    ...(lessonPage ? { lessonPage } : {}),
+  } satisfies AcademyStaticPageData;
   if (!developmentGuestHomePage) {
-    return courseCurriculum
-      ? ({ courseCurriculum } satisfies AcademyStaticPageData)
-      : null;
+    return courseCurriculum || lessonPage ? coursePageData : null;
   }
   return (
     pathname === "/" || pathname === "/home"
       ? { guestHomePage: developmentGuestHomePage }
       : {
           guestHomeCopy: toGuestHomeCopy(developmentGuestHomePage),
-          ...(courseCurriculum ? { courseCurriculum } : {}),
+          ...coursePageData,
         }
   ) satisfies AcademyStaticPageData;
 }
@@ -281,6 +300,92 @@ function parseWith<T>(
   };
 }
 
+/** The address of a lesson page: its course and lesson number. */
+function readLessonPageAddress(pathname: string) {
+  const match = /^\/learn\/([^/]+)\/([^/]+)$/u.exec(pathname);
+  if (!match?.[1] || !match[2]) return undefined;
+  const lessonNumber = resolveLessonIdentifier(match[2]);
+  if (lessonNumber === null) return undefined;
+  try {
+    return { courseSlug: decodeURIComponent(match[1]), lessonNumber };
+  } catch {
+    return undefined;
+  }
+}
+
+function fetchPublicCurriculum(courseSlug: string, retryBudgetMs?: number) {
+  return fetchStaticApiData(
+    `/courses/${encodeURIComponent(courseSlug)}/curriculum`,
+    parseWith(
+      coursePublicCurriculumSchema,
+      `public curriculum for ${courseSlug}`,
+    ),
+    retryBudgetMs,
+  );
+}
+
+/**
+ * Each course's public curriculum, read once per build: a course's course
+ * page and all of its lesson pages are built from the same copy, so they
+ * agree with each other and with the course's curriculum file.
+ */
+const builtPublicCurricula = new Map<string, Promise<CoursePublicCurriculum>>();
+
+function loadBuiltPublicCurriculum(courseSlug: string) {
+  let curriculum = builtPublicCurricula.get(courseSlug);
+  if (!curriculum) {
+    curriculum = fetchPublicCurriculum(courseSlug);
+    // A failed read is tried again by the next page that needs it.
+    curriculum.catch(() => builtPublicCurricula.delete(courseSlug));
+    builtPublicCurricula.set(courseSlug, curriculum);
+  }
+  return curriculum;
+}
+
+/**
+ * A lesson page's lesson from its course's public curriculum, with the
+ * first of its discussions as a visitor is shown them. A lesson whose
+ * discussions cannot be read is built without them; the page then loads
+ * them as before.
+ */
+async function loadLessonPageSeed(
+  curriculum: CoursePublicCurriculum,
+  lessonNumber: number,
+  retryBudgetMs?: number,
+): Promise<LessonPageSeed | undefined> {
+  const lesson = findCurriculumLesson(curriculum, lessonNumber);
+  if (!lesson) return undefined;
+  const kind = openingDiscussionKind(curriculum.settings);
+  const page = kind
+    ? await fetchStaticApiData(
+        `/courses/${curriculum.course.id}/lessons/${lesson.id}/discussions?${new URLSearchParams(
+          {
+            kind,
+            sort: "top",
+            limit: String(DISCUSSIONS_IN_LESSON_PAGE),
+          },
+        )}`,
+        parseWith(
+          lessonDiscussionsListResponseSchema,
+          `discussions for ${curriculum.course.slug} lesson ${lessonNumber}`,
+        ),
+        retryBudgetMs,
+      ).catch((error: unknown) => {
+        console.warn(
+          "Building a lesson page without its discussions:",
+          error instanceof Error ? error.message : error,
+        );
+        return null;
+      })
+    : null;
+  return toLessonPageSeed(
+    curriculum,
+    lessonNumber,
+    kind && page ? { kind, page } : null,
+    Date.now(),
+  );
+}
+
 /**
  * A course page's course: its public curriculum, the same for everyone,
  * and the price a visitor is offered (asked without a session, so it is
@@ -292,14 +397,9 @@ async function loadCourseCurriculumPreview(
 ): Promise<CourseCurriculumPreview> {
   const key = encodeURIComponent(courseSlug);
   const [curriculum, access] = await Promise.all([
-    fetchStaticApiData(
-      `/courses/${key}/curriculum`,
-      parseWith(
-        coursePublicCurriculumSchema,
-        `public curriculum for ${courseSlug}`,
-      ),
-      retryBudgetMs,
-    ),
+    retryBudgetMs === undefined
+      ? loadBuiltPublicCurriculum(courseSlug)
+      : fetchPublicCurriculum(courseSlug, retryBudgetMs),
     fetchStaticApiData(
       `/courses/${key}/access`,
       parseWith(courseAccessResponseSchema, `access for ${courseSlug}`),
@@ -357,6 +457,49 @@ async function loadDevelopmentCourseOverview(courseSlug: string) {
   return developmentCourseOverviews.get(courseSlug);
 }
 
+/** The last public curriculum read for each course the dev server has served lessons of. */
+const developmentCurricula = new Map<string, CoursePublicCurriculum>();
+const developmentCurriculumRefreshes = new Map<string, Promise<void>>();
+
+/**
+ * A lesson page on the dev server, as the production build has it, but
+ * for its discussions, which the page loads itself (the document does not
+ * wait on a request for every lesson). The course's curriculum is served
+ * from the last copy read and refreshed behind it, as the course page's is.
+ */
+async function loadDevelopmentLessonPage({
+  courseSlug,
+  lessonNumber,
+}: {
+  courseSlug: string;
+  lessonNumber: number;
+}) {
+  let refresh = developmentCurriculumRefreshes.get(courseSlug);
+  if (!refresh) {
+    refresh = fetchPublicCurriculum(courseSlug, 0)
+      .then((curriculum) => {
+        developmentCurricula.delete(courseSlug);
+        developmentCurricula.set(courseSlug, curriculum);
+        if (developmentCurricula.size > DEVELOPMENT_COURSE_OVERVIEW_LIMIT) {
+          const oldest = developmentCurricula.keys().next().value;
+          if (oldest !== undefined) developmentCurricula.delete(oldest);
+        }
+      })
+      .catch(() => {
+        developmentCurricula.delete(courseSlug);
+      })
+      .finally(() => {
+        developmentCurriculumRefreshes.delete(courseSlug);
+      });
+    developmentCurriculumRefreshes.set(courseSlug, refresh);
+  }
+  if (!developmentCurricula.has(courseSlug)) await refresh;
+  const curriculum = developmentCurricula.get(courseSlug);
+  return curriculum
+    ? toLessonPageSeed(curriculum, lessonNumber, null, Date.now())
+    : undefined;
+}
+
 export async function loadAcademyStaticPageData(
   request: Request,
   courseSlug?: string,
@@ -398,6 +541,14 @@ async function loadStaticPageData(
     return {
       courseCurriculum: await loadCourseCurriculumPreview(courseSlug),
     } satisfies AcademyStaticPageData;
+  }
+  const lessonAddress = readLessonPageAddress(pathname);
+  if (lessonAddress) {
+    const lessonPage = await loadLessonPageSeed(
+      await loadBuiltPublicCurriculum(lessonAddress.courseSlug),
+      lessonAddress.lessonNumber,
+    );
+    return lessonPage ? ({ lessonPage } satisfies AcademyStaticPageData) : null;
   }
   return null;
 }

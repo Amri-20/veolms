@@ -33,6 +33,19 @@ export interface LessonContentViewer {
   holdsCourse: () => Promise<boolean>;
 }
 
+/**
+ * Whether a lesson's description is for everyone, whoever may play the
+ * lesson. A video's or a quiz's description only says what the lesson is
+ * about, so it is built into the lesson's page and the course's curriculum
+ * like its title; a reading lesson's description is the lesson itself, and
+ * it is read by `createLessonContentAccess`.
+ */
+export function isLessonDescriptionPublic(lesson: {
+  content_type: string | null;
+}): boolean {
+  return lesson.content_type !== "document";
+}
+
 export function viewerIsCourseStaff(
   course: { creator_id: string | null },
   viewer: OverviewViewer | undefined,

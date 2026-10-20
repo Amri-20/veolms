@@ -120,19 +120,21 @@ export function useCoursePublicCurriculum(
 /**
  * A course's whole public curriculum as the site was built with it (see
  * `staticCurriculumUrl`). Null when the build has no copy of that version.
+ * `version` null asks for whichever copy the site has; undefined asks for
+ * nothing.
  */
 export function useStaticCurriculum(
   courseSlug: string | null | undefined,
   version: string | null | undefined,
   options?: { enabled?: boolean },
 ) {
+  const asked = Boolean(courseSlug) && version !== undefined;
   return useQuery<CoursePublicCurriculum | null, ApiError>({
-    queryKey:
-      courseSlug && version
-        ? courseKeys.staticCurriculum(courseSlug, version)
-        : ["courses", "static-curriculum", null],
+    queryKey: asked
+      ? courseKeys.staticCurriculum(courseSlug!, version!)
+      : ["courses", "static-curriculum", null],
     queryFn: () => coursesService.getStaticCurriculum(courseSlug!, version!),
-    enabled: Boolean(courseSlug && version && (options?.enabled ?? true)),
+    enabled: asked && (options?.enabled ?? true),
     staleTime: Infinity,
     retry: 1,
   });
@@ -150,12 +152,14 @@ export function useCourseAccessList(options?: { enabled?: boolean }) {
 }
 
 /**
- * One lesson's description. The lesson page shows the course overview's
- * copy until this answers, and keeps it if this fails.
+ * One lesson's description: a reading lesson's text, which the course's
+ * curriculum leaves out for a viewer it is not open to everyone for (see
+ * `useLessonDescriptionState`).
  */
 export function useLessonDescription(
   courseId: string | null | undefined,
   lessonId: string | null | undefined,
+  options?: { enabled?: boolean },
 ) {
   return useQuery<LessonDescriptionResponse, ApiError>({
     queryKey:
@@ -163,7 +167,7 @@ export function useLessonDescription(
         ? courseKeys.lessonDescription(courseId, lessonId)
         : ["courses", "overview", null, "lesson-description", null],
     queryFn: () => coursesService.getLessonDescription(courseId!, lessonId!),
-    enabled: Boolean(courseId && lessonId),
+    enabled: Boolean(courseId && lessonId && (options?.enabled ?? true)),
     // As long as the overview it stands in for.
     staleTime: 60 * 1000,
     // A lesson that is only text has nothing else to show, so a dropped

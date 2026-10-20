@@ -57,10 +57,16 @@ export function toCurriculumPreview(
 /**
  * Where a built site keeps a course's whole public curriculum. The version
  * travels in the query, so a page built with one version is never handed
- * another one's copy by a cache along the way.
+ * another one's copy by a cache along the way. Without a version it is
+ * whichever copy the site was built with (the file is revalidated on every
+ * request, so a cache does not hand out an older one).
  */
-export function staticCurriculumUrl(courseSlug: string, version: string) {
-  return `/static/courses/${encodeURIComponent(courseSlug)}/curriculum.json?v=${encodeURIComponent(version)}`;
+export function staticCurriculumUrl(
+  courseSlug: string,
+  version: string | null,
+) {
+  const path = `/static/courses/${encodeURIComponent(courseSlug)}/curriculum.json`;
+  return version === null ? path : `${path}?v=${encodeURIComponent(version)}`;
 }
 
 /**

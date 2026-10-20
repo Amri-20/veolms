@@ -66,7 +66,7 @@ import {
   type CourseSection,
 } from "../courseContent";
 import { adaptCourseOverviewToCurriculum } from "../courseCurriculumAdapter";
-import { useCourseOverview } from "../../services/courses";
+import { useLearningCourse } from "../useLearningCourse";
 
 const EMPTY_CURRICULUM_SECTIONS: CourseSection[] = [];
 
@@ -181,7 +181,7 @@ export function LearningMiniPlayer({
   );
 
   const selectedLesson = session.selectedLesson ?? 1;
-  const { data: courseOverview } = useCourseOverview(session.courseSlug, {
+  const { data: courseOverview } = useLearningCourse(session.courseSlug, {
     enabled: Boolean(session.courseSlug),
   });
   const adaptedCurriculum = useMemo(

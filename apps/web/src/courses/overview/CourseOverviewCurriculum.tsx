@@ -8,10 +8,21 @@ import { FileText } from "@phosphor-icons/react/FileText";
 import { PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { PlayCircle } from "@phosphor-icons/react/PlayCircle";
 import { Question } from "@phosphor-icons/react/Question";
-import { useDeferredValue, useState, type CSSProperties } from "react";
+import {
+  useContext,
+  useDeferredValue,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { flushSync } from "react-dom";
 import type { CourseSection } from "../../learning/courseContent";
 import { formatDuration } from "../courseAdapter";
+import {
+  CurriculumIntentContext,
+  useCurriculumIntent,
+} from "./curriculumIntent";
 import {
   readApplicationScrollPosition,
   scrollApplicationTo,
@@ -79,6 +90,7 @@ function CurriculumSectionRow({
   isReadOnlyPreview = false,
   isPaidCourse = false,
 }: CurriculumSectionRowProps) {
+  const curriculumIntent = useCurriculumIntent();
   const panelId = `cov-section-panel-${section.id}`;
   const buttonId = `cov-section-toggle-${section.id}`;
   const lessonCount = section.lessons.length;
@@ -131,6 +143,7 @@ function CurriculumSectionRow({
         className="group/section flex w-full cursor-pointer items-center gap-4 border-0 bg-transparent px-4 py-4 text-left text-(--text) transition-colors duration-140 hover:bg-[color-mix(in_srgb,var(--text)_3%,transparent)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--accent) max-[640px]:gap-3 max-[640px]:px-3.5 @xl/curriculum:px-5"
         aria-expanded={isOpen}
         aria-controls={panelId}
+        {...curriculumIntent}
         onClick={onToggle}
       >
         {/* The section's number, two figures, on a tinted tile; a done
@@ -403,6 +416,28 @@ export function CourseOverviewCurriculum({
   onRequestAllSections,
 }: CourseOverviewCurriculumProps) {
   const sectionCount = Math.max(courseSections.length, totalSections ?? 0);
+  const curriculumIntent = useCurriculumIntent();
+  const prefetchAllSections = useContext(CurriculumIntentContext);
+  const showAllButtonRef = useRef<HTMLButtonElement>(null);
+  // A phone has no hover: there the rest of the curriculum is fetched as
+  // the button comes near the screen, which is where a reader who scrolls
+  // that far is heading.
+  useEffect(() => {
+    const button = showAllButtonRef.current;
+    if (!button || !prefetchAllSections) return;
+    if (!window.matchMedia?.("(pointer: coarse)").matches) return;
+    if (typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        prefetchAllSections();
+      },
+      { rootMargin: "300px 0px" },
+    );
+    observer.observe(button);
+    return () => observer.disconnect();
+  }, [prefetchAllSections]);
   // Whether the last change was to every section at once (see `animate`).
   const [changedTogether, setChangedTogether] = useState(false);
   const [showingAllSections, setShowingAllSections] = useState(false);
@@ -532,10 +567,10 @@ export function CourseOverviewCurriculum({
           // the card's bottom edge (past the card's own padding there).
           data-fixed-radius
           className="mt-3 flex min-h-16 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--text)_2%,transparent)] px-4 text-[0.92rem] font-semibold text-(--accent-ink,var(--accent)) transition-colors duration-140 hover:border-[color-mix(in_srgb,var(--text)_14%,transparent)] hover:bg-[color-mix(in_srgb,var(--text)_4%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) active:bg-[color-mix(in_srgb,var(--text)_6%,transparent)] max-[640px]:-mx-[15px] max-[640px]:mt-1 max-[640px]:-mb-5 max-[640px]:min-h-16 max-[640px]:w-[calc(100%+30px)] max-[640px]:border-transparent max-[640px]:bg-transparent max-[640px]:active:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)]"
-          // The rest of the outline is usually here already (fetched while
-          // the page was idle); pointing at the button asks for it if not.
-          onPointerEnter={onRequestAllSections}
-          onFocus={onRequestAllSections}
+          ref={showAllButtonRef}
+          // The rest of the outline is fetched as the reader reaches for
+          // this button (see `useCurriculumIntent`), or on the press.
+          {...curriculumIntent}
           onClick={(event) => {
             if (!showingAllSections) {
               onRequestAllSections?.();

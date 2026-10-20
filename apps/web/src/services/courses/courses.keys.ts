@@ -27,7 +27,8 @@ export const courseKeys = {
   publicCurriculum: (idOrSlug: string) =>
     [...courseKeys.overviews(), idOrSlug, "public-curriculum"] as const,
   // Never stale: a version names one curriculum for good.
-  staticCurriculum: (courseSlug: string, version: string) =>
+  // `null`: the copy the site was built with, whatever its version.
+  staticCurriculum: (courseSlug: string, version: string | null) =>
     [...courseKeys.all, "static-curriculum", courseSlug, version] as const,
   editor: (id: string) => [...courseKeys.all, "editor", id] as const,
   preview: (id: string) => [...courseKeys.all, "preview", id] as const,

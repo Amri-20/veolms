@@ -13,9 +13,15 @@ export type DiscussionFeedSort = "newest" | "top";
  */
 export type DiscussionFeedView = DiscussionFeedSort | "mine";
 
+/**
+ * Top comes first and is where a lesson's discussions open: the most liked,
+ * and among equally liked ones the oldest (the first things said about the
+ * lesson). It is the order the lesson's page is built with, so the list the
+ * page shows at once is the one it keeps.
+ */
 export const DISCUSSION_FEED_SORT_OPTIONS = [
-  ["newest", "Newest"],
   ["top", "Top"],
+  ["newest", "Newest"],
 ] as const satisfies readonly (readonly [DiscussionFeedView, string])[];
 
 const MINE_LABELS: Record<DiscussionEntryFilter, string> = {

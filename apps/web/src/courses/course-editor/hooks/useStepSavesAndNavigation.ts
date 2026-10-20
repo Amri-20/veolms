@@ -34,6 +34,7 @@ import {
 import {
   type PricingFormState,
   normalizePricingState,
+  pricingFormFromServer,
   isPricingEqual,
   validatePricing,
   buildPricingPayload,
@@ -648,13 +649,7 @@ export function useStepSavesAndNavigation({
         courseId: targetCourseId,
         payload,
       });
-      const hasSale = res.salePrice != null && res.salePrice !== undefined;
-      const newBaseline: PricingFormState = normalizePricingState({
-        sellingPrice: hasSale ? String(res.salePrice) : String(res.price),
-        originalPrice: hasSale && res.price > 0 ? String(res.price) : "",
-        currency: res.currency || "INR",
-        showDiscountBadge: res.showDiscountBadge === true,
-      });
+      const newBaseline: PricingFormState = pricingFormFromServer(res);
 
       setServerPricing(newBaseline);
       serverPricingRef.current = newBaseline;

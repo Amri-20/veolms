@@ -15,6 +15,7 @@ import {
   getVideoPlaybackBootstrap,
   refreshVideoPlaybackToken,
 } from "./videoPlaybackBootstrap";
+import { prefersReducedData } from "../lib/reduced-data";
 
 let inFlight:
   | {
@@ -167,20 +168,6 @@ export const LESSON_HOVER_PRELOAD_DELAY_MS = 120;
 
 /** The lesson preloaded speculatively (hover or next-up), by manifest URL. */
 let speculativeManifestUrl: string | undefined;
-
-function prefersReducedData(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const connection = (
-    navigator as {
-      connection?: { saveData?: boolean; effectiveType?: string };
-    }
-  ).connection;
-  return (
-    Boolean(connection?.saveData) ||
-    connection?.effectiveType === "slow-2g" ||
-    connection?.effectiveType === "2g"
-  );
-}
 
 /**
  * A speculative preload replaces the page's single preload session. That is

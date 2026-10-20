@@ -5,7 +5,6 @@ import {
   type LessonContentAccessState,
   type LessonParticipationState,
 } from "../Discussion";
-import type { useCourseOverview } from "../../services/courses";
 
 export interface LessonContentPanelProps {
   lessonContentRef: RefObject<HTMLElement | null>;
@@ -37,7 +36,7 @@ export interface LessonContentPanelProps {
   onOpenLogin: () => void;
   seekCurrentLessonToTimestamp: (seconds: number) => void;
   isLearningDeepLinkError: boolean;
-  refetchCourseOverview: ReturnType<typeof useCourseOverview>["refetch"];
+  refetchCourseOverview: () => Promise<unknown>;
 }
 
 export function LessonContentPanel({
