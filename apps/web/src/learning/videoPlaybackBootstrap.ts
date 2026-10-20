@@ -196,8 +196,9 @@ async function readResponsePayload(response: Response): Promise<unknown> {
 async function requestBootstrap(
   options: VideoPlaybackBootstrapRequest,
 ): Promise<VideoPlaybackBootstrap> {
-  // Asks for the master playlist inline, saving the player that request.
-  const path = `${playbackPath(options, "playback-bootstrap")}?inlineManifest=1`;
+  // Asks for the master playlist inline, saving the player that request,
+  // and for the seek-preview storyboard when the video has one.
+  const path = `${playbackPath(options, "playback-bootstrap")}?inlineManifest=1&storyboard=1`;
   let response: Response;
   try {
     response = await fetch(resolveVideoPlaybackApiUrl(path), {

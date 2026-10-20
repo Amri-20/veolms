@@ -17,6 +17,18 @@ export interface AnalyticsEventPayloads {
     seconds: number;
     at: Date;
   };
+  /**
+   * A video finished transcoding and can be played. Work that derives
+   * files from the output (seek-preview storyboards, for one) starts here.
+   */
+  "media.video.ready": {
+    mediaId: string;
+    /** Storage key of the top-level manifest (HLS master or DASH MPD). */
+    manifestKey: string;
+    /** The `video_outputs` row written for this output. */
+    outputId: string;
+    at: Date;
+  };
 }
 
 export type AnalyticsEventName = keyof AnalyticsEventPayloads;

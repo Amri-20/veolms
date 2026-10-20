@@ -35,12 +35,22 @@ export const videoPlaybackBootstrapSchema = z.strictObject({
    * Relative URIs in it are relative to `manifestUrl`.
    */
   inlinedMasterManifest: z.string().min(1).optional(),
+  /**
+   * The video's seek-preview storyboard index (sprite sheets made from the
+   * video), when one has been made. Sent only to callers that ask for it
+   * (`storyboard=1`), for the same reason as `inlinedMasterManifest`. Its
+   * sheets are protected like the segments: request them with
+   * `segmentToken`.
+   */
+  storyboardUrl: z.string().min(1).optional(),
 });
 
 /** Query of the playback bootstrap request. */
 export const videoPlaybackBootstrapQuerySchema = z.object({
   /** `1` asks for `inlinedMasterManifest` when it can be read quickly. */
   inlineManifest: z.enum(["0", "1"]).optional(),
+  /** `1` asks for `storyboardUrl` when the video has a storyboard. */
+  storyboard: z.enum(["0", "1"]).optional(),
 });
 
 /**

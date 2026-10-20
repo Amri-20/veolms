@@ -111,15 +111,16 @@ export function appendLearningHlsCacheVersion(
 
 /**
  * Requests that carry the CDN playback token: playlists (.m3u8/.mpd),
- * segments (.ts today, .m4s and init.mp4 with CMAF), captions, and AES-128
- * keys (key.bin).
+ * segments (.ts today, .m4s and init.mp4 with CMAF), captions, AES-128
+ * keys (key.bin), and the seek-preview storyboard (index and sheets).
  */
 function carriesPlaybackToken(type: VideoNetworkRequest["type"]): boolean {
   return (
     type === "manifest" ||
     type === "segment" ||
     type === "text" ||
-    type === "key"
+    type === "key" ||
+    type === "thumbnail"
   );
 }
 

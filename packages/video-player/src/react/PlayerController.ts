@@ -35,6 +35,11 @@ type SnapshotListener = () => void;
 const SCRUB_BUFFERED_END_MARGIN_SECONDS = 0.1;
 /** A scrub seek that never reports `seeked` stops blocking the next one. */
 const SCRUB_SEEK_TIMEOUT_MS = 500;
+/**
+ * After a drag ends on a part not downloaded, the storyboard picture stays
+ * until the video has the real frame, or this long at most.
+ */
+const SCRUB_FRAME_HOLD_TIMEOUT_MS = 8_000;
 
 function isTimeBuffered(ranges: TimeRanges, time: number): boolean {
   for (let index = 0; index < ranges.length; index += 1) {
@@ -131,6 +136,9 @@ export class PlayerController {
   // The newest drag position still waiting for the seek in flight to finish.
   #scrubTarget: number | null = null;
   #scrubSeekInFlight = false;
+  // Ends the wait for the real frame after a drag released on a part not
+  // downloaded (see `scrubFrameTime`).
+  #scrubFrameRelease: (() => void) | null = null;
   readonly #activeMediaListeners = new Set<ActiveMediaListener>();
 
   constructor(engine: VideoEngine) {
@@ -353,6 +361,7 @@ export class PlayerController {
   }: PlayerLoadRequest): Promise<void> {
     this.assertActive();
     this.resetZoom();
+    this.#clearScrubFrame();
     const generation = ++this.#loadGeneration;
     await this.waitForMedia();
     if (generation !== this.#loadGeneration || this.#destroyed) return;
@@ -442,8 +451,12 @@ export class PlayerController {
     // A deliberate seek replaces any drag position still queued.
     this.#scrubTarget = null;
     if (!this.isMediaReady()) {
+      this.#clearScrubFrame();
       this.#pendingMediaProperties.seekTime = time;
       return;
+    }
+    if (this.#snapshot.ui.scrubFrameTime !== null) {
+      this.#holdScrubFrameUntilSeeked(time);
     }
     this.engine.seek(time);
   }
@@ -459,11 +472,62 @@ export class PlayerController {
     const media = this.#media;
     if (!Number.isFinite(time) || !media || !this.isMediaReady()) return;
     if (!isTimeBuffered(media.buffered, time)) {
+      // The storyboard picture stands in for the video here.
       this.#scrubTarget = null;
+      this.#releaseScrubFrameHold();
+      if (this.#snapshot.ui.scrubFrameTime !== time) {
+        this.updateUi({ scrubFrameTime: time });
+      }
       return;
     }
+    this.#clearScrubFrame();
     this.#scrubTarget = time;
     if (!this.#scrubSeekInFlight) this.runScrubSeek(media);
+  }
+
+  /**
+   * Keeps the storyboard picture of a released drag over the video until
+   * the seek to it has a frame to show.
+   */
+  #holdScrubFrameUntilSeeked(time: number): void {
+    this.#releaseScrubFrameHold();
+    const media = this.#media;
+    if (!media) {
+      this.#clearScrubFrame();
+      return;
+    }
+    if (this.#snapshot.ui.scrubFrameTime !== time) {
+      this.updateUi({ scrubFrameTime: time });
+    }
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      media.removeEventListener("seeked", finish);
+      media.removeEventListener("emptied", finish);
+      window.clearTimeout(timeout);
+      if (this.#scrubFrameRelease === release) this.#scrubFrameRelease = null;
+    };
+    const finish = () => {
+      release();
+      if (!this.#destroyed) this.#clearScrubFrame();
+    };
+    media.addEventListener("seeked", finish);
+    media.addEventListener("emptied", finish);
+    const timeout = window.setTimeout(finish, SCRUB_FRAME_HOLD_TIMEOUT_MS);
+    this.#scrubFrameRelease = release;
+  }
+
+  #releaseScrubFrameHold(): void {
+    this.#scrubFrameRelease?.();
+    this.#scrubFrameRelease = null;
+  }
+
+  #clearScrubFrame(): void {
+    this.#releaseScrubFrameHold();
+    if (this.#snapshot.ui.scrubFrameTime !== null) {
+      this.updateUi({ scrubFrameTime: null });
+    }
   }
 
   private runScrubSeek(media: HTMLVideoElement): void {
@@ -601,6 +665,9 @@ export class PlayerController {
   }
 
   setScrubbing(scrubbing: boolean): void {
+    // A drag that ends without a seek (cancelled) drops its picture; one
+    // that sought keeps it until the video catches up.
+    if (!scrubbing && !this.#scrubFrameRelease) this.#clearScrubFrame();
     this.updateUi({ scrubbing, controlsVisible: true });
   }
 
@@ -718,6 +785,7 @@ export class PlayerController {
   async destroy(): Promise<void> {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#releaseScrubFrameHold();
     this.#loadGeneration += 1;
     this.#playRequestGeneration += 1;
     this.#requestedMedia = null;

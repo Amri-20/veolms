@@ -28,16 +28,25 @@ function StoryboardImage({ frame }: { frame: StoryboardFrame }) {
 }
 
 function SpriteFrame({ frame }: { frame: StoryboardFrame }) {
-  const [sheetSize, setSheetSize] = useState<{
+  const [loadedSheetSize, setSheetSize] = useState<{
     width: number;
     height: number;
   } | null>(null);
+  // A sheet whose size the storyboard states is drawn at once, without
+  // waiting for it to load again.
+  const sheetSizeKnown =
+    frame.sheetWidth !== undefined && frame.sheetHeight !== undefined;
+  const knownSheetSize = sheetSizeKnown
+    ? { width: frame.sheetWidth!, height: frame.sheetHeight! }
+    : null;
+  const sheetSize = knownSheetSize ?? loadedSheetSize;
   const width = frame.width ?? 1;
   const height = frame.height ?? 1;
   const x = frame.x ?? 0;
   const y = frame.y ?? 0;
 
   useEffect(() => {
+    if (sheetSizeKnown) return undefined;
     let active = true;
     const image = new Image();
     image.onload = () => {
@@ -53,7 +62,7 @@ function SpriteFrame({ frame }: { frame: StoryboardFrame }) {
       active = false;
       image.onload = null;
     };
-  }, [frame.imageUrl]);
+  }, [frame.imageUrl, sheetSizeKnown]);
 
   const backgroundPositionX =
     sheetSize && sheetSize.width > width

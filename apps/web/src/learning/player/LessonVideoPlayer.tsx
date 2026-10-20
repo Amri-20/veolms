@@ -1534,6 +1534,7 @@ export function LessonVideoPlayer({
       source={source}
       description={description ?? undefined}
       chapterThumbnails={chapterThumbnails}
+      spriteStoryboardUrl={playbackBootstrap?.storyboardUrl}
       theme={playerTheme}
       engine="shaka"
       engineFactory={engineFactory}
