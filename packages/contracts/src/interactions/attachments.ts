@@ -122,54 +122,6 @@ export type LearningUploadResponse = z.infer<
   typeof learningUploadResponseSchema
 >;
 
-const IPV4_PATTERN =
-  /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-const TLD_PATTERN = /^(?:[a-zA-Z]{2,63}|xn--[a-zA-Z0-9]+)$/;
-const DOMAIN_LABEL_PATTERN = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
-
-/**
- * Validates whether a hostname is a fully formed public domain name or valid IP.
- * Rejects single-label hosts like "ss", incomplete domains without TLD, or invalid characters.
- */
-export function isValidPreviewHost(host: string): boolean {
-  if (!host) return false;
-  const cleanHost = host
-    .toLowerCase()
-    .trim()
-    .replace(/^\.+|\.+$/g, "");
-  if (!cleanHost) return false;
-
-  if (IPV4_PATTERN.test(cleanHost)) {
-    return true;
-  }
-
-  if (!cleanHost.includes(".")) {
-    return false;
-  }
-
-  const parts = cleanHost.split(".");
-  if (parts.length < 2) return false;
-
-  // A hostname starting with "www." must have at least domain and TLD: www.<domain>.<tld>
-  if (parts[0] === "www" && parts.length < 3) {
-    return false;
-  }
-
-  const tld = parts[parts.length - 1];
-  if (!tld || !TLD_PATTERN.test(tld)) {
-    return false;
-  }
-
-  for (let i = 0; i < parts.length - 1; i++) {
-    const label = parts[i];
-    if (!label || !DOMAIN_LABEL_PATTERN.test(label)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 /**
  * Normalizes a URL input string by prepending https:// if it lacks a protocol.
  */
@@ -190,42 +142,3 @@ export function normalizePreviewUrl(urlString: string): string {
   }
   return `https://${trimmed}`;
 }
-
-/**
- * Validates whether a URL string is an HTTP/HTTPS URL with a fully formed domain or valid IP.
- */
-export function isValidPreviewUrl(urlString: string): boolean {
-  if (!urlString || typeof urlString !== "string") return false;
-  const normalized = normalizePreviewUrl(urlString);
-  try {
-    const parsed = new URL(normalized);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return false;
-    }
-    return isValidPreviewHost(parsed.hostname);
-  } catch {
-    return false;
-  }
-}
-
-export const linkPreviewQuerySchema = z.object({
-  url: z
-    .string()
-    .transform(normalizePreviewUrl)
-    .pipe(
-      z.string().url().refine(isValidPreviewUrl, {
-        message:
-          "URL must contain a valid domain name with a supported top-level domain",
-      }),
-    ),
-});
-export type LinkPreviewQuery = z.infer<typeof linkPreviewQuerySchema>;
-
-export const linkPreviewResponseSchema = z.object({
-  url: z.string().url(),
-  title: z.string().nullable().optional(),
-  description: z.string().nullable().optional(),
-  siteName: z.string().nullable().optional(),
-  imageUrl: z.string().nullable().optional(),
-});
-export type LinkPreviewResponse = z.infer<typeof linkPreviewResponseSchema>;

@@ -778,7 +778,6 @@ export const CommentCard = React.memo(function CommentCard({
               </div>
 
               <DiscussionMarkdown
-                linkPreviewSource="url"
                 content={comment.content ?? createDiscussionDraft(comment.text)}
                 label={`${entryLabel} by ${comment.name}`}
                 linkedAttachments={comment.attachments}
@@ -1278,7 +1277,6 @@ function ReplyCard({
                 </div>
               ) : (
                 <DiscussionMarkdown
-                  linkPreviewSource="url"
                   content={reply.content ?? createDiscussionDraft(reply.text)}
                   label={`Reply by ${reply.name}`}
                   linkedAttachments={reply.attachments}

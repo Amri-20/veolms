@@ -3,7 +3,6 @@ import type { DatabaseExecutor } from "@veolms/database";
 import type {
   CompleteAttachmentUploadRequest,
   InitiateAttachmentUploadRequest,
-  LinkPreviewQuery,
 } from "@veolms/contracts";
 import { httpError } from "../../../../lib/errors.ts";
 import { discussionActor } from "../shared/discussion.access.ts";
@@ -27,11 +26,6 @@ export interface AttachmentsController {
   ): Promise<void>;
 
   uploadAttachment(request: FastifyRequest, reply: FastifyReply): Promise<void>;
-
-  getLinkPreview(
-    request: FastifyRequest<{ Querystring: LinkPreviewQuery }>,
-    reply: FastifyReply,
-  ): Promise<void>;
 }
 
 export function createAttachmentsController({
@@ -125,12 +119,6 @@ export function createAttachmentsController({
         multipartFile.file.resume();
         throw error;
       }
-    },
-
-    async getLinkPreview(request, reply) {
-      const { url } = request.query;
-      const preview = await service.fetchLinkPreview(url);
-      await reply.status(200).send(preview);
     },
   };
 }

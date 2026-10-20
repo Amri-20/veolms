@@ -1465,7 +1465,6 @@ function ThreadRootEntry({
             />
           </div>
           <DiscussionMarkdown
-            linkPreviewSource="url"
             content={entry.content ?? createDiscussionDraft(entry.text)}
             label={`Discussion entry by ${entry.name}`}
             linkedAttachments={entry.attachments}
@@ -1752,7 +1751,6 @@ function ThreadReplyEntry({
                 </div>
               ) : (
                 <DiscussionMarkdown
-                  linkPreviewSource="url"
                   content={reply.content ?? createDiscussionDraft(reply.text)}
                   label={`Reply by ${reply.name}`}
                   linkedAttachments={reply.attachments}

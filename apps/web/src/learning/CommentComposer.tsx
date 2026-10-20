@@ -18,15 +18,10 @@ import {
 import type { DiscussionFormattingState } from "./discussion-editor/commands";
 import type { InteractionCapabilities } from "./discussionFeed";
 import { AttachmentComposerPreview } from "./discussion-attachments";
-import { LinkPreviewCard } from "./LinkPreviewCard";
 import {
   revokeLocalAttachmentPreview,
   type LocalComposerAttachment,
 } from "../services/learning-interactions/attachment-model";
-import {
-  useUrlLinkPreview,
-  extractFirstWrittenUrl,
-} from "../services/learning-interactions";
 
 interface CommentComposerProps {
   draft: DiscussionDraft;
@@ -141,13 +136,6 @@ export function CommentComposer({
     window.setTimeout(() => editorController?.focus(), 0);
   };
 
-  const detectedUrl = extractFirstWrittenUrl(draft.markdown);
-  const [dismissedUrl, setDismissedUrl] = useState<string | null>(null);
-  const activeUrl =
-    detectedUrl && detectedUrl !== dismissedUrl ? detectedUrl : null;
-  // Made from the link alone; no request while typing.
-  const { data: linkPreview } = useUrlLinkPreview(activeUrl);
-
   const resetAfterLocalSubmit = () => {
     // This callback is invoked only when the local optimistic create is
     // accepted; mutation settlement must never alter a newer draft.
@@ -157,7 +145,6 @@ export function CommentComposer({
     setFormattingState(EMPTY_FORMATTING_STATE);
     setAttachmentError(null);
     setInternalAttachments([]);
-    setDismissedUrl(null);
     onAttachmentsChangeProp?.([]);
   };
 
@@ -216,15 +203,6 @@ export function CommentComposer({
                 attachments={effectiveAttachments}
                 onRemove={handleRemoveAttachment}
               />
-            )}
-            {linkPreview && (
-              <div className="px-3 pb-2.5">
-                <LinkPreviewCard
-                  preview={linkPreview}
-                  onRemove={() => setDismissedUrl(detectedUrl)}
-                  compact
-                />
-              </div>
             )}
             {attachmentError && (
               <p role="alert" className="px-3 pb-2 text-xs text-red-500">
