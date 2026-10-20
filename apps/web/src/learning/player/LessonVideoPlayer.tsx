@@ -1198,7 +1198,9 @@ export function LessonVideoPlayer({
       courseLessonsOpen &&
       Boolean(courseLessonsPanel);
     const gateIllustration =
-      presentation === "full" && playbackAccessError?.kind === "retry"
+      presentation === "full" &&
+      (playbackAccessError?.kind === "retry" ||
+        playbackAccessError?.kind === "notice")
         ? playbackAccessError.illustration
         : undefined;
     const gateTitle = !playbackAccessError

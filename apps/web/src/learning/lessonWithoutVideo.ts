@@ -177,10 +177,13 @@ export function viewerMayRecordProgress(input: {
 
 /**
  * The statement shown where the video would be. It is not a failure: there
- * is nothing to retry and nothing wrong with the lesson.
+ * is nothing to retry and nothing wrong with the lesson. It is drawn with
+ * the octopus that has not found something, as the other "not found"
+ * screens are.
  */
 export const NO_VIDEO_NOTICE = {
   kind: "notice",
+  illustration: "not-found",
   title: "No video",
   message: "This lesson has no video.",
   actionLabel: "",
