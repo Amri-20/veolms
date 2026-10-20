@@ -1,6 +1,8 @@
 import { api } from "../../lib/api-client";
 import type {
   Category,
+  CourseAccessListResponse,
+  CourseAccessResponse,
   CourseAccessRule,
   CourseBasicsResponse,
   CourseCreatedResponse,
@@ -96,6 +98,14 @@ export const coursesService = {
     );
   },
 
+  /** What the viewer may do with one course: never cached anywhere. */
+  getAccess: (idOrSlug: string): Promise<CourseAccessResponse> =>
+    api.get<CourseAccessResponse>(
+      `/courses/${encodeURIComponent(idOrSlug)}/access`,
+    ),
+  /** The same for every published course, for the catalogue's cards. */
+  listAccess: (): Promise<CourseAccessListResponse> =>
+    api.get<CourseAccessListResponse>("/courses/access"),
   getLessonDescription: (
     courseId: string,
     lessonId: string,

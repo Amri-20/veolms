@@ -9,6 +9,7 @@ export * from "./category/category.controller.ts";
 // Course
 export * from "./course/course.service.ts";
 export * from "./course/course.controller.ts";
+export * from "./course/overview-visibility.ts";
 
 // Curriculum
 export * from "./curriculum/curriculum.service.ts";

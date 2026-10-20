@@ -167,6 +167,49 @@ export async function findCourseBySlugIncludingDeleted(
     .executeTakeFirst();
 }
 
+/**
+ * What deciding a viewer's access and showing the price need, for courses
+ * by id, or for every published course when no ids are given. No counts, no
+ * thumbnails: it is asked on every page that shows a price.
+ */
+export async function listCourseAccessFacts(
+  database: Kysely<Database>,
+  filter: { courseIds: readonly string[] } | { published: true },
+) {
+  const showDiscountBadge = await hasDiscountBadgeColumn(database);
+  let query = database
+    .selectFrom("courses")
+    .leftJoin("course_pricing", "course_pricing.course_id", "courses.id")
+    .leftJoin(
+      "course_access_rules",
+      "course_access_rules.course_id",
+      "courses.id",
+    )
+    .select([
+      "courses.id",
+      "courses.slug",
+      "courses.status",
+      "courses.creator_id",
+      "course_access_rules.access_type",
+      "course_pricing.pricing_type",
+      "course_pricing.price",
+      "course_pricing.currency",
+      "course_pricing.sale_price",
+      discountBadgeColumn(showDiscountBadge),
+    ])
+    .where("courses.deleted_at", "is", null);
+  if ("courseIds" in filter) {
+    if (filter.courseIds.length === 0) return [];
+    query = query.where("courses.id", "in", [...filter.courseIds]);
+  } else {
+    query = query.where("courses.status", "=", "published");
+  }
+  return await query
+    .orderBy("courses.created_at", "asc")
+    .orderBy("courses.id", "asc")
+    .execute();
+}
+
 export async function listPublishedCourses(
   database: Kysely<Database>,
   filters?: {

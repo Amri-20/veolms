@@ -31,6 +31,18 @@ export interface EnrollmentService {
     userRoles?: readonly string[],
   ): Promise<EnrolledCourse[]>;
   /**
+   * The learner's active enrolments with their progress, as
+   * `listEnrolledCourses` reports it, without the card details (no
+   * thumbnails are resolved).
+   */
+  listEnrollmentProgress(userId: string): Promise<
+    Array<{
+      courseId: string;
+      progress: number;
+      lastAccessedAt: Date | null;
+    }>
+  >;
+  /**
    * Removes the learner from a course.
    *
    * A learner may leave only a free course they joined at no cost; their
@@ -163,6 +175,27 @@ export function createEnrollmentService({
     );
   }
 
+  async function listEnrollmentProgress(userId: string) {
+    const rows = await enrollmentRepo.listEnrolledCoursesForUser(
+      database,
+      userId,
+    );
+    return rows.map((row) => {
+      const { courseId, progress, lastAccessedAt } = toEnrolledCourseContract({
+        ...row,
+        course_thumbnail_url: null,
+        total_sections: Number(row.total_sections) || 0,
+        total_lessons: Number(row.total_lessons) || 0,
+        total_duration_seconds: Number(row.total_duration_seconds) || 0,
+      });
+      return {
+        courseId,
+        progress: progress ?? 0,
+        lastAccessedAt: lastAccessedAt ? new Date(lastAccessedAt) : null,
+      };
+    });
+  }
+
   async function unenrollFromCourse(
     actor: { id: string; roles: readonly string[] },
     courseId: string,
@@ -271,6 +304,7 @@ export function createEnrollmentService({
   return {
     listAcademyEnrollments,
     listEnrolledCourses,
+    listEnrollmentProgress,
     unenrollFromCourse,
     getEnrollmentStats,
     getEnrollmentActivityBuckets,

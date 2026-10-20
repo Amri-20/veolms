@@ -12,6 +12,7 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { createCorsMatcher } from "./cors.ts";
 import { AppError, registerErrorHandler } from "./errors.ts";
 import { registerOpenApi } from "./openapi.ts";
+import { detectSiteContentChange } from "./site-content-changes.ts";
 import type {
   CoreAppServices,
   CreateVeoLMSApiOptions,
@@ -28,26 +29,20 @@ export const API_ROUTE_PREFIX = "/v1";
 const MAX_PARAM_LENGTH = 512;
 
 /**
- * Course-scoped routes whose mutations do NOT change the course's public
- * static page and so must not dispatch a page rebuild. Without this, every
- * learner discussion post, moderation action, quiz interaction or progress
- * write under `/courses/<uuid>/...` triggered a GitHub Actions workflow run
- * (each up to ~13 minutes, serialized per process) — CI traffic driven by
- * ordinary learner activity.
+ * The course a request changed, for the public course page rebuild. Learner
+ * activity under `/courses/<uuid>/...` (discussions, notes, quizzes) and
+ * routes that only name a course further along (access grants, a learner
+ * leaving a course) are not changes to it; see `detectSiteContentChange`.
  */
-const STATIC_REFRESH_EXCLUDED_SEGMENTS =
-  /\/(threads|replies|discussions|notes|notes-overview|moderation|reports|quiz-assignment|quiz-assignments|quiz-pricing|quiz-analytics|attempts)(\/|\?|$)/iu;
-
 function getCourseMutation(
   request: FastifyRequest,
 ): PendingCourseStaticRefresh | null {
-  if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return null;
-  if (request.routeOptions.url?.includes("static-page-refresh")) return null;
-  if (STATIC_REFRESH_EXCLUDED_SEGMENTS.test(request.url)) return null;
-  const courseId = request.url.match(
-    /\/(?:bin\/)?courses\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(?:\/|\?|$)/iu,
-  )?.[1];
-  return courseId ? { courseId } : null;
+  const change = detectSiteContentChange({
+    method: request.method,
+    url: request.url,
+    routeUrl: request.routeOptions.url,
+  });
+  return change?.scope === "course" ? { courseId: change.courseId } : null;
 }
 
 function getCourseSlugFromResponse(payload: unknown): string | undefined {
@@ -144,6 +139,19 @@ export async function createVeoLMSApi<
 
   app.addHook("onResponse", async (request, reply) => {
     if (reply.statusCode < 200 || reply.statusCode >= 300) return;
+    const siteChange = detectSiteContentChange({
+      method: request.method,
+      url: request.url,
+      routeUrl: request.routeOptions.url,
+      userRoles: (request as { user?: { roles?: readonly string[] } }).user
+        ?.roles,
+    });
+    if (siteChange?.scope === "site") {
+      request.log.info(
+        { siteContentChange: siteChange.reason },
+        "Site-wide content changed",
+      );
+    }
     const pending = pendingCourseRefreshes.get(request);
     if (!pending || !appServices?.courseStaticPages) return;
     const status = appServices.courseStaticPages.requestRefresh(pending);

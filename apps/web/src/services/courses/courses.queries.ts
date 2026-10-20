@@ -2,6 +2,8 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import type {
   Category,
+  CourseAccessListResponse,
+  CourseAccessResponse,
   CourseEditorDataResponse,
   CourseOverviewResponse,
   CourseStaticPageRefreshStatusResponse,
@@ -69,6 +71,37 @@ export function useCourseOverview(
     // a price, curriculum or publish change since that build shows up —
     // the same rule the guest home page follows.
     initialDataUpdatedAt: options?.initialData ? 0 : undefined,
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+}
+
+/**
+ * What the viewer may do with one course: which lessons open, what the rest
+ * need, the price now and their progress. Decided by the server by the rule
+ * playback applies, so a lesson shown unlocked plays.
+ */
+export function useCourseAccess(
+  idOrSlug: string | null | undefined,
+  options?: { enabled?: boolean },
+) {
+  return useQuery<CourseAccessResponse, ApiError>({
+    queryKey: idOrSlug
+      ? courseKeys.access(idOrSlug)
+      : ["courses", "overview", null, "access"],
+    queryFn: () => coursesService.getAccess(idOrSlug!),
+    enabled: Boolean(idOrSlug && (options?.enabled ?? true)),
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+}
+
+/** `useCourseAccess` for every published course, for the catalogue. */
+export function useCourseAccessList(options?: { enabled?: boolean }) {
+  return useQuery<CourseAccessListResponse, ApiError>({
+    queryKey: courseKeys.accessList(),
+    queryFn: () => coursesService.listAccess(),
+    enabled: options?.enabled ?? true,
     staleTime: 60 * 1000,
     retry: false,
   });

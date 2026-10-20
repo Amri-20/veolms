@@ -27,8 +27,10 @@ import {
   videoPlaybackFailureNotice,
 } from "../../videoPlaybackFailure";
 import type { AuthUser } from "../../../store/auth.store";
-import type { useEnrolledCourses } from "../../../services/enrollments";
-import type { useCourseOverview } from "../../../services/courses";
+import type {
+  useCourseAccess,
+  useCourseOverview,
+} from "../../../services/courses";
 import type { VideoPlaybackBootstrap } from "@veolms/contracts";
 import type { CourseLesson } from "@veolms/contracts";
 import type { OctopusKind } from "../../../components/OctopusIllustration";
@@ -40,7 +42,7 @@ export interface UseLessonStagePlanArgs {
   isAuthenticated: boolean;
   resolvedAuthUser: AuthUser | null;
   isAuthResolutionPending: boolean;
-  enrolledCoursesQuery: ReturnType<typeof useEnrolledCourses>;
+  courseAccessQuery: ReturnType<typeof useCourseAccess>;
   courseOverview: ReturnType<typeof useCourseOverview>["data"];
   selectedLesson: number;
   adaptedCurriculum: AdaptedCurriculum | null;
@@ -90,7 +92,7 @@ export function useLessonStagePlan({
   isAuthenticated,
   resolvedAuthUser,
   isAuthResolutionPending,
-  enrolledCoursesQuery,
+  courseAccessQuery,
   courseOverview,
   selectedLesson,
   adaptedCurriculum,
@@ -113,12 +115,10 @@ export function useLessonStagePlan({
 }: UseLessonStagePlanArgs): UseLessonStagePlanResult {
   const lessonStagePlan = useMemo(() => {
     const course = courseOverview?.course;
-    const holdsCourse = enrolledCoursesQuery.isFetched
-      ? Boolean(
-          enrolledCoursesQuery.data?.courses.some(
-            (enrolled) => enrolled.courseId === course?.id,
-          ),
-        )
+    // The server's answer: whether every lesson opens to the viewer.
+    const courseAccess = courseAccessQuery.data;
+    const holdsCourse = courseAccess
+      ? courseAccess.access === "full"
       : undefined;
     return planLessonStage({
       lesson: adaptedCurriculum?.lessonsByNumber.get(selectedLesson),
@@ -130,13 +130,7 @@ export function useLessonStagePlan({
         !isAuthResolutionPending &&
         viewerMayRecordProgress({
           isAuthenticated,
-          managesCourse: Boolean(
-            resolvedAuthUser &&
-            (resolvedAuthUser.id === course?.creatorId ||
-              resolvedAuthUser.roles?.some(
-                (role) => role.trim().toLowerCase() === "admin",
-              )),
-          ),
+          managesCourse: courseAccess?.viewer === "manager",
           holdsCourse,
           pricingType: courseOverview?.pricing?.pricingType,
           canSelfEnroll: courseOverview?.canSelfEnroll,
@@ -145,12 +139,10 @@ export function useLessonStagePlan({
   }, [
     adaptedCurriculum,
     courseOverview,
-    enrolledCoursesQuery.data?.courses,
-    enrolledCoursesQuery.isFetched,
+    courseAccessQuery.data,
     isAuthResolutionPending,
     isAuthenticated,
     lessonDescriptionState,
-    resolvedAuthUser,
     selectedLesson,
     selectedLessonQuizAttached,
     showingQuiz,

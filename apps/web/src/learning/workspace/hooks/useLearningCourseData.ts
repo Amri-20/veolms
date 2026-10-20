@@ -5,9 +5,8 @@ import {
   getPublicPreviewLessonNumbers,
 } from "../../coursePlayerAccess";
 import { useAuthStore } from "../../../store/auth.store";
-import { useCourseOverview } from "../../../services/courses";
+import { useCourseAccess, useCourseOverview } from "../../../services/courses";
 import { useCurrentUser } from "../../../services/auth";
-import { useEnrolledCourses } from "../../../services/enrollments";
 import type { InteractionCapabilities } from "../../Discussion";
 import type { AuthUser } from "../../../store/auth.store";
 import type { ApiError } from "../../../lib/api-error";
@@ -20,7 +19,11 @@ export interface UseLearningCourseDataResult {
   isAuthenticated: boolean;
   resolvedAuthUser: AuthUser | null;
   isAuthResolutionPending: boolean;
-  enrolledCoursesQuery: ReturnType<typeof useEnrolledCourses>;
+  /**
+   * What the viewer may do with the course, decided by the server by the
+   * rule playback applies: which lessons open, and whether they manage it.
+   */
+  courseAccessQuery: ReturnType<typeof useCourseAccess>;
   isApiRoute: boolean;
   courseOverview: ReturnType<typeof useCourseOverview>["data"];
   isCourseOverviewLoading: boolean;
@@ -44,10 +47,10 @@ export function useLearningCourseData({
   const resolvedAuthUser =
     currentUser === undefined ? storedAuthUser : currentUser;
   const isAuthResolutionPending = !isCurrentUserFetched && !storedAuthUser;
-  const enrolledCoursesQuery = useEnrolledCourses({
-    enabled: isAuthenticated,
-  });
   const isApiRoute = Boolean(courseSlug);
+  const courseAccessQuery = useCourseAccess(courseSlug, {
+    enabled: isApiRoute,
+  });
   const {
     data: courseOverview,
     isLoading: isCourseOverviewLoading,
@@ -94,7 +97,7 @@ export function useLearningCourseData({
     isAuthenticated,
     resolvedAuthUser,
     isAuthResolutionPending,
-    enrolledCoursesQuery,
+    courseAccessQuery,
     isApiRoute,
     courseOverview,
     isCourseOverviewLoading,
