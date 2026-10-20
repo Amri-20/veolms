@@ -104,18 +104,18 @@ export function createConfigurationService({
 
     const now = new Date();
 
-    // A course has one price, optionally with the price it is marked down
-    // from. Selling it for zero is what makes it free, so the pricing type is
-    // derived here and whatever the client sent for it is ignored.
+    // A course has both prices: what is paid, and the marked price it is
+    // struck through from (the same when there is no discount). Selling it
+    // for zero is what makes it free, so the pricing type is derived here
+    // and whatever the client sent for it is ignored.
     const price = updates.price;
     const currency = updates.currency ?? "INR";
-    const salePrice = updates.salePrice ?? null;
-    const pricingType: "free" | "paid" =
-      (salePrice ?? price) === 0 ? "free" : "paid";
+    const salePrice = updates.salePrice;
+    const pricingType: "free" | "paid" = salePrice === 0 ? "free" : "paid";
 
     // A badge needs a discount to announce.
     const showDiscountBadge =
-      salePrice !== null && updates.showDiscountBadge === true;
+      price > salePrice && updates.showDiscountBadge === true;
     const canStoreBadge = await hasDiscountBadgeColumn(database);
     if (showDiscountBadge && !canStoreBadge) {
       throw httpError(

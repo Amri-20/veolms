@@ -180,25 +180,47 @@ export function validatePricing(pricing: PricingState): {
   return { isValid: true, error: null };
 }
 
+/**
+ * A course always stores both prices: `salePrice`, what a learner pays, and
+ * `price`, the marked price it is struck through from. With no original
+ * price in the form the two are the same (no discount); a selling price of
+ * zero makes the course free.
+ */
 export function buildPricingPayload(state: PricingFormState) {
   const rawSell = state.sellingPrice.replace(/,/g, "").trim();
   const rawOrig = state.originalPrice.replace(/,/g, "").trim();
   const sellNum = Math.round(parseFloat(rawSell));
   const origNum = rawOrig ? Math.round(parseFloat(rawOrig)) : null;
 
-  const price = origNum && origNum > 0 ? origNum : isNaN(sellNum) ? 0 : sellNum;
-  const salePrice =
-    origNum && origNum > 0 ? (isNaN(sellNum) ? null : sellNum) : null;
-
-  // What the learner pays: the sale price when there is an original price
-  // to strike through, otherwise the price itself.
-  const charged = salePrice ?? price;
+  const salePrice = isNaN(sellNum) ? 0 : sellNum;
+  const price = origNum && origNum > salePrice ? origNum : salePrice;
 
   return {
-    pricingType: charged === 0 ? ("free" as const) : ("paid" as const),
+    pricingType: salePrice === 0 ? ("free" as const) : ("paid" as const),
     price,
     salePrice,
     currency: state.currency || "INR",
-    showDiscountBadge: salePrice !== null && state.showDiscountBadge,
+    // A badge needs a discount to announce.
+    showDiscountBadge: price > salePrice && state.showDiscountBadge,
   };
+}
+
+/**
+ * The form for a stored price. The original price is shown only when it is
+ * above the selling price: equal ones mean no discount, and older rows that
+ * stored the selling price alone are read the same way.
+ */
+export function pricingFormFromServer(pricing: {
+  price: number;
+  salePrice?: number | null;
+  currency?: string | null;
+  showDiscountBadge?: boolean | null;
+}): PricingFormState {
+  const salePrice = pricing.salePrice ?? pricing.price;
+  return normalizePricingState({
+    sellingPrice: String(salePrice),
+    originalPrice: pricing.price > salePrice ? String(pricing.price) : "",
+    currency: pricing.currency || "INR",
+    showDiscountBadge: pricing.showDiscountBadge === true,
+  });
 }

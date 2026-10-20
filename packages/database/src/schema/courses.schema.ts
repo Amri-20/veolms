@@ -95,7 +95,8 @@ export interface CoursePricingTable {
   pricing_type: PricingType;
   price: number;
   currency: Generated<string>;
-  sale_price: number | null;
+  /** What a learner pays; never above `price` (see 20261020120000). */
+  sale_price: number;
   /** Show the discount as a badge on the course's cards. */
   show_discount_badge: Generated<boolean>;
   created_at: Generated<Date>;

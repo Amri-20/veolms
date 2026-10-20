@@ -102,7 +102,7 @@ export async function upsertPricing(
     pricing_type: PricingType;
     price: number;
     currency: string;
-    sale_price: number | null;
+    sale_price: number;
     /** Left out while the column does not exist yet (migration pending). */
     show_discount_badge?: boolean;
     created_at: Date;

@@ -21,6 +21,7 @@ import type { PricingControlKey } from "../statusIndicators";
 import {
   type PricingFormState,
   normalizePricingState,
+  pricingFormFromServer,
   isPricingEqual,
   validatePricing,
   buildPricingPayload,
@@ -305,13 +306,7 @@ export function usePricingHandlers({
 
       // Stale-response protection: Only update baseline if we are still at targetVersion
       if (pricingVersionRef.current === targetVersion) {
-        const hasSale = res.salePrice != null && res.salePrice !== undefined;
-        const newBaseline: PricingFormState = normalizePricingState({
-          sellingPrice: hasSale ? String(res.salePrice) : String(res.price),
-          originalPrice: hasSale && res.price > 0 ? String(res.price) : "",
-          currency: res.currency || "INR",
-          showDiscountBadge: res.showDiscountBadge === true,
-        });
+        const newBaseline: PricingFormState = pricingFormFromServer(res);
         setServerPricing(newBaseline);
         serverPricingRef.current = newBaseline;
 
