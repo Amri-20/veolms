@@ -274,11 +274,11 @@ function DiscussionInner({
   const [entryFilter, setEntryFilter] = useState<DiscussionEntryFilter>(
     enabledKinds.length === 1 ? enabledKinds[0]! : "all",
   );
-  const [chosenFeedView, setFeedView] = useState<DiscussionFeedView>("newest");
+  const [chosenFeedView, setFeedView] = useState<DiscussionFeedView>("top");
   // "Mine" is only there for a learner who is signed in; one who signs out
-  // while it is chosen is back on the newest.
+  // while it is chosen is back on the top ones.
   const feedView: DiscussionFeedView =
-    chosenFeedView === "mine" && !currentUser ? "newest" : chosenFeedView;
+    chosenFeedView === "mine" && !currentUser ? "top" : chosenFeedView;
   const feedSort: DiscussionFeedSort = getDiscussionFeedSort(feedView);
   const feedMine = feedView === "mine";
 

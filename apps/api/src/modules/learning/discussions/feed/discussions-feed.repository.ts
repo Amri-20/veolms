@@ -121,7 +121,7 @@ export function createDiscussionsFeedRepository(): DiscussionsFeedRepository {
           score < ${cursor.score}
           or (
             score = ${cursor.score}
-            and "createdAt" < ${cursorCreatedAt}
+            and "createdAt" > ${cursorCreatedAt}
           )
           or (
             score = ${cursor.score}
@@ -149,9 +149,12 @@ export function createDiscussionsFeedRepository(): DiscussionsFeedRepository {
         )`
         : sql``;
 
+      // Top: the most liked first, and among equally liked ones the oldest
+      // first: the first things said about a lesson, which is what a lesson
+      // whose discussions have no likes yet opens with.
       const orderBy =
         options.sort === "top"
-          ? sql`order by score desc, "createdAt" desc, "sourceRank" desc, "entityId" desc`
+          ? sql`order by score desc, "createdAt" asc, "sourceRank" desc, "entityId" desc`
           : sql`order by "createdAt" desc, "sourceRank" desc, "entityId" desc`;
 
       const result = await sql<FeedCandidate>`
