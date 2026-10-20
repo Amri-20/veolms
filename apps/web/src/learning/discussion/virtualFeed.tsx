@@ -302,7 +302,7 @@ function DiscussionWindowVirtualFeed(props: DiscussionVirtualFeedProps) {
     // The list can mount while the page is already scrolled (a linked
     // comment, a filter change). Without this the virtualizer assumes it
     // starts at the top and scrolls the page there.
-    initialOffset: () => window.scrollY,
+    initialOffset: () => (typeof window === "undefined" ? 0 : window.scrollY),
     estimateSize: () => DISCUSSION_VIRTUAL_ESTIMATE_SIZE,
     getItemKey: (index) => getClientEntityId(props.entries[index]!),
     initialRect: { width: 1024, height: 768 },

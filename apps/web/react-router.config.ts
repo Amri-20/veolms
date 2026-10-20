@@ -1,5 +1,8 @@
 import type { Config } from "@react-router/dev/config";
-import { courseListResponseSchema } from "@veolms/contracts";
+import {
+  courseListResponseSchema,
+  coursePublicCurriculumSchema,
+} from "@veolms/contracts";
 import {
   createLearningPrerenderPaths,
   type LearningPrerenderScope,
@@ -37,15 +40,8 @@ const learningPrerenderScope: LearningPrerenderScope =
 
 // React Router evaluates this config through Vite's config runner, whose
 // environment is a dev server even during `react-router build`. The build
-// wrapper sets this explicit flag so production prerenders use the full path
-// set instead of the small development sample.
+// wrapper sets this explicit flag; without it nothing is prerendered.
 const isDevelopment = process.env.VEO_REACT_ROUTER_BUILD !== "true";
-const developmentPrerenderCourseSlugs = ["tailwind-css"] as const;
-
-const staticLearningPages = createLearningPrerenderPaths({
-  courseSlugs: isDevelopment ? developmentPrerenderCourseSlugs : undefined,
-  scope: learningPrerenderScope,
-});
 
 function getStaticApiBaseUrl() {
   const configured =
@@ -92,17 +88,67 @@ async function getStaticCataloguePaths() {
     cursor = result.data.nextCursor;
     if (!cursor) break;
   }
-  return [...new Set(slugs)].map(
-    (slug) => `/courses/${encodeURIComponent(slug)}/overview`,
-  );
+  return [...new Set(slugs)];
+}
+
+function unwrapApiData(body: unknown) {
+  return body && typeof body === "object" && "success" in body && "data" in body
+    ? body.data
+    : body;
+}
+
+/**
+ * Every lesson page of the catalogue's courses, numbered as their public
+ * curricula number them. A course without one (none published yet) has
+ * none.
+ */
+async function getStaticLearningPaths(courseSlugs: readonly string[]) {
+  if (learningPrerenderScope === "none") return [];
+  const courses = [];
+  for (const slug of courseSlugs) {
+    const response = await fetchStaticBuildApi(
+      `${getStaticApiBaseUrl()}/courses/${encodeURIComponent(slug)}/curriculum`,
+      90_000,
+    );
+    if (response.status === 404) continue;
+    if (!response.ok) {
+      throw new Error(
+        `Unable to read the curriculum of ${slug} from the build API (${response.status}).`,
+      );
+    }
+    const result = coursePublicCurriculumSchema.safeParse(
+      unwrapApiData(await response.json()),
+    );
+    if (!result.success) {
+      throw new Error(
+        `The build API returned an invalid curriculum for ${slug}.`,
+      );
+    }
+    courses.push({
+      slug,
+      lessonCount: result.data.sections.reduce(
+        (total, section) => total + (section.lessons?.length ?? 0),
+        0,
+      ),
+    });
+  }
+  return createLearningPrerenderPaths({
+    courses,
+    scope: learningPrerenderScope,
+  });
 }
 
 const prerenderConfig = {
-  paths: async () => [
-    ...staticApplicationPages,
-    ...(await getStaticCataloguePaths()),
-    ...staticLearningPages,
-  ],
+  paths: async () => {
+    const courseSlugs = await getStaticCataloguePaths();
+    return [
+      ...staticApplicationPages,
+      ...courseSlugs.map(
+        (slug) => `/courses/${encodeURIComponent(slug)}/overview`,
+      ),
+      ...(await getStaticLearningPaths(courseSlugs)),
+    ];
+  },
   concurrency: 1,
   timeout: 120_000,
   retryCount: 2,

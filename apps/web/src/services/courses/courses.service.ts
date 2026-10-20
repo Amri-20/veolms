@@ -120,18 +120,22 @@ export const coursesService = {
    * course published since, or the dev server), and for a copy of another
    * version than the one asked for.
    */
+  /**
+   * `version` null: whichever copy the site was built with. The request is
+   * the one a lesson page's head preloads (`as="fetch"`, crossorigin
+   * anonymous: same-origin credentials), so the two are one download.
+   */
   getStaticCurriculum: async (
     courseSlug: string,
-    version: string,
+    version: string | null,
   ): Promise<CoursePublicCurriculum | null> => {
-    const response = await fetch(staticCurriculumUrl(courseSlug, version), {
-      credentials: "omit",
-    });
+    const response = await fetch(staticCurriculumUrl(courseSlug, version));
     if (!response.ok) return null;
     const parsed = coursePublicCurriculumSchema.safeParse(
       await response.json().catch(() => null),
     );
-    if (!parsed.success || parsed.data.version !== version) return null;
+    if (!parsed.success) return null;
+    if (version !== null && parsed.data.version !== version) return null;
     return parsed.data;
   },
   getLessonDescription: (

@@ -5,7 +5,8 @@ import {
   getPublicPreviewLessonNumbers,
 } from "../../coursePlayerAccess";
 import { useAuthStore } from "../../../store/auth.store";
-import { useCourseAccess, useCourseOverview } from "../../../services/courses";
+import { useCourseAccess } from "../../../services/courses";
+import { useLearningCourse } from "../../useLearningCourse";
 import { useCurrentUser } from "../../../services/auth";
 import type { InteractionCapabilities } from "../../Discussion";
 import type { AuthUser } from "../../../store/auth.store";
@@ -25,12 +26,14 @@ export interface UseLearningCourseDataResult {
    */
   courseAccessQuery: ReturnType<typeof useCourseAccess>;
   isApiRoute: boolean;
-  courseOverview: ReturnType<typeof useCourseOverview>["data"];
+  courseOverview: ReturnType<typeof useLearningCourse>["data"];
+  /** Whether `courseOverview` lists every lesson (see `useLearningCourse`). */
+  isCourseOverviewComplete: boolean;
   isCourseOverviewLoading: boolean;
   isCourseOverviewError: boolean;
   courseOverviewError: ApiError | null;
   isCourseOverviewFetching: boolean;
-  refetchCourseOverview: ReturnType<typeof useCourseOverview>["refetch"];
+  refetchCourseOverview: () => Promise<unknown>;
   isInteractionCapabilitiesLoading: boolean;
   interactionCapabilities: InteractionCapabilities;
   isLessonAvailable: (lessonNumber: number) => boolean;
@@ -53,12 +56,13 @@ export function useLearningCourseData({
   });
   const {
     data: courseOverview,
+    isComplete: isCourseOverviewComplete,
     isLoading: isCourseOverviewLoading,
     isError: isCourseOverviewError,
     error: courseOverviewError,
     isFetching: isCourseOverviewFetching,
     refetch: refetchCourseOverview,
-  } = useCourseOverview(courseSlug, {
+  } = useLearningCourse(courseSlug, {
     enabled: isApiRoute,
   });
   const isInteractionCapabilitiesLoading =
@@ -100,6 +104,7 @@ export function useLearningCourseData({
     courseAccessQuery,
     isApiRoute,
     courseOverview,
+    isCourseOverviewComplete,
     isCourseOverviewLoading,
     isCourseOverviewError,
     courseOverviewError,

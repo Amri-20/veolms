@@ -68,6 +68,7 @@ import {
 import {
   createLessonContentAccess,
   findFirstPublishedLessonId,
+  isLessonDescriptionPublic,
 } from "./lesson-content-access.ts";
 import {
   getLessonDurationSeconds,
@@ -1281,10 +1282,11 @@ export function createCourseService({
       ? resources
       : redactLockedResources(resources);
 
-    // A lesson's description is its content (all of it, for a reading
-    // lesson), so a lesson the viewer may not open goes out without one, by
-    // the rule its video is played by. The lesson page asks for it on its
-    // own and is told to sign in or to get the course.
+    // A reading lesson's description is the lesson, so one the viewer may
+    // not open goes out without it, by the rule a video is played by. The
+    // lesson page asks for it on its own and is told to sign in or to get
+    // the course. Any other lesson's description is for everyone (see
+    // `isLessonDescriptionPublic`).
     const lessonContentAccess = createLessonContentAccess({
       viewer,
       course,
@@ -1295,7 +1297,7 @@ export function createCourseService({
     const firstLessonId = findFirstPublishedLessonId(sections, lessons);
     const withheldDescriptionLessonIds = new Set<string>();
     for (const lesson of lessons) {
-      if (!lesson.description) continue;
+      if (!lesson.description || isLessonDescriptionPublic(lesson)) continue;
       const access = await lessonContentAccess({
         is_preview: lesson.is_preview,
         isFirstLesson: lesson.id === firstLessonId,
@@ -1354,7 +1356,9 @@ export function createCourseService({
         // The map also holds every lesson's own media, and a resource can
         // point at one of those.
         omitResourceMedia: !viewerMayDownloadResources,
-        omitLessonDescriptions: !overviewLessonDescriptions,
+        // The public curriculum (a visitor's overview) always carries them:
+        // lesson pages are built from it.
+        omitLessonDescriptions: !overviewLessonDescriptions && Boolean(user),
         withheldDescriptionLessonIds,
       }),
       pricing: pricing
@@ -1503,6 +1507,9 @@ export function createCourseService({
     );
     if (!lesson || !isLessonListedInOverview(lesson, visibility)) {
       throw new AppError(404, "LESSON_NOT_FOUND", "Lesson not found.");
+    }
+    if (isLessonDescriptionPublic(lesson)) {
+      return { lessonId: lesson.id, description: lesson.description };
     }
 
     const [accessRule, pricing] = await Promise.all([

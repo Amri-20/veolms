@@ -5,18 +5,19 @@ import {
   resolveLessonDescriptionState,
   type LessonDescriptionState,
 } from "../../lessonWithoutVideo";
-import type { useCourseOverview } from "../../../services/courses";
+import type { useLearningCourse } from "../../useLearningCourse";
+import { isPlaceholderLesson } from "../../staticLessonPage";
 import type { useCourseQuizAssignments } from "../../../services/quizzes/quizzes.queries";
 import type { CourseLesson } from "@veolms/contracts";
 import type { ApiError } from "../../../lib/api-error";
 
 export interface UseLessonDescriptionStateArgs {
   isApiRoute: boolean;
-  courseOverview: ReturnType<typeof useCourseOverview>["data"];
+  courseOverview: ReturnType<typeof useLearningCourse>["data"];
   courseOverviewError: ApiError | null;
   isCourseOverviewError: boolean;
   isCourseOverviewFetching: boolean;
-  refetchCourseOverview: ReturnType<typeof useCourseOverview>["refetch"];
+  refetchCourseOverview: () => Promise<unknown>;
   selectedLesson: number;
   adaptedCurriculum: AdaptedCurriculum | null;
   firstCurriculumLessonId: number | undefined;
@@ -87,12 +88,21 @@ export function useLessonDescriptionState({
       ? undefined
       : false;
   const overviewLesson = adaptedCurriculum?.lessonsByNumber.get(selectedLesson);
-  // The open lesson's description comes from its own request. The overview's
-  // copy is shown until that answers, and kept if it fails; once the
-  // overview stops carrying descriptions, this is the only source.
+  // A lesson's description comes with the course: a video's or a quiz's is
+  // for everyone, so the page is built with it and a lesson without one
+  // simply has none. Only a reading lesson's text is left out for a viewer
+  // it is not open to everyone for; that one is asked for on its own, and
+  // the server answers it by the rule the lesson plays by.
+  const asksForDescription = Boolean(
+    overviewLesson &&
+    !isPlaceholderLesson(overviewLesson) &&
+    overviewLesson.contentType === "document" &&
+    !overviewLesson.description,
+  );
   const lessonDescriptionQuery = useLessonDescription(
     courseOverview?.course.id,
     overviewLesson?.id,
+    { enabled: asksForDescription },
   );
   const fetchedLessonDescription = lessonDescriptionQuery.data;
   // The lesson as the course lists it: what the stage is planned from, and
@@ -133,7 +143,11 @@ export function useLessonDescriptionState({
   // is its description, so its stage and its completion wait for this.
   const lessonDescriptionState = resolveLessonDescriptionState({
     overviewHasDescription: overviewHasLessonDescription,
-    request: !(courseOverview?.course.id && overviewLesson?.id)
+    request: !(
+      courseOverview?.course.id &&
+      overviewLesson?.id &&
+      asksForDescription
+    )
       ? "idle"
       : fetchedLessonDescription !== undefined
         ? "answered"
