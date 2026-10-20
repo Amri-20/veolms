@@ -532,7 +532,13 @@ const stylesheetPath = (clientDirectory, href) => {
   return resolved;
 };
 
-const processPage = async ({ clientDirectory, pagePath, stylesheets }) => {
+const processPage = async ({
+  clientDirectory,
+  pagePath,
+  stylesheets,
+  sharedTokens,
+  sharedCriticalCss,
+}) => {
   const html = await readFile(pagePath, "utf8");
   const elements = scanElements(html);
   const head = findHead(elements);
@@ -585,7 +591,7 @@ const processPage = async ({ clientDirectory, pagePath, stylesheets }) => {
     throw new PageError("no styles-*.css stylesheet link in <head>");
   }
 
-  const tokens = collectPageTokens(elements);
+  const tokens = sharedTokens ?? collectPageTokens(elements);
   let output = html;
   let inlinedBytes = 0;
   let inlinedGzipBytes = 0;
@@ -611,12 +617,19 @@ const processPage = async ({ clientDirectory, pagePath, stylesheets }) => {
       };
       stylesheets.set(filePath, stylesheet);
     }
-    const criticalCss = extractCriticalCss(stylesheet.root, tokens);
+    // Pages that share their tokens share what is taken from each sheet.
+    let critical = sharedTokens ? sharedCriticalCss.get(filePath) : undefined;
+    if (!critical) {
+      const css = extractCriticalCss(stylesheet.root, tokens);
+      critical = { css, gzipBytes: gzipSync(css).length };
+      if (sharedTokens) sharedCriticalCss.set(filePath, critical);
+    }
+    const criticalCss = critical.css;
     if (/<\/style/iu.test(criticalCss)) {
       throw new PageError(`the CSS from ${href} contains "</style"`);
     }
     inlinedBytes += Buffer.byteLength(criticalCss);
-    inlinedGzipBytes += gzipSync(criticalCss).length;
+    inlinedGzipBytes += critical.gzipBytes;
     deferredBytes += stylesheet.bytes;
     deferredGzipBytes += stylesheet.gzipBytes;
 
@@ -652,21 +665,62 @@ const processPage = async ({ clientDirectory, pagePath, stylesheets }) => {
   };
 };
 
+/** A course's lesson pages: `learn/<course>/<lesson>/index.html`. */
+const isLessonPage = (page) => /^learn\/[^/]+\/[^/]+\/index\.html$/u.test(page);
+
+/**
+ * Every lesson page is the same screen with another lesson in it, and a
+ * course has hundreds: one page's CSS took about 0.1 s to pick out of the
+ * app's stylesheet, most of a build of all of them. They are given the CSS
+ * of everything any of them uses instead, picked out once: a little more
+ * than one page needs, and the same for each.
+ */
+const collectSharedTokens = async (root, pages) => {
+  const shared = {
+    tags: new Set(),
+    ids: new Set(),
+    classes: new Set(),
+    attributes: new Set(),
+  };
+  for (const pagePath of pages) {
+    const tokens = collectPageTokens(
+      scanElements(await readFile(pagePath, "utf8")),
+    );
+    for (const kind of Object.keys(shared)) {
+      for (const token of tokens[kind]) shared[kind].add(token);
+    }
+  }
+  return shared;
+};
+
 export async function inlineCriticalCss(clientDirectory) {
   const root = path.resolve(clientDirectory);
   const pages = await collectPages(root);
   if (pages.length === 0) {
     throw new Error(`Critical CSS: no prerendered index.html under ${root}`);
   }
+  const relative = (pagePath) =>
+    path.relative(root, pagePath).split(path.sep).join("/");
+  const lessonPages = pages.filter((pagePath) =>
+    isLessonPage(relative(pagePath)),
+  );
+  const lessonTokens =
+    lessonPages.length > 1
+      ? await collectSharedTokens(root, lessonPages)
+      : undefined;
+  const lessonCriticalCss = new Map();
   const stylesheets = new Map();
   for (const pagePath of pages) {
-    const page = path.relative(root, pagePath).split(path.sep).join("/");
+    const page = relative(pagePath);
+    const shared = lessonTokens && isLessonPage(page);
     let result;
     try {
       result = await processPage({
         clientDirectory: root,
         pagePath,
         stylesheets,
+        sharedTokens: shared ? lessonTokens : undefined,
+        sharedCriticalCss: lessonCriticalCss,
       });
     } catch (error) {
       if (error instanceof PageError) {

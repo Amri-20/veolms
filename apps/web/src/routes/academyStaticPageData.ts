@@ -544,11 +544,38 @@ async function loadStaticPageData(
   }
   const lessonAddress = readLessonPageAddress(pathname);
   if (lessonAddress) {
-    const lessonPage = await loadLessonPageSeed(
-      await loadBuiltPublicCurriculum(lessonAddress.courseSlug),
-      lessonAddress.lessonNumber,
-    );
+    const lessonPage = await loadBuiltLessonPageSeed(lessonAddress);
     return lessonPage ? ({ lessonPage } satisfies AcademyStaticPageData) : null;
   }
   return null;
+}
+
+/**
+ * Each lesson page's seed, read once per build. A page's data is fetched
+ * for its `.data` file and, being larger than React Router hands to the
+ * HTML render, read again for its HTML; this keeps that to one read of its
+ * discussions, and the two files the same.
+ */
+const builtLessonPageSeeds = new Map<
+  string,
+  Promise<LessonPageSeed | undefined>
+>();
+
+function loadBuiltLessonPageSeed({
+  courseSlug,
+  lessonNumber,
+}: {
+  courseSlug: string;
+  lessonNumber: number;
+}) {
+  const key = `${courseSlug}/${lessonNumber}`;
+  let seed = builtLessonPageSeeds.get(key);
+  if (!seed) {
+    seed = loadBuiltPublicCurriculum(courseSlug).then((curriculum) =>
+      loadLessonPageSeed(curriculum, lessonNumber),
+    );
+    seed.catch(() => builtLessonPageSeeds.delete(key));
+    builtLessonPageSeeds.set(key, seed);
+  }
+  return seed;
 }
