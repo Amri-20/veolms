@@ -27,6 +27,27 @@ import {
 
 type SnapshotListener = () => void;
 
+/**
+ * How far before the end of a buffered range a drag may still seek without
+ * the player having to fetch: the last fraction of a range is often a
+ * partial segment that cannot be decoded on its own yet.
+ */
+const SCRUB_BUFFERED_END_MARGIN_SECONDS = 0.1;
+/** A scrub seek that never reports `seeked` stops blocking the next one. */
+const SCRUB_SEEK_TIMEOUT_MS = 500;
+
+function isTimeBuffered(ranges: TimeRanges, time: number): boolean {
+  for (let index = 0; index < ranges.length; index += 1) {
+    if (
+      time >= ranges.start(index) &&
+      time <= ranges.end(index) - SCRUB_BUFFERED_END_MARGIN_SECONDS
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 interface MediaWaiter {
   resolve: () => void;
   reject: (reason: unknown) => void;
@@ -107,6 +128,9 @@ export class PlayerController {
   #playRequestGeneration = 0;
   #hudId = 0;
   #standbyMedia: HTMLVideoElement | null = null;
+  // The newest drag position still waiting for the seek in flight to finish.
+  #scrubTarget: number | null = null;
+  #scrubSeekInFlight = false;
   readonly #activeMediaListeners = new Set<ActiveMediaListener>();
 
   constructor(engine: VideoEngine) {
@@ -415,10 +439,53 @@ export class PlayerController {
         message: "Seek time must be a finite number.",
       });
     }
+    // A deliberate seek replaces any drag position still queued.
+    this.#scrubTarget = null;
     if (!this.isMediaReady()) {
       this.#pendingMediaProperties.seekTime = time;
       return;
     }
+    this.engine.seek(time);
+  }
+
+  /**
+   * One step of a timeline drag. The video shows the frame at `time` only
+   * when that part is already downloaded: a drag never starts a fetch (the
+   * seek on release does). Seeks run one at a time, each to the newest
+   * position, because a seek started before the last one finished cancels
+   * it, and a drag faster than decoding would then show no frame at all.
+   */
+  scrubTo(time: number): void {
+    const media = this.#media;
+    if (!Number.isFinite(time) || !media || !this.isMediaReady()) return;
+    if (!isTimeBuffered(media.buffered, time)) {
+      this.#scrubTarget = null;
+      return;
+    }
+    this.#scrubTarget = time;
+    if (!this.#scrubSeekInFlight) this.runScrubSeek(media);
+  }
+
+  private runScrubSeek(media: HTMLVideoElement): void {
+    const time = this.#scrubTarget;
+    this.#scrubTarget = null;
+    if (time === null || media !== this.#media || this.#destroyed) {
+      this.#scrubSeekInFlight = false;
+      return;
+    }
+    this.#scrubSeekInFlight = true;
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      media.removeEventListener("seeked", finish);
+      window.clearTimeout(timeout);
+      // One more frame so the decoded picture is painted before the next
+      // seek replaces it.
+      window.requestAnimationFrame(() => this.runScrubSeek(media));
+    };
+    media.addEventListener("seeked", finish);
+    const timeout = window.setTimeout(finish, SCRUB_SEEK_TIMEOUT_MS);
     this.engine.seek(time);
   }
 

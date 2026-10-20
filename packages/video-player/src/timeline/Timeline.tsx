@@ -189,13 +189,13 @@ export function Timeline({
     event.currentTarget.setPointerCapture(event.pointerId);
     controller.setScrubbing(true);
     controller.setControlsVisible(true);
-    controller.seekTo(scrubAtPointer(event.clientX));
+    controller.scrubTo(scrubAtPointer(event.clientX));
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "touch" && pointerIdRef.current === null) return;
     if (pointerIdRef.current === event.pointerId) {
-      controller.seekTo(scrubAtPointer(event.clientX));
+      controller.scrubTo(scrubAtPointer(event.clientX));
       return;
     }
     previewAtPointer(event.clientX);
@@ -246,7 +246,12 @@ export function Timeline({
     controller.seekTo(clamp(nextTime, 0, duration));
   };
 
-  const progress = timeToPositionPercent(currentTime, duration);
+  // While dragging, the thumb and the played part follow the pointer, even
+  // over parts not downloaded yet, where the video keeps its last frame
+  // until the drag ends.
+  const shownTime =
+    scrubbing && previewTime !== null ? previewTime : currentTime;
+  const progress = timeToPositionPercent(shownTime, duration);
   const bufferedRanges = normalizeBufferedRanges(buffered, duration);
   const positionedMarkers = positionTimelineMarkers(markers, duration);
   const segments = getTimelineSegments(chapters, duration);
@@ -350,12 +355,12 @@ export function Timeline({
                     />
                   );
                 })}
-                {currentTime > segment.start || !segmented ? (
+                {shownTime > segment.start || !segmented ? (
                   <span
                     data-timeline-progress=""
                     className="absolute inset-y-0 left-0 rounded-full bg-[var(--video-player-accent,#ff7a1a)]"
                     style={{
-                      width: `${timeToPositionPercent(currentTime - segment.start, span)}%`,
+                      width: `${timeToPositionPercent(shownTime - segment.start, span)}%`,
                     }}
                   />
                 ) : null}
