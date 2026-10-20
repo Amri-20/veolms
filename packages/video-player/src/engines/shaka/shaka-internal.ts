@@ -219,18 +219,21 @@ export const SHAKA_STREAMING_DEFAULTS = {
 } as const;
 
 /**
- * Retries tuned for flaky mobile links: four tries, ~0.4s/0.6s/0.9s apart,
- * each allowed Shaka's usual 30s. No stall or connection timeout: a 1080p
- * segment (~1.6MB) on a slow link, or behind an extension that hands the
- * page the body only once it is complete, shows no progress for seconds
- * while still arriving, and aborting it there loops forever at that tier.
+ * Retries tuned for flaky mobile links: four tries, ~0.4s/0.6s/0.9s apart.
+ * No limit on a request's total time: on 3G (~50KB/s) a 1080p segment
+ * (~1.6MB) needs over 30s, and a retry starts again from its first byte, so
+ * a total limit made it fail forever. A request is given up only when no
+ * byte has arrived for 20s, which also leaves room for an extension that
+ * hands the page the body only once it is complete.
  */
 export const SHAKA_SEGMENT_RETRY_DEFAULTS = {
   maxAttempts: 4,
   baseDelay: 400,
   backoffFactor: 1.5,
   fuzzFactor: 0.3,
-  timeout: 30_000,
+  timeout: 0,
+  connectionTimeout: 20_000,
+  stallTimeout: 20_000,
 } as const;
 
 /**
@@ -240,9 +243,14 @@ export const SHAKA_SEGMENT_RETRY_DEFAULTS = {
  * stream to use at most 85% of the measured bandwidth, downgrading starts
  * only above 95%: with one value for both, quality flipped back and forth
  * every few seconds, each switch fetching another tier's segments.
+ *
+ * The browser's own network guess (navigator.connection) is not used: it
+ * reported 1.35 Mbps on a 0.4 Mbps 3G link, so playback began at 720p and
+ * no segment finished. Only what this page measures moves quality up.
  */
 export const SHAKA_ABR_DEFAULTS = {
   defaultBandwidthEstimate: 650_000,
+  useNetworkInformation: false,
   switchInterval: 4,
   bandwidthUpgradeTarget: 0.85,
   bandwidthDowngradeTarget: 0.95,
@@ -542,6 +550,7 @@ export function createShakaConfiguration(
 
   result.abr = {
     enabled: streaming?.abrEnabled ?? true,
+    useNetworkInformation: SHAKA_ABR_DEFAULTS.useNetworkInformation,
     defaultBandwidthEstimate:
       streaming?.abrDefaultBandwidthEstimate ??
       getShakaStartupBandwidthEstimate(),
