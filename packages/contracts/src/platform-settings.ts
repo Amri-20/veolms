@@ -24,7 +24,6 @@ export const platformAppearanceSettingsSchema = z.strictObject({
 }) satisfies z.ZodType<PlatformAppearanceSettings>;
 
 export const platformSecuritySettingsSchema = z.strictObject({
-  studentTwoFactorEnabled: z.boolean(),
   requireVerifiedPhoneForEnrollment: z.boolean(),
 }) satisfies z.ZodType<PlatformSecuritySettings>;
 

@@ -100,10 +100,6 @@ function resolveSettings(document: StoredDocument): PlatformSettings {
       ? appearance.data
       : DEFAULT_PLATFORM_APPEARANCE_SETTINGS,
     security: {
-      studentTwoFactorEnabled:
-        typeof security.studentTwoFactorEnabled === "boolean"
-          ? security.studentTwoFactorEnabled
-          : true,
       // Until an admin decides, the server's configuration does.
       requireVerifiedPhoneForEnrollment:
         typeof security.requireVerifiedPhoneForEnrollment === "boolean"
@@ -136,7 +132,6 @@ export interface PlatformSettingsService {
     changes: UpdatePlatformSettingsRequest,
     updatedBy: string | null,
   ): Promise<PlatformSettingsResponse>;
-  isStudentTwoFactorEnabled(): Promise<boolean>;
   requiresVerifiedPhoneForEnrollment(): Promise<boolean>;
 }
 
@@ -252,8 +247,6 @@ export function createPlatformSettingsService({
       toPublicSettings((await readSettings()).settings),
     getInvoiceSettings: async () => (await readSettings()).settings.invoice,
     updateSettings,
-    isStudentTwoFactorEnabled: async () =>
-      (await readSettings()).settings.security.studentTwoFactorEnabled,
     requiresVerifiedPhoneForEnrollment: async () =>
       (await readSettings()).settings.security
         .requireVerifiedPhoneForEnrollment,

@@ -30,7 +30,7 @@ export function isMfaMandatoryAccount(
 /**
  * Anyone holding a role other than student (admins, instructors and every
  * team role, custom ones included): two-factor sign-in is always required of
- * them, whatever the academy decides for students.
+ * them; students have none (see `isTwoFactorOffFor`).
  */
 export function isStaffAccount(
   roles: readonly string[] | null | undefined,
