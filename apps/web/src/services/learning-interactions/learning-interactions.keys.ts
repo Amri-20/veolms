@@ -91,6 +91,4 @@ export const learningInteractionKeys = {
     [...learningInteractionKeys.notesRoot(), "infinite", filters] as const,
   noteDetails: (noteId: string) =>
     [...learningInteractionKeys.all, "note", noteId] as const,
-  linkPreview: (url: string) =>
-    [...learningInteractionKeys.all, "link-preview", url] as const,
 };

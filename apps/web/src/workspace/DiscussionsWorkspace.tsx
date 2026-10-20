@@ -666,11 +666,6 @@ function DiscussionWorkspaceCardContent({
   parentContext?: string | null;
   expandable?: boolean;
 }) {
-  const isMobileOrCoarsePointer = useSyncExternalStore(
-    subscribeToDiscussionSwipePreview,
-    getDiscussionSwipePreviewSnapshot,
-    getDiscussionSwipePreviewServerSnapshot,
-  );
   const [isPreviewTruncated, setIsPreviewTruncated] = useState(false);
   const previewRef = useRef<HTMLSpanElement>(null);
   const normalizedTitle = normalizeWorkspacePreviewText(expandedTitle);
@@ -764,10 +759,8 @@ function DiscussionWorkspaceCardContent({
             }
           >
             <DiscussionMarkdown
-              linkPreviewSource="url"
               content={content}
               label={`${label} by ${thread.author}`}
-              enableLinkPreview={!isMobileOrCoarsePointer}
               preserveSoftBreaks
               className="discussion-hub__card-expanded-markdown max-w-none"
             />

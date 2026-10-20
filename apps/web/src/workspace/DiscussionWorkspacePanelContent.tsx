@@ -112,7 +112,6 @@ function PostBody({
         }
       >
         <DiscussionMarkdown
-          linkPreviewSource="url"
           content={{
             format: "markdown",
             markdown: content,
