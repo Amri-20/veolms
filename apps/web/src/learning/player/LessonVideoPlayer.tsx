@@ -1426,17 +1426,28 @@ export function LessonVideoPlayer({
             ) : (
               <div className="relative z-20 max-w-md space-y-4">
                 {/* Drawn only where the player is tall enough to keep the
-                    message and its action whole under it. */}
+                    message and its action whole under it. A notice has no
+                    action, so it keeps the drawing in a shorter player. */}
                 {gateIllustration ? (
                   // The drawing sets its own display, so the box around it
                   // is what comes and goes.
-                  <div className="hidden [@container_(min-height:17rem)]:block">
-                    <OctopusIllustration
-                      kind={gateIllustration}
-                      surface="dark"
-                      className="mx-auto h-[clamp(4.5rem,calc(100cqh_-_13rem),9rem)] w-auto"
-                    />
-                  </div>
+                  playbackAccessError.onAction || playbackAccessError.link ? (
+                    <div className="hidden [@container_(min-height:17rem)]:block">
+                      <OctopusIllustration
+                        kind={gateIllustration}
+                        surface="dark"
+                        className="mx-auto h-[clamp(4.5rem,calc(100cqh_-_13rem),9rem)] w-auto"
+                      />
+                    </div>
+                  ) : (
+                    <div className="hidden [@container_(min-height:10.5rem)]:block">
+                      <OctopusIllustration
+                        kind={gateIllustration}
+                        surface="dark"
+                        className="mx-auto h-[clamp(3.5rem,calc(100cqh_-_8rem),9rem)] w-auto"
+                      />
+                    </div>
+                  )
                 ) : null}
                 <div className="space-y-1">
                   <h2 className="text-base font-semibold">{gateTitle}</h2>
