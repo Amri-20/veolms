@@ -25,13 +25,6 @@ export const academyThemes: readonly AcademyTheme[] = [
     darkInk: true,
   },
   {
-    id: "brainwave",
-    name: "Brainwave Slate",
-    note: "Cool graphite & electric blue",
-    preview: "#0085ff",
-    darkInk: true,
-  },
-  {
     id: "midnight",
     name: "Midnight Azure",
     note: "Deep blue & luminous",
@@ -43,6 +36,13 @@ export const academyThemes: readonly AcademyTheme[] = [
     name: "Ocean Blue",
     note: "Default - clear & confident",
     preview: "#7193ff",
+    darkInk: true,
+  },
+  {
+    id: "brainwave",
+    name: "Brainwave Slate",
+    note: "Cool graphite & electric blue",
+    preview: "#0085ff",
     darkInk: true,
   },
   {
