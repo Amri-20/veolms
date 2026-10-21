@@ -787,7 +787,9 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
 
     standby.volume = previousMedia.volume;
     standby.muted = previousMedia.muted;
-    standby.playbackRate = previousMedia.playbackRate;
+    // The learner's speed, not the element's: during a stall Shaka holds
+    // the element at 0, and the new lesson would start frozen at it.
+    standby.playbackRate = this.getSnapshot().playbackRate;
     previousMedia.pause();
     this.assignStandbyMedia(previousMedia);
     this.replaceMediaElement(standby, previousMedia);
