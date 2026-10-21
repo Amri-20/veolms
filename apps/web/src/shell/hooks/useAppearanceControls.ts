@@ -305,8 +305,12 @@ export function useAppearanceControls({
   );
 
   useEffect(() => {
+    // The app's own full screen (the root); a video put full screen does
+    // not re-render the shell.
     const syncFullscreenState = () =>
-      setIsFullscreen(Boolean(getDocumentFullscreenElement(document)));
+      setIsFullscreen(
+        getDocumentFullscreenElement(document) === document.documentElement,
+      );
     const handleFullscreenShortcut = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||

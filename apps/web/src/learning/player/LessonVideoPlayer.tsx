@@ -1,4 +1,5 @@
 import {
+  startTransition,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -1092,10 +1093,14 @@ export function LessonVideoPlayer({
     writeAmbientPreference(enabled);
   }, []);
 
+  // A transition, as the turn that sets it (see useLandscapeOrientation in
+  // LessonPlayerControls): the lesson page re-renders for it.
   const handleMobileLandscapeFullscreenChange = useCallback(
     (active: boolean) => {
-      setMobileLandscapeFullscreen(active);
-      onMobileLandscapeFullscreenChange?.(active);
+      startTransition(() => {
+        setMobileLandscapeFullscreen(active);
+        onMobileLandscapeFullscreenChange?.(active);
+      });
     },
     [onMobileLandscapeFullscreenChange],
   );

@@ -19,6 +19,7 @@ import { CaretDownIcon as CaretDown } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon as CaretRight } from "@phosphor-icons/react/CaretRight";
 import { QueueIcon as Queue } from "@phosphor-icons/react/Queue";
 import {
+  startTransition,
   useEffect,
   useId,
   useLayoutEffect,
@@ -36,6 +37,11 @@ import {
   LEARNING_PLAYER_MINIMIZE_TITLE,
 } from "./learningPlayerShortcuts";
 import { COURSE_CONTENT_SHORTCUT_ARIA } from "../../keyboardShortcuts";
+import {
+  layoutQuery,
+  layoutQueryMatches,
+  watchLayoutQuery,
+} from "../../shell/phoneVideoFullscreenHold";
 import { cn } from "../../lib/utils";
 import { getPhoneLessonDrawerCollapsedSnapPoint } from "../useLessonDrawerHeroControl";
 import {
@@ -54,29 +60,37 @@ export const MOBILE_INVISIBLE_HIT_SURFACE_CLASS =
   "[&&&]:!bg-transparent [&&&:hover]:!bg-transparent [&&&:active]:!bg-transparent [&&&:focus-visible]:!bg-transparent [&&&[aria-pressed=true]]:!bg-transparent";
 const LANDSCAPE_ORIENTATION_QUERY = "(orientation: landscape)";
 
-const subscribeToLandscapeOrientation = (onStoreChange: () => void) => {
-  const media = window.matchMedia(LANDSCAPE_ORIENTATION_QUERY);
-  media.addEventListener("change", onStoreChange);
-  return () => media.removeEventListener("change", onStoreChange);
-};
-
-const getLandscapeOrientationSnapshot = () =>
-  window.matchMedia(LANDSCAPE_ORIENTATION_QUERY).matches;
-
-const getLandscapeOrientationServerSnapshot = () => false;
+/**
+ * Whether the screen is sideways. A turn is applied as a transition: the
+ * controls' landscape layout reaches the lesson page, whose re-render took
+ * over a second on a phone in development, and an urgent update kept the
+ * phone from drawing the turned screen meanwhile (it stayed black). As a
+ * transition the turned video is drawn first and the layout follows.
+ */
+function useLandscapeOrientation(): boolean {
+  const [landscape, setLandscape] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia(LANDSCAPE_ORIENTATION_QUERY);
+    setLandscape(media.matches);
+    const sync = () => startTransition(() => setLandscape(media.matches));
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  return landscape;
+}
 
 // Matches Tailwind's `sm` breakpoint. Settings and autoplay are rendered in
 // exactly one place, so their desktop position is decided in JS, not CSS.
 const WIDE_VIEWPORT_QUERY = "(min-width: 40rem)";
 
-const subscribeToWideViewport = (onStoreChange: () => void) => {
-  const media = window.matchMedia(WIDE_VIEWPORT_QUERY);
-  media.addEventListener("change", onStoreChange);
-  return () => media.removeEventListener("change", onStoreChange);
-};
+// Held while a phone plays a video full screen sideways (see
+// phoneVideoFullscreenHold): a phone never takes the desktop layout, and
+// re-rendering the controls for nothing held up the turn.
+const subscribeToWideViewport = (onStoreChange: () => void) =>
+  watchLayoutQuery(layoutQuery(WIDE_VIEWPORT_QUERY), onStoreChange);
 
 const getWideViewportSnapshot = () =>
-  window.matchMedia(WIDE_VIEWPORT_QUERY).matches;
+  layoutQueryMatches(layoutQuery(WIDE_VIEWPORT_QUERY));
 
 const getWideViewportServerSnapshot = () => false;
 
@@ -989,11 +1003,7 @@ export function LessonPlayerControls({
   const persistentProgressVisible =
     ready && !controlsSuppressed && mobileInteraction && !fullscreen;
   const timelineDisplayed = visible || persistentProgressVisible;
-  const landscapeOrientation = useSyncExternalStore(
-    subscribeToLandscapeOrientation,
-    getLandscapeOrientationSnapshot,
-    getLandscapeOrientationServerSnapshot,
-  );
+  const landscapeOrientation = useLandscapeOrientation();
   const mobileLandscapeFullscreen = mobileFullscreen && landscapeOrientation;
   const fullscreenCoursePanelVisible =
     mobileLandscapeFullscreen &&

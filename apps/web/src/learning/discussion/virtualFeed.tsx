@@ -13,6 +13,7 @@ import {
 } from "@tanstack/react-virtual";
 import type { Comment } from "../CommentCard";
 import { getApplicationScrollElement } from "../../shell/applicationScroll";
+import { watchLayoutResize } from "../../shell/phoneVideoFullscreenHold";
 import { getClientEntityId } from "../../services/learning-interactions/interaction-entities";
 
 const DISCUSSION_VIRTUAL_OVERSCAN = 5;
@@ -251,8 +252,7 @@ function useDiscussionScrollMode() {
     };
 
     syncScrollMode();
-    window.addEventListener("resize", syncScrollMode);
-    return () => window.removeEventListener("resize", syncScrollMode);
+    return watchLayoutResize(syncScrollMode);
   }, []);
 
   return useWindowScroll;

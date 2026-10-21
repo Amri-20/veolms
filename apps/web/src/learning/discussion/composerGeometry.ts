@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { watchLayoutQuery } from "../../shell/phoneVideoFullscreenHold";
 
 export type ComposerMode = "collapsed" | "desktop" | "mobile";
 
@@ -71,8 +72,7 @@ export function usePhoneComposerLayout() {
     const media = window.matchMedia("(max-width: 640px)");
     const sync = () => setIsPhone(media.matches);
     sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
+    return watchLayoutQuery(media, sync);
   }, []);
 
   return isPhone;

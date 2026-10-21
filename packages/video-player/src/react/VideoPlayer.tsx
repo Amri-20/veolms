@@ -252,11 +252,26 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
           typeof window !== "undefined" &&
           window.innerHeight > window.innerWidth;
         if (!portraitViewport || !orientation.lock) return;
+        const lockLandscape = orientation.lock.bind(orientation);
 
         const generation = orientationLockGenerationRef.current + 1;
         orientationLockGenerationRef.current = generation;
-        void orientation
-          .lock("landscape")
+        // Two frames: the screen turns once the video fills it, so the turn
+        // shows the video, not the page it left.
+        const lockOnceDrawn = () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          );
+        void lockOnceDrawn()
+          .then(() => {
+            if (
+              generation !== orientationLockGenerationRef.current ||
+              currentFullscreenElement() !== presentationContainerRef.current
+            ) {
+              return Promise.reject(new Error("full screen left"));
+            }
+            return lockLandscape("landscape");
+          })
           .then(() => {
             const stillOwnsRequest =
               generation === orientationLockGenerationRef.current;
