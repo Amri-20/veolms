@@ -195,13 +195,15 @@ function FramePreviewCard({
       ) : null}
       <div className="relative">
         {/* No border: a raised surface, like the selected item of the
-            app's side menu (its dark `--surface-depth-shadow`): a lit top
-            and left edge and a darker bottom edge drawn over the picture
-            (the ::after layer, edges only: the picture itself stays
-            clean), and soft layered shadows beneath. */}
+            app's side menu. Its edge is a pair of hairlines made of
+            shadows, so it reads as clearly over a dark picture as over a
+            light one: a light line just inside (the ::after layer, drawn
+            over the picture; brighter along the top) and a dark one just
+            outside, with a tight contact shadow under the bottom edge and
+            softer ones further out. */}
         <div
           data-video-player-preview-frame=""
-          className="relative overflow-hidden rounded-2xl bg-black shadow-[0_2px_6px_rgb(0_0_0/0.45),0_14px_32px_rgb(0_0_0/0.5),0_28px_56px_rgb(0_0_0/0.28)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_0_1px_0_rgb(255_255_255/0.28),inset_1px_0_0_rgb(255_255_255/0.1),inset_-1px_0_0_rgb(255_255_255/0.05),inset_0_-1px_0_rgb(0_0_0/0.35),inset_0_0_0_1px_rgb(255_255_255/0.07)] after:content-['']"
+          className="relative overflow-hidden rounded-2xl bg-black shadow-[0_0_0_1px_rgb(0_0_0/0.55),0_2px_3px_rgb(0_0_0/0.45),0_8px_18px_rgb(0_0_0/0.45),0_22px_44px_rgb(0_0_0/0.35)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.16),inset_0_1px_0_rgb(255_255_255/0.14)] after:content-['']"
         >
           <StoryboardImage frame={frame} onDrawn={() => setDrawn(true)} />
         </div>
