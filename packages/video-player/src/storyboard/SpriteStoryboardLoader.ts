@@ -134,6 +134,15 @@ export class SpriteStoryboardLoader {
     return this.#indexPromise;
   }
 
+  /**
+   * With a preview video: readies the chunk the pointer is moving into.
+   * Called on every pointer move; sheets need nothing of the kind.
+   */
+  prepareAhead(time: number, direction: 1 | -1): void {
+    if (this.destroyed || !Number.isFinite(time)) return;
+    this.#video?.prepareAhead(time, direction);
+  }
+
   /** Asks for the detail sheet covering `time` (and a close neighbour). */
   requestDetail(time: number): void {
     if (this.destroyed || !Number.isFinite(time)) return;

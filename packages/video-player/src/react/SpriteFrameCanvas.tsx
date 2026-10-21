@@ -2,24 +2,84 @@ import { useLayoutEffect, useRef, type CanvasHTMLAttributes } from "react";
 import {
   decodeSpriteSheet,
   getDecodedSpriteSheet,
+  getNearestDecodedFrame,
 } from "../storyboard/spriteSheetStore";
 import type { StoryboardFrame } from "../storyboard/storyboardTypes";
 
-/** The drawing's own width; every frame is scaled into it. */
-const CANVAS_WIDTH = 480;
+/** The drawing's width before the canvas has a size on screen. */
+const FALLBACK_CANVAS_WIDTH = 480;
+/** The drawing is never made wider than this, however large the player. */
+const MAX_CANVAS_WIDTH = 1920;
+
+interface Drawn {
+  source: ImageBitmap;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 /**
- * Draws one storyboard frame from a sheet kept in `spriteSheetStore`.
+ * The drawing's size: the box the picture fills on screen (fitted the way
+ * `object-fit: contain` fits it), in device pixels. Drawing at that size
+ * with high-quality smoothing is sharper than drawing at the frame's own
+ * size and letting the page scale the canvas.
+ */
+function backingSize(canvas: HTMLCanvasElement, aspect: number) {
+  const ratio = window.devicePixelRatio || 1;
+  const boxWidth = canvas.clientWidth;
+  const boxHeight = canvas.clientHeight;
+  let width = boxWidth > 0 ? boxWidth : FALLBACK_CANVAS_WIDTH / ratio;
+  if (boxHeight > 0 && width / aspect > boxHeight) width = boxHeight * aspect;
+  const deviceWidth = Math.max(
+    1,
+    Math.min(MAX_CANVAS_WIDTH, Math.round(width * ratio)),
+  );
+  return {
+    width: deviceWidth,
+    height: Math.max(1, Math.round(deviceWidth / aspect)),
+  };
+}
+
+/** Draws `drawn` over the whole canvas; false when it could not. */
+function paint(canvas: HTMLCanvasElement, drawn: Drawn): boolean {
+  const context = canvas.getContext("2d");
+  if (!context) return false;
+  try {
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(
+      drawn.source,
+      drawn.x,
+      drawn.y,
+      drawn.width,
+      drawn.height,
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
+    return true;
+  } catch {
+    // The picture was let go meanwhile; the next frame draws again.
+    return false;
+  }
+}
+
+/**
+ * Draws one storyboard frame from a sheet kept in `spriteSheetStore` (or a
+ * preview video's decoded picture).
  *
  * The canvas keeps its last picture until the next one is drawn, so moving
  * between frames never flashes black, even when a sheet has to be decoded
  * again first. It stays invisible until its first picture (normally drawn
  * before the first paint, from the decoded sheet).
  *
- * A picture that arrives after the pointer has moved on is still drawn,
- * unless one asked for later is already on the canvas: a sweep faster than
- * decoding then shows pictures trailing just behind the pointer instead of
- * holding one picture until it stops.
+ * While a preview video's picture is decoded, the closest picture already
+ * decoded stands in for it. A picture that arrives after the pointer has
+ * moved on is still drawn, unless one asked for later is already on the
+ * canvas: a sweep faster than decoding then shows pictures trailing just
+ * behind the pointer instead of holding one picture until it stops.
  */
 export function SpriteFrameCanvas({
   className,
@@ -32,64 +92,70 @@ export function SpriteFrameCanvas({
   onDrawn?: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Request order of the picture asked for last, and of the one drawn.
+  // Request order of the picture asked for last, and of the one drawn (a
+  // stand-in counts half, so its own picture still replaces it).
   const requestRef = useRef(0);
   const drawnRequestRef = useRef(0);
+  const drawnRef = useRef<Drawn | null>(null);
   const onDrawnRef = useRef(onDrawn);
   useLayoutEffect(() => {
     onDrawnRef.current = onDrawn;
   });
+
+  // Follows the canvas's size on screen; a new size clears the drawing, so
+  // the last picture is drawn again at once.
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(() => {
+      const drawn = drawnRef.current;
+      if (!drawn) return;
+      const size = backingSize(canvas, drawn.width / drawn.height);
+      if (canvas.width === size.width && canvas.height === size.height) {
+        return;
+      }
+      canvas.width = size.width;
+      canvas.height = size.height;
+      paint(canvas, drawn);
+    });
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
     const width = frame.width ?? 1;
     const height = frame.height ?? 1;
-    const canvasHeight = Math.max(
-      1,
-      Math.round((CANVAS_WIDTH * height) / width),
-    );
-    if (canvas.width !== CANVAS_WIDTH || canvas.height !== canvasHeight) {
-      // Resizing clears the drawing; only a frame of another shape does it.
-      canvas.width = CANVAS_WIDTH;
-      canvas.height = canvasHeight;
+    const size = backingSize(canvas, width / height);
+    if (canvas.width !== size.width || canvas.height !== size.height) {
+      // Resizing clears the drawing: draw the last picture again.
+      canvas.width = size.width;
+      canvas.height = size.height;
+      if (drawnRef.current) paint(canvas, drawnRef.current);
     }
 
     const request = (requestRef.current += 1);
-    const draw = (sheet: ImageBitmap) => {
-      if (request < drawnRequestRef.current) return;
-      const context = canvas.getContext("2d");
-      if (!context) return;
-      try {
-        context.imageSmoothingQuality = "high";
-        context.drawImage(
-          sheet,
-          frame.x ?? 0,
-          frame.y ?? 0,
-          width,
-          height,
-          0,
-          0,
-          canvas.width,
-          canvas.height,
-        );
-        canvas.style.opacity = "1";
-        drawnRequestRef.current = request;
-        onDrawnRef.current?.();
-      } catch {
-        // The sheet was let go between decoding and drawing; the next
-        // frame draws again.
-      }
+    const draw = (source: ImageBitmap, order: number) => {
+      if (order < drawnRequestRef.current) return;
+      const drawn = { source, x: frame.x ?? 0, y: frame.y ?? 0, width, height };
+      if (!paint(canvas, drawn)) return;
+      drawnRef.current = drawn;
+      canvas.style.opacity = "1";
+      drawnRequestRef.current = order;
+      onDrawnRef.current?.();
     };
 
     const decoded = getDecodedSpriteSheet(frame.imageUrl);
     if (decoded) {
-      draw(decoded);
+      draw(decoded, request);
       return undefined;
     }
+    const standIn = getNearestDecodedFrame(frame.imageUrl);
+    if (standIn) draw(standIn, request - 0.5);
     let mounted = true;
     void decodeSpriteSheet(frame.imageUrl).then((sheet) => {
-      if (mounted && sheet && canvas.isConnected) draw(sheet);
+      if (mounted && sheet && canvas.isConnected) draw(sheet, request);
     });
     return () => {
       // Only an unmount stops a late picture; a newer frame does not.

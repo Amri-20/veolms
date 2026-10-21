@@ -32,6 +32,8 @@ let useCounter = 0;
  */
 export interface FrameProvider {
   getDecoded(key: string): ImageBitmap | null;
+  /** A close picture already decoded, to show while `key` is decoded. */
+  getNearestDecoded?(key: string): ImageBitmap | null;
   decode(key: string): Promise<ImageBitmap | null>;
 }
 
@@ -110,6 +112,14 @@ export function getDecodedSpriteSheet(key: string): ImageBitmap | null {
   if (!entry?.bitmap) return null;
   entry.lastUsed = ++useCounter;
   return entry.bitmap;
+}
+
+/**
+ * A stand-in close to `key`, already decoded (from a preview video), or
+ * null. Sheets have none: their frames are all decoded together.
+ */
+export function getNearestDecodedFrame(key: string): ImageBitmap | null {
+  return providerFor(key)?.getNearestDecoded?.(key) ?? null;
 }
 
 /** The decoded sheet, decoding it again from its bytes when it was let go. */

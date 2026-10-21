@@ -96,6 +96,9 @@ export function useSpriteStoryboard(
       }
       const { previewTime } = snapshot.ui;
       if (previewTime === null || previewTime === lastTime) return;
+      if (lastTime !== null) {
+        loader.prepareAhead(previewTime, previewTime > lastTime ? 1 : -1);
+      }
       lastTime = previewTime;
       void loader.start();
       // ...or at once when the viewer points at the timeline: previews are
