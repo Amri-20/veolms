@@ -3,6 +3,7 @@ import {
   decodeSpriteSheet,
   getDecodedSpriteSheet,
   getNearestDecodedFrame,
+  subscribeFramesDecoded,
 } from "../storyboard/spriteSheetStore";
 import type { StoryboardFrame } from "../storyboard/storyboardTypes";
 
@@ -97,6 +98,10 @@ export function SpriteFrameCanvas({
   const requestRef = useRef(0);
   const drawnRequestRef = useRef(0);
   const drawnRef = useRef<Drawn | null>(null);
+  // The frame asked for last, and whether its own picture (not a stand-in)
+  // is on the canvas.
+  const frameRef = useRef(frame);
+  const exactRef = useRef(false);
   const onDrawnRef = useRef(onDrawn);
   useLayoutEffect(() => {
     onDrawnRef.current = onDrawn;
@@ -136,32 +141,70 @@ export function SpriteFrameCanvas({
     }
 
     const request = (requestRef.current += 1);
-    const draw = (source: ImageBitmap, order: number) => {
+    frameRef.current = frame;
+    exactRef.current = false;
+    const draw = (source: ImageBitmap, order: number, exact: boolean) => {
       if (order < drawnRequestRef.current) return;
       const drawn = { source, x: frame.x ?? 0, y: frame.y ?? 0, width, height };
       if (!paint(canvas, drawn)) return;
       drawnRef.current = drawn;
       canvas.style.opacity = "1";
       drawnRequestRef.current = order;
+      if (exact && request === requestRef.current) exactRef.current = true;
       onDrawnRef.current?.();
     };
 
     const decoded = getDecodedSpriteSheet(frame.imageUrl);
     if (decoded) {
-      draw(decoded, request);
+      draw(decoded, request, true);
       return undefined;
     }
     const standIn = getNearestDecodedFrame(frame.imageUrl);
-    if (standIn) draw(standIn, request - 0.5);
+    if (standIn) draw(standIn, request - 0.5, false);
     let mounted = true;
     void decodeSpriteSheet(frame.imageUrl).then((sheet) => {
-      if (mounted && sheet && canvas.isConnected) draw(sheet, request);
+      if (!mounted || !canvas.isConnected) return;
+      if (sheet) {
+        draw(sheet, request, true);
+        return;
+      }
+      // Not decoded this far (a fast sweep decodes a chunk's first picture
+      // only): the closest one stands in until it is.
+      const later = getNearestDecodedFrame(frame.imageUrl);
+      if (later) draw(later, request - 0.5, false);
     });
     return () => {
       // Only an unmount stops a late picture; a newer frame does not.
       mounted = canvas.isConnected;
     };
   }, [frame]);
+
+  // A stand-in is replaced by the frame's own picture as soon as some
+  // decode produces it (the pointer slowed down over it, for one).
+  useLayoutEffect(
+    () =>
+      subscribeFramesDecoded(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || exactRef.current) return;
+        const current = frameRef.current;
+        const source = getDecodedSpriteSheet(current.imageUrl);
+        if (!source) return;
+        const drawn = {
+          source,
+          x: current.x ?? 0,
+          y: current.y ?? 0,
+          width: current.width ?? 1,
+          height: current.height ?? 1,
+        };
+        if (!paint(canvas, drawn)) return;
+        drawnRef.current = drawn;
+        canvas.style.opacity = "1";
+        drawnRequestRef.current = requestRef.current;
+        exactRef.current = true;
+        onDrawnRef.current?.();
+      }),
+    [],
+  );
 
   return (
     <canvas

@@ -24,6 +24,8 @@ export interface SpriteStoryboardLoaderOptions {
   /** Called whenever the set of frames that can be shown changes. */
   onFrames: (frames: readonly StoryboardFrame[]) => void;
   onError?: (error: unknown) => void;
+  /** Called once the storyboard is found to be a preview video. */
+  onPreviewVideo?: () => void;
 }
 
 /** A detail sheet this close to the pointer's sheet edge brings its neighbour. */
@@ -108,6 +110,11 @@ export class SpriteStoryboardLoader {
    */
   fillInBackground(time: number): void {
     void this.#ensureIndex().then(() => this.#video?.fillInBackground(time));
+  }
+
+  /** Loads the index only (a few kilobytes), so a first hover is quick. */
+  prepare(): Promise<SpriteStoryboardIndex | null> {
+    return this.#ensureIndex();
   }
 
   /**
@@ -220,6 +227,7 @@ export class SpriteStoryboardLoader {
       },
     );
     this.#video = video;
+    this.#options.onPreviewVideo?.();
     this.#unregisterVideo = registerFrameProvider(video.prefix, video);
     // Every picture can be asked for at once: each is fetched and decoded
     // when first drawn (the canvas keeps its last picture meanwhile).

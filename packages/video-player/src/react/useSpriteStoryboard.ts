@@ -15,10 +15,11 @@ const PREVIEW_DWELL_MS = 150;
 /** Pace is measured over at least this much time, not event to event. */
 const PREVIEW_PACE_WINDOW_MS = 80;
 /**
- * How long the lesson plays before a preview video is filled in behind it,
- * so the fill never competes with the start of playback.
+ * How long after the lesson's video is ready a preview video starts to be
+ * filled in behind it (at low priority), so that it does not compete with
+ * the start of playback and a first hover finds its pictures there.
  */
-const BACKGROUND_FILL_DELAY_MS = 4_000;
+const BACKGROUND_FILL_DELAY_MS = 2_000;
 
 function resolveDocumentUrl(url: string): string {
   if (typeof document === "undefined") return url;
@@ -69,6 +70,7 @@ export function useSpriteStoryboard(
       },
       onFrames: (frames) => controller.setStoryboard(frames),
       onError: (error) => onErrorRef.current?.(error),
+      onPreviewVideo: () => controller.setScrubWithStoryboard(true),
     });
 
     let anchor: { time: number; at: number } | null = null;
@@ -86,9 +88,14 @@ export function useSpriteStoryboard(
     };
     const unsubscribe = controller.subscribe(() => {
       const snapshot = controller.getSnapshot();
-      // After the lesson has played a few seconds, so it never competes
-      // with the start of playback...
-      if (!filled && fillTimer === undefined && snapshot.media.playing) {
+      // Once the lesson's video is ready (its playback token is known by
+      // then): the index at once, the preview video a moment later...
+      if (
+        !filled &&
+        fillTimer === undefined &&
+        snapshot.media.lifecycle === "ready"
+      ) {
+        void loader.prepare();
         fillTimer = window.setTimeout(
           () => fill(controller.getSnapshot().media.currentTime),
           BACKGROUND_FILL_DELAY_MS,
@@ -131,6 +138,7 @@ export function useSpriteStoryboard(
       window.clearTimeout(dwellTimer);
       window.clearTimeout(fillTimer);
       loader.destroy();
+      controller.setScrubWithStoryboard(false);
       controller.setStoryboard([]);
     };
   }, [controller, url]);

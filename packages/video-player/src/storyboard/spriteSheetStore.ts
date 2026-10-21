@@ -38,6 +38,23 @@ export interface FrameProvider {
 }
 
 const providers = new Map<string, FrameProvider>();
+const decodeListeners = new Set<() => void>();
+
+/** Called by providers when new pictures have been decoded. */
+export function notifyFramesDecoded(): void {
+  for (const listener of decodeListeners) listener();
+}
+
+/**
+ * Tells `listener` whenever a provider has decoded new pictures (a canvas
+ * showing a stand-in draws the exact picture then).
+ */
+export function subscribeFramesDecoded(listener: () => void): () => void {
+  decodeListeners.add(listener);
+  return () => {
+    decodeListeners.delete(listener);
+  };
+}
 
 export function registerFrameProvider(
   prefix: string,

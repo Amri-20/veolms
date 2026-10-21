@@ -142,6 +142,8 @@ export class PlayerController {
   // A drag pauses a playing video and plays it again from where it is let
   // go (see `setScrubbing`).
   #resumeAfterScrub = false;
+  // Set while the storyboard is a preview video: see `scrubTo`.
+  #scrubWithStoryboard = false;
   #scrubPausing = false;
   readonly #activeMediaListeners = new Set<ActiveMediaListener>();
 
@@ -472,10 +474,21 @@ export class PlayerController {
    * position, because a seek started before the last one finished cancels
    * it, and a drag faster than decoding would then show no frame at all.
    */
+  /**
+   * With a preview video (pictures every half second, decoded at 100+ a
+   * second) a drag shows its pictures everywhere, also over parts already
+   * downloaded: seeking the lesson itself there managed some 5 to 7
+   * pictures a second at 1080p, so the drag went by fits and starts.
+   * The lesson seeks once, on release.
+   */
+  setScrubWithStoryboard(enabled: boolean): void {
+    this.#scrubWithStoryboard = enabled;
+  }
+
   scrubTo(time: number): void {
     const media = this.#media;
     if (!Number.isFinite(time) || !media || !this.isMediaReady()) return;
-    if (!isTimeBuffered(media.buffered, time)) {
+    if (this.#scrubWithStoryboard || !isTimeBuffered(media.buffered, time)) {
       // The storyboard picture stands in for the video here.
       this.#scrubTarget = null;
       this.#releaseScrubFrameHold();

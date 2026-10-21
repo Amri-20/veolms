@@ -1,5 +1,5 @@
 import type { PreviewVideoInfo } from "./spriteStoryboardIndex.ts";
-import type { FrameProvider } from "./spriteSheetStore.ts";
+import { notifyFramesDecoded, type FrameProvider } from "./spriteSheetStore.ts";
 import type { StoryboardFrame } from "./storyboardTypes.ts";
 
 /** Fetches `[start, end)` of the preview stream. */
@@ -21,6 +21,12 @@ const MAX_WAITING_DECODES = 1;
 const NEAREST_PICTURE_RANGE = 40;
 /** Chunk downloads asked for by the pointer, at once. */
 const MAX_ON_DEMAND_FETCHES = 4;
+/**
+ * Requests for another chunk this soon after the last are a fast sweep:
+ * only the chunk's first picture is decoded for them (one picture comes
+ * through at once; the exact one follows when the pointer slows down).
+ */
+const FAST_SWEEP_CHUNK_MS = 120;
 /** A pointer resting this close to a chunk's edge readies the next one. */
 const NEIGHBOUR_PREPARE_SECONDS = 3;
 /** Bytes per background request (several chunks at once). */
@@ -72,7 +78,11 @@ export class PreviewVideoFrames implements FrameProvider {
   readonly #chunks = new Map<number, Uint8Array>();
   readonly #chunkLoads = new Map<number, Promise<Uint8Array>>();
   readonly #pictures = new Map<number, ImageBitmap>();
-  readonly #chunkDecodes = new Map<number, Promise<void>>();
+  // Decodes running or waiting, by chunk, with the last picture each goes to.
+  readonly #chunkDecodes = new Map<
+    number,
+    { upTo: number; job: Promise<void> }
+  >();
   // Callers waiting for one picture, told as soon as it is decoded rather
   // than when its whole chunk is.
   readonly #pictureWaiters = new Map<number, Array<() => void>>();
@@ -87,6 +97,7 @@ export class PreviewVideoFrames implements FrameProvider {
   #decoder: VideoDecoder | null = null;
   #decoderOutput: ((frame: VideoFrame) => void) | null = null;
   #backgroundStarted = false;
+  #lastRequest: { chunk: number; at: number } | null = null;
   #destroyed = false;
 
   readonly #acceleration: HardwareAcceleration;
@@ -188,9 +199,9 @@ export class PreviewVideoFrames implements FrameProvider {
   }
 
   /**
-   * Readies the chunk after (or before) the one holding `time`, in the
-   * direction the pointer is moving, so it is decoded when the pointer
-   * gets there.
+   * Readies the first picture of the chunk after (or before) the one
+   * holding `time`, in the direction the pointer is moving: one picture
+   * decodes at once, and stands in until the one asked for is decoded.
    */
   prepareAhead(time: number, direction: 1 | -1): void {
     const { frameCount, gopFrames, interval } = this.#info;
@@ -201,7 +212,7 @@ export class PreviewVideoFrames implements FrameProvider {
     const next = Math.floor(picture / gopFrames) + direction;
     if (next < 0 || next >= this.chunkCount) return;
     if (this.#pictures.has(next * gopFrames)) return;
-    void this.prepareChunk(next);
+    void this.prepareChunk(next, 0);
   }
 
   getDecoded(key: string): ImageBitmap | null {
@@ -226,9 +237,22 @@ export class PreviewVideoFrames implements FrameProvider {
       this.#pictureWaiters.set(picture, waiters);
       // Whichever comes first: the picture, or the end of its chunk (which
       // may not have produced it, if the chunk gave way to a newer one).
+      const chunk = Math.floor(picture / this.#info.gopFrames);
+      const now = performance.now();
+      const fastSweep =
+        this.#lastRequest !== null &&
+        this.#lastRequest.chunk !== chunk &&
+        now - this.#lastRequest.at < FAST_SWEEP_CHUNK_MS;
+      this.#lastRequest = { chunk, at: now };
       await Promise.race([
         decoded,
-        this.prepareChunk(Math.floor(picture / this.#info.gopFrames)),
+        // Only as far as this picture (the first one, in a fast sweep):
+        // the rest of the chunk is decoded when the pointer rests there
+        // (`prepareAt`).
+        this.prepareChunk(
+          chunk,
+          fastSweep ? 0 : picture - chunk * this.#info.gopFrames,
+        ),
       ]);
       const left = this.#pictureWaiters
         .get(picture)
@@ -258,18 +282,31 @@ export class PreviewVideoFrames implements FrameProvider {
     else if (intoChunk < edge) void this.prepareChunk(chunk - 1);
   }
 
-  /** Decodes one chunk (fetching it first if needed). Never rejects. */
-  prepareChunk(chunk: number): Promise<void> {
+  /**
+   * Decodes one chunk (fetching it first if needed), from its first
+   * picture to picture `upTo` within it (all of it by default). Each
+   * decoded picture reaches the page as a task of its own, so on a busy
+   * page (a drag redraws it every frame) a whole chunk took some 300 ms to
+   * come through; decoding only as far as needed keeps up. Never rejects.
+   */
+  prepareChunk(
+    chunk: number,
+    upTo: number = this.#info.gopFrames - 1,
+  ): Promise<void> {
     if (this.#destroyed || chunk < 0 || chunk >= this.chunkCount) {
       return Promise.resolve();
     }
     const existing = this.#chunkDecodes.get(chunk);
-    if (existing) return existing;
+    if (existing && existing.upTo >= upTo) return existing.job;
     const job = this.#loadChunk(chunk, "high")
-      .then((data) => this.#queueDecode(chunk, data))
+      .then((data) => this.#queueDecode(chunk, data, upTo))
       .catch(() => undefined)
-      .finally(() => this.#chunkDecodes.delete(chunk));
-    this.#chunkDecodes.set(chunk, job);
+      .finally(() => {
+        if (this.#chunkDecodes.get(chunk)?.job === job) {
+          this.#chunkDecodes.delete(chunk);
+        }
+      });
+    this.#chunkDecodes.set(chunk, { upTo, job });
     return job;
   }
 
@@ -397,11 +434,11 @@ export class PreviewVideoFrames implements FrameProvider {
     this.#waitingFetches.shift()?.();
   }
 
-  #queueDecode(chunk: number, data: Uint8Array): Promise<void> {
+  #queueDecode(chunk: number, data: Uint8Array, upTo: number): Promise<void> {
     return new Promise<void>((resolve) => {
       this.#waitingDecodes.push({
         chunk,
-        run: () => this.#decodeChunk(chunk, data).finally(resolve),
+        run: () => this.#decodeChunk(chunk, data, upTo).finally(resolve),
         drop: resolve,
       });
       // Older requests give way; their pictures are decoded when asked for
@@ -455,17 +492,21 @@ export class PreviewVideoFrames implements FrameProvider {
     return decoder;
   }
 
-  async #decodeChunk(chunk: number, data: Uint8Array): Promise<void> {
+  async #decodeChunk(
+    chunk: number,
+    data: Uint8Array,
+    upTo: number,
+  ): Promise<void> {
     const { gopFrames, interval, frameCount } = this.#info;
     const first = chunk * gopFrames;
-    const count = Math.min(gopFrames, frameCount - first);
+    const count = Math.min(gopFrames, frameCount - first, upTo + 1);
     let allKept = true;
     for (let picture = first; picture < first + count; picture += 1) {
       if (!this.#pictures.has(picture)) allKept = false;
     }
     if (allKept || this.#destroyed) return;
 
-    const pictures = splitPictures(data);
+    const pictures = splitPictures(data).slice(0, count);
     const conversions: Array<Promise<void>> = [];
     const step = interval * 1_000_000;
     this.#decoderOutput = (frame) => {
@@ -510,6 +551,7 @@ export class PreviewVideoFrames implements FrameProvider {
     }
     await Promise.all(conversions);
     this.#trimPictures(first, first + count);
+    notifyFramesDecoded();
   }
 
   /** Lets go of the least recently drawn pictures beyond the budget. */
