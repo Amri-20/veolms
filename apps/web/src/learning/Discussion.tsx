@@ -1558,7 +1558,7 @@ function DiscussionInner({
               next.set("thread", selectedServerId);
               return next;
             },
-            { replace: true },
+            { replace: true, state: withKeepScroll(window.history.state?.usr) },
           );
           return;
         }
@@ -1606,7 +1606,7 @@ function DiscussionInner({
             next.delete("thread");
             return next;
           },
-          { replace: true },
+          { replace: true, state: withKeepScroll(window.history.state?.usr) },
         );
       }
     }
@@ -1657,7 +1657,7 @@ function DiscussionInner({
             next.delete("thread");
             return next;
           },
-          { replace: true },
+          { replace: true, state: withKeepScroll(window.history.state?.usr) },
         );
       }
     }
@@ -2134,7 +2134,7 @@ function DiscussionInner({
             next.delete("thread");
             return next;
           },
-          { replace: true },
+          { replace: true, state: withKeepScroll(window.history.state?.usr) },
         );
       }
       return;
@@ -2598,7 +2598,7 @@ function DiscussionInner({
               else next.delete("thread");
               return next;
             },
-            { replace: true },
+            { replace: true, state: withKeepScroll(window.history.state?.usr) },
           );
         }}
         isBackendMode={isBackendMode}
@@ -2646,7 +2646,10 @@ function DiscussionInner({
                     next.delete("thread");
                     return next;
                   },
-                  { replace: true },
+                  {
+                    replace: true,
+                    state: withKeepScroll(window.history.state?.usr),
+                  },
                 );
               }
             }}
@@ -2666,7 +2669,10 @@ function DiscussionInner({
                   else next.delete("thread");
                   return next;
                 },
-                { replace: true },
+                {
+                  replace: true,
+                  state: withKeepScroll(window.history.state?.usr),
+                },
               );
             }}
             onLike={onLike}

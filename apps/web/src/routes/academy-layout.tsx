@@ -119,6 +119,7 @@ import {
 import {
   asksToKeepScroll,
   followApplicationScrollPosition,
+  forgetKeepScrollRequest,
   readApplicationScrollPosition,
   scrollApplicationTo,
   type ApplicationScrollPosition,
@@ -660,6 +661,13 @@ export default function AcademyLayout() {
       stopFollowingPosition?.();
     };
   }, [currentLocationPath]);
+
+  // A request to keep the scroll position is for that one address change:
+  // coming back to the entry through the browser history restores its
+  // position as usual. Runs after the effect above has read it.
+  useLayoutEffect(() => {
+    if (asksToKeepScroll(location.state)) forgetKeepScrollRequest();
+  }, [location.key, location.state]);
 
   useEffect(() => {
     const previousScrollRestoration = window.history.scrollRestoration;
