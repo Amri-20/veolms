@@ -66,7 +66,6 @@ import {
   prepareLearningMiniPlayerPlaybackHandoff,
 } from "./learningMiniPlayerStore";
 import {
-  clampPlayerVolume,
   clearResumePosition,
   consumeMiniPlayerRestore,
   lessonPlayerStorageKeys,
@@ -76,6 +75,7 @@ import {
   writeMutedPreference,
   writePlaybackRatePreference,
   writeResumePosition,
+  readVolumeChange,
   writeVolumePreference,
 } from "./lessonPlayerPersistence";
 import { createLearningLessonVideoSource } from "./lessonVideoSource";
@@ -1138,8 +1138,11 @@ export function LessonVideoPlayer({
         const nextMuted = event.newValue === "true" || event.newValue === "on";
         setMuted(nextMuted);
         playerPrefsRef.current.muted = nextMuted;
-      } else if (event.key === lessonPlayerStorageKeys.volume) {
-        const nextVolume = clampPlayerVolume(Number(event.newValue));
+      } else if (event.key === lessonPlayerStorageKeys.volumeChange) {
+        // Only a change a viewer made in another tab moves this one; the
+        // saved volume itself is not followed (see `volumeChange`).
+        const nextVolume = readVolumeChange(event.newValue);
+        if (nextVolume === null) return;
         playerPrefsRef.current.volume = nextVolume;
         pendingRemoteVolume = nextVolume;
         remoteVolumeTimer ??= window.setTimeout(
