@@ -122,11 +122,12 @@ function previewCardLeft(position: number): string {
 /**
  * The time pill: see-through, fully rounded, a lighter grey than the
  * frame's shadow with a lighter shadow of its own, so it does not run into
- * the dark shadow under the frame it sits on. A plain grey, with no tint
- * (what shows through it is blurred to black and white too).
+ * the dark shadow under the frame it sits on. Its grey is tinted with the
+ * theme's accent colour (what shows through it is blurred to black and
+ * white).
  */
 const PREVIEW_TIME_PILL_CLASS =
-  "rounded-full bg-[rgb(60_60_60/0.68)] px-3.5 py-1 text-sm leading-5 tabular-nums text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.26),0_1px_3px_rgb(0_0_0/0.22),0_4px_10px_rgb(0_0_0/0.16)] backdrop-blur-md backdrop-grayscale";
+  "rounded-full bg-[color-mix(in_oklab,color-mix(in_oklab,var(--video-player-accent,#ff7a1a)_40%,rgb(60_60_60))_68%,transparent)] px-3.5 py-1 text-sm leading-5 tabular-nums text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.26),0_1px_3px_rgb(0_0_0/0.22),0_4px_10px_rgb(0_0_0/0.16)] backdrop-blur-md backdrop-grayscale";
 
 /** The timeline thumb's size (`size-3`), which stays inside the track. */
 const TIMELINE_THUMB_SIZE_PX = 12;
