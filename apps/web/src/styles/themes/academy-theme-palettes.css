@@ -11,6 +11,7 @@
 @import "./dark/grove.css";
 @import "./dark/rose.css";
 @import "./dark/signal.css";
+@import "./dark/live.css";
 @import "./dark/barbie.css";
 @import "./dark/aurora.css";
 @import "./dark/brainwave.css";
@@ -26,6 +27,7 @@
 @import "./light/grove.css";
 @import "./light/rose.css";
 @import "./light/signal.css";
+@import "./light/live.css";
 @import "./light/barbie.css";
 @import "./light/aurora.css";
 @import "./light/brainwave.css";

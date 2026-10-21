@@ -45,16 +45,16 @@ export const academyThemes: readonly AcademyTheme[] = [
     darkInk: false,
   },
   {
-    id: "ember",
-    name: "Ember Orange",
-    note: "Warm & focused",
-    preview: "#ff8a34",
-    darkInk: true,
-  },
-  {
     id: "signal",
     name: "Signal Red",
     note: "Crisp & high-impact",
+    preview: "#d92d4e",
+    darkInk: false,
+  },
+  {
+    id: "live",
+    name: "Live Red",
+    note: "Near-black & vivid red",
     preview: "#ff0033",
     darkInk: false,
   },
@@ -70,6 +70,13 @@ export const academyThemes: readonly AcademyTheme[] = [
     name: "Barbie Pink",
     note: "Bright & iconic",
     preview: "#ec4d9b",
+    darkInk: true,
+  },
+  {
+    id: "ember",
+    name: "Ember Orange",
+    note: "Warm & focused",
+    preview: "#ff8a34",
     darkInk: true,
   },
   {

@@ -496,6 +496,9 @@
   --mini-tone: #fb6f92;
 }
 .settings-mini-surface--signal {
+  --mini-tone: #d92d4e;
+}
+.settings-mini-surface--live {
   --mini-tone: #ff0033;
 }
 .settings-mini-surface--barbie {
@@ -601,6 +604,12 @@
   --mini-base: #190c10;
   --mini-panel: #381b23;
   --mini-line: #c9a3ac;
+  --mini-tone: #d92d4e;
+}
+.settings-mini-surface--forced-dark.settings-mini-surface--live {
+  --mini-base: #0f0f0f;
+  --mini-panel: #2c2c2c;
+  --mini-line: #aaaaaa;
   --mini-tone: #ff0033;
 }
 .settings-mini-surface--forced-dark.settings-mini-surface--barbie {

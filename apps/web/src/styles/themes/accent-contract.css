@@ -18,6 +18,10 @@
 }
 
 :root[data-theme="dark"][data-palette="signal"] {
+  --accent-ink: #ee667d;
+}
+
+:root[data-theme="dark"][data-palette="live"] {
   --accent-ink: #ff5c77;
 }
 
@@ -82,5 +86,9 @@
 }
 
 :root[data-theme="light"][data-palette="signal"] {
+  --accent-ink: #b81c3c;
+}
+
+:root[data-theme="light"][data-palette="live"] {
   --accent-ink: #c00027;
 }
