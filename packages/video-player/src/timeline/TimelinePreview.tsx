@@ -140,10 +140,10 @@ function ScrubTimePill({
 }) {
   return (
     <div
-      className={`pointer-events-none absolute bottom-full z-30 h-0 w-(--preview-card-width) max-w-full -translate-x-1/2 ${touch ? "mb-20" : "mb-5"} ${PREVIEW_CARD_WIDTH_CLASS}`}
+      className={`pointer-events-none absolute bottom-full z-30 h-0 w-(--preview-card-width) max-w-full -translate-x-1/2 ${touch ? "mb-12.5" : "mb-5"} ${PREVIEW_CARD_WIDTH_CLASS}`}
       style={{ left: previewCardLeft(position) }}
       data-video-player-preview=""
-      data-video-player-preview-mode="pill"
+      data-video-player-preview-mode="time"
     >
       <span
         className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 ${PREVIEW_TIME_PILL_CLASS}`}
@@ -197,11 +197,11 @@ function FramePreviewCard({
         {/* No border: a raised surface, like the selected item of the
             app's side menu (its dark `--surface-depth-shadow`): a lit top
             and left edge and a darker bottom edge drawn over the picture
-            (the ::after layer), a faint sheen from the top left, and soft
-            layered shadows beneath. */}
+            (the ::after layer, edges only: the picture itself stays
+            clean), and soft layered shadows beneath. */}
         <div
           data-video-player-preview-frame=""
-          className="relative overflow-hidden rounded-2xl bg-black shadow-[0_2px_6px_rgb(0_0_0/0.45),0_14px_32px_rgb(0_0_0/0.5),0_28px_56px_rgb(0_0_0/0.28)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:bg-[linear-gradient(155deg,rgb(255_255_255/0.12)_0%,rgb(255_255_255/0.03)_28%,transparent_45%)] after:shadow-[inset_0_1px_0_rgb(255_255_255/0.28),inset_1px_0_0_rgb(255_255_255/0.1),inset_-1px_0_0_rgb(255_255_255/0.05),inset_0_-1px_0_rgb(0_0_0/0.35),inset_0_0_0_1px_rgb(255_255_255/0.07)] after:content-['']"
+          className="relative overflow-hidden rounded-2xl bg-black shadow-[0_2px_6px_rgb(0_0_0/0.45),0_14px_32px_rgb(0_0_0/0.5),0_28px_56px_rgb(0_0_0/0.28)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_0_1px_0_rgb(255_255_255/0.28),inset_1px_0_0_rgb(255_255_255/0.1),inset_-1px_0_0_rgb(255_255_255/0.05),inset_0_-1px_0_rgb(0_0_0/0.35),inset_0_0_0_1px_rgb(255_255_255/0.07)] after:content-['']"
         >
           <StoryboardImage frame={frame} onDrawn={() => setDrawn(true)} />
         </div>
