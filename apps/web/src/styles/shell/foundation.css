@@ -409,8 +409,14 @@
    the page is not one colour down its edge (a dark hero, then the page's
    ground). A see-through line took on whatever was behind it and showed in
    two tones. So it is painted solid: the accent mixed into the shell's own
-   colour, by more or less as it shows more or less strongly. */
+   colour, by more or less as it shows more or less strongly.
+
+   Light themes are the exception (below): there the sidebar beside the line
+   is darker than the shell colour, so a line made of the shell colour ended
+   in a pale strip at the top and bottom, and the accent mixed into that pale
+   colour already read as the hover state at rest. */
 .sidebar-resize-handle::after {
+  --sidebar-resize-line-strength: var(--sidebar-resize-line-rest, 0.34);
   content: "";
   position: absolute;
   top: 14px;
@@ -420,31 +426,57 @@
   border-radius: 999px;
   background: linear-gradient(
     180deg,
-    var(--app-shell) 0%,
+    var(--sidebar-resize-line-base, var(--app-shell)) 0%,
     color-mix(
         in srgb,
         var(--accent) calc(34% * var(--sidebar-resize-line-strength)),
-        var(--app-shell)
+        var(--sidebar-resize-line-base, var(--app-shell))
       )
       13%,
     color-mix(
         in srgb,
         var(--accent) calc(58% * var(--sidebar-resize-line-strength)),
-        var(--app-shell)
+        var(--sidebar-resize-line-base, var(--app-shell))
       )
       50%,
     color-mix(
         in srgb,
         var(--accent) calc(34% * var(--sidebar-resize-line-strength)),
-        var(--app-shell)
+        var(--sidebar-resize-line-base, var(--app-shell))
       )
       87%,
-    var(--app-shell) 100%
+    var(--sidebar-resize-line-base, var(--app-shell)) 100%
+  );
+  /* The ends fade out to nothing, whatever lies beside them. Fading only
+     into the shell colour left a hard top end beside the page's rounded top
+     corner: a pale stub in a light theme, and the same stub, merely dark, in
+     a dark one. */
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    #000 16%,
+    #000 84%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    #000 16%,
+    #000 84%,
+    transparent 100%
   );
   transition:
     --sidebar-resize-line-strength 150ms ease,
     opacity 150ms ease,
     box-shadow 150ms ease;
+}
+
+/* In a light theme the line is the accent alone, see-through, so its ends
+   fade into whatever lies beside them and it only ever tints the edge; and it
+   rests fainter, so the pointer clearly brings it up. */
+:root[data-theme="light"] .sidebar-resize-handle {
+  --sidebar-resize-line-base: transparent;
+  --sidebar-resize-line-rest: 0.22;
 }
 
 /* Three steps: faint at rest, clearer under the pointer, and brightest
