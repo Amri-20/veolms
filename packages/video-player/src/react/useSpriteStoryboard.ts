@@ -14,6 +14,11 @@ const SLOW_PREVIEW_SECONDS_PER_SECOND = 30;
 const PREVIEW_DWELL_MS = 150;
 /** Pace is measured over at least this much time, not event to event. */
 const PREVIEW_PACE_WINDOW_MS = 80;
+/**
+ * How long the lesson plays before a preview video is filled in behind it,
+ * so the fill never competes with the start of playback.
+ */
+const BACKGROUND_FILL_DELAY_MS = 4_000;
 
 function resolveDocumentUrl(url: string): string {
   if (typeof document === "undefined") return url;
@@ -69,11 +74,33 @@ export function useSpriteStoryboard(
     let anchor: { time: number; at: number } | null = null;
     let lastTime: number | null = null;
     let dwellTimer: number | undefined;
+    let fillTimer: number | undefined;
+    let filled = false;
+    // Fetches a preview video (when the storyboard has one) behind the
+    // lesson at low priority, once.
+    const fill = (from: number) => {
+      if (filled) return;
+      filled = true;
+      window.clearTimeout(fillTimer);
+      loader.fillInBackground(from);
+    };
     const unsubscribe = controller.subscribe(() => {
-      const { previewTime } = controller.getSnapshot().ui;
+      const snapshot = controller.getSnapshot();
+      // After the lesson has played a few seconds, so it never competes
+      // with the start of playback...
+      if (!filled && fillTimer === undefined && snapshot.media.playing) {
+        fillTimer = window.setTimeout(
+          () => fill(controller.getSnapshot().media.currentTime),
+          BACKGROUND_FILL_DELAY_MS,
+        );
+      }
+      const { previewTime } = snapshot.ui;
       if (previewTime === null || previewTime === lastTime) return;
       lastTime = previewTime;
       void loader.start();
+      // ...or at once when the viewer points at the timeline: previews are
+      // wanted now, starting from there.
+      fill(previewTime);
 
       const now = performance.now();
       // A pointer that rested before moving again starts a new measure.
@@ -99,6 +126,7 @@ export function useSpriteStoryboard(
     return () => {
       unsubscribe();
       window.clearTimeout(dwellTimer);
+      window.clearTimeout(fillTimer);
       loader.destroy();
       controller.setStoryboard([]);
     };

@@ -15,6 +15,11 @@ const CANVAS_WIDTH = 480;
  * between frames never flashes black, even when a sheet has to be decoded
  * again first. It stays invisible until its first picture (normally drawn
  * before the first paint, from the decoded sheet).
+ *
+ * A picture that arrives after the pointer has moved on is still drawn,
+ * unless one asked for later is already on the canvas: a sweep faster than
+ * decoding then shows pictures trailing just behind the pointer instead of
+ * holding one picture until it stops.
  */
 export function SpriteFrameCanvas({
   className,
@@ -27,6 +32,9 @@ export function SpriteFrameCanvas({
   onDrawn?: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Request order of the picture asked for last, and of the one drawn.
+  const requestRef = useRef(0);
+  const drawnRequestRef = useRef(0);
   const onDrawnRef = useRef(onDrawn);
   useLayoutEffect(() => {
     onDrawnRef.current = onDrawn;
@@ -47,7 +55,9 @@ export function SpriteFrameCanvas({
       canvas.height = canvasHeight;
     }
 
+    const request = (requestRef.current += 1);
     const draw = (sheet: ImageBitmap) => {
+      if (request < drawnRequestRef.current) return;
       const context = canvas.getContext("2d");
       if (!context) return;
       try {
@@ -64,6 +74,7 @@ export function SpriteFrameCanvas({
           canvas.height,
         );
         canvas.style.opacity = "1";
+        drawnRequestRef.current = request;
         onDrawnRef.current?.();
       } catch {
         // The sheet was let go between decoding and drawing; the next
@@ -76,12 +87,13 @@ export function SpriteFrameCanvas({
       draw(decoded);
       return undefined;
     }
-    let current = true;
+    let mounted = true;
     void decodeSpriteSheet(frame.imageUrl).then((sheet) => {
-      if (current && sheet) draw(sheet);
+      if (mounted && sheet && canvas.isConnected) draw(sheet);
     });
     return () => {
-      current = false;
+      // Only an unmount stops a late picture; a newer frame does not.
+      mounted = canvas.isConnected;
     };
   }, [frame]);
 

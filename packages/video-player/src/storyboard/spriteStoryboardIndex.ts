@@ -17,15 +17,39 @@ export interface SpriteStoryboardLevel {
 }
 
 /**
+ * A seek-preview video: the lesson as small pictures (`width` x `height`,
+ * one every `interval` seconds) in a bare H.264 stream (Annex B, an access
+ * unit delimiter before every picture, no B-frames). Every `gopFrames`
+ * pictures start a chunk with a full picture that decodes on its own;
+ * chunk `n` is the bytes from `gopOffsets[n]` to the next one (or `bytes`).
+ */
+export interface PreviewVideoInfo {
+  /** The stream's URL, relative to the index document. */
+  file: string;
+  /** WebCodecs codec string, e.g. `avc1.4d401e`. */
+  codec: string;
+  width: number;
+  height: number;
+  interval: number;
+  frameCount: number;
+  gopFrames: number;
+  gopOffsets: readonly number[];
+  bytes: number;
+}
+
+/**
  * The `index.json` written next to a video's sprite sheets. `coarse` is
  * small and covers the whole video in a few sheets; `detail` is larger and
- * is fetched one sheet at a time, only where the viewer lingers.
+ * is fetched one sheet at a time, only where the viewer lingers. `video`,
+ * when present, is a preview video that replaces both where the browser
+ * can decode it.
  */
 export interface SpriteStoryboardIndex {
   version: 1;
   duration: number;
   coarse: SpriteStoryboardLevel;
   detail?: SpriteStoryboardLevel;
+  video?: PreviewVideoInfo;
 }
 
 function positiveNumber(value: unknown): value is number {
@@ -65,6 +89,46 @@ function parseLevel(value: unknown): SpriteStoryboardLevel | null {
   };
 }
 
+function parseVideo(value: unknown): PreviewVideoInfo | null {
+  if (!value || typeof value !== "object") return null;
+  const video = value as Record<string, unknown>;
+  const offsets = video.gopOffsets;
+  if (
+    typeof video.file !== "string" ||
+    video.file.length === 0 ||
+    typeof video.codec !== "string" ||
+    !/^avc1\.[0-9a-f]{6}$/iu.test(video.codec) ||
+    !positiveInteger(video.width) ||
+    !positiveInteger(video.height) ||
+    !positiveNumber(video.interval) ||
+    !positiveInteger(video.frameCount) ||
+    !positiveInteger(video.gopFrames) ||
+    !positiveInteger(video.bytes) ||
+    !Array.isArray(offsets) ||
+    offsets.length !== Math.ceil(video.frameCount / video.gopFrames) ||
+    offsets[0] !== 0 ||
+    !offsets.every(
+      (offset, index) =>
+        Number.isInteger(offset) &&
+        (index === 0 || offset > (offsets[index - 1] as number)) &&
+        offset < (video.bytes as number),
+    )
+  ) {
+    return null;
+  }
+  return {
+    file: video.file,
+    codec: video.codec,
+    width: video.width,
+    height: video.height,
+    interval: video.interval,
+    frameCount: video.frameCount,
+    gopFrames: video.gopFrames,
+    gopOffsets: offsets as number[],
+    bytes: video.bytes,
+  };
+}
+
 /** Validates a storyboard index document; null when it is not one. */
 export function parseSpriteStoryboardIndex(
   value: unknown,
@@ -79,11 +143,16 @@ export function parseSpriteStoryboardIndex(
   const detail =
     document.detail === undefined ? undefined : parseLevel(document.detail);
   if (detail === null) return null;
+  // A preview video that does not read right is left out; the sheets
+  // still work.
+  const video =
+    document.video === undefined ? null : parseVideo(document.video);
   return {
     version: 1,
     duration: document.duration,
     coarse,
     ...(detail ? { detail } : {}),
+    ...(video ? { video } : {}),
   };
 }
 

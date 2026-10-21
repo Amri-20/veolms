@@ -25,6 +25,35 @@ interface SheetEntry {
 const sheets = new Map<string, SheetEntry>();
 let useCounter = 0;
 
+/**
+ * Pictures that are not cut from a kept sheet (a preview video's decoded
+ * pictures), drawn the same way. A provider answers for every key that
+ * starts with its prefix.
+ */
+export interface FrameProvider {
+  getDecoded(key: string): ImageBitmap | null;
+  decode(key: string): Promise<ImageBitmap | null>;
+}
+
+const providers = new Map<string, FrameProvider>();
+
+export function registerFrameProvider(
+  prefix: string,
+  provider: FrameProvider,
+): () => void {
+  providers.set(prefix, provider);
+  return () => {
+    if (providers.get(prefix) === provider) providers.delete(prefix);
+  };
+}
+
+function providerFor(key: string): FrameProvider | undefined {
+  for (const [prefix, provider] of providers) {
+    if (key.startsWith(prefix)) return provider;
+  }
+  return undefined;
+}
+
 function decodedBytes(bitmap: ImageBitmap): number {
   return bitmap.width * bitmap.height * 4;
 }
@@ -70,11 +99,13 @@ export function releaseSpriteSheet(key: string): void {
 
 /** Whether `key` names a sheet kept here (and so can be drawn by key). */
 export function isKeptSpriteSheet(key: string): boolean {
-  return sheets.has(key);
+  return sheets.has(key) || providerFor(key) !== undefined;
 }
 
 /** The decoded sheet, when it is decoded now. */
 export function getDecodedSpriteSheet(key: string): ImageBitmap | null {
+  const provider = providerFor(key);
+  if (provider) return provider.getDecoded(key);
   const entry = sheets.get(key);
   if (!entry?.bitmap) return null;
   entry.lastUsed = ++useCounter;
@@ -83,6 +114,8 @@ export function getDecodedSpriteSheet(key: string): ImageBitmap | null {
 
 /** The decoded sheet, decoding it again from its bytes when it was let go. */
 export function decodeSpriteSheet(key: string): Promise<ImageBitmap | null> {
+  const provider = providerFor(key);
+  if (provider) return provider.decode(key);
   const entry = sheets.get(key);
   if (!entry) return Promise.resolve(null);
   entry.lastUsed = ++useCounter;

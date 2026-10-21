@@ -6,7 +6,12 @@ import {
   type SpriteStoryboardIndex,
   type SpriteStoryboardLevel,
 } from "./spriteStoryboardIndex.ts";
-import { registerSpriteSheet, releaseSpriteSheet } from "./spriteSheetStore.ts";
+import {
+  registerFrameProvider,
+  registerSpriteSheet,
+  releaseSpriteSheet,
+} from "./spriteSheetStore.ts";
+import { PreviewVideoFrames } from "./PreviewVideoFrames.ts";
 import type { StoryboardFrame } from "./storyboardTypes.ts";
 
 export interface SpriteStoryboardLoaderOptions {
@@ -74,6 +79,10 @@ export class SpriteStoryboardLoader {
   #detailQueue: number[] = [];
   #detailInFlight = 0;
   readonly #keptSheets: string[] = [];
+  // Set when the index has a preview video this browser can decode: it
+  // then stands in for both sheet levels.
+  #video: PreviewVideoFrames | null = null;
+  #unregisterVideo: (() => void) | null = null;
 
   constructor(options: SpriteStoryboardLoaderOptions) {
     this.#options = options;
@@ -87,6 +96,18 @@ export class SpriteStoryboardLoader {
     this.#abort.abort();
     this.#detailQueue = [];
     for (const key of this.#keptSheets.splice(0)) releaseSpriteSheet(key);
+    this.#unregisterVideo?.();
+    this.#video?.destroy();
+    this.#video = null;
+  }
+
+  /**
+   * Fetches the rest of the preview video at low priority, from `time` on
+   * (once the lesson is playing, so it never competes with its start).
+   * Sheets are not filled in this way: they cost several times more.
+   */
+  fillInBackground(time: number): void {
+    void this.#ensureIndex().then(() => this.#video?.fillInBackground(time));
   }
 
   /**
@@ -94,6 +115,13 @@ export class SpriteStoryboardLoader {
    * every pointer move: it only starts what is missing.
    */
   start(): Promise<SpriteStoryboardIndex | null> {
+    return this.#ensureIndex().then((index) => {
+      if (index && !this.#video) this.#loadMissingCoarse(index);
+      return index;
+    });
+  }
+
+  #ensureIndex(): Promise<SpriteStoryboardIndex | null> {
     if (this.destroyed) return Promise.resolve(null);
     if (!this.#indexPromise) {
       if (Date.now() < this.#indexRetryAt) return Promise.resolve(null);
@@ -103,16 +131,17 @@ export class SpriteStoryboardLoader {
         return index;
       });
     }
-    return this.#indexPromise.then((index) => {
-      if (index) this.#loadMissingCoarse(index);
-      return index;
-    });
+    return this.#indexPromise;
   }
 
   /** Asks for the detail sheet covering `time` (and a close neighbour). */
   requestDetail(time: number): void {
     if (this.destroyed || !Number.isFinite(time)) return;
     void this.start().then((index) => {
+      if (this.#video) {
+        this.#video.prepareAt(time);
+        return;
+      }
       const level = index?.detail;
       if (!index || !level || this.destroyed) return;
       const sheet = sheetIndexAtTime(level, time);
@@ -143,6 +172,10 @@ export class SpriteStoryboardLoader {
       const response = await this.#fetchWithRetry(this.#options.indexUrl);
       const index = parseSpriteStoryboardIndex(await response.json());
       if (!index) throw new Error("The storyboard index is not valid.");
+      const acceleration = index.video
+        ? await PreviewVideoFrames.decoderAcceleration(index.video)
+        : null;
+      if (acceleration) this.#useVideo(index, acceleration);
       if (this.destroyed) return null;
       this.#index = index;
       return index;
@@ -155,6 +188,33 @@ export class SpriteStoryboardLoader {
       if (!this.destroyed) this.#options.onError?.(error);
       return null;
     }
+  }
+
+  #useVideo(
+    index: SpriteStoryboardIndex,
+    acceleration: HardwareAcceleration,
+  ): void {
+    const info = index.video;
+    if (!info || this.destroyed) return;
+    const url = new URL(info.file, this.#options.indexUrl).href;
+    const video = new PreviewVideoFrames(
+      info,
+      acceleration,
+      async (start, end, priority) => {
+        const response = await this.#fetchWithRetry(url, {
+          headers: { Range: `bytes=${start}-${end - 1}` },
+          priority,
+        });
+        const data = new Uint8Array(await response.arrayBuffer());
+        // A server that ignores the range sends the whole stream.
+        return response.status === 200 ? data.subarray(start, end) : data;
+      },
+    );
+    this.#video = video;
+    this.#unregisterVideo = registerFrameProvider(video.prefix, video);
+    // Every picture can be asked for at once: each is fetched and decoded
+    // when first drawn (the canvas keeps its last picture meanwhile).
+    this.#options.onFrames(video.frames(index.duration));
   }
 
   #loadMissingCoarse(index: SpriteStoryboardIndex): void {
@@ -248,7 +308,10 @@ export class SpriteStoryboardLoader {
    * GET with a fresh token on each try. A missing file (404) or a refused
    * one (401/403 after the token was renewed) is not tried again here.
    */
-  async #fetchWithRetry(url: string): Promise<Response> {
+  async #fetchWithRetry(
+    url: string,
+    init: { headers?: Record<string, string>; priority?: "high" | "low" } = {},
+  ): Promise<Response> {
     let lastError: unknown;
     for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
       if (attempt > 0) {
@@ -258,7 +321,10 @@ export class SpriteStoryboardLoader {
         const response = await fetch(await this.#prepare(url), {
           signal: this.#abort.signal,
           credentials: "omit",
-        });
+          ...(init.headers ? { headers: init.headers } : {}),
+          // Background fetches yield to the lesson's own segments.
+          ...(init.priority ? { priority: init.priority } : {}),
+        } as RequestInit);
         if (response.ok) return response;
         lastError = new HttpStatusError(response.status);
         if (response.status === 404) break;
