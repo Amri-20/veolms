@@ -1,5 +1,5 @@
 import type { getRightPanelShortcutLabel } from "../../../keyboardShortcuts";
-import { useCallback, useMemo, useRef, type JSX } from "react";
+import { useCallback, useEffect, useMemo, useRef, type JSX } from "react";
 import type {
   LessonPlayerMinimizeGestureState,
   LessonVideoPlayerProps,
@@ -8,12 +8,18 @@ import type {
 import type { LearningMiniPlayerRequest } from "../../player/learningMiniPlayerTypes";
 import { type Lesson, createLessonVideo } from "../../courseContent";
 import { mediaService } from "../../../services/media";
-import { VideoPlaybackBootstrapError } from "../../videoPlaybackBootstrap";
+import {
+  VideoPlaybackBootstrapError,
+  getVideoPlaybackBootstrap,
+} from "../../videoPlaybackBootstrap";
 import { preloadLessonPlayback } from "../../earlyHlsPreload";
 import type { VideoPlaybackBootstrap } from "@veolms/contracts";
 import type { CourseLesson } from "@veolms/contracts";
 import type { useSecondPressHold } from "../../../gestures/useSecondPressHold";
 import type { OctopusKind } from "../../../components/OctopusIllustration";
+
+/** How long a lesson plays before its neighbours' bootstraps are fetched. */
+const NEIGHBOUR_BOOTSTRAP_DELAY_MS = 2_500;
 
 export interface UseLessonPlayerPropsArgs {
   courseSlug: string | undefined;
@@ -174,6 +180,26 @@ export function useLessonPlayerProps({
     preloadedNextLessonRef.current = preloadKey;
     void preloadLessonPlayback(courseSlug, nextLessonId);
   }, [courseSlug, nextLessonId, selectedLesson, showingQuiz]);
+
+  // The next and previous lessons' bootstraps (a few hundred bytes, no
+  // video) are fetched once this lesson has had a moment to start, so
+  // "Next", "Previous" and autoplay open them without a round trip to the
+  // API first: 0.3-1 s of black on production.
+  useEffect(() => {
+    if (!courseSlug || showingQuiz) return;
+    const neighbours = [nextLessonId, previousLessonId].filter(
+      (id): id is number => id !== undefined,
+    );
+    if (neighbours.length === 0) return;
+    const timer = window.setTimeout(() => {
+      for (const lessonNumber of neighbours) {
+        void getVideoPlaybackBootstrap({ courseSlug, lessonNumber }).catch(
+          () => undefined,
+        );
+      }
+    }, NEIGHBOUR_BOOTSTRAP_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [courseSlug, nextLessonId, previousLessonId, showingQuiz]);
 
   const currentLessonTitle = currentLesson[1];
   const selectedLessonDurationSeconds = selectedLessonRecord?.durationSeconds;

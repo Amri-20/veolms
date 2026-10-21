@@ -18,9 +18,11 @@ import {
   LESSON_PROGRESS_COMPLETE_THRESHOLD,
 } from "../workspaceConstants";
 import { safeResumeVideo } from "../workspaceDom";
+import { getVideoPlaybackBootstrap } from "../../videoPlaybackBootstrap";
 
 export interface UseLessonNavigationArgs {
   lessonId: number;
+  courseSlug: string | undefined;
   onSelectLesson: (lessonId: number, view?: "video" | "quiz") => void;
   selectedLesson: number;
   setSelectedLesson: Dispatch<SetStateAction<number>>;
@@ -82,6 +84,7 @@ export function useLessonNavigation({
   recordProgress,
   previousLessonId,
   nextLessonId,
+  courseSlug,
 }: UseLessonNavigationArgs): UseLessonNavigationResult {
   const getLessonDrawerCollapsedSnapPoint = useCallback(() => {
     return getPhoneLessonDrawerCollapsedSnapPoint(
@@ -189,6 +192,14 @@ export function useLessonNavigation({
         resumeLessonVideoPlayback();
       }
       if (lessonNumber === selectedLesson) return;
+      // The lesson's bootstrap is asked for at the click, not once the page
+      // has rendered for the new lesson (0.3-0.75 s later on production);
+      // the player's own request for it shares this one.
+      if (courseSlug && !isTargetDedicatedQuiz && view !== "quiz") {
+        void getVideoPlaybackBootstrap({ courseSlug, lessonNumber }).catch(
+          () => undefined,
+        );
+      }
       pendingLessonSelectionRef.current = lessonNumber;
       setSelectedLesson(lessonNumber);
       if (view !== undefined) {
@@ -198,6 +209,7 @@ export function useLessonNavigation({
       }
     },
     [
+      courseSlug,
       curriculumLessonsById,
       hasLessonQuiz,
       onSelectLesson,
