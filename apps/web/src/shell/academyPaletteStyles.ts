@@ -12,7 +12,6 @@ import barbieDark from "../styles/themes/dark/barbie.css?url&no-inline";
 import auroraDark from "../styles/themes/dark/aurora.css?url&no-inline";
 import brainwaveDark from "../styles/themes/dark/brainwave.css?url&no-inline";
 import lilacDark from "../styles/themes/dark/lilac.css?url&no-inline";
-import champagneDark from "../styles/themes/dark/champagne.css?url&no-inline";
 import limeDark from "../styles/themes/dark/lime.css?url&no-inline";
 import codexLight from "../styles/themes/light/codex.css?url&no-inline";
 import oceanLight from "../styles/themes/light/ocean.css?url&no-inline";
@@ -28,7 +27,6 @@ import barbieLight from "../styles/themes/light/barbie.css?url&no-inline";
 import auroraLight from "../styles/themes/light/aurora.css?url&no-inline";
 import brainwaveLight from "../styles/themes/light/brainwave.css?url&no-inline";
 import lilacLight from "../styles/themes/light/lilac.css?url&no-inline";
-import champagneLight from "../styles/themes/light/champagne.css?url&no-inline";
 import limeLight from "../styles/themes/light/lime.css?url&no-inline";
 import paletteCatalogStylesheet from "../styles/themes/academy-theme-palettes.css?url&no-inline";
 import { DEFAULT_ACADEMY_THEME } from "../themes";
@@ -55,7 +53,6 @@ export const academyPaletteStylesById: Readonly<
   aurora: { dark: auroraDark, light: auroraLight },
   brainwave: { dark: brainwaveDark, light: brainwaveLight },
   lilac: { dark: lilacDark, light: lilacLight },
-  champagne: { dark: champagneDark, light: champagneLight },
   lime: { dark: limeDark, light: limeLight },
 };
 

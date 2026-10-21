@@ -496,7 +496,7 @@
   --mini-tone: #fb6f92;
 }
 .settings-mini-surface--signal {
-  --mini-tone: #d92d4e;
+  --mini-tone: #ff0033;
 }
 .settings-mini-surface--barbie {
   --mini-tone: #ec4d9b;
@@ -509,9 +509,6 @@
 }
 .settings-mini-surface--lilac {
   --mini-tone: #c18cff;
-}
-.settings-mini-surface--champagne {
-  --mini-tone: #e6c98a;
 }
 .settings-mini-surface--lime {
   --mini-tone: #a3e635;
@@ -604,7 +601,7 @@
   --mini-base: #190c10;
   --mini-panel: #381b23;
   --mini-line: #c9a3ac;
-  --mini-tone: #d92d4e;
+  --mini-tone: #ff0033;
 }
 .settings-mini-surface--forced-dark.settings-mini-surface--barbie {
   --mini-base: #1b0915;
@@ -629,12 +626,6 @@
   --mini-panel: #3b3047;
   --mini-line: #bea9c5;
   --mini-tone: #c18cff;
-}
-.settings-mini-surface--forced-dark.settings-mini-surface--champagne {
-  --mini-base: #1d1b17;
-  --mini-panel: #3e392e;
-  --mini-line: #bdb19c;
-  --mini-tone: #e6c98a;
 }
 .settings-mini-surface--forced-dark.settings-mini-surface--lime {
   --mini-base: #171d17;

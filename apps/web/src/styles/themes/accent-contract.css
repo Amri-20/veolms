@@ -18,7 +18,7 @@
 }
 
 :root[data-theme="dark"][data-palette="signal"] {
-  --accent-ink: #ee667d;
+  --accent-ink: #ff5c77;
 }
 
 :root[data-theme="dark"][data-palette="barbie"] {
@@ -47,10 +47,6 @@
 
 :root[data-theme="light"][data-palette="barbie"] {
   --accent-ink: #b41f67;
-}
-
-:root[data-theme="light"][data-palette="champagne"] {
-  --accent-ink: #7d5a10;
 }
 
 :root[data-theme="light"][data-palette="ember"] {
@@ -86,5 +82,5 @@
 }
 
 :root[data-theme="light"][data-palette="signal"] {
-  --accent-ink: #b81c3c;
+  --accent-ink: #c00027;
 }

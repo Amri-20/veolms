@@ -11,11 +11,11 @@
   --text: #260c12;
   --text-secondary: #56313a;
   --muted: #805c64;
-  --accent: #bb1d3d;
-  --accent-hover: #a81634;
-  --accent-soft: rgba(187, 29, 61, 0.12);
-  --accent-border: rgba(187, 29, 61, 0.3);
-  --accent-shadow: rgba(168, 22, 52, 0.16);
+  --accent: #ff0033;
+  --accent-hover: #e0002d;
+  --accent-soft: rgba(255, 0, 51, 0.12);
+  --accent-border: rgba(255, 0, 51, 0.3);
+  --accent-shadow: rgba(204, 0, 41, 0.16);
   --on-accent: #ffffff;
   --app-shell: #f2dfe3;
   --main-surface: #fff6f8;
