@@ -1,5 +1,6 @@
 import {
   useMemo,
+  type ComponentProps,
   type Dispatch,
   type SetStateAction,
   type RefObject,
@@ -13,6 +14,10 @@ import { CURRICULUM_MIN_WIDTH } from "../../learningShellPreferences";
 import { LESSON_DRAWER_MIN_FLOATING_WIDTH } from "../../useLessonDrawerHeroControl";
 import type { LessonDrawerViewportBounds } from "../../useLessonDrawerHeroControl";
 import type { useSecondPressHold } from "../../../gestures/useSecondPressHold";
+import {
+  useLiveLessonProgress,
+  type LiveLessonProgress,
+} from "../../player/liveLessonProgress";
 
 export interface UsePlayerCourseLessonsArgs {
   courseNavigationActionLabel: string | undefined;
@@ -61,7 +66,7 @@ export interface UsePlayerCourseLessonsArgs {
   curriculumQuizLessonNumbers: Set<number>;
   showingQuiz: boolean;
   lockedLessonNumbers: ReadonlySet<number>;
-  lessonProgress: Record<number, number>;
+  liveLessonProgress: LiveLessonProgress;
   courseThumbnail: string | undefined;
   courseThumbnailSrcSet: string | undefined;
   selectLesson: (lessonNumber: number, view?: "video" | "quiz") => void;
@@ -88,6 +93,26 @@ export interface UsePlayerCourseLessonsResult {
   playerCourseLessonsOpen: boolean;
   fullscreenVideoLayoutWidthPercent: number;
   fullscreenCoursePanel: JSX.Element;
+}
+
+/**
+ * The lesson list beside a video in full screen. It is part of the player's
+ * props, and those go to the academy layout with the persistent player, so
+ * it reads progress from the live source: a progress change must not make a
+ * new list and, with it, new player props.
+ */
+function LiveProgressCurriculum({
+  lessonProgress,
+  ...props
+}: Omit<ComponentProps<typeof Curriculum>, "lessonProgress"> & {
+  lessonProgress: LiveLessonProgress;
+}) {
+  return (
+    <Curriculum
+      {...props}
+      lessonProgress={useLiveLessonProgress(lessonProgress)}
+    />
+  );
 }
 
 export function usePlayerCourseLessons({
@@ -119,7 +144,7 @@ export function usePlayerCourseLessons({
   curriculumQuizLessonNumbers,
   showingQuiz,
   lockedLessonNumbers,
-  lessonProgress,
+  liveLessonProgress,
   courseThumbnail,
   courseThumbnailSrcSet,
   selectLesson,
@@ -166,14 +191,14 @@ export function usePlayerCourseLessons({
         onVideoWidthPercentChange={setFullscreenVideoWidthPercent}
         onVideoWidthPreviewChange={setFullscreenVideoWidthPreviewPercent}
       >
-        <Curriculum
+        <LiveProgressCurriculum
           sections={curriculumSections}
           lessonsById={curriculumLessonsById}
           scrollportRef={fullscreenCurriculumScrollportRef}
           scrollportId="learning-fullscreen-course-curriculum-scrollport"
           scrollControlBottomClearance="calc(100dvh - 228px)"
           selectedLesson={selectedLesson}
-          lessonProgress={lessonProgress}
+          lessonProgress={liveLessonProgress}
           lockedLessonNumbers={lockedLessonNumbers}
           onSelectLesson={selectLesson}
           onOpenCourseOverview={onOpenCourseOverview}
@@ -206,7 +231,7 @@ export function usePlayerCourseLessons({
       fullscreenCurriculumFocusRequest,
       fullscreenVideoWidthPercent,
       handleOpenLessonQuiz,
-      lessonProgress,
+      liveLessonProgress,
       lockedLessonNumbers,
       onOpenCourseOverview,
       selectLesson,

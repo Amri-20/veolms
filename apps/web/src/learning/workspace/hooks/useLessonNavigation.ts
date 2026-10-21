@@ -274,13 +274,15 @@ export function useLessonNavigation({
         roundedProgress >= LESSON_PROGRESS_COMPLETE_THRESHOLD
           ? 100
           : roundedProgress;
-      // Not a transition: every progress change re-registers the persistent
-      // player, a sync update in the layout. Transition updates kept losing
-      // to those renders, so React replayed them on the old base state on
-      // every render, and `recordProgress` stamps a fresh time each replay:
-      // a new progress object every frame, another registration, until React
-      // stopped with "Maximum update depth exceeded" (error #185) a moment
-      // after seeking near the end of a lesson.
+      // Not a transition. On 2026-10-22 one here looped until React stopped
+      // with "Maximum update depth exceeded" (error #185) after a seek:
+      // every progress change registered the persistent player again, a
+      // sync update in the layout's commit; the transition kept losing to
+      // those renders and was replayed on each, and `recordProgress` stamped
+      // a new time on every replay. Neither holds any more (progress reaches
+      // the player through `liveLessonProgress`, and a replayed
+      // `recordProgress` gives back the same state); seeking was checked
+      // with the transition put back, but it has not been restored.
       setLocalLessonProgress((current) => {
         if (current[selectedLesson] === nextProgress) return current;
         return { ...current, [selectedLesson]: nextProgress };

@@ -161,13 +161,28 @@ export function useLearningProgress({
 
   const recordProgress = useCallback(
     (lessonNumber: number, progressPercent: number) => {
-      setLocalState((current) =>
-        recordLearningProgress(current, {
-          lessonId: lessonIdsByNumber?.get(lessonNumber),
-          lessonNumber,
-          progressPercent,
-        }),
-      );
+      const update = {
+        lessonId: lessonIdsByNumber?.get(lessonNumber),
+        lessonNumber,
+        progressPercent,
+        // Read once, here: the updater below may run more than once.
+        clientUpdatedAt: new Date().toISOString(),
+      };
+      // React applies an update again when it rebases one it had skipped,
+      // and may keep doing so render after render. Applied again to the
+      // same state, this one gives back the very state it gave before, not
+      // an equal copy, so nothing that depends on the progress sees a change
+      // (a new copy on each replay fed a render loop on 2026-10-22, React
+      // error #185).
+      let appliedTo: LocalLearningProgressState | undefined;
+      let result = EMPTY_LEARNING_PROGRESS_STATE;
+      setLocalState((current) => {
+        if (current !== appliedTo) {
+          appliedTo = current;
+          result = recordLearningProgress(current, update);
+        }
+        return result;
+      });
     },
     [lessonIdsByNumber],
   );

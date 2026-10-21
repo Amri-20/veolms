@@ -12,6 +12,10 @@ import type {
   AdaptedCurriculumSection,
 } from "../../courseCurriculumAdapter";
 import { useLearningProgress } from "../../useLearningProgress";
+import {
+  useLiveLessonProgressSource,
+  type LiveLessonProgress,
+} from "../../player/liveLessonProgress";
 import { seedResumePositionFromProgress } from "../../player/lessonPlayerPersistence";
 import { LESSON_PROGRESS_COMPLETE_THRESHOLD } from "../workspaceConstants";
 import type { useCourseOverview } from "../../../services/courses";
@@ -41,6 +45,8 @@ export interface UseLessonProgressStateResult {
       }
     | undefined;
   lessonProgress: Record<number, number>;
+  /** The same progress for the player, which must not re-render with it. */
+  liveLessonProgress: LiveLessonProgress;
   courseComplete: boolean;
   currentLessonIndex: number;
   previousLessonId: number | undefined;
@@ -136,6 +142,7 @@ export function useLessonProgressState({
     }
     return merged;
   }, [localLessonProgress, persistedLessonProgress]);
+  const liveLessonProgress = useLiveLessonProgressSource(lessonProgress);
   // Every lesson is finished, by the rule that gives a lesson its check mark
   // in the list. The end screen says the course is complete only then.
   const courseComplete = useMemo(
@@ -206,6 +213,7 @@ export function useLessonProgressState({
     recordProgress,
     detachedProgressTarget,
     lessonProgress,
+    liveLessonProgress,
     courseComplete,
     currentLessonIndex,
     previousLessonId,

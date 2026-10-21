@@ -13,6 +13,7 @@ import type {
 import type { Lesson } from "../../courseContent";
 import type { AdaptedCurriculumSection } from "../../courseCurriculumAdapter";
 import type { useLessonTitleHeightSwipe } from "../../player/LessonPlayerHeightHandle";
+import type { LiveLessonProgress } from "../../player/liveLessonProgress";
 
 export interface UseLessonHeaderArgs {
   courseSlug: string | undefined;
@@ -35,7 +36,7 @@ export interface UseLessonHeaderArgs {
         lessonIdsByNumber: ReadonlyMap<number, string> | undefined;
       }
     | undefined;
-  lessonProgress: Record<number, number>;
+  liveLessonProgress: LiveLessonProgress;
   stickyPlayer: boolean;
   appliedPlayerHeight: number | null;
   readingGrowable:
@@ -74,7 +75,7 @@ export function useLessonHeader({
   curriculumLessonsById,
   currentLesson,
   detachedProgressTarget,
-  lessonProgress,
+  liveLessonProgress,
   stickyPlayer,
   appliedPlayerHeight,
   readingGrowable,
@@ -85,6 +86,10 @@ export function useLessonHeader({
   openLessonDrawerInPlace,
   lessonPlayerProps,
 }: UseLessonHeaderArgs): UseLessonHeaderResult {
+  // Registers the player again whenever what it shows changes. Progress is
+  // not among those: it is handed over as a live source (see
+  // `liveLessonProgress`), since every registration re-renders the academy
+  // layout in the middle of this commit.
   useLayoutEffect(() => {
     const anchor = playerWrapRef.current;
     if (
@@ -111,7 +116,7 @@ export function useLessonHeader({
       onSelectLesson: selectLesson,
       curriculumSections,
       curriculumLessonsById,
-      lessonProgress,
+      lessonProgress: liveLessonProgress,
       isLessonAvailable,
       progressTarget: detachedProgressTarget,
     });
@@ -122,7 +127,7 @@ export function useLessonHeader({
     detachedProgressTarget,
     isLessonAvailable,
     lessonPlayerProps,
-    lessonProgress,
+    liveLessonProgress,
     persistentPlayerCourseRouteKey,
     persistentPlayerLessonPath,
     persistentPlayerReturnPath,

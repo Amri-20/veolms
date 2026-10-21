@@ -120,6 +120,7 @@ export function recordDetachedLearningProgress(
     lessonId: lessonIdsByNumber?.get(lessonNumber),
     lessonNumber,
     progressPercent,
+    clientUpdatedAt: new Date().toISOString(),
   });
   if (next === current) return;
 
