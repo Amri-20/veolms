@@ -1,5 +1,4 @@
 import {
-  startTransition,
   useCallback,
   useEffect,
   type Dispatch,
@@ -275,18 +274,20 @@ export function useLessonNavigation({
         roundedProgress >= LESSON_PROGRESS_COMPLETE_THRESHOLD
           ? 100
           : roundedProgress;
-      // Not urgent: the lesson page re-renders for it (curriculum and
-      // discussion included) while the video plays, so it is a transition
-      // that gives way to drawing the video and the controls.
-      startTransition(() => {
-        setLocalLessonProgress((current) => {
-          if (current[selectedLesson] === nextProgress) return current;
-          return { ...current, [selectedLesson]: nextProgress };
-        });
-        // Kept by `recordProgress` under the learner's account; the course
-        // cards read it from there (`catalogueCardProgress.ts`).
-        recordProgress(selectedLesson, nextProgress);
+      // Not a transition: every progress change re-registers the persistent
+      // player, a sync update in the layout. Transition updates kept losing
+      // to those renders, so React replayed them on the old base state on
+      // every render, and `recordProgress` stamps a fresh time each replay:
+      // a new progress object every frame, another registration, until React
+      // stopped with "Maximum update depth exceeded" (error #185) a moment
+      // after seeking near the end of a lesson.
+      setLocalLessonProgress((current) => {
+        if (current[selectedLesson] === nextProgress) return current;
+        return { ...current, [selectedLesson]: nextProgress };
       });
+      // Kept by `recordProgress` under the learner's account; the course
+      // cards read it from there (`catalogueCardProgress.ts`).
+      recordProgress(selectedLesson, nextProgress);
     },
     [recordProgress, selectedLesson, setLocalLessonProgress],
   );
