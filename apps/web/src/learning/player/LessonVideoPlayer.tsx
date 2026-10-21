@@ -102,6 +102,10 @@ const FINISHED_LESSON_RESUME_TAIL_SECONDS = 3;
 // percentage would start hours early in a long lesson.
 const NEAR_LESSON_END_SECONDS = 60;
 const LESSON_PLAYER_CONTROLS_IDLE_DELAY_MS = 1_000;
+/** How long a volume taken from another tab counts as that tab's. */
+const REMOTE_VOLUME_ECHO_MS = 2_000;
+/** Another tab's volume is applied at most this often. */
+const REMOTE_VOLUME_APPLY_INTERVAL_MS = 150;
 const MAX_MINI_PLAYER_RESTORE_DRIFT_SECONDS = 0.35;
 const LESSON_PLAYER_SHORTCUTS = {
   seekBackwardLarge: false,
@@ -438,6 +442,13 @@ export function LessonVideoPlayer({
   const playerPrefsRef = useRef({ ...initialPlayerPreferences });
   const playbackPrefsAppliedRef = useRef(false);
   const applyingPlaybackPrefsRef = useRef(false);
+  // Volumes taken from another tab (a `storage` event) in the last moments.
+  // The volume change each causes here is that tab's, not this one's, and
+  // is not saved again: saved, it reached the other tab as a new change,
+  // and with volume changes reported a moment late the tabs sent each
+  // other's older values back and forth without end (the slider kept
+  // moving on its own, and a tab could hang).
+  const remoteVolumesRef = useRef<Array<{ volume: number; until: number }>>([]);
   const [muted, setMuted] = useState(initialPlayerPreferences.muted);
   const [ambientEnabled, setAmbientEnabled] = useState(false);
   const seekIntervalSeconds = useLearningSeekInterval();
@@ -828,10 +839,24 @@ export function LessonVideoPlayer({
         }
         setMuted(event.detail.muted);
         playerPrefsRef.current.muted = event.detail.muted;
-        if (preferencesReadyRef.current) {
+        // Only a change made in this tab is saved for the others: a tab the
+        // viewer is not using makes no changes of its own, and a volume
+        // taken from another tab is that tab's (see `remoteVolumesRef`).
+        const now = performance.now();
+        remoteVolumesRef.current = remoteVolumesRef.current.filter(
+          (entry) => entry.until > now,
+        );
+        const thisTabInUse =
+          typeof document === "undefined" || document.hasFocus();
+        const volumeFromAnotherTab = remoteVolumesRef.current.some(
+          (entry) => Math.abs(entry.volume - event.detail.volume) < 0.001,
+        );
+        if (playbackPrefsAppliedRef.current) {
+          playerPrefsRef.current.volume = event.detail.volume;
+        }
+        if (preferencesReadyRef.current && thisTabInUse) {
           writeMutedPreference(event.detail.muted);
-          if (playbackPrefsAppliedRef.current) {
-            playerPrefsRef.current.volume = event.detail.volume;
+          if (playbackPrefsAppliedRef.current && !volumeFromAnotherTab) {
             writeVolumePreference(event.detail.volume);
             publishLearningPlayerBootstrap({
               muted: event.detail.muted,
@@ -1088,6 +1113,26 @@ export function LessonVideoPlayer({
     preferencesReadyRef.current = true;
     setPreferencesReady(true);
 
+    // Another tab's volume is applied a few times a second at most, the
+    // latest one: a burst of changes from other tabs (a slider dragged
+    // there, or older pages still sending volumes back and forth) must not
+    // make this one apply and redraw hundreds of them a second.
+    let pendingRemoteVolume: number | null = null;
+    let remoteVolumeTimer: number | undefined;
+    const applyRemoteVolume = () => {
+      remoteVolumeTimer = undefined;
+      const nextVolume = pendingRemoteVolume;
+      pendingRemoteVolume = null;
+      if (nextVolume === null) return;
+      const now = performance.now();
+      remoteVolumesRef.current = [
+        ...remoteVolumesRef.current.filter((entry) => entry.until > now),
+        { volume: nextVolume, until: now + REMOTE_VOLUME_ECHO_MS },
+      ];
+      if (playbackPrefsAppliedRef.current) {
+        playerRef.current?.setVolume(nextVolume);
+      }
+    };
     const syncPreferences = (event: StorageEvent) => {
       if (event.key === lessonPlayerStorageKeys.muted) {
         const nextMuted = event.newValue === "true" || event.newValue === "on";
@@ -1096,9 +1141,11 @@ export function LessonVideoPlayer({
       } else if (event.key === lessonPlayerStorageKeys.volume) {
         const nextVolume = clampPlayerVolume(Number(event.newValue));
         playerPrefsRef.current.volume = nextVolume;
-        if (playbackPrefsAppliedRef.current) {
-          playerRef.current?.setVolume(nextVolume);
-        }
+        pendingRemoteVolume = nextVolume;
+        remoteVolumeTimer ??= window.setTimeout(
+          applyRemoteVolume,
+          REMOTE_VOLUME_APPLY_INTERVAL_MS,
+        );
       } else if (event.key === lessonPlayerStorageKeys.playbackRate) {
         const nextRate = Number(event.newValue);
         if (!Number.isFinite(nextRate) || nextRate <= 0) return;
@@ -1113,6 +1160,7 @@ export function LessonVideoPlayer({
     return () => {
       preferencesReadyRef.current = false;
       window.removeEventListener("storage", syncPreferences);
+      window.clearTimeout(remoteVolumeTimer);
     };
   }, []);
 
