@@ -31,6 +31,9 @@ export const CURRICULUM_SWIPE_EXCLUSION_SELECTOR = [
   '[role="slider"]',
   "[data-player-control]",
   "[data-player-menu]",
+  // The video itself: a sideways slip of the thumb while seeking or
+  // tapping the picture must not open or close the course content.
+  "[data-video-player-root]",
   "[data-sidebar-swipe-ignore]",
   "[data-learning-swipe-ignore]",
 ].join(",");
@@ -45,6 +48,7 @@ export const LESSON_DRAWER_REVEAL_EXCLUSION_SELECTOR = [
   '[role="slider"]',
   "[data-player-control]",
   "[data-player-menu]",
+  "[data-video-player-root]",
 ].join(",");
 
 /**

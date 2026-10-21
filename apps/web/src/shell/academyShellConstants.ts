@@ -49,6 +49,9 @@ export const SIDEBAR_SWIPE_EXCLUSION_SELECTOR = [
   ".learning-curriculum__progress-track",
   "[data-player-control]",
   "[data-player-menu]",
+  // The video itself: a sideways slip of the thumb while seeking or
+  // tapping the picture must not open or close the side menu.
+  "[data-video-player-root]",
   "[data-sidebar-swipe-ignore]",
 ].join(",");
 
