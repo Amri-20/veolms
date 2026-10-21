@@ -11,6 +11,27 @@ export interface LongScrollElasticScrollerProps extends ElasticScrollerProps {
 }
 
 /**
+ * The elements whose boxes make up the scrollport's content: its children,
+ * and in place of a `display: contents` wrapper (which has no box, so a
+ * ResizeObserver never reports it) that wrapper's own children. The
+ * wrappers are returned too, so that a page swapped in under one is seen.
+ */
+const collectContentBoxes = (
+  parent: Element,
+  boxes: Element[],
+  wrappers: Element[],
+) => {
+  for (const child of parent.children) {
+    if (getComputedStyle(child).display === "contents") {
+      wrappers.push(child);
+      collectContentBoxes(child, boxes, wrappers);
+    } else {
+      boxes.push(child);
+    }
+  }
+};
+
+/**
  * The elastic scroller for a scrollport whose content is sometimes short and
  * sometimes very long (a list of students, orders or discussions). It is
  * only there while the content is long; a page that scrolls a little is
@@ -38,24 +59,38 @@ export function LongScrollElasticScroller({
     };
 
     // The content's height is what matters, and the scrollport's own box
-    // does not change with it, so its children are watched too.
+    // does not change with it, so the content's boxes are watched too. The
+    // shell puts each page inside `display: contents` wrappers, so these
+    // are found below them; watching only the wrappers missed a page whose
+    // content grew after its first layout (Discussions, whose tab panel
+    // sets its height a frame after the list arrives).
     const sizes = new ResizeObserver(measure);
-    const observeChildren = () => {
-      sizes.disconnect();
-      sizes.observe(scrollport);
-      for (const child of scrollport.children) sizes.observe(child);
-    };
     const children = new MutationObserver(() => {
-      observeChildren();
+      observeContent();
       measure();
     });
-    observeChildren();
-    children.observe(scrollport, { childList: true });
+    const observeContent = () => {
+      sizes.disconnect();
+      children.disconnect();
+      const boxes: Element[] = [];
+      const wrappers: Element[] = [scrollport];
+      collectContentBoxes(scrollport, boxes, wrappers);
+      sizes.observe(scrollport);
+      for (const box of boxes) sizes.observe(box);
+      for (const wrapper of wrappers) {
+        children.observe(wrapper, { childList: true });
+      }
+    };
+    observeContent();
     measure();
+    // A check while scrolling as well: the control only shows on a scroll,
+    // so it is then always right, whatever the observers missed.
+    scrollport.addEventListener("scroll", measure, { passive: true });
 
     return () => {
       sizes.disconnect();
       children.disconnect();
+      scrollport.removeEventListener("scroll", measure);
     };
   }, [disabled, minScrollScreens, scrollportRef]);
 
