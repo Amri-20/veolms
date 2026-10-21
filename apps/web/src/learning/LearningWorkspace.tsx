@@ -418,6 +418,7 @@ export function LearningWorkspace({
     handleLessonEnded,
   } = useLessonNavigation({
     lessonId,
+    courseSlug,
     onSelectLesson,
     selectedLesson,
     setSelectedLesson,

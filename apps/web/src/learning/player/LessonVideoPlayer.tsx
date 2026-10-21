@@ -539,6 +539,36 @@ export function LessonVideoPlayer({
     refreshPlaybackToken,
   ]);
 
+  // Opening another lesson whose bootstrap is still on its way used to swap
+  // the whole player for the waiting surface, so the player, its Shaka
+  // engine and the <video> were destroyed and built again once it arrived:
+  // close to a second of black with no controls on every such switch. The
+  // player now stays, held paused on the lesson it last played under the
+  // same waiting surface, and loads the new lesson in place when its
+  // bootstrap comes, as a hovered lesson does. Nothing of the held lesson
+  // counts for the new one: progress is written under the key of the video
+  // actually loaded (`activeMediaKeyRef`), and it is paused.
+  const lastPlayableRef = useRef<{
+    source: VideoSource;
+    mediaKey: string;
+  } | null>(null);
+  const holdingPreviousLesson =
+    playbackBootstrapPending &&
+    !playbackAccessError &&
+    lastPlayableRef.current !== null &&
+    lastPlayableRef.current.mediaKey !== mediaKey;
+  if (!playbackBootstrapPending && !playbackAccessError) {
+    lastPlayableRef.current = { source, mediaKey };
+  }
+  const playerSource =
+    holdingPreviousLesson && lastPlayableRef.current
+      ? lastPlayableRef.current.source
+      : source;
+
+  useEffect(() => {
+    if (holdingPreviousLesson) playerRef.current?.pause();
+  }, [holdingPreviousLesson]);
+
   useEffect(() => {
     setShowEndScreen(false);
     setAutoplayCancelled(false);
@@ -1175,7 +1205,10 @@ export function LessonVideoPlayer({
       } as FullscreenCoursePanelStyle)
     : undefined;
 
-  if (playbackBootstrapPending || playbackAccessError) {
+  if (
+    (playbackBootstrapPending && !holdingPreviousLesson) ||
+    playbackAccessError
+  ) {
     const MinimizeIcon = playerTheme.icons.minimize;
     const FullscreenEnterIcon = playerTheme.icons.fullscreenEnter;
     const FullscreenExitIcon = playerTheme.icons.fullscreenExit;
@@ -1544,18 +1577,20 @@ export function LessonVideoPlayer({
   return (
     <VeoVideoPlayer
       ref={playerRef}
-      source={source}
+      source={playerSource}
       description={description ?? undefined}
       chapterThumbnails={chapterThumbnails}
       theme={playerTheme}
       engine="shaka"
       engineFactory={engineFactory}
       autoPlay={
-        playbackSuspended
+        playbackSuspended || holdingPreviousLesson
           ? false
           : autoPlayOnMediaChange || restoreAutoplayRef.current === true
       }
-      keyboardEnabled={presentation === "full" && !playbackSuspended}
+      keyboardEnabled={
+        presentation === "full" && !playbackSuspended && !holdingPreviousLesson
+      }
       zoomEnabled={presentation === "full"}
       zoomOverflowBoundary={
         presentation === "full" && mobileLandscapeFullscreen
@@ -1727,7 +1762,18 @@ export function LessonVideoPlayer({
         )
       }
       overlays={
-        presentation === "full" && !minimizeGesture.controlsSuppressed ? (
+        holdingPreviousLesson ? (
+          // The same waiting surface the player used to be replaced with:
+          // black over the held lesson, with the loader, above the controls.
+          <div
+            className="absolute inset-0 z-50 grid place-items-center bg-black"
+            role="status"
+            aria-label="Loading video"
+            data-learning-playback-gate="pending"
+          >
+            <VideoLoadingSpinner />
+          </div>
+        ) : presentation === "full" && !minimizeGesture.controlsSuppressed ? (
           <>
             <LessonAmbientProjection enabled={ambientEnabled} />
             {endScreenVisible ? (
