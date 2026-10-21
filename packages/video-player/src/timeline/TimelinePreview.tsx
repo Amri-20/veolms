@@ -107,6 +107,50 @@ function SpriteFrame({ frame }: { frame: StoryboardFrame }) {
   );
 }
 
+/** The preview card's width (and so where its time pill sits). */
+const PREVIEW_CARD_WIDTH_CLASS =
+  "[--preview-card-width:clamp(15rem,36%,24rem)]";
+
+/**
+ * The card follows the pointer but stops at either end of the timeline
+ * instead of running off the player.
+ */
+function previewCardLeft(position: number): string {
+  return `clamp(min(50%, calc(var(--preview-card-width) / 2)), ${position}%, max(50%, calc(100% - var(--preview-card-width) / 2)))`;
+}
+
+/** The time pill: see-through, fully rounded, raised like the frame. */
+const PREVIEW_TIME_PILL_CLASS =
+  "rounded-full bg-[rgb(10_12_18/0.55)] px-3.5 py-1 text-sm leading-5 tabular-nums text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.22),inset_0_-1px_0_rgb(0_0_0/0.3),0_2px_6px_rgb(0_0_0/0.4),0_8px_18px_rgb(0_0_0/0.3)] backdrop-blur-md backdrop-saturate-150";
+
+/**
+ * While the timeline is dragged: the hover card's time pill alone, in the
+ * same place (astride where the card's bottom edge would be), the picture
+ * being shown over the whole video instead.
+ */
+function ScrubTimePill({
+  position,
+  previewTime,
+}: {
+  position: number;
+  previewTime: number;
+}) {
+  return (
+    <div
+      className={`pointer-events-none absolute bottom-full z-30 mb-5 h-0 w-(--preview-card-width) max-w-full -translate-x-1/2 ${PREVIEW_CARD_WIDTH_CLASS}`}
+      style={{ left: previewCardLeft(position) }}
+      data-video-player-preview=""
+      data-video-player-preview-mode="pill"
+    >
+      <span
+        className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 ${PREVIEW_TIME_PILL_CLASS}`}
+      >
+        {formatMediaTime(previewTime)}
+      </span>
+    </div>
+  );
+}
+
 /**
  * The storyboard frame of the hovered moment, with the time in a chip
  * astride the middle of its bottom edge, half over the frame and half
@@ -133,9 +177,9 @@ function FramePreviewCard({
   const [drawn, setDrawn] = useState(false);
   return (
     <div
-      className={`pointer-events-none absolute bottom-full z-30 mb-5 w-(--preview-card-width) max-w-full -translate-x-1/2 [--preview-card-width:clamp(15rem,36%,24rem)]`}
+      className={`pointer-events-none absolute bottom-full z-30 mb-5 w-(--preview-card-width) max-w-full -translate-x-1/2 ${PREVIEW_CARD_WIDTH_CLASS}`}
       style={{
-        left: `clamp(min(50%, calc(var(--preview-card-width) / 2)), ${position}%, max(50%, calc(100% - var(--preview-card-width) / 2)))`,
+        left: previewCardLeft(position),
         visibility: drawnOnCanvas && !drawn ? "hidden" : undefined,
       }}
       data-video-player-preview=""
@@ -160,7 +204,9 @@ function FramePreviewCard({
         </div>
         {/* Half below the frame; the card's bottom margin keeps it clear of
             the timeline. A see-through pill, raised the same way. */}
-        <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 rounded-full bg-[rgb(10_12_18/0.55)] px-3.5 py-1 text-sm leading-5 tabular-nums text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.22),inset_0_-1px_0_rgb(0_0_0/0.3),0_2px_6px_rgb(0_0_0/0.4),0_8px_18px_rgb(0_0_0/0.3)] backdrop-blur-md backdrop-saturate-150">
+        <span
+          className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 ${PREVIEW_TIME_PILL_CLASS}`}
+        >
           {formatMediaTime(previewTime)}
         </span>
       </div>
@@ -218,6 +264,14 @@ export function TimelinePreview({
   const chapterThumbnail = scrubbing
     ? null
     : controllerData.chapterThumbnailUrl;
+  if (scrubbing && (layout === "centered-pill" || layout === "follow-pill")) {
+    return (
+      <ScrubTimePill
+        previewTime={previewTime}
+        position={timeToPositionPercent(previewTime, duration)}
+      />
+    );
+  }
   if (frame && (layout === "centered-pill" || layout === "follow-pill")) {
     return (
       <FramePreviewCard
