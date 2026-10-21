@@ -109,10 +109,10 @@ function SpriteFrame({ frame }: { frame: StoryboardFrame }) {
 
 /**
  * The storyboard frame of the hovered moment, large, with the time in a
- * chip in its middle (and the chapter, when there is one, above it).
- * About 30% of the player wide, between 12rem and 20rem. It follows the
- * pointer but stops at either end of the timeline instead of running off
- * the player. A frame drawn on a canvas keeps the card hidden until its
+ * chip at the middle of its lower edge (and the chapter, when there is
+ * one, above it). About a quarter of the player wide, between 11rem and
+ * 17rem. It follows the pointer but stops at either end of the timeline
+ * instead of running off the player. A frame drawn on a canvas keeps the card hidden until its
  * first picture is in, so it never opens on a black box.
  */
 function FramePreviewCard({
@@ -130,7 +130,7 @@ function FramePreviewCard({
   const [drawn, setDrawn] = useState(false);
   return (
     <div
-      className="pointer-events-none absolute bottom-full z-30 mb-3 w-(--preview-card-width) max-w-full -translate-x-1/2 [--preview-card-width:clamp(12rem,30%,20rem)]"
+      className="pointer-events-none absolute bottom-full z-30 mb-3 w-(--preview-card-width) max-w-full -translate-x-1/2 [--preview-card-width:clamp(11rem,26%,17rem)]"
       style={{
         left: `clamp(min(50%, calc(var(--preview-card-width) / 2)), ${position}%, max(50%, calc(100% - var(--preview-card-width) / 2)))`,
         visibility: drawnOnCanvas && !drawn ? "hidden" : undefined,
@@ -148,7 +148,7 @@ function FramePreviewCard({
         className="relative overflow-hidden rounded-2xl border-2 border-white/25 bg-black shadow-[0_12px_32px_rgba(0,0,0,0.45)]"
       >
         <StoryboardImage frame={frame} onDrawn={() => setDrawn(true)} />
-        <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-lg border border-white/15 bg-[rgb(8_10_16/0.75)] px-2.5 py-0.5 text-base font-bold tabular-nums text-white">
+        <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-lg border border-white/15 bg-[rgb(8_10_16/0.75)] px-2.5 py-0.5 text-base font-bold tabular-nums text-white">
           {formatMediaTime(previewTime)}
         </span>
       </div>
