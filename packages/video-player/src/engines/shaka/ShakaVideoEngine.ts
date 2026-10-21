@@ -433,6 +433,19 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     this.emit("qualitychange", { quality, auto: false });
   }
 
+  setBufferAheadLimit(seconds: number | null): void {
+    const player = this.#player;
+    const runtime = this.#runtime;
+    const source = this.getSnapshot().source;
+    if (!player || !runtime || !source) return;
+    player.configure({
+      streaming:
+        seconds === null
+          ? createShakaConfiguration(source, runtime).streaming
+          : { bufferingGoal: seconds },
+    });
+  }
+
   override enableAutoQuality(): void {
     const player = this.requirePlayer();
     player.configure({ abr: { enabled: true } });
