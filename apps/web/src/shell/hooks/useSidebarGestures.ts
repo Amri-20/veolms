@@ -21,6 +21,7 @@ import {
   isSidebarSwipeExcludedTarget,
   isFocusedSidebarSwipeInput,
 } from "../academyShellGeometry";
+import { isVideoTimelineSwipeZone } from "../../gestures/pointerGestureOwnership";
 
 export interface UseSidebarGesturesArgs {
   renderMain: ((context: CoursesPageRenderContext) => ReactNode) | null;
@@ -215,6 +216,7 @@ export function useSidebarGestures({
         event.clientX >= (event.splitX ?? window.innerWidth / 2)) ||
       sidebarResizeRef.current ||
       isSidebarSwipeExcludedTarget(event.target) ||
+      isVideoTimelineSwipeZone(event.target, event) ||
       isFocusedSidebarSwipeInput(event.target)
     )
       return;
