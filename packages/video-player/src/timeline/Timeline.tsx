@@ -20,6 +20,13 @@ import {
 import { TimelinePreview, type TimelinePreviewLayout } from "./TimelinePreview";
 
 const KEYBOARD_SEEK_SECONDS = 5;
+/**
+ * After a drag is let go with the pointer still on the timeline, the hover
+ * preview stays away until the pointer has moved this far: the drag has
+ * just shown that moment over the whole video, and the lesson plays on
+ * from it.
+ */
+const HOVER_AFTER_DRAG_DISTANCE_PX = 6;
 /** Visual gap between two chapter segments of the track, in pixels. */
 const SEGMENT_GAP_PX = 3;
 // The hovered chapter grows by being made taller rather than scaled: a
@@ -96,6 +103,8 @@ export function Timeline({
   // leaves the video where it was: "release to cancel".
   const scrubOriginRef = useRef<{ time: number; left: boolean } | null>(null);
   const [cancelArmed, setCancelArmed] = useState(false);
+  // Where a mouse drag was let go, until the pointer moves away from it.
+  const releaseXRef = useRef<number | null>(null);
   const {
     buffered,
     chapters,
@@ -198,6 +207,15 @@ export function Timeline({
       controller.scrubTo(scrubAtPointer(event.clientX));
       return;
     }
+    if (releaseXRef.current !== null) {
+      if (
+        Math.abs(event.clientX - releaseXRef.current) <
+        HOVER_AFTER_DRAG_DISTANCE_PX
+      ) {
+        return;
+      }
+      releaseXRef.current = null;
+    }
     previewAtPointer(event.clientX);
   };
 
@@ -212,7 +230,9 @@ export function Timeline({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     controller.setScrubbing(false);
-    if (event.pointerType !== "mouse") controller.setPreviewTime(null);
+    // No hover preview where the drag ends (see HOVER_AFTER_DRAG_DISTANCE_PX).
+    controller.setPreviewTime(null);
+    releaseXRef.current = event.pointerType === "mouse" ? event.clientX : null;
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -306,8 +326,12 @@ export function Timeline({
           controller.setScrubbing(false);
           controller.setPreviewTime(null);
         }}
-        onPointerEnter={(event) => previewAtPointer(event.clientX)}
+        onPointerEnter={(event) => {
+          releaseXRef.current = null;
+          previewAtPointer(event.clientX);
+        }}
         onPointerLeave={() => {
+          releaseXRef.current = null;
           if (pointerIdRef.current === null) controller.setPreviewTime(null);
         }}
       >
