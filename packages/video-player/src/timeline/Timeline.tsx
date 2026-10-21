@@ -105,6 +105,9 @@ export function Timeline({
   const [cancelArmed, setCancelArmed] = useState(false);
   // Where a mouse drag was let go, until the pointer moves away from it.
   const releaseXRef = useRef<number | null>(null);
+  // What the drag in progress is made with: a finger's time pill rises
+  // clear of the thumb.
+  const [scrubPointerType, setScrubPointerType] = useState<string | null>(null);
   const {
     buffered,
     chapters,
@@ -193,6 +196,7 @@ export function Timeline({
     if (!Number.isFinite(duration) || duration <= 0) return;
     event.preventDefault();
     pointerIdRef.current = event.pointerId;
+    setScrubPointerType(event.pointerType);
     snappedChapterTimeRef.current = null;
     scrubOriginRef.current = { time: currentTime, left: false };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -290,6 +294,7 @@ export function Timeline({
           layout={previewLayout}
           previewTime={previewTime}
           scrubbing={scrubbing}
+          scrubPointerType={scrubPointerType}
         />
       ) : null}
       {cancelArmed ? (

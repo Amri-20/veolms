@@ -131,13 +131,16 @@ const PREVIEW_TIME_PILL_CLASS =
 function ScrubTimePill({
   position,
   previewTime,
+  touch,
 }: {
   position: number;
   previewTime: number;
+  /** A finger drag: the pill rises clear of the thumb on the timeline. */
+  touch: boolean;
 }) {
   return (
     <div
-      className={`pointer-events-none absolute bottom-full z-30 mb-5 h-0 w-(--preview-card-width) max-w-full -translate-x-1/2 ${PREVIEW_CARD_WIDTH_CLASS}`}
+      className={`pointer-events-none absolute bottom-full z-30 h-0 w-(--preview-card-width) max-w-full -translate-x-1/2 ${touch ? "mb-20" : "mb-5"} ${PREVIEW_CARD_WIDTH_CLASS}`}
       style={{ left: previewCardLeft(position) }}
       data-video-player-preview=""
       data-video-player-preview-mode="pill"
@@ -221,6 +224,8 @@ interface TimelinePreviewProps {
   previewTime: number;
   /** True while the timeline is dragged: the time only, no picture. */
   scrubbing?: boolean;
+  /** The pointer of the drag in progress ("mouse", "touch", "pen"). */
+  scrubPointerType?: string | null;
   /**
    * `follow` (the default) is a card that travels with the pointer;
    * `centered-pill` is a single line fixed over the middle of the timeline;
@@ -254,6 +259,7 @@ export function TimelinePreview({
   layout = "follow",
   previewTime,
   scrubbing = false,
+  scrubPointerType = null,
 }: TimelinePreviewProps) {
   const controllerData = useTimelinePreviewData(previewTime);
   // While the timeline is dragged, the moment is shown over the whole video
@@ -269,6 +275,7 @@ export function TimelinePreview({
       <ScrubTimePill
         previewTime={previewTime}
         position={timeToPositionPercent(previewTime, duration)}
+        touch={scrubPointerType === "touch"}
       />
     );
   }
