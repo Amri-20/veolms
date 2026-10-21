@@ -42,9 +42,12 @@ const SCRUB_SEEK_TIMEOUT_MS = 500;
 const SCRUB_FRAME_HOLD_TIMEOUT_MS = 8_000;
 /**
  * A drag held still this long shows the lesson's own frame there, in its
- * playing quality, instead of the preview picture.
+ * playing quality, instead of the preview picture: over a part not
+ * downloaded yet (a fetch, so not for a mere pause in the drag) ...
  */
 const SCRUB_REST_MS = 300;
+/** ... and over a part already downloaded (only a seek). */
+const SCRUB_REST_BUFFERED_MS = 100;
 /**
  * While a drag rests, the lesson fetches only this far ahead: the segment
  * under the pointer (segments run 2-6s), which is also enough to start
@@ -56,6 +59,13 @@ const SCRUB_REST_BUFFER_AHEAD_SECONDS = 2;
  * of where it stopped: a finger held on the screen still trembles.
  */
 const SCRUB_REST_TOLERANCE_SHARE = 0.006;
+/**
+ * The lesson's own frame, shown during a drag, gives way to the preview
+ * again once it is this many tolerances behind the pointer (fewer brings
+ * it back): a drag slowing down and speeding up does not flick between
+ * the two.
+ */
+const SCRUB_LESSON_FALL_BEHIND_TOLERANCES = 2;
 
 function isTimeBuffered(ranges: TimeRanges, time: number): boolean {
   for (let index = 0; index < ranges.length; index += 1) {
@@ -170,6 +180,9 @@ export class PlayerController {
   #scrubRestSeekCleanup: (() => void) | null = null;
   #scrubShowsLesson = false;
   #scrubBufferLimited = false;
+  // The moment of the lesson's frame on screen during a drag: where its
+  // last finished seek landed.
+  #scrubLessonTime: number | null = null;
   readonly #activeMediaListeners = new Set<ActiveMediaListener>();
 
   constructor(engine: VideoEngine) {
@@ -501,10 +514,11 @@ export class PlayerController {
    */
   /**
    * With a preview video (pictures every half second, decoded at 100+ a
-   * second) a drag shows its pictures everywhere, also over parts already
-   * downloaded: seeking the lesson itself there managed some 5 to 7
-   * pictures a second at 1080p, so the drag went by fits and starts.
-   * The lesson seeks once, on release.
+   * second) a moving drag shows its pictures everywhere, also over parts
+   * already downloaded: seeking the lesson itself managed some 5 to 7
+   * pictures a second at 1080p, and having it follow behind the preview
+   * froze the page for up to a second at a time (20 frames instead of 152
+   * in a 1.5s sweep). The lesson seeks only where the drag rests.
    */
   setScrubWithStoryboard(enabled: boolean): void {
     this.#scrubWithStoryboard = enabled;
@@ -513,33 +527,76 @@ export class PlayerController {
   scrubTo(time: number): void {
     const media = this.#media;
     if (!Number.isFinite(time) || !media || !this.isMediaReady()) return;
-    if (this.#scrubWithStoryboard || !isTimeBuffered(media.buffered, time)) {
-      // The storyboard picture stands in for the video here, until the drag
-      // rests: the lesson then seeks there and its own frame takes over.
-      this.#scrubTarget = null;
-      this.#scrubRestTime = time;
-      const anchor = this.#scrubRestAnchor;
-      const moved =
-        anchor === null || Math.abs(time - anchor) > this.#scrubRestTolerance();
-      if (moved) {
-        this.#scrubRestAnchor = time;
-        this.#scrubShowsLesson = false;
-        this.#cancelScrubRestSeek();
-      }
-      if (!this.#scrubShowsLesson) {
-        this.#releaseScrubFrameHold();
-        if (this.#snapshot.ui.scrubFrameTime !== time) {
-          this.updateUi({ scrubFrameTime: time });
-        }
-      }
-      // A tremble while the lesson's frame shows moves the lesson with it.
-      if (moved || this.#scrubShowsLesson) this.#scheduleScrubRestSeek();
+    const buffered = isTimeBuffered(media.buffered, time);
+    if (!this.#scrubWithStoryboard && buffered) {
+      this.#endScrubRest();
+      this.#clearScrubFrame();
+      this.#scrubTarget = time;
+      if (!this.#scrubSeekInFlight) this.runScrubSeek(media);
       return;
     }
-    this.#endScrubRest();
+
+    // The storyboard picture stands in for the lesson while its own frame
+    // is not close to the pointer; where the drag rests, the lesson seeks.
+    this.#scrubTarget = null;
+    this.#scrubRestTime = time;
+    const tolerance = this.#scrubRestTolerance();
+    if (this.#scrubLessonTime === null && !media.seeking) {
+      this.#scrubLessonTime = media.currentTime;
+    }
+    const lessonTime = this.#scrubLessonTime;
+    const lag = lessonTime === null ? Infinity : Math.abs(time - lessonTime);
+    if (!this.#scrubShowsLesson && lag <= tolerance) {
+      this.#scrubShowsLesson = true;
+      this.#clearScrubFrame();
+    } else if (
+      this.#scrubShowsLesson &&
+      lag > tolerance * SCRUB_LESSON_FALL_BEHIND_TOLERANCES
+    ) {
+      this.#scrubShowsLesson = false;
+    }
+    if (!this.#scrubShowsLesson) {
+      this.#releaseScrubFrameHold();
+      if (this.#snapshot.ui.scrubFrameTime !== time) {
+        this.updateUi({ scrubFrameTime: time });
+      }
+    }
+
+    const anchor = this.#scrubRestAnchor;
+    if (anchor === null || Math.abs(time - anchor) > tolerance) {
+      this.#scrubRestAnchor = time;
+      this.#cancelScrubRestSeek();
+      this.#scheduleScrubRestSeek(
+        buffered ? SCRUB_REST_BUFFERED_MS : SCRUB_REST_MS,
+      );
+    }
+  }
+
+  /**
+   * The seek where a drag rested has finished: the lesson's frame takes
+   * over from the preview if it is close enough to the pointer.
+   */
+  #noteScrubLessonFrame(media: HTMLMediaElement): void {
+    if (media.seeking || this.#destroyed || !this.#snapshot.ui.scrubbing) {
+      return;
+    }
+    this.#scrubLessonTime = media.currentTime;
+    const time = this.#scrubRestTime;
+    if (
+      time === null ||
+      this.#scrubShowsLesson ||
+      Math.abs(time - media.currentTime) > this.#scrubRestTolerance()
+    ) {
+      return;
+    }
+    this.#scrubShowsLesson = true;
     this.#clearScrubFrame();
-    this.#scrubTarget = time;
-    if (!this.#scrubSeekInFlight) this.runScrubSeek(media);
+  }
+
+  #clearScrubRestTimer(): void {
+    if (this.#scrubRestTimer === null) return;
+    window.clearTimeout(this.#scrubRestTimer);
+    this.#scrubRestTimer = null;
   }
 
   #scrubRestTolerance(): number {
@@ -549,20 +606,19 @@ export class PlayerController {
       : 0;
   }
 
-  #scheduleScrubRestSeek(): void {
-    if (this.#scrubRestTimer !== null) {
-      window.clearTimeout(this.#scrubRestTimer);
-    }
+  #scheduleScrubRestSeek(delay: number): void {
+    this.#clearScrubRestTimer();
     this.#scrubRestTimer = window.setTimeout(() => {
       this.#scrubRestTimer = null;
       this.#seekWhereScrubRests();
-    }, SCRUB_REST_MS);
+    }, delay);
   }
 
   /**
-   * The drag has rested: the lesson seeks to where it is, fetching just
-   * the segment there, and its frame replaces the preview picture once
-   * decoded. Released there, it plays on from that segment at once.
+   * The drag has rested: the lesson seeks to where it is (fetching just the
+   * segment there when it is not downloaded yet), and its frame replaces
+   * the preview picture once decoded. Released there, it plays on from that
+   * segment at once.
    */
   #seekWhereScrubRests(): void {
     const media = this.#media;
@@ -577,7 +633,7 @@ export class PlayerController {
       return;
     }
     this.#cancelScrubRestSeek();
-    if (!this.#scrubBufferLimited) {
+    if (!this.#scrubBufferLimited && !isTimeBuffered(media.buffered, time)) {
       this.#scrubBufferLimited = true;
       this.engine.setBufferAheadLimit?.(SCRUB_REST_BUFFER_AHEAD_SECONDS);
     }
@@ -585,9 +641,7 @@ export class PlayerController {
       // Another seek is already on its way: its own `seeked` decides.
       if (media.seeking) return;
       this.#cancelScrubRestSeek();
-      if (this.#destroyed || !this.#snapshot.ui.scrubbing) return;
-      this.#scrubShowsLesson = true;
-      this.#clearScrubFrame();
+      this.#noteScrubLessonFrame(media);
     };
     media.addEventListener("seeked", onSeeked);
     this.#scrubRestSeekCleanup = () =>
@@ -602,13 +656,11 @@ export class PlayerController {
 
   /** Ends a drag's rest: no seek pending, and the full buffer back. */
   #endScrubRest(): void {
-    if (this.#scrubRestTimer !== null) {
-      window.clearTimeout(this.#scrubRestTimer);
-      this.#scrubRestTimer = null;
-    }
+    this.#clearScrubRestTimer();
     this.#cancelScrubRestSeek();
     this.#scrubRestAnchor = null;
     this.#scrubRestTime = null;
+    this.#scrubLessonTime = null;
     this.#scrubShowsLesson = false;
     if (this.#scrubBufferLimited) {
       this.#scrubBufferLimited = false;
