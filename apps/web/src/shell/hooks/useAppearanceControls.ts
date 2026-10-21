@@ -239,9 +239,15 @@ export function useAppearanceControls({
     mode: "light" | "dark",
     origin?: ThemeRevealOrigin,
   ) => {
-    if (mode === resolvedTheme) return;
     themeRevealOriginRef.current = origin ?? null;
-    setTheme(mode);
+    // Against the mode last asked for rather than `resolvedTheme`, which
+    // follows a moment after the reveal starts (useShellLayoutEffects): a
+    // quick press back to the other side would have been ignored.
+    setTheme((current) =>
+      current === mode || (current === "device" && mode === resolvedTheme)
+        ? current
+        : mode,
+    );
   };
   const updateReadingMode = (preferences: Partial<ReadingModePreferences>) => {
     const next = persistReadingModePreferences({
