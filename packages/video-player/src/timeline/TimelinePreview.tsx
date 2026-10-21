@@ -147,17 +147,20 @@ function FramePreviewCard({
         </p>
       ) : null}
       <div className="relative">
+        {/* No border: a raised surface, like the selected item of the
+            app's side menu (its dark `--surface-depth-shadow`): a lit top
+            and left edge and a darker bottom edge drawn over the picture
+            (the ::after layer), a faint sheen from the top left, and soft
+            layered shadows beneath. */}
         <div
           data-video-player-preview-frame=""
-          className="overflow-hidden rounded-2xl border-2 border-white/25 bg-black shadow-[0_12px_32px_rgba(0,0,0,0.45)]"
+          className="relative overflow-hidden rounded-2xl bg-black shadow-[0_2px_6px_rgb(0_0_0/0.45),0_14px_32px_rgb(0_0_0/0.5),0_28px_56px_rgb(0_0_0/0.28)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:bg-[linear-gradient(155deg,rgb(255_255_255/0.12)_0%,rgb(255_255_255/0.03)_28%,transparent_45%)] after:shadow-[inset_0_1px_0_rgb(255_255_255/0.28),inset_1px_0_0_rgb(255_255_255/0.1),inset_-1px_0_0_rgb(255_255_255/0.05),inset_0_-1px_0_rgb(0_0_0/0.35),inset_0_0_0_1px_rgb(255_255_255/0.07)] after:content-['']"
         >
           <StoryboardImage frame={frame} onDrawn={() => setDrawn(true)} />
         </div>
         {/* Half below the frame; the card's bottom margin keeps it clear of
-            the timeline. */}
-        <span
-          className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 rounded-lg border border-white/20 bg-[rgb(8_10_16/0.9)] px-2.5 py-0.5 tabular-nums text-white shadow-[0_2px_8px_rgba(0,0,0,0.45)] text-sm`}
-        >
+            the timeline. A see-through pill, raised the same way. */}
+        <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 rounded-full bg-[rgb(10_12_18/0.55)] px-3.5 py-1 text-sm leading-5 tabular-nums text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.22),inset_0_-1px_0_rgb(0_0_0/0.3),0_2px_6px_rgb(0_0_0/0.4),0_8px_18px_rgb(0_0_0/0.3)] backdrop-blur-md backdrop-saturate-150">
           {formatMediaTime(previewTime)}
         </span>
       </div>
