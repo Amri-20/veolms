@@ -125,6 +125,34 @@
   }
 }
 
+/* In a light theme an idle item is a faint veil over the sidebar, not a pale
+   tile: close to the sidebar's own colour, still seen as an item, and well
+   apart from the selected one. The surface mixed into the shell colour (the
+   rule above) came out nearly white beside the darker sidebar of a lesson
+   page; seen through, the lesson's glow tints the item a little, as it does
+   the sidebar around it. */
+:root[data-theme="light"] .courses-app .courses-nav {
+  --sidebar-menu-idle-background: color-mix(
+    in srgb,
+    var(--surface) 22%,
+    transparent
+  );
+}
+
+@media (min-width: 821px) {
+  :root[data-theme="light"]
+    .courses-app:not(.courses-app--hidden):has(
+      > .ambient-canvas--shell.ambient-canvas--visible
+    )
+    .courses-nav {
+    --sidebar-menu-idle-background: color-mix(
+      in srgb,
+      var(--surface) 22%,
+      transparent
+    );
+  }
+}
+
 .courses-nav button.is-active {
   background: var(--sidebar-menu-active-background);
   box-shadow: var(--sidebar-menu-active-shadow);
@@ -796,6 +824,18 @@
   color: var(--text);
   background: color-mix(in srgb, var(--selected) 68%, var(--surface));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+/* The selected item, and the profile and theme buttons raised like it, are
+   the brightest thing on a light sidebar: white, the accent only tinting
+   the far edge. Mixed with the stronger surface and more accent they read
+   as grey beside the faint idle items. */
+:root[data-theme="light"] .courses-sidebar {
+  --sidebar-menu-active-background: linear-gradient(
+    108deg,
+    var(--surface) 0%,
+    color-mix(in srgb, var(--surface) 94%, var(--accent) 6%) 100%
+  );
 }
 
 :root[data-theme="light"] .courses-nav button.is-active {

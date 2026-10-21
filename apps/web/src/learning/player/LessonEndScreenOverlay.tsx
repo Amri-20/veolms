@@ -1,7 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type HTMLAttributes,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { ArrowCounterClockwiseIcon as ArrowCounterClockwise } from "@phosphor-icons/react/ArrowCounterClockwise";
 import { ArrowElbowDownLeftIcon as ArrowElbowDownLeft } from "@phosphor-icons/react/ArrowElbowDownLeft";
 import { CheckCircleIcon as CheckCircle } from "@phosphor-icons/react/CheckCircle";
+import { usePlayerMobileInteraction } from "@veolms/video-player";
 
 export interface NextLessonInfo {
   id: number;
@@ -89,6 +98,7 @@ export function LessonEndScreenOverlay({
   // A click or tap on the screen (not on its buttons) holds the countdown
   // where it is, number and ring alike. Only Cancel or Next ends it then.
   const [countdownHeld, setCountdownHeld] = useState(false);
+  const centralControlsShown = useCentralControlsShown();
   const hasNextLesson = Boolean(nextLesson);
   // Still counting down at zero: the next lesson is opened right after that
   // render, and the screen stays as it was until then. Ending the countdown
@@ -154,29 +164,52 @@ export function LessonEndScreenOverlay({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  const screenProps = {
+    "data-lesson-end-screen": "",
+    role: "dialog",
+    "aria-label": nextLesson ? "Up next" : "Lesson finished",
+    "data-countdown-held": countdownHeld ? "" : undefined,
+    // The screen keeps its clicks: one that reached the video beneath
+    // would play it, and playing closes the end screen.
+    onPointerDown: (event: ReactPointerEvent) => event.stopPropagation(),
+    onPointerUp: (event: ReactPointerEvent) => event.stopPropagation(),
+    onDoubleClick: (event: ReactMouseEvent) => event.stopPropagation(),
+    onClick: (event: ReactMouseEvent) => {
+      event.stopPropagation();
+      if (event.target instanceof Element && event.target.closest("button")) {
+        return;
+      }
+      if (isCountdownActive) setCountdownHeld(true);
+    },
+  } as const;
+  const screenClass = `pointer-events-auto absolute inset-0 overflow-hidden bg-black/85 text-white select-none [container-type:size] animate-in fade-in duration-200 ${
+    // The player's controls layer (z-30) is drawn over the end screen.
+    controlsInset ? "z-20" : "z-50"
+  }`;
+
+  if (centralControlsShown) {
+    return (
+      <LessonEndScreenAroundCentralControls
+        screenProps={screenProps}
+        screenClass={screenClass}
+        nextLesson={nextLesson}
+        courseComplete={courseComplete}
+        isCountdownActive={isCountdownActive}
+        secondsRemaining={secondsRemaining}
+        onGoNext={onGoNext}
+        onRestart={onRestart}
+        onCancelAutoplay={onCancelAutoplay}
+      />
+    );
+  }
+
   return (
     <div
-      data-lesson-end-screen=""
-      role="dialog"
-      aria-label={nextLesson ? "Up next" : "Lesson finished"}
-      className={`pointer-events-auto absolute inset-0 grid place-items-center overflow-hidden bg-black/85 text-white select-none [container-type:size] animate-in fade-in duration-200 ${
-        // The player's controls layer (z-30) is drawn over the end screen,
-        // in its lowest band; the words and buttons are centred above it.
-        controlsInset ? "z-20 pb-14 @lg:pb-16" : "z-50"
+      {...screenProps}
+      className={`${screenClass} grid place-items-center ${
+        // The words and buttons are centred above the controls' lowest band.
+        controlsInset ? "pb-14 @lg:pb-16" : ""
       }`}
-      data-countdown-held={countdownHeld ? "" : undefined}
-      // The screen keeps its clicks: one that reached the video beneath
-      // would play it, and playing closes the end screen.
-      onPointerDown={(event) => event.stopPropagation()}
-      onPointerUp={(event) => event.stopPropagation()}
-      onDoubleClick={(event) => event.stopPropagation()}
-      onClick={(event) => {
-        event.stopPropagation();
-        if (event.target instanceof Element && event.target.closest("button")) {
-          return;
-        }
-        if (isCountdownActive) setCountdownHeld(true);
-      }}
     >
       <div className="flex w-full max-w-2xl min-w-0 flex-col items-center px-6 text-center @4xl:max-w-3xl">
         {nextLesson ? (
@@ -284,6 +317,172 @@ export function LessonEndScreenOverlay({
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/*
+ * The player's own buttons in the middle of the picture (previous, play,
+ * next: `LessonCentralControls`) are shown on a touch screen and in a window
+ * narrower than 40rem (`max-sm`). The end screen then leaves them their band
+ * across the middle instead of drawing its own buttons under them.
+ */
+const NARROW_WINDOW_QUERY = "(width < 40rem)";
+
+function subscribeNarrowWindow(onChange: () => void) {
+  const query = window.matchMedia(NARROW_WINDOW_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function useCentralControlsShown() {
+  const touch = usePlayerMobileInteraction();
+  const narrow = useSyncExternalStore(
+    subscribeNarrowWindow,
+    () => window.matchMedia(NARROW_WINDOW_QUERY).matches,
+    () => false,
+  );
+  return touch || narrow;
+}
+
+/**
+ * The band the central controls take: the 62px play button between the
+ * 46px lesson buttons, 24px apart (`LessonCentralControls`).
+ */
+const centralBandClass = "h-15.5 w-[12.625rem] shrink-0";
+/** Side buttons, beside the central controls: no key marks, less padding. */
+const sideButtonClass =
+  "inline-flex h-9 shrink-0 cursor-pointer items-center justify-center rounded-lg px-3 text-sm font-semibold whitespace-nowrap transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
+
+/**
+ * The end screen where the player's central controls are shown. Three
+ * bands, the middle one theirs: the words above it in two short lines (no
+ * details line, the title on one line), and Cancel and Next below it. A
+ * player too short for that (a phone held upright, about 200px) puts the
+ * words on one line and Cancel and Next either side of the central
+ * controls.
+ */
+function LessonEndScreenAroundCentralControls({
+  screenProps,
+  screenClass,
+  nextLesson,
+  courseComplete,
+  isCountdownActive,
+  secondsRemaining,
+  onGoNext,
+  onRestart,
+  onCancelAutoplay,
+}: {
+  screenProps: HTMLAttributes<HTMLDivElement>;
+  screenClass: string;
+  nextLesson?: NextLessonInfo;
+  courseComplete: boolean;
+  isCountdownActive: boolean;
+  secondsRemaining: number;
+  onGoNext: () => void;
+  onRestart: () => void;
+  onCancelAutoplay: () => void;
+}) {
+  const label = nextLesson
+    ? `Up next${isCountdownActive ? ` in ${secondsRemaining}s` : ""}`
+    : courseComplete
+      ? "Course complete"
+      : "You've reached the last lesson";
+  const title = nextLesson
+    ? nextLesson.title
+    : courseComplete
+      ? "You've finished every lesson in this course."
+      : "Some earlier lessons are still unfinished.";
+  const firstAction = isCountdownActive
+    ? { label: "Cancel", onClick: onCancelAutoplay }
+    : { label: "Replay", onClick: onRestart };
+
+  return (
+    <div
+      {...screenProps}
+      className={`${screenClass} grid grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)]`}
+    >
+      <div className="flex min-h-0 min-w-0 flex-col items-center justify-end px-6 pb-1.5 text-center">
+        <p className="hidden max-w-full text-sm font-medium text-white/65 [@container_(min-height:16.5rem)]:block">
+          {label}
+        </p>
+        <h2 className="hidden max-w-full truncate text-base leading-snug font-semibold [@container_(min-height:16.5rem)]:mt-1 [@container_(min-height:16.5rem)]:block">
+          {title}
+        </h2>
+        <p className="max-w-full truncate text-sm [@container_(min-height:16.5rem)]:hidden">
+          <span className="font-medium text-white/65">{label} · </span>
+          <span className="font-semibold">{title}</span>
+        </p>
+      </div>
+      <div className="flex items-center justify-center gap-1.5">
+        <div className="flex w-0 grow justify-end">
+          <button
+            type="button"
+            onClick={firstAction.onClick}
+            className={`${sideButtonClass} bg-white/12 text-white hover:bg-white/20 [@container_(min-height:16.5rem)]:hidden`}
+          >
+            {firstAction.label}
+          </button>
+        </div>
+        <div aria-hidden="true" className={centralBandClass} />
+        <div className="flex w-0 grow justify-start">
+          {nextLesson ? (
+            <button
+              type="button"
+              onClick={onGoNext}
+              className={`${sideButtonClass} bg-white text-black hover:bg-white/85 [@container_(min-height:16.5rem)]:hidden`}
+              aria-label="Next lesson"
+            >
+              Next
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <div className="hidden items-start justify-center gap-2 pt-2 [@container_(min-height:16.5rem)]:flex">
+        {isCountdownActive ? (
+          <button
+            type="button"
+            onClick={onCancelAutoplay}
+            className={escKeycapClass}
+            aria-keyshortcuts="Escape"
+            title="Cancel (Esc)"
+          >
+            <span
+              aria-hidden="true"
+              className={`${keyLabelClass} bg-white/14 text-white/80`}
+            >
+              Esc
+            </span>
+            Cancel
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onRestart}
+            className={nextLesson ? secondaryButtonClass : primaryButtonClass}
+          >
+            <ArrowCounterClockwise weight="bold" className={buttonIconClass} />
+            Replay
+          </button>
+        )}
+        {nextLesson ? (
+          <button
+            type="button"
+            onClick={onGoNext}
+            className={enterKeycapClass}
+            aria-label="Next lesson"
+            aria-keyshortcuts="Enter"
+            title="Next lesson (Enter)"
+          >
+            Next
+            <ArrowElbowDownLeft
+              weight="bold"
+              aria-hidden="true"
+              className={buttonIconClass}
+            />
+          </button>
+        ) : null}
       </div>
     </div>
   );

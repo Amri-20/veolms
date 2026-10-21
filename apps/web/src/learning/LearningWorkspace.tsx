@@ -32,6 +32,7 @@ import { useFloatingLessonDrawerResize } from "./workspace/hooks/useFloatingLess
 import { useCurriculumResize } from "./workspace/hooks/useCurriculumResize";
 import { usePlayerCourseLessons } from "./workspace/hooks/usePlayerCourseLessons";
 import { useLessonPlayerProps } from "./workspace/hooks/useLessonPlayerProps";
+import { useLessonEditPath } from "./workspace/hooks/useLessonEditPath";
 import { useLessonHeader } from "./workspace/hooks/useLessonHeader";
 
 interface LearningWorkspaceProps {
@@ -51,6 +52,8 @@ interface LearningWorkspaceProps {
   /** "Unlock the course" on a locked lesson. */
   onUnlockCourse: () => void;
   onOpenLogin: () => void;
+  /** Opens a page of the app (the course editor, for "Edit"). */
+  onOpenEditor?: (path: string) => void;
   onMinimizePlayer?: (request: LearningMiniPlayerRequest) => void;
   onMinimizeGestureChange?: (state: LessonPlayerMinimizeGestureState) => void;
   onMiniPlayerRestoreReady?: () => void;
@@ -80,6 +83,7 @@ export function LearningWorkspace({
   onOpenCourseOverview,
   onUnlockCourse,
   onOpenLogin,
+  onOpenEditor,
   onMinimizePlayer,
   onMinimizeGestureChange,
   onMiniPlayerRestoreReady,
@@ -662,6 +666,15 @@ export function LearningWorkspace({
       fullscreenCoursePanel,
     });
 
+  const lessonEditPath = useLessonEditPath({
+    user: resolvedAuthUser,
+    course: courseOverview?.course,
+    sectionId: curriculumSections.find((section) =>
+      section.lessons.some(([lessonNumber]) => lessonNumber === selectedLesson),
+    )?.sectionId,
+    lessonId: backendLessonId,
+  });
+
   const { lessonHeader } = useLessonHeader({
     courseSlug,
     persistentPlayerCourseRouteKey,
@@ -687,6 +700,8 @@ export function LearningWorkspace({
     selectLesson,
     openLessonDrawerInPlace,
     lessonPlayerProps,
+    lessonEditPath: onOpenEditor ? lessonEditPath : null,
+    onOpenLessonEditor: onOpenEditor,
   });
 
   return (
