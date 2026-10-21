@@ -474,6 +474,28 @@ html[data-app-hydrated="false"] .learning-workspace__main {
   letter-spacing: -0.035em;
 }
 
+/* With "Edit" beside it (staff who may edit the lesson), the title button
+   stops short of the edge instead of running under it, and the title keeps
+   to one line, cut short with an ellipsis rather than wrapped. The link sits
+   as low as the title button, which keeps its 8px top margin. */
+.learning-workspace__lesson-header[data-lesson-edit]
+  .learning-workspace__lesson-heading {
+  margin-inline-end: 0;
+  padding-inline-end: 0;
+}
+
+.learning-workspace__lesson-header[data-lesson-edit]
+  .learning-workspace__lesson-heading
+  h1 {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.learning-workspace__lesson-edit {
+  margin-top: 8px;
+}
+
 .learning-workspace__lesson-heading:active {
   color: var(--text);
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));

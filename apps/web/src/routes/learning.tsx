@@ -421,6 +421,7 @@ export default function LearningRoute() {
         mobileBottomNavigationHidden={mobileBottomNavigationHidden}
         onSelectLesson={selectLesson}
         onOpenCourseOverview={openCourseOverview}
+        onOpenEditor={navigateTo}
         onUnlockCourse={unlockCourse}
         onOpenLogin={openLogin}
         onMinimizeGestureChange={onLearningPlayerMinimizeGestureChange}
