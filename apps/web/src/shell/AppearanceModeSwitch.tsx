@@ -1,5 +1,5 @@
 import { createLucideIcon, Sun } from "lucide-react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -77,6 +77,24 @@ const FRONT_TIMING =
 const TAIL_TIMING =
   "[transition:translate_600ms_linear(0,0.047,0.164,0.319,0.488,0.651,0.796,0.915,1.006,1.069,1.107,1.124,1.125,1.115,1.097,1.077,1.055,1.036,1.019,1.005,0.995,0.989,0.985,0.984,0.985,0.986,0.989,0.991,1)_100ms]! motion-reduce:[transition:none]!";
 
+// Where the two sides meet: the S the slab draws (its masks above), 26px
+// wide around the middle, from 13px right of it at the top to 13px left at
+// the bottom, whichever side is chosen. The buttons are clipped to it, so a
+// press or hover goes to the side the S shows it on; a straight split down
+// the middle gave each side the other one's corner. Sampled from the S's cubic,
+// (26,0) to (0,44) with control points (15,0) and (11,44).
+const DIVIDER_POINTS = Array.from({ length: 11 }, (_, index) => {
+  const t = index / 10;
+  const u = 1 - t;
+  const x = u * u * u * 26 + 3 * u * u * t * 15 + 3 * u * t * t * 11;
+  const y = 3 * u * t * t * 44 + t * t * t * 44;
+  return `calc(50% + ${(x - 13).toFixed(2)}px) ${((y / 44) * 100).toFixed(2)}%`;
+}).join(", ");
+const OPTION_HIT_AREAS: Record<AppearanceMode, CSSProperties> = {
+  light: { clipPath: `polygon(0 0, ${DIVIDER_POINTS}, 0 100%)` },
+  dark: { clipPath: `polygon(${DIVIDER_POINTS}, 100% 100%, 100% 0)` },
+};
+
 const SLAB_FILL_CLASS =
   "bg-[linear-gradient(180deg,rgb(255_255_255/45%)_0_1px,transparent_1px),linear-gradient(0deg,rgb(0_0_0/18%)_0_1px,transparent_1px),linear-gradient(180deg,color-mix(in_srgb,white_14%,var(--accent)),var(--accent)_55%,color-mix(in_srgb,black_6%,var(--accent)))]";
 const ACCENT_LABELS_CLASS = "left-0 w-[100cqw] text-(--on-accent)";
@@ -141,10 +159,25 @@ function ModeLabels({
 // over the reveal's snapshot (see CoursesPage) and keeps the dock's button
 // styles off these buttons.
 export function AppearanceModeSwitch({
-  mode,
-  onChange,
+  mode: committedMode,
+  onChange: commitMode,
 }: AppearanceModeSwitchProps) {
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  // The side just chosen, shown at once: the mode the shell hands back
+  // arrives only after the page has restyled for it, and the slab waited for
+  // it (about half a second on a lesson page). A new mode from the shell
+  // (this press landing, or a change made elsewhere) replaces it.
+  const [shownMode, setShownMode] = useState(committedMode);
+  const [lastCommittedMode, setLastCommittedMode] = useState(committedMode);
+  if (committedMode !== lastCommittedMode) {
+    setLastCommittedMode(committedMode);
+    setShownMode(committedMode);
+  }
+  const mode = shownMode;
+  const onChange = (nextMode: AppearanceMode, origin?: ThemeRevealOrigin) => {
+    setShownMode(nextMode);
+    commitMode(nextMode, origin);
+  };
 
   // Arrows move between the two sides as in a radio group. The palette
   // menu around it reads arrows, Enter and Home/End for its swatches, so
@@ -281,7 +314,8 @@ export function AppearanceModeSwitch({
               tabIndex={selected ? 0 : -1}
               title={`${label} mode (Shift+D)`}
               data-appearance-mode-option={value}
-              className="relative z-2 h-full min-w-0 cursor-pointer rounded-[14px] border-0 bg-transparent text-transparent focus-visible:outline-2 focus-visible:-outline-offset-3 focus-visible:outline-(--text) aria-checked:focus-visible:outline-(--on-accent)"
+              className="absolute inset-0 z-2 min-w-0 cursor-pointer rounded-[14px] border-0 bg-transparent text-transparent focus-visible:outline-2 focus-visible:-outline-offset-3 focus-visible:outline-(--text) aria-checked:focus-visible:outline-(--on-accent)"
+              style={OPTION_HIT_AREAS[value]}
               onClick={(event) => {
                 if (swipedRef.current) {
                   swipedRef.current = false;

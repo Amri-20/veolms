@@ -243,8 +243,9 @@ export function useShellLayoutEffects({
       };
       // Reveal light/dark flips with the circular view transition, but skip it
       // for the initial application so startup stays instant.
+      let reveal: ViewTransition | null = null;
       if (appliedThemeRef.current && appliedThemeRef.current !== nextTheme) {
-        applyWithThemeViewTransition(
+        reveal = applyWithThemeViewTransition(
           commit,
           "mode",
           pointerOrigin ?? undefined,
@@ -253,7 +254,17 @@ export function useShellLayoutEffects({
         commit();
       }
       appliedThemeRef.current = nextTheme;
-      setResolvedTheme(nextTheme);
+      // The React copy of the mode re-renders the whole shell and page
+      // (about 90ms on a lesson page in a production build, several times
+      // that in development). Set before the reveal, it ran ahead of the
+      // snapshot the reveal starts from, and nothing on screen answered the
+      // click until it was done. It is set once the reveal is under way; the
+      // colours themselves come from the root attributes `commit` sets.
+      const mirrorTheme = () => {
+        if (appliedThemeRef.current === nextTheme) setResolvedTheme(nextTheme);
+      };
+      if (reveal) void reveal.ready.then(mirrorTheme, mirrorTheme);
+      else mirrorTheme();
     };
     applyTheme();
     persistDisplayMode(theme);
