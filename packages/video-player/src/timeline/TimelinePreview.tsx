@@ -122,15 +122,27 @@ function previewCardLeft(position: number): string {
 /**
  * The time pill: see-through, fully rounded, a lighter grey than the
  * frame's shadow with a lighter shadow of its own, so it does not run into
- * the dark shadow under the frame it sits on.
+ * the dark shadow under the frame it sits on. The grey carries a faint
+ * tint of the player's accent colour, so it follows the theme.
  */
 const PREVIEW_TIME_PILL_CLASS =
-  "rounded-full bg-[rgb(58_62_74/0.68)] px-3.5 py-1 text-sm leading-5 tabular-nums text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.26),0_1px_3px_rgb(0_0_0/0.22),0_4px_10px_rgb(0_0_0/0.16)] backdrop-blur-md backdrop-saturate-150";
+  "rounded-full bg-[color-mix(in_oklab,var(--video-player-accent,#ff7a1a)_16%,rgb(58_62_74/0.68))] px-3.5 py-1 text-sm leading-5 tabular-nums text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.26),0_1px_3px_rgb(0_0_0/0.22),0_4px_10px_rgb(0_0_0/0.16)] backdrop-blur-md backdrop-saturate-150";
+
+/** The timeline thumb's size (`size-3`), which stays inside the track. */
+const TIMELINE_THUMB_SIZE_PX = 12;
+/**
+ * How far past either end of the timeline the drag's time pill may reach
+ * before it stops following the thumb (the timeline sits about 12px in from
+ * the player's edges).
+ */
+const SCRUB_PILL_OVERHANG_PX = 6;
 
 /**
- * While the timeline is dragged: the hover card's time pill alone, in the
- * same place (astride where the card's bottom edge would be), the picture
- * being shown over the whole video instead.
+ * While the timeline is dragged: the hover card's time pill alone, at the
+ * same height (astride where the card's bottom edge would be), the picture
+ * being shown over the whole video instead. It stays centred over the
+ * thumb right to either end, only stopping where it would run off the
+ * player.
  */
 function ScrubTimePill({
   position,
@@ -142,15 +154,20 @@ function ScrubTimePill({
   /** A finger drag: the pill rises clear of the thumb on the timeline. */
   touch: boolean;
 }) {
+  // The thumb's centre, as the thumb itself is placed (see `Timeline`).
+  const thumbX = `(${position / 100} * (100cqw - ${TIMELINE_THUMB_SIZE_PX}px) + ${TIMELINE_THUMB_SIZE_PX / 2}px)`;
   return (
     <div
-      className={`pointer-events-none absolute bottom-full z-30 h-0 w-(--preview-card-width) max-w-full -translate-x-1/2 ${touch ? "mb-12.5" : "mb-5"} ${PREVIEW_CARD_WIDTH_CLASS}`}
-      style={{ left: previewCardLeft(position) }}
+      className={`pointer-events-none absolute inset-x-0 bottom-full z-30 h-0 @container ${touch ? "mb-12.5" : "mb-5"}`}
       data-video-player-preview=""
       data-video-player-preview-mode="time"
     >
       <span
-        className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 ${PREVIEW_TIME_PILL_CLASS}`}
+        className={`absolute bottom-0 ${PREVIEW_TIME_PILL_CLASS}`}
+        style={{
+          left: `calc${thumbX}`,
+          translate: `clamp(calc(-1 * ${thumbX} - ${SCRUB_PILL_OVERHANG_PX}px), -50%, calc(100cqw + ${SCRUB_PILL_OVERHANG_PX}px - ${thumbX} - 100%)) 50%`,
+        }}
       >
         {formatMediaTime(previewTime)}
       </span>
