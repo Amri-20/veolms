@@ -1577,20 +1577,25 @@ export function LessonCentralControls({
   onGoNext,
   onGoPrevious,
 }: LessonCentralControlsProps) {
-  const { buffering, controlsVisible, lifecycle } = usePlayerState(
+  const { buffering, controlsVisible, lifecycle, scrubbing } = usePlayerState(
     ({ media, ui }) => ({
       buffering: media.buffering,
       controlsVisible: ui.controlsVisible,
       lifecycle: media.lifecycle,
+      scrubbing: ui.scrubbing,
     }),
     (left, right) =>
       left.buffering === right.buffering &&
       left.controlsVisible === right.controlsVisible &&
-      left.lifecycle === right.lifecycle,
+      left.lifecycle === right.lifecycle &&
+      left.scrubbing === right.scrubbing,
   );
   const mobileInteraction = usePlayerMobileInteraction();
   const loading = lifecycle !== "ready" || buffering;
-  const visible = !controlsSuppressed && !loading && controlsVisible;
+  // A drag on the timeline shows the moment over the whole picture; the
+  // play and lesson buttons in its middle step aside for it.
+  const visible =
+    !controlsSuppressed && !loading && controlsVisible && !scrubbing;
 
   return (
     <div

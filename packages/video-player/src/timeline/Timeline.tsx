@@ -269,6 +269,7 @@ export function Timeline({
           duration={duration}
           layout={previewLayout}
           previewTime={previewTime}
+          scrubbing={scrubbing}
         />
       ) : null}
       {cancelArmed ? (

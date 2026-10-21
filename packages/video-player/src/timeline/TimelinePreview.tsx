@@ -111,23 +111,21 @@ function SpriteFrame({ frame }: { frame: StoryboardFrame }) {
  * The storyboard frame of the hovered moment, with the time in a chip
  * astride the middle of its bottom edge, half over the frame and half
  * below it, in the size of the player's own time display (and the chapter,
- * when there is one, above the frame). Following the
- * pointer (desktop) it is about a third of the player wide, 13rem to 21rem;
- * fixed in the middle (phones, short players) about a quarter, 11rem to
- * 17rem. It stops at either end of the timeline instead of running off the
- * player. A frame drawn on a canvas keeps the card hidden until its first
- * picture is in, so it never opens on a black box.
+ * when there is one, above the frame). Shown for a hovering pointer only
+ * (a mouse, on a phone too; a drag shows the moment over the whole video
+ * instead). About 36% of the player wide, 15rem to 24rem, following the
+ * pointer but stopping at either end of the timeline instead of running
+ * off the player. A frame drawn on a canvas keeps the card hidden until
+ * its first picture is in, so it never opens on a black box.
  */
 function FramePreviewCard({
   chapterTitle,
   frame,
-  large,
   position,
   previewTime,
 }: {
   chapterTitle: string | null;
   frame: StoryboardFrame;
-  large: boolean;
   position: number;
   previewTime: number;
 }) {
@@ -135,7 +133,7 @@ function FramePreviewCard({
   const [drawn, setDrawn] = useState(false);
   return (
     <div
-      className={`pointer-events-none absolute bottom-full z-30 mb-5 w-(--preview-card-width) max-w-full -translate-x-1/2 ${large ? "[--preview-card-width:clamp(13rem,32%,21rem)]" : "[--preview-card-width:clamp(11rem,26%,17rem)]"}`}
+      className={`pointer-events-none absolute bottom-full z-30 mb-5 w-(--preview-card-width) max-w-full -translate-x-1/2 [--preview-card-width:clamp(15rem,36%,24rem)]`}
       style={{
         left: `clamp(min(50%, calc(var(--preview-card-width) / 2)), ${position}%, max(50%, calc(100% - var(--preview-card-width) / 2)))`,
         visibility: drawnOnCanvas && !drawn ? "hidden" : undefined,
@@ -158,7 +156,7 @@ function FramePreviewCard({
         {/* Half below the frame; the card's bottom margin keeps it clear of
             the timeline. */}
         <span
-          className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 rounded-lg border border-white/20 bg-[rgb(8_10_16/0.9)] px-2.5 py-0.5 tabular-nums text-white shadow-[0_2px_8px_rgba(0,0,0,0.45)] ${large ? "text-sm" : "text-xs"}`}
+          className={`absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 rounded-lg border border-white/20 bg-[rgb(8_10_16/0.9)] px-2.5 py-0.5 tabular-nums text-white shadow-[0_2px_8px_rgba(0,0,0,0.45)] text-sm`}
         >
           {formatMediaTime(previewTime)}
         </span>
@@ -172,6 +170,8 @@ export type TimelinePreviewLayout = "follow" | "follow-pill" | "centered-pill";
 interface TimelinePreviewProps {
   duration: number;
   previewTime: number;
+  /** True while the timeline is dragged: the time only, no picture. */
+  scrubbing?: boolean;
   /**
    * `follow` (the default) is a card that travels with the pointer;
    * `centered-pill` is a single line fixed over the middle of the timeline;
@@ -204,23 +204,24 @@ export function TimelinePreview({
   duration,
   layout = "follow",
   previewTime,
+  scrubbing = false,
 }: TimelinePreviewProps) {
   const controllerData = useTimelinePreviewData(previewTime);
-  if (
-    controllerData.frame &&
-    (layout === "centered-pill" || layout === "follow-pill")
-  ) {
+  // While the timeline is dragged, the moment is shown over the whole video
+  // (the real frame, or the storyboard frame drawn by `ScrubFrameOverlay`),
+  // so no picture box covers it: only the time. Without a drag the preview
+  // follows a hovering pointer (a mouse, on a phone too) as on desktop.
+  const frame = scrubbing ? null : controllerData.frame;
+  const chapterThumbnail = scrubbing
+    ? null
+    : controllerData.chapterThumbnailUrl;
+  if (frame && (layout === "centered-pill" || layout === "follow-pill")) {
     return (
       <FramePreviewCard
-        frame={controllerData.frame}
+        frame={frame}
         chapterTitle={controllerData.chapterTitle}
         previewTime={previewTime}
-        large={layout === "follow-pill"}
-        position={
-          layout === "follow-pill"
-            ? timeToPositionPercent(previewTime, duration)
-            : 50
-        }
+        position={timeToPositionPercent(previewTime, duration)}
       />
     );
   }
@@ -260,14 +261,10 @@ export function TimelinePreview({
   }
   const position = timeToPositionPercent(previewTime, duration);
   const translate = position < 14 ? 0 : position > 86 ? -100 : -50;
-  const hasRichPreview = Boolean(
-    controllerData.frame || controllerData.chapterTitle,
-  );
+  const hasRichPreview = Boolean(frame || controllerData.chapterTitle);
   // A storyboard frame is the exact hovered moment and wins over the
   // chapter still, which only shows where the chapter begins.
-  const chapterThumbnailUrl = controllerData.frame
-    ? null
-    : controllerData.chapterThumbnailUrl;
+  const chapterThumbnailUrl = frame ? null : chapterThumbnail;
 
   return (
     <div
@@ -286,9 +283,9 @@ export function TimelinePreview({
       data-video-player-preview=""
       data-video-player-preview-mode={hasRichPreview ? "rich" : "time"}
     >
-      {controllerData.frame ? (
+      {frame ? (
         <div className="overflow-hidden bg-black">
-          <StoryboardImage frame={controllerData.frame} />
+          <StoryboardImage frame={frame} />
         </div>
       ) : null}
       {chapterThumbnailUrl ? (

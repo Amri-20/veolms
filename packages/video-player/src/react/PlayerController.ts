@@ -139,6 +139,10 @@ export class PlayerController {
   // Ends the wait for the real frame after a drag released on a part not
   // downloaded (see `scrubFrameTime`).
   #scrubFrameRelease: (() => void) | null = null;
+  // A drag pauses a playing video and plays it again from where it is let
+  // go (see `setScrubbing`).
+  #resumeAfterScrub = false;
+  #scrubPausing = false;
   readonly #activeMediaListeners = new Set<ActiveMediaListener>();
 
   constructor(engine: VideoEngine) {
@@ -664,11 +668,48 @@ export class PlayerController {
     this.updateUi({ settingsView, controlsVisible: true });
   }
 
+  /**
+   * True while a drag holds the video paused, until it plays again after
+   * the drag: pause and play then are the drag's, not the viewer's (the
+   * play/pause feedback stays quiet).
+   */
+  get scrubPausing(): boolean {
+    return this.#scrubPausing;
+  }
+
+  /**
+   * A drag on the timeline. A playing video pauses for it, and plays again
+   * from where the drag lets go (call after the seek it ends with), or from
+   * where it was if the drag was cancelled.
+   */
   setScrubbing(scrubbing: boolean): void {
+    const wasScrubbing = this.#snapshot.ui.scrubbing;
+    if (scrubbing && !wasScrubbing) {
+      const { media } = this.#snapshot;
+      this.#resumeAfterScrub =
+        this.isMediaReady() && !media.paused && !media.ended;
+      if (this.#resumeAfterScrub) {
+        this.#scrubPausing = true;
+        this.pause();
+      }
+    }
     // A drag that ends without a seek (cancelled) drops its picture; one
     // that sought keeps it until the video catches up.
     if (!scrubbing && !this.#scrubFrameRelease) this.#clearScrubFrame();
     this.updateUi({ scrubbing, controlsVisible: true });
+    if (!scrubbing && wasScrubbing) {
+      const resume = this.#resumeAfterScrub;
+      this.#resumeAfterScrub = false;
+      if (resume && !this.#destroyed) {
+        void this.play()
+          .catch(() => undefined)
+          .finally(() => {
+            this.#scrubPausing = false;
+          });
+      } else {
+        this.#scrubPausing = false;
+      }
+    }
   }
 
   setPreviewTime(previewTime: number | null): void {

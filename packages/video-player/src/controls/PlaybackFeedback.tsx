@@ -39,6 +39,8 @@ export function PlaybackFeedback({
       }
       if (previousPaused === media.paused) return;
       previousPaused = media.paused;
+      // A drag on the timeline pauses and resumes by itself.
+      if (controller.scrubPausing) return;
 
       sequenceRef.current += 1;
       const nextFeedback: PlaybackFeedbackState = {
