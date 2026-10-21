@@ -119,9 +119,13 @@ function previewCardLeft(position: number): string {
   return `clamp(min(50%, calc(var(--preview-card-width) / 2)), ${position}%, max(50%, calc(100% - var(--preview-card-width) / 2)))`;
 }
 
-/** The time pill: see-through, fully rounded, raised like the frame. */
+/**
+ * The time pill: see-through, fully rounded, a lighter grey than the
+ * frame's shadow with a lighter shadow of its own, so it does not run into
+ * the dark shadow under the frame it sits on.
+ */
 const PREVIEW_TIME_PILL_CLASS =
-  "rounded-full bg-[rgb(10_12_18/0.55)] px-3.5 py-1 text-sm leading-5 tabular-nums text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.22),inset_0_-1px_0_rgb(0_0_0/0.3),0_2px_6px_rgb(0_0_0/0.4),0_8px_18px_rgb(0_0_0/0.3)] backdrop-blur-md backdrop-saturate-150";
+  "rounded-full bg-[rgb(58_62_74/0.68)] px-3.5 py-1 text-sm leading-5 tabular-nums text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.26),0_1px_3px_rgb(0_0_0/0.22),0_4px_10px_rgb(0_0_0/0.16)] backdrop-blur-md backdrop-saturate-150";
 
 /**
  * While the timeline is dragged: the hover card's time pill alone, in the
