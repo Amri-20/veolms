@@ -108,21 +108,25 @@ function SpriteFrame({ frame }: { frame: StoryboardFrame }) {
 }
 
 /**
- * The storyboard frame of the hovered moment, large, with the time in a
- * chip at the middle of its lower edge (and the chapter, when there is
- * one, above it). About a quarter of the player wide, between 11rem and
- * 17rem. It follows the pointer but stops at either end of the timeline
- * instead of running off the player. A frame drawn on a canvas keeps the card hidden until its
- * first picture is in, so it never opens on a black box.
+ * The storyboard frame of the hovered moment, with the time in a chip
+ * astride the middle of its top edge, half over the frame and half above
+ * it (and the chapter, when there is one, above that). Following the
+ * pointer (desktop) it is about a third of the player wide, 13rem to 21rem;
+ * fixed in the middle (phones, short players) about a quarter, 11rem to
+ * 17rem. It stops at either end of the timeline instead of running off the
+ * player. A frame drawn on a canvas keeps the card hidden until its first
+ * picture is in, so it never opens on a black box.
  */
 function FramePreviewCard({
   chapterTitle,
   frame,
+  large,
   position,
   previewTime,
 }: {
   chapterTitle: string | null;
   frame: StoryboardFrame;
+  large: boolean;
   position: number;
   previewTime: number;
 }) {
@@ -130,7 +134,7 @@ function FramePreviewCard({
   const [drawn, setDrawn] = useState(false);
   return (
     <div
-      className="pointer-events-none absolute bottom-full z-30 mb-3 w-(--preview-card-width) max-w-full -translate-x-1/2 [--preview-card-width:clamp(11rem,26%,17rem)]"
+      className={`pointer-events-none absolute bottom-full z-30 mb-3 w-(--preview-card-width) max-w-full -translate-x-1/2 ${large ? "[--preview-card-width:clamp(13rem,32%,21rem)]" : "[--preview-card-width:clamp(11rem,26%,17rem)]"}`}
       style={{
         left: `clamp(min(50%, calc(var(--preview-card-width) / 2)), ${position}%, max(50%, calc(100% - var(--preview-card-width) / 2)))`,
         visibility: drawnOnCanvas && !drawn ? "hidden" : undefined,
@@ -139,16 +143,19 @@ function FramePreviewCard({
       data-video-player-preview-mode="frame"
     >
       {chapterTitle ? (
-        <p className="mb-1.5 truncate text-center text-sm font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
+        // Clear of the time chip, which rises half its height above the frame.
+        <p className="mb-5 truncate text-center text-sm font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
           {chapterTitle}
         </p>
       ) : null}
-      <div
-        data-video-player-preview-frame=""
-        className="relative overflow-hidden rounded-2xl border-2 border-white/25 bg-black shadow-[0_12px_32px_rgba(0,0,0,0.45)]"
-      >
-        <StoryboardImage frame={frame} onDrawn={() => setDrawn(true)} />
-        <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-lg border border-white/15 bg-[rgb(8_10_16/0.75)] px-2.5 py-0.5 text-base font-bold tabular-nums text-white">
+      <div className="relative">
+        <div
+          data-video-player-preview-frame=""
+          className="overflow-hidden rounded-2xl border-2 border-white/25 bg-black shadow-[0_12px_32px_rgba(0,0,0,0.45)]"
+        >
+          <StoryboardImage frame={frame} onDrawn={() => setDrawn(true)} />
+        </div>
+        <span className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-lg border border-white/20 bg-[rgb(8_10_16/0.9)] px-2.5 py-0.5 text-base font-bold tabular-nums text-white shadow-[0_2px_8px_rgba(0,0,0,0.45)]">
           {formatMediaTime(previewTime)}
         </span>
       </div>
@@ -204,6 +211,7 @@ export function TimelinePreview({
         frame={controllerData.frame}
         chapterTitle={controllerData.chapterTitle}
         previewTime={previewTime}
+        large={layout === "follow-pill"}
         position={
           layout === "follow-pill"
             ? timeToPositionPercent(previewTime, duration)
