@@ -23,6 +23,13 @@ export interface VideoEngine {
    * `mediachange`. Engines without this support leave it out.
    */
   setStandbyMedia?(media: HTMLMediaElement | null): void;
+  /**
+   * Limits how far ahead of the playhead the engine fetches; `null` gives
+   * the source its own buffer back. A timeline drag resting on a moment
+   * fetches just the segment there. Engines without control over buffering
+   * leave it out.
+   */
+  setBufferAheadLimit?(seconds: number | null): void;
   load(source: VideoSource, options?: VideoLoadOptions): Promise<void>;
   unload(): Promise<void>;
   destroy(): Promise<void>;

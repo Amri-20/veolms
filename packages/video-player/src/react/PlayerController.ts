@@ -27,6 +27,58 @@ import {
 
 type SnapshotListener = () => void;
 
+/**
+ * How far before the end of a buffered range a drag may still seek without
+ * the player having to fetch: the last fraction of a range is often a
+ * partial segment that cannot be decoded on its own yet.
+ */
+const SCRUB_BUFFERED_END_MARGIN_SECONDS = 0.1;
+/** A scrub seek that never reports `seeked` stops blocking the next one. */
+const SCRUB_SEEK_TIMEOUT_MS = 500;
+/**
+ * After a drag ends on a part not downloaded, the storyboard picture stays
+ * until the video has the real frame, or this long at most.
+ */
+const SCRUB_FRAME_HOLD_TIMEOUT_MS = 8_000;
+/**
+ * A drag held still this long shows the lesson's own frame there, in its
+ * playing quality, instead of the preview picture: over a part not
+ * downloaded yet (a fetch, so not for a mere pause in the drag) ...
+ */
+const SCRUB_REST_MS = 300;
+/** ... and over a part already downloaded (only a seek). */
+const SCRUB_REST_BUFFERED_MS = 100;
+/**
+ * While a drag rests, the lesson fetches only this far ahead: the segment
+ * under the pointer (segments run 2-6s), which is also enough to start
+ * playing at once on release (playback starts at 1.5s buffered).
+ */
+const SCRUB_REST_BUFFER_AHEAD_SECONDS = 2;
+/**
+ * A drag counts as resting while it stays within this share of the video
+ * of where it stopped: a finger held on the screen still trembles.
+ */
+const SCRUB_REST_TOLERANCE_SHARE = 0.006;
+/**
+ * The lesson's own frame, shown during a drag, gives way to the preview
+ * again once it is this many tolerances behind the pointer (fewer brings
+ * it back): a drag slowing down and speeding up does not flick between
+ * the two.
+ */
+const SCRUB_LESSON_FALL_BEHIND_TOLERANCES = 2;
+
+function isTimeBuffered(ranges: TimeRanges, time: number): boolean {
+  for (let index = 0; index < ranges.length; index += 1) {
+    if (
+      time >= ranges.start(index) &&
+      time <= ranges.end(index) - SCRUB_BUFFERED_END_MARGIN_SECONDS
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 interface MediaWaiter {
   resolve: () => void;
   reject: (reason: unknown) => void;
@@ -107,6 +159,30 @@ export class PlayerController {
   #playRequestGeneration = 0;
   #hudId = 0;
   #standbyMedia: HTMLVideoElement | null = null;
+  // The newest drag position still waiting for the seek in flight to finish.
+  #scrubTarget: number | null = null;
+  #scrubSeekInFlight = false;
+  // Ends the wait for the real frame after a drag released on a part not
+  // downloaded (see `scrubFrameTime`).
+  #scrubFrameRelease: (() => void) | null = null;
+  // A drag pauses a playing video and plays it again from where it is let
+  // go (see `setScrubbing`).
+  #resumeAfterScrub = false;
+  // Set while the storyboard is a preview video: see `scrubTo`.
+  #scrubWithStoryboard = false;
+  #scrubPausing = false;
+  // A drag resting on a moment (see `scrubTo`): where it stopped, the
+  // newest position since, the wait before the lesson seeks there, and
+  // whether the lesson's own frame is showing instead of the preview.
+  #scrubRestAnchor: number | null = null;
+  #scrubRestTime: number | null = null;
+  #scrubRestTimer: number | null = null;
+  #scrubRestSeekCleanup: (() => void) | null = null;
+  #scrubShowsLesson = false;
+  #scrubBufferLimited = false;
+  // The moment of the lesson's frame on screen during a drag: where its
+  // last finished seek landed.
+  #scrubLessonTime: number | null = null;
   readonly #activeMediaListeners = new Set<ActiveMediaListener>();
 
   constructor(engine: VideoEngine) {
@@ -329,6 +405,7 @@ export class PlayerController {
   }: PlayerLoadRequest): Promise<void> {
     this.assertActive();
     this.resetZoom();
+    this.#clearScrubFrame();
     const generation = ++this.#loadGeneration;
     await this.waitForMedia();
     if (generation !== this.#loadGeneration || this.#destroyed) return;
@@ -415,10 +492,247 @@ export class PlayerController {
         message: "Seek time must be a finite number.",
       });
     }
+    // A deliberate seek replaces any drag position still queued.
+    this.#scrubTarget = null;
     if (!this.isMediaReady()) {
+      this.#clearScrubFrame();
       this.#pendingMediaProperties.seekTime = time;
       return;
     }
+    if (this.#snapshot.ui.scrubFrameTime !== null) {
+      this.#holdScrubFrameUntilSeeked(time);
+    }
+    this.engine.seek(time);
+  }
+
+  /**
+   * One step of a timeline drag. The video shows the frame at `time` only
+   * when that part is already downloaded: a drag never starts a fetch (the
+   * seek on release does). Seeks run one at a time, each to the newest
+   * position, because a seek started before the last one finished cancels
+   * it, and a drag faster than decoding would then show no frame at all.
+   */
+  /**
+   * With a preview video (pictures every half second, decoded at 100+ a
+   * second) a moving drag shows its pictures everywhere, also over parts
+   * already downloaded: seeking the lesson itself managed some 5 to 7
+   * pictures a second at 1080p, and having it follow behind the preview
+   * froze the page for up to a second at a time (20 frames instead of 152
+   * in a 1.5s sweep). The lesson seeks only where the drag rests.
+   */
+  setScrubWithStoryboard(enabled: boolean): void {
+    this.#scrubWithStoryboard = enabled;
+  }
+
+  scrubTo(time: number): void {
+    const media = this.#media;
+    if (!Number.isFinite(time) || !media || !this.isMediaReady()) return;
+    const buffered = isTimeBuffered(media.buffered, time);
+    if (!this.#scrubWithStoryboard && buffered) {
+      this.#endScrubRest();
+      this.#clearScrubFrame();
+      this.#scrubTarget = time;
+      if (!this.#scrubSeekInFlight) this.runScrubSeek(media);
+      return;
+    }
+
+    // The storyboard picture stands in for the lesson while its own frame
+    // is not close to the pointer; where the drag rests, the lesson seeks.
+    this.#scrubTarget = null;
+    this.#scrubRestTime = time;
+    const tolerance = this.#scrubRestTolerance();
+    if (this.#scrubLessonTime === null && !media.seeking) {
+      this.#scrubLessonTime = media.currentTime;
+    }
+    const lessonTime = this.#scrubLessonTime;
+    const lag = lessonTime === null ? Infinity : Math.abs(time - lessonTime);
+    if (!this.#scrubShowsLesson && lag <= tolerance) {
+      this.#scrubShowsLesson = true;
+      this.#clearScrubFrame();
+    } else if (
+      this.#scrubShowsLesson &&
+      lag > tolerance * SCRUB_LESSON_FALL_BEHIND_TOLERANCES
+    ) {
+      this.#scrubShowsLesson = false;
+    }
+    if (!this.#scrubShowsLesson) {
+      this.#releaseScrubFrameHold();
+      if (this.#snapshot.ui.scrubFrameTime !== time) {
+        this.updateUi({ scrubFrameTime: time });
+      }
+    }
+
+    const anchor = this.#scrubRestAnchor;
+    if (anchor === null || Math.abs(time - anchor) > tolerance) {
+      this.#scrubRestAnchor = time;
+      this.#cancelScrubRestSeek();
+      this.#scheduleScrubRestSeek(
+        buffered ? SCRUB_REST_BUFFERED_MS : SCRUB_REST_MS,
+      );
+    }
+  }
+
+  /**
+   * The seek where a drag rested has finished: the lesson's frame takes
+   * over from the preview if it is close enough to the pointer.
+   */
+  #noteScrubLessonFrame(media: HTMLMediaElement): void {
+    if (media.seeking || this.#destroyed || !this.#snapshot.ui.scrubbing) {
+      return;
+    }
+    this.#scrubLessonTime = media.currentTime;
+    const time = this.#scrubRestTime;
+    if (
+      time === null ||
+      this.#scrubShowsLesson ||
+      Math.abs(time - media.currentTime) > this.#scrubRestTolerance()
+    ) {
+      return;
+    }
+    this.#scrubShowsLesson = true;
+    this.#clearScrubFrame();
+  }
+
+  #clearScrubRestTimer(): void {
+    if (this.#scrubRestTimer === null) return;
+    window.clearTimeout(this.#scrubRestTimer);
+    this.#scrubRestTimer = null;
+  }
+
+  #scrubRestTolerance(): number {
+    const duration = this.#snapshot.media.duration;
+    return Number.isFinite(duration) && duration > 0
+      ? duration * SCRUB_REST_TOLERANCE_SHARE
+      : 0;
+  }
+
+  #scheduleScrubRestSeek(delay: number): void {
+    this.#clearScrubRestTimer();
+    this.#scrubRestTimer = window.setTimeout(() => {
+      this.#scrubRestTimer = null;
+      this.#seekWhereScrubRests();
+    }, delay);
+  }
+
+  /**
+   * The drag has rested: the lesson seeks to where it is (fetching just the
+   * segment there when it is not downloaded yet), and its frame replaces
+   * the preview picture once decoded. Released there, it plays on from that
+   * segment at once.
+   */
+  #seekWhereScrubRests(): void {
+    const media = this.#media;
+    const time = this.#scrubRestTime;
+    if (
+      !media ||
+      time === null ||
+      this.#destroyed ||
+      !this.#snapshot.ui.scrubbing ||
+      !this.isMediaReady()
+    ) {
+      return;
+    }
+    this.#cancelScrubRestSeek();
+    if (!this.#scrubBufferLimited && !isTimeBuffered(media.buffered, time)) {
+      this.#scrubBufferLimited = true;
+      this.engine.setBufferAheadLimit?.(SCRUB_REST_BUFFER_AHEAD_SECONDS);
+    }
+    const onSeeked = () => {
+      // Another seek is already on its way: its own `seeked` decides.
+      if (media.seeking) return;
+      this.#cancelScrubRestSeek();
+      this.#noteScrubLessonFrame(media);
+    };
+    media.addEventListener("seeked", onSeeked);
+    this.#scrubRestSeekCleanup = () =>
+      media.removeEventListener("seeked", onSeeked);
+    this.engine.seek(time);
+  }
+
+  #cancelScrubRestSeek(): void {
+    this.#scrubRestSeekCleanup?.();
+    this.#scrubRestSeekCleanup = null;
+  }
+
+  /** Ends a drag's rest: no seek pending, and the full buffer back. */
+  #endScrubRest(): void {
+    this.#clearScrubRestTimer();
+    this.#cancelScrubRestSeek();
+    this.#scrubRestAnchor = null;
+    this.#scrubRestTime = null;
+    this.#scrubLessonTime = null;
+    this.#scrubShowsLesson = false;
+    if (this.#scrubBufferLimited) {
+      this.#scrubBufferLimited = false;
+      this.engine.setBufferAheadLimit?.(null);
+    }
+  }
+
+  /**
+   * Keeps the storyboard picture of a released drag over the video until
+   * the seek to it has a frame to show.
+   */
+  #holdScrubFrameUntilSeeked(time: number): void {
+    this.#releaseScrubFrameHold();
+    const media = this.#media;
+    if (!media) {
+      this.#clearScrubFrame();
+      return;
+    }
+    if (this.#snapshot.ui.scrubFrameTime !== time) {
+      this.updateUi({ scrubFrameTime: time });
+    }
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      media.removeEventListener("seeked", finish);
+      media.removeEventListener("emptied", finish);
+      window.clearTimeout(timeout);
+      if (this.#scrubFrameRelease === release) this.#scrubFrameRelease = null;
+    };
+    const finish = () => {
+      release();
+      if (!this.#destroyed) this.#clearScrubFrame();
+    };
+    media.addEventListener("seeked", finish);
+    media.addEventListener("emptied", finish);
+    const timeout = window.setTimeout(finish, SCRUB_FRAME_HOLD_TIMEOUT_MS);
+    this.#scrubFrameRelease = release;
+  }
+
+  #releaseScrubFrameHold(): void {
+    this.#scrubFrameRelease?.();
+    this.#scrubFrameRelease = null;
+  }
+
+  #clearScrubFrame(): void {
+    this.#releaseScrubFrameHold();
+    if (this.#snapshot.ui.scrubFrameTime !== null) {
+      this.updateUi({ scrubFrameTime: null });
+    }
+  }
+
+  private runScrubSeek(media: HTMLVideoElement): void {
+    const time = this.#scrubTarget;
+    this.#scrubTarget = null;
+    if (time === null || media !== this.#media || this.#destroyed) {
+      this.#scrubSeekInFlight = false;
+      return;
+    }
+    this.#scrubSeekInFlight = true;
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      media.removeEventListener("seeked", finish);
+      window.clearTimeout(timeout);
+      // One more frame so the decoded picture is painted before the next
+      // seek replaces it.
+      window.requestAnimationFrame(() => this.runScrubSeek(media));
+    };
+    media.addEventListener("seeked", finish);
+    const timeout = window.setTimeout(finish, SCRUB_SEEK_TIMEOUT_MS);
     this.engine.seek(time);
   }
 
@@ -533,8 +847,49 @@ export class PlayerController {
     this.updateUi({ settingsView, controlsVisible: true });
   }
 
+  /**
+   * True while a drag holds the video paused, until it plays again after
+   * the drag: pause and play then are the drag's, not the viewer's (the
+   * play/pause feedback stays quiet).
+   */
+  get scrubPausing(): boolean {
+    return this.#scrubPausing;
+  }
+
+  /**
+   * A drag on the timeline. A playing video pauses for it, and plays again
+   * from where the drag lets go (call after the seek it ends with), or from
+   * where it was if the drag was cancelled.
+   */
   setScrubbing(scrubbing: boolean): void {
+    const wasScrubbing = this.#snapshot.ui.scrubbing;
+    if (scrubbing !== wasScrubbing) this.#endScrubRest();
+    if (scrubbing && !wasScrubbing) {
+      const { media } = this.#snapshot;
+      this.#resumeAfterScrub =
+        this.isMediaReady() && !media.paused && !media.ended;
+      if (this.#resumeAfterScrub) {
+        this.#scrubPausing = true;
+        this.pause();
+      }
+    }
+    // A drag that ends without a seek (cancelled) drops its picture; one
+    // that sought keeps it until the video catches up.
+    if (!scrubbing && !this.#scrubFrameRelease) this.#clearScrubFrame();
     this.updateUi({ scrubbing, controlsVisible: true });
+    if (!scrubbing && wasScrubbing) {
+      const resume = this.#resumeAfterScrub;
+      this.#resumeAfterScrub = false;
+      if (resume && !this.#destroyed) {
+        void this.play()
+          .catch(() => undefined)
+          .finally(() => {
+            this.#scrubPausing = false;
+          });
+      } else {
+        this.#scrubPausing = false;
+      }
+    }
   }
 
   setPreviewTime(previewTime: number | null): void {
@@ -651,6 +1006,8 @@ export class PlayerController {
   async destroy(): Promise<void> {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#releaseScrubFrameHold();
+    this.#endScrubRest();
     this.#loadGeneration += 1;
     this.#playRequestGeneration += 1;
     this.#requestedMedia = null;

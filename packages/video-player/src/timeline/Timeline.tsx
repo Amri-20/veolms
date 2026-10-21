@@ -20,6 +20,13 @@ import {
 import { TimelinePreview, type TimelinePreviewLayout } from "./TimelinePreview";
 
 const KEYBOARD_SEEK_SECONDS = 5;
+/**
+ * After a drag is let go with the pointer still on the timeline, the hover
+ * preview stays away until the pointer has moved this far: the drag has
+ * just shown that moment over the whole video, and the lesson plays on
+ * from it.
+ */
+const HOVER_AFTER_DRAG_DISTANCE_PX = 6;
 /** Visual gap between two chapter segments of the track, in pixels. */
 const SEGMENT_GAP_PX = 3;
 // The hovered chapter grows by being made taller rather than scaled: a
@@ -96,6 +103,11 @@ export function Timeline({
   // leaves the video where it was: "release to cancel".
   const scrubOriginRef = useRef<{ time: number; left: boolean } | null>(null);
   const [cancelArmed, setCancelArmed] = useState(false);
+  // Where a mouse drag was let go, until the pointer moves away from it.
+  const releaseXRef = useRef<number | null>(null);
+  // What the drag in progress is made with: a finger's time pill rises
+  // clear of the thumb.
+  const [scrubPointerType, setScrubPointerType] = useState<string | null>(null);
   const {
     buffered,
     chapters,
@@ -184,19 +196,29 @@ export function Timeline({
     if (!Number.isFinite(duration) || duration <= 0) return;
     event.preventDefault();
     pointerIdRef.current = event.pointerId;
+    setScrubPointerType(event.pointerType);
     snappedChapterTimeRef.current = null;
     scrubOriginRef.current = { time: currentTime, left: false };
     event.currentTarget.setPointerCapture(event.pointerId);
     controller.setScrubbing(true);
     controller.setControlsVisible(true);
-    controller.seekTo(scrubAtPointer(event.clientX));
+    controller.scrubTo(scrubAtPointer(event.clientX));
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "touch" && pointerIdRef.current === null) return;
     if (pointerIdRef.current === event.pointerId) {
-      controller.seekTo(scrubAtPointer(event.clientX));
+      controller.scrubTo(scrubAtPointer(event.clientX));
       return;
+    }
+    if (releaseXRef.current !== null) {
+      if (
+        Math.abs(event.clientX - releaseXRef.current) <
+        HOVER_AFTER_DRAG_DISTANCE_PX
+      ) {
+        return;
+      }
+      releaseXRef.current = null;
     }
     previewAtPointer(event.clientX);
   };
@@ -212,7 +234,9 @@ export function Timeline({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     controller.setScrubbing(false);
-    if (event.pointerType !== "mouse") controller.setPreviewTime(null);
+    // No hover preview where the drag ends (see HOVER_AFTER_DRAG_DISTANCE_PX).
+    controller.setPreviewTime(null);
+    releaseXRef.current = event.pointerType === "mouse" ? event.clientX : null;
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -246,7 +270,12 @@ export function Timeline({
     controller.seekTo(clamp(nextTime, 0, duration));
   };
 
-  const progress = timeToPositionPercent(currentTime, duration);
+  // While dragging, the thumb and the played part follow the pointer, even
+  // over parts not downloaded yet, where the video keeps its last frame
+  // until the drag ends.
+  const shownTime =
+    scrubbing && previewTime !== null ? previewTime : currentTime;
+  const progress = timeToPositionPercent(shownTime, duration);
   const bufferedRanges = normalizeBufferedRanges(buffered, duration);
   const positionedMarkers = positionTimelineMarkers(markers, duration);
   const segments = getTimelineSegments(chapters, duration);
@@ -264,6 +293,8 @@ export function Timeline({
           duration={duration}
           layout={previewLayout}
           previewTime={previewTime}
+          scrubbing={scrubbing}
+          scrubPointerType={scrubPointerType}
         />
       ) : null}
       {cancelArmed ? (
@@ -300,8 +331,12 @@ export function Timeline({
           controller.setScrubbing(false);
           controller.setPreviewTime(null);
         }}
-        onPointerEnter={(event) => previewAtPointer(event.clientX)}
+        onPointerEnter={(event) => {
+          releaseXRef.current = null;
+          previewAtPointer(event.clientX);
+        }}
         onPointerLeave={() => {
+          releaseXRef.current = null;
           if (pointerIdRef.current === null) controller.setPreviewTime(null);
         }}
       >
@@ -350,12 +385,12 @@ export function Timeline({
                     />
                   );
                 })}
-                {currentTime > segment.start || !segmented ? (
+                {shownTime > segment.start || !segmented ? (
                   <span
                     data-timeline-progress=""
                     className="absolute inset-y-0 left-0 rounded-full bg-[var(--video-player-accent,#ff7a1a)]"
                     style={{
-                      width: `${timeToPositionPercent(currentTime - segment.start, span)}%`,
+                      width: `${timeToPositionPercent(shownTime - segment.start, span)}%`,
                     }}
                   />
                 ) : null}

@@ -16,6 +16,16 @@ let responsiveModeMediaQuery: MediaQueryList | null = null;
 let windowedMobileMode = false;
 let fullscreenModeActive = false;
 let fullscreenMobileMode = false;
+/**
+ * A phone leaving full screen is often still sideways for a moment, wider
+ * than the mobile width, while it turns upright. The player keeps its
+ * mobile mode through that turn instead of flipping to desktop and back
+ * (two re-renders while the phone redraws the turned screen); after this
+ * long a phone still sideways gets the mode its width gives.
+ */
+const FULLSCREEN_EXIT_TURN_MS = 2_000;
+let exitTurnUntil = 0;
+let exitTurnTimer: ReturnType<typeof setTimeout> | null = null;
 
 function getResponsiveMobileSnapshot(): boolean {
   if (typeof window === "undefined") return false;
@@ -46,8 +56,22 @@ function updateResponsiveModeStore(): void {
 
   if (fullscreenActive) {
     if (!fullscreenModeActive) fullscreenMobileMode = windowedMobileMode;
+    exitTurnUntil = 0;
   } else {
-    windowedMobileMode = getResponsiveMobileSnapshot();
+    const mobileWidth = getResponsiveMobileSnapshot();
+    if (fullscreenModeActive && fullscreenMobileMode && !mobileWidth) {
+      exitTurnUntil = performance.now() + FULLSCREEN_EXIT_TURN_MS;
+      if (exitTurnTimer !== null) clearTimeout(exitTurnTimer);
+      exitTurnTimer = setTimeout(() => {
+        exitTurnTimer = null;
+        exitTurnUntil = 0;
+        if (responsiveModeListening) updateResponsiveModeStore();
+      }, FULLSCREEN_EXIT_TURN_MS);
+    }
+    if (mobileWidth || performance.now() >= exitTurnUntil) {
+      windowedMobileMode = mobileWidth;
+      if (mobileWidth) exitTurnUntil = 0;
+    }
   }
   fullscreenModeActive = fullscreenActive;
 
@@ -96,6 +120,9 @@ function stopResponsiveModeStore(): void {
   );
   responsiveModeMediaQuery = null;
   responsiveModeListening = false;
+  if (exitTurnTimer !== null) clearTimeout(exitTurnTimer);
+  exitTurnTimer = null;
+  exitTurnUntil = 0;
 }
 
 function subscribeToResponsiveMobileMode(onStoreChange: () => void) {

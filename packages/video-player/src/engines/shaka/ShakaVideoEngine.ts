@@ -430,6 +430,19 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     this.emit("qualitychange", { quality, auto: false });
   }
 
+  setBufferAheadLimit(seconds: number | null): void {
+    const player = this.#player;
+    const runtime = this.#runtime;
+    const source = this.getSnapshot().source;
+    if (!player || !runtime || !source) return;
+    player.configure({
+      streaming:
+        seconds === null
+          ? createShakaConfiguration(source, runtime).streaming
+          : { bufferingGoal: seconds },
+    });
+  }
+
   override enableAutoQuality(): void {
     const player = this.requirePlayer();
     player.configure({ abr: { enabled: true } });
@@ -824,7 +837,9 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
 
     standby.volume = previousMedia.volume;
     standby.muted = previousMedia.muted;
-    standby.playbackRate = previousMedia.playbackRate;
+    // The learner's speed, not the element's: during a stall Shaka holds
+    // the element at 0, and the new lesson would start frozen at it.
+    standby.playbackRate = this.getSnapshot().playbackRate;
     previousMedia.pause();
     this.assignStandbyMedia(previousMedia);
     this.replaceMediaElement(standby, previousMedia);

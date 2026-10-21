@@ -19,6 +19,7 @@ import { CaretDownIcon as CaretDown } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon as CaretRight } from "@phosphor-icons/react/CaretRight";
 import { QueueIcon as Queue } from "@phosphor-icons/react/Queue";
 import {
+  startTransition,
   useEffect,
   useId,
   useLayoutEffect,
@@ -36,6 +37,11 @@ import {
   LEARNING_PLAYER_MINIMIZE_TITLE,
 } from "./learningPlayerShortcuts";
 import { COURSE_CONTENT_SHORTCUT_ARIA } from "../../keyboardShortcuts";
+import {
+  layoutQuery,
+  layoutQueryMatches,
+  watchLayoutQuery,
+} from "../../shell/phoneVideoFullscreenHold";
 import { cn } from "../../lib/utils";
 import { getPhoneLessonDrawerCollapsedSnapPoint } from "../useLessonDrawerHeroControl";
 import {
@@ -54,29 +60,37 @@ export const MOBILE_INVISIBLE_HIT_SURFACE_CLASS =
   "[&&&]:!bg-transparent [&&&:hover]:!bg-transparent [&&&:active]:!bg-transparent [&&&:focus-visible]:!bg-transparent [&&&[aria-pressed=true]]:!bg-transparent";
 const LANDSCAPE_ORIENTATION_QUERY = "(orientation: landscape)";
 
-const subscribeToLandscapeOrientation = (onStoreChange: () => void) => {
-  const media = window.matchMedia(LANDSCAPE_ORIENTATION_QUERY);
-  media.addEventListener("change", onStoreChange);
-  return () => media.removeEventListener("change", onStoreChange);
-};
-
-const getLandscapeOrientationSnapshot = () =>
-  window.matchMedia(LANDSCAPE_ORIENTATION_QUERY).matches;
-
-const getLandscapeOrientationServerSnapshot = () => false;
+/**
+ * Whether the screen is sideways. A turn is applied as a transition: the
+ * controls' landscape layout reaches the lesson page, whose re-render took
+ * over a second on a phone in development, and an urgent update kept the
+ * phone from drawing the turned screen meanwhile (it stayed black). As a
+ * transition the turned video is drawn first and the layout follows.
+ */
+function useLandscapeOrientation(): boolean {
+  const [landscape, setLandscape] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia(LANDSCAPE_ORIENTATION_QUERY);
+    setLandscape(media.matches);
+    const sync = () => startTransition(() => setLandscape(media.matches));
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  return landscape;
+}
 
 // Matches Tailwind's `sm` breakpoint. Settings and autoplay are rendered in
 // exactly one place, so their desktop position is decided in JS, not CSS.
 const WIDE_VIEWPORT_QUERY = "(min-width: 40rem)";
 
-const subscribeToWideViewport = (onStoreChange: () => void) => {
-  const media = window.matchMedia(WIDE_VIEWPORT_QUERY);
-  media.addEventListener("change", onStoreChange);
-  return () => media.removeEventListener("change", onStoreChange);
-};
+// Held while a phone plays a video full screen sideways (see
+// phoneVideoFullscreenHold): a phone never takes the desktop layout, and
+// re-rendering the controls for nothing held up the turn.
+const subscribeToWideViewport = (onStoreChange: () => void) =>
+  watchLayoutQuery(layoutQuery(WIDE_VIEWPORT_QUERY), onStoreChange);
 
 const getWideViewportSnapshot = () =>
-  window.matchMedia(WIDE_VIEWPORT_QUERY).matches;
+  layoutQueryMatches(layoutQuery(WIDE_VIEWPORT_QUERY));
 
 const getWideViewportServerSnapshot = () => false;
 
@@ -989,11 +1003,7 @@ export function LessonPlayerControls({
   const persistentProgressVisible =
     ready && !controlsSuppressed && mobileInteraction && !fullscreen;
   const timelineDisplayed = visible || persistentProgressVisible;
-  const landscapeOrientation = useSyncExternalStore(
-    subscribeToLandscapeOrientation,
-    getLandscapeOrientationSnapshot,
-    getLandscapeOrientationServerSnapshot,
-  );
+  const landscapeOrientation = useLandscapeOrientation();
   const mobileLandscapeFullscreen = mobileFullscreen && landscapeOrientation;
   const fullscreenCoursePanelVisible =
     mobileLandscapeFullscreen &&
@@ -1048,7 +1058,7 @@ export function LessonPlayerControls({
         previewLayout={
           mobileInteraction || shortPlayer ? "centered-pill" : "follow-pill"
         }
-        className={`${shortPlayer && !mobileInteraction ? (seekTimeOnly ? "[&_[data-video-player-preview]]:!bottom-5.5 [&_[data-video-player-preview]]:!mb-0 [&_[data-video-player-preview]>span+span]:hidden" : "[&_[data-video-player-preview]]:!bottom-17 [&_[data-video-player-preview]]:!mb-0") : ""} pointer-events-none overflow-visible [&_[role=slider]]:pointer-events-auto max-sm:[&_[role=slider]]:h-7 max-sm:[&_[data-video-player-preview]]:!bottom-8 max-sm:[&_[data-video-player-preview]]:!mb-0 max-sm:[&_[data-timeline-buffered-range]]:rounded-none max-sm:[&_[data-timeline-progress]]:rounded-none max-sm:[&_[data-timeline-track]]:rounded-none max-sm:[&_[data-timeline-track]]:!scale-y-100 max-sm:[&_[data-timeline-thumb]]:z-80 ${mobileTimelineGeometry} ${forcedMobileTimelineGeometry} ${mobileInteraction ? "[&_[role=slider]]:!h-7 [&_[data-video-player-preview]]:!bottom-8 [&_[data-video-player-preview]]:!mb-0 [&_[data-timeline-buffered-range]]:!rounded-none [&_[data-timeline-progress]]:!rounded-none [&_[data-timeline-track]]:!rounded-none [&_[data-timeline-thumb]]:!z-80" : ""}`}
+        className={`${shortPlayer && !mobileInteraction ? (seekTimeOnly ? "[&_[data-video-player-preview-mode=pill]]:!bottom-5.5 [&_[data-video-player-preview-mode=pill]]:!mb-0 [&_[data-video-player-preview-mode=pill]>span+span]:hidden" : "[&_[data-video-player-preview-mode=pill]]:!bottom-17 [&_[data-video-player-preview-mode=pill]]:!mb-0") : ""} pointer-events-none overflow-visible [&_[role=slider]]:pointer-events-auto max-sm:[&_[role=slider]]:h-7 max-sm:[&_[data-video-player-preview-mode=pill]]:!bottom-8 max-sm:[&_[data-video-player-preview-mode=pill]]:!mb-0 max-sm:[&_[data-timeline-buffered-range]]:rounded-none max-sm:[&_[data-timeline-progress]]:rounded-none max-sm:[&_[data-timeline-track]]:rounded-none max-sm:[&_[data-timeline-track]]:!scale-y-100 max-sm:[&_[data-timeline-thumb]]:z-80 ${mobileTimelineGeometry} ${forcedMobileTimelineGeometry} ${mobileInteraction ? "[&_[role=slider]]:!h-7 [&_[data-video-player-preview-mode=pill]]:!bottom-8 [&_[data-video-player-preview-mode=pill]]:!mb-0 [&_[data-timeline-buffered-range]]:!rounded-none [&_[data-timeline-progress]]:!rounded-none [&_[data-timeline-track]]:!rounded-none [&_[data-timeline-thumb]]:!z-80" : ""}`}
       />
     </div>
   );
@@ -1577,20 +1587,25 @@ export function LessonCentralControls({
   onGoNext,
   onGoPrevious,
 }: LessonCentralControlsProps) {
-  const { buffering, controlsVisible, lifecycle } = usePlayerState(
+  const { buffering, controlsVisible, lifecycle, scrubbing } = usePlayerState(
     ({ media, ui }) => ({
       buffering: media.buffering,
       controlsVisible: ui.controlsVisible,
       lifecycle: media.lifecycle,
+      scrubbing: ui.scrubbing,
     }),
     (left, right) =>
       left.buffering === right.buffering &&
       left.controlsVisible === right.controlsVisible &&
-      left.lifecycle === right.lifecycle,
+      left.lifecycle === right.lifecycle &&
+      left.scrubbing === right.scrubbing,
   );
   const mobileInteraction = usePlayerMobileInteraction();
   const loading = lifecycle !== "ready" || buffering;
-  const visible = !controlsSuppressed && !loading && controlsVisible;
+  // A drag on the timeline shows the moment over the whole picture; the
+  // play and lesson buttons in its middle step aside for it.
+  const visible =
+    !controlsSuppressed && !loading && controlsVisible && !scrubbing;
 
   return (
     <div

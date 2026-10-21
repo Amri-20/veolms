@@ -39,6 +39,7 @@ import {
   type LearningPlayerMotionFinish,
 } from "./learningPlayerExpandMotion";
 import { useLearningMiniPlayerGestures } from "./useLearningMiniPlayerGestures";
+import { isPhoneLayoutHeld } from "../../shell/phoneVideoFullscreenHold";
 import { MiniPlayerResizeHandles } from "./MiniPlayerResizeHandles";
 import { MiniPlayerInfoBar } from "./MiniPlayerInfoBar";
 import { MiniPlayerReadingModeEffects } from "./MiniPlayerReadingModeEffects";
@@ -338,6 +339,10 @@ export function PersistentLearningPlayerHost({
   const rememberFullPlayerRect = useCallback(() => {
     const host = hostRef.current;
     if (
+      // A video full screen on a phone turned sideways: its place on the
+      // page is not where it rests, and measuring forced a style and layout
+      // pass on every render during the turn (see phoneVideoFullscreenHold).
+      isPhoneLayoutHeld() ||
       !host ||
       expandMotionRef.current ||
       host.hasAttribute("data-learning-mini-player") ||

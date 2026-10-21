@@ -3,6 +3,14 @@ const PLAYER_AMBIENT_STORAGE_KEY = "veolms-player-ambient";
 const PLAYER_AUTOPLAY_STORAGE_KEY = "veolms-player-autoplay";
 const PLAYER_PLAYBACK_RATE_STORAGE_KEY = "veolms-player-playback-rate";
 const PLAYER_VOLUME_STORAGE_KEY = "veolms-player-volume";
+/**
+ * Where a tab announces a volume change made in it, for the other tabs to
+ * follow. Kept apart from the saved volume above: pages from before this
+ * key wrote that one back and forth between themselves without end (see
+ * `remoteVolumesRef` in LessonVideoPlayer), and a tab that followed it was
+ * moved by them; this one only a change made by a viewer writes.
+ */
+const PLAYER_VOLUME_CHANGE_STORAGE_KEY = "veolms-player-volume-change";
 const PLAYER_MINI_RESTORE_STORAGE_KEY = "veolms-player-mini-restore";
 const PLAYER_MINI_WIDTH_STORAGE_KEY = "veolms-player-mini-width";
 const PLAYER_MINI_SIDE_STORAGE_KEY = "veolms-player-mini-side";
@@ -47,6 +55,7 @@ export const lessonPlayerStorageKeys = {
   muted: PLAYER_MUTED_STORAGE_KEY,
   playbackRate: PLAYER_PLAYBACK_RATE_STORAGE_KEY,
   volume: PLAYER_VOLUME_STORAGE_KEY,
+  volumeChange: PLAYER_VOLUME_CHANGE_STORAGE_KEY,
   resume: (mediaKey: string) => `veolms-watch-${mediaKey}`,
 } as const;
 
@@ -205,18 +214,37 @@ export function writePlaybackRatePreference(
   }
 }
 
+/**
+ * Saves a volume the viewer set in this tab, and announces it to the other
+ * tabs (`lessonPlayerStorageKeys.volumeChange`).
+ */
 export function writeVolumePreference(
   volume: number,
   storage: StorageWriter | null = getBrowserStorage(),
 ): void {
   if (!Number.isFinite(volume)) return;
+  const clamped = clampPlayerVolume(volume);
   try {
+    storage?.setItem(PLAYER_VOLUME_STORAGE_KEY, String(clamped));
     storage?.setItem(
-      PLAYER_VOLUME_STORAGE_KEY,
-      String(clampPlayerVolume(volume)),
+      PLAYER_VOLUME_CHANGE_STORAGE_KEY,
+      JSON.stringify({ volume: clamped, at: Date.now() }),
     );
   } catch {
     // Playback remains usable when browser storage is unavailable.
+  }
+}
+
+/** The volume in a `volumeChange` announcement, or null. */
+export function readVolumeChange(value: string | null): number | null {
+  if (!value) return null;
+  try {
+    const change = JSON.parse(value) as { volume?: unknown };
+    return typeof change.volume === "number" && Number.isFinite(change.volume)
+      ? clampPlayerVolume(change.volume)
+      : null;
+  } catch {
+    return null;
   }
 }
 
