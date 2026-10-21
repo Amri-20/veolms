@@ -164,6 +164,14 @@ export function installPhoneVideoFullscreenHold(): () => void {
   };
 }
 
+/** Calls `listener` each time a hold ends. */
+export function onPhoneLayoutRelease(listener: () => void): () => void {
+  releaseListeners.add(listener);
+  return () => {
+    releaseListeners.delete(listener);
+  };
+}
+
 /**
  * Calls `onChange` when `media` changes, except while the layout is held:
  * then once, when the hold ends, if it changed meanwhile.

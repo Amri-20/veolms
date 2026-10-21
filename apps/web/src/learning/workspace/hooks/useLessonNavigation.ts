@@ -1,4 +1,5 @@
 import {
+  startTransition,
   useCallback,
   useEffect,
   type Dispatch,
@@ -262,13 +263,18 @@ export function useLessonNavigation({
         roundedProgress >= LESSON_PROGRESS_COMPLETE_THRESHOLD
           ? 100
           : roundedProgress;
-      setLocalLessonProgress((current) => {
-        if (current[selectedLesson] === nextProgress) return current;
-        return { ...current, [selectedLesson]: nextProgress };
+      // Not urgent: the lesson page re-renders for it (curriculum and
+      // discussion included) while the video plays, so it is a transition
+      // that gives way to drawing the video and the controls.
+      startTransition(() => {
+        setLocalLessonProgress((current) => {
+          if (current[selectedLesson] === nextProgress) return current;
+          return { ...current, [selectedLesson]: nextProgress };
+        });
+        // Kept by `recordProgress` under the learner's account; the course
+        // cards read it from there (`catalogueCardProgress.ts`).
+        recordProgress(selectedLesson, nextProgress);
       });
-      // Kept by `recordProgress` under the learner's account; the course
-      // cards read it from there (`catalogueCardProgress.ts`).
-      recordProgress(selectedLesson, nextProgress);
     },
     [recordProgress, selectedLesson, setLocalLessonProgress],
   );
