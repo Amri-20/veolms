@@ -34,6 +34,7 @@ import { usePlayerCourseLessons } from "./workspace/hooks/usePlayerCourseLessons
 import { useLessonPlayerProps } from "./workspace/hooks/useLessonPlayerProps";
 import { useLessonEditPath } from "./workspace/hooks/useLessonEditPath";
 import { useLessonHeader } from "./workspace/hooks/useLessonHeader";
+import { useShownAfterFirstPaint } from "./workspace/hooks/useShownAfterFirstPaint";
 
 interface LearningWorkspaceProps {
   courseSlug: string | undefined;
@@ -676,6 +677,10 @@ export function LearningWorkspace({
     lessonId: backendLessonId,
   });
 
+  // Opened inside the app, the page draws the video first and the parts
+  // below and beside it a frame later.
+  const lowerPartsShown = useShownAfterFirstPaint();
+
   const { lessonHeader } = useLessonHeader({
     courseSlug,
     persistentPlayerCourseRouteKey,
@@ -839,6 +844,7 @@ export function LearningWorkspace({
           isCourseOverviewLoading={isCourseOverviewLoading}
           courseUnavailable={courseUnavailable}
           setChaptersPanelHost={setChaptersPanelHost}
+          listShown={lowerPartsShown}
         />
       </main>
 

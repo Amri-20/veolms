@@ -80,6 +80,13 @@ export interface CurriculumColumnProps {
   isCourseOverviewLoading: boolean;
   courseUnavailable: "failed" | "not-found" | "no-lessons" | null;
   setChaptersPanelHost: Dispatch<SetStateAction<HTMLDivElement | null>>;
+  /**
+   * Whether the course's lessons are drawn yet. A lesson opened inside the
+   * app draws its column first and the list in it a frame later (see
+   * useShownAfterFirstPaint): the list is most of the page's elements, and
+   * it held the video back.
+   */
+  listShown: boolean;
 }
 
 export function CurriculumColumn({
@@ -119,6 +126,7 @@ export function CurriculumColumn({
   isCourseOverviewLoading,
   courseUnavailable,
   setChaptersPanelHost,
+  listShown,
 }: CurriculumColumnProps) {
   // prettier-ignore
   return (
@@ -171,31 +179,33 @@ export function CurriculumColumn({
           id="learning-course-content"
           className="learning-curriculum__viewport"
         >
-          <Curriculum
-            sections={curriculumSections}
-            lessonsById={curriculumLessonsById}
-            scrollportRef={curriculumScrollportRef}
-            scrollportId="learning-course-curriculum-scrollport"
-            selectedLesson={selectedLesson}
-            lessonProgress={lessonProgress}
-            onSelectLesson={selectLesson}
-            lockedLessonNumbers={lockedLessonNumbers}
-            onOpenCourseOverview={onOpenCourseOverview}
-            courseNavigationActionLabel={courseNavigationActionLabel}
-            courseTitle={courseTitle}
-            courseThumbnail={courseThumbnail}
-            courseThumbnailSrcSet={courseThumbnailSrcSet}
-            focusRequest={curriculumFocusRequest}
-            persistenceKey={coursePersistenceKey}
-            lessonResources={curriculumLessonResources}
-            resourceCourseKey={courseSlug}
-            quizLessonNumbers={curriculumQuizLessonNumbers}
-            activeQuizLesson={showingQuiz ? selectedLesson : null}
-            onOpenLessonQuiz={handleOpenLessonQuiz}
-            isLoading={isApiRoute && isCourseOverviewLoading}
-            unavailable={courseUnavailable !== null}
-            loadFailed={courseUnavailable === "failed"}
-          />
+          {listShown ? (
+            <Curriculum
+              sections={curriculumSections}
+              lessonsById={curriculumLessonsById}
+              scrollportRef={curriculumScrollportRef}
+              scrollportId="learning-course-curriculum-scrollport"
+              selectedLesson={selectedLesson}
+              lessonProgress={lessonProgress}
+              onSelectLesson={selectLesson}
+              lockedLessonNumbers={lockedLessonNumbers}
+              onOpenCourseOverview={onOpenCourseOverview}
+              courseNavigationActionLabel={courseNavigationActionLabel}
+              courseTitle={courseTitle}
+              courseThumbnail={courseThumbnail}
+              courseThumbnailSrcSet={courseThumbnailSrcSet}
+              focusRequest={curriculumFocusRequest}
+              persistenceKey={coursePersistenceKey}
+              lessonResources={curriculumLessonResources}
+              resourceCourseKey={courseSlug}
+              quizLessonNumbers={curriculumQuizLessonNumbers}
+              activeQuizLesson={showingQuiz ? selectedLesson : null}
+              onOpenLessonQuiz={handleOpenLessonQuiz}
+              isLoading={isApiRoute && isCourseOverviewLoading}
+              unavailable={courseUnavailable !== null}
+              loadFailed={courseUnavailable === "failed"}
+            />
+          ) : null}
         </div>
         {/* The lesson player portals its chapters panel here so it
                 overlays the course content. It sits below the resize rail. */}

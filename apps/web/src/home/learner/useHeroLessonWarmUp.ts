@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { prefetchCoursePage } from "../../services/courses";
 import { prefetchLearningProgressSnapshot } from "../../services/learning-progress";
+import { persistentLearningPlayerHostBody } from "../../routing/prerenderedBodies";
 
 /** How many segments past the learner's place the lesson's video fetches. */
 const HERO_LESSON_SEGMENTS = 3;
@@ -37,7 +38,7 @@ export function useHeroLessonWarmUp(
       if (cancelled) return;
       void prefetchCoursePage(queryClient, courseSlug);
       void prefetchLearningProgressSnapshot(queryClient, courseSlug);
-      void import("../../learning/player/PersistentLearningPlayerHost");
+      void persistentLearningPlayerHostBody.preload();
       void import("../../learning/earlyHlsPreload").then(
         ({ preloadLessonPlayback }) => {
           if (cancelled) return;

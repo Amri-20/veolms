@@ -68,13 +68,9 @@ import {
   VideoPlaybackBootstrapError,
 } from "../learning/videoPlaybackBootstrap";
 
-const loadPersistentLearningPlayerHost = () =>
-  import("../learning/player/PersistentLearningPlayerHost");
-const PersistentLearningPlayerHost = lazy(() =>
-  loadPersistentLearningPlayerHost().then((module) => ({
-    default: module.PersistentLearningPlayerHost,
-  })),
-);
+const loadPersistentLearningPlayerHost =
+  persistentLearningPlayerHostBody.preload;
+const PersistentLearningPlayerHost = persistentLearningPlayerHostBody.Body;
 const loadLearningMiniPlayer = () =>
   import("../learning/player/LearningMiniPlayer");
 const LearningMiniPlayer = lazy(() =>
@@ -93,6 +89,7 @@ import {
 } from "../learning/player/learningMiniPlayerStore";
 import type { NavigateTo, NavigationOptions } from "../routing/navigation";
 import { AcademyRouteGuard } from "../routing/RouteGuards";
+import { persistentLearningPlayerHostBody } from "../routing/prerenderedBodies";
 import { useCapabilities } from "../services/authorization/authorization.queries";
 import { ProfileNavigationProvider } from "../profiles/ProfileLink";
 import { ProfilePreviewHost } from "../profiles/ProfilePreviewHost";
