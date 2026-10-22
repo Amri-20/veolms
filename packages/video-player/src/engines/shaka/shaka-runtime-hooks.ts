@@ -11,6 +11,8 @@ export type ShakaRuntimeHook = (runtimeModule: unknown) => void;
 
 interface ShakaRuntimeHookState {
   hooks: Set<ShakaRuntimeHook>;
+  /** Run before the others (see `onShakaRuntimeLoaded`). */
+  firstHooks?: Set<ShakaRuntimeHook>;
   loaded: boolean;
   runtimeModule: unknown;
 }
@@ -41,13 +43,21 @@ function runHook(hook: ShakaRuntimeHook, runtimeModule: unknown): void {
 /**
  * Runs `hook` with the Shaka module every time the default loader loads it,
  * and at once if it has already been loaded. Returns an unsubscribe function.
+ *
+ * `first`: run before the other hooks, whenever it was added. For a hook that
+ * changes something the others take a copy of (Shaka's fetch plugin, which
+ * an extension wraps in a scheme plugin of its own).
  */
-export function onShakaRuntimeLoaded(hook: ShakaRuntimeHook): () => void {
+export function onShakaRuntimeLoaded(
+  hook: ShakaRuntimeHook,
+  options: { first?: boolean } = {},
+): () => void {
   const state = hookState();
-  state.hooks.add(hook);
+  const hooks = options.first ? (state.firstHooks ??= new Set()) : state.hooks;
+  hooks.add(hook);
   if (state.loaded) runHook(hook, state.runtimeModule);
   return () => {
-    state.hooks.delete(hook);
+    hooks.delete(hook);
   };
 }
 
@@ -57,5 +67,6 @@ export function notifyShakaRuntimeLoaded(runtimeModule: unknown): void {
   if (state.loaded && state.runtimeModule === runtimeModule) return;
   state.loaded = true;
   state.runtimeModule = runtimeModule;
+  for (const hook of state.firstHooks ?? []) runHook(hook, runtimeModule);
   for (const hook of state.hooks) runHook(hook, runtimeModule);
 }

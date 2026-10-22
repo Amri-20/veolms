@@ -1,5 +1,6 @@
 import {
   Fragment,
+  useLayoutEffect,
   type RefObject,
   type Dispatch,
   type SetStateAction,
@@ -16,6 +17,7 @@ import type { SidebarPreferences } from "../settings/settingsPreferences";
 import { SIDEBAR_NAV_ITEM_SQUIRCLE_CLASS } from "./academyShellClasses";
 import type { SidebarTooltip } from "./academyShellTypes";
 import { ShortcutKeys } from "./ShortcutKeys";
+import { useHydrated } from "../courses/viewerCourseState";
 
 export interface SidebarNavigationProps {
   navigationScrollFade: { top: boolean; bottom: boolean; overflow: boolean };
@@ -66,6 +68,29 @@ export function SidebarNavigation({
   sidebarResizePreviewWidth,
   renderedSidebarWidth,
 }: SidebarNavigationProps) {
+  // The menu item a page was opened from is lit by the document's head
+  // before the page runs (see routing/navigationOriginEarlyState.ts), by
+  // changing the built page's classes. React leaves a class it did not put
+  // there, so where the app then decided on another item (a lesson page
+  // whose origin it does not take), both stayed lit. Once the page runs,
+  // every item is set to what the app decided.
+  const hydrated = useHydrated();
+  const activeLabels = navigation
+    .filter((item) => isNavigationItemActive(item))
+    .map(([label]) => label)
+    .join("|");
+  useLayoutEffect(() => {
+    const menu = navigationRef.current;
+    if (!hydrated || !menu) return;
+    const active = new Set(activeLabels.split("|"));
+    for (const item of menu.querySelectorAll(":scope > button")) {
+      item.classList.toggle(
+        "is-active",
+        active.has(item.getAttribute("aria-label") ?? ""),
+      );
+    }
+  }, [activeLabels, hydrated, navigationRef]);
+
   // prettier-ignore
   return (
     <nav

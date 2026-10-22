@@ -34,6 +34,7 @@ import { usePlayerCourseLessons } from "./workspace/hooks/usePlayerCourseLessons
 import { useLessonPlayerProps } from "./workspace/hooks/useLessonPlayerProps";
 import { useLessonEditPath } from "./workspace/hooks/useLessonEditPath";
 import { useLessonHeader } from "./workspace/hooks/useLessonHeader";
+import { useShownAfterFirstPaint } from "./workspace/hooks/useShownAfterFirstPaint";
 
 interface LearningWorkspaceProps {
   courseSlug: string | undefined;
@@ -344,6 +345,7 @@ export function LearningWorkspace({
     recordProgress,
     detachedProgressTarget,
     lessonProgress,
+    progressKnown,
     liveLessonProgress,
     courseComplete,
     currentLessonIndex,
@@ -365,6 +367,11 @@ export function LearningWorkspace({
     curriculumLessonsById,
     courseAccessRefused,
   });
+  // The course's progress in the lesson list waits for the learner's own
+  // (a visitor has none to wait for): until then it shimmers, rather than
+  // saying 0% and then changing.
+  const progressPending =
+    isAuthResolutionPending || (isAuthenticated && !progressKnown);
 
   const {
     stickyPlayer,
@@ -676,6 +683,10 @@ export function LearningWorkspace({
     lessonId: backendLessonId,
   });
 
+  // Opened inside the app, the page draws the video first and the parts
+  // below and beside it a frame later.
+  const lowerPartsShown = useShownAfterFirstPaint();
+
   const { lessonHeader } = useLessonHeader({
     courseSlug,
     persistentPlayerCourseRouteKey,
@@ -821,6 +832,7 @@ export function LearningWorkspace({
           curriculumScrollportRef={curriculumScrollportRef}
           selectedLesson={selectedLesson}
           lessonProgress={lessonProgress}
+          progressPending={progressPending}
           selectLesson={selectLesson}
           lockedLessonNumbers={lockedLessonNumbers}
           onOpenCourseOverview={onOpenCourseOverview}
@@ -839,6 +851,7 @@ export function LearningWorkspace({
           isCourseOverviewLoading={isCourseOverviewLoading}
           courseUnavailable={courseUnavailable}
           setChaptersPanelHost={setChaptersPanelHost}
+          listShown={lowerPartsShown}
         />
       </main>
 
@@ -900,6 +913,7 @@ export function LearningWorkspace({
           lessonDrawerScrollportRef={lessonDrawerScrollportRef}
           selectedLesson={selectedLesson}
           lessonProgress={lessonProgress}
+          progressPending={progressPending}
           lockedLessonNumbers={lockedLessonNumbers}
           selectLesson={selectLesson}
           onOpenCourseOverview={onOpenCourseOverview}

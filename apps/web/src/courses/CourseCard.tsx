@@ -25,6 +25,12 @@ import { Fragment, type ReactNode } from "react";
 import { courseOverviewBody } from "../routing/prerenderedBodies";
 import { prefetchCoursePage } from "../services/courses";
 import { getCourseRouteKey, hasBegunCourse } from "./catalogue";
+import type { CourseOpenOptions } from "./catalogue";
+import {
+  mergeIntentHandlers,
+  useLessonOpenIntent,
+  type LessonOpenTarget,
+} from "../learning/lessonOpenIntent";
 import { formatCourseProgress } from "../learning/courseProgressFormat";
 import type { Course, CourseRole } from "./catalogue";
 import { ALT_DRAG_TEXT_SELECT_CLASSES } from "./altDragTextSelect";
@@ -85,7 +91,11 @@ export interface CourseCardProps {
   publicAction?: "view" | "enroll";
   wishlisted: boolean;
   onWishlist: (course: Course) => void;
-  onOpen: (course: Course) => void;
+  /**
+   * Opens the course's lessons. The card names the lesson and asks for it
+   * to play when the press was on its play button or "Continue Learning".
+   */
+  onOpen: (course: Course, options?: CourseOpenOptions) => void;
   onExplore: (course: Course) => void;
   onEdit?: (course: Course) => void;
   onEditIntent?: (course: Course) => void;
@@ -212,6 +222,40 @@ export function CourseCard({
     }
     if (!course.enrolled && !viewerStatePending) prefetchOverview();
   };
+  // The lesson the play button (and, on a course the learner holds, the
+  // main button) opens: readied while the pointer rests on it, and opened
+  // playing. A learner's course goes on where they left it, on any device;
+  // one they do not hold plays its preview, from the first lesson; a
+  // creator's opens where the course's address does. A visitor's picture
+  // leads to the course page instead, and a course in the bin to nothing.
+  const courseRouteKey = getCourseRouteKey(course);
+  const playTarget: LessonOpenTarget | null =
+    isDeleting || isPublic || viewerStatePending
+      ? null
+      : role === "creator"
+        ? isBin || course.deletedAt
+          ? null
+          : { courseKey: courseRouteKey, lesson: "course" }
+        : course.enrolled
+          ? {
+              courseKey: courseRouteKey,
+              lesson: "resume",
+              review: progress >= 100,
+            }
+          : { courseKey: courseRouteKey, lesson: 1 };
+  const playIntent = useLessonOpenIntent(playTarget);
+  const openPlaying = () =>
+    playIntent.open((lessonNumber) =>
+      onOpen(course, { lessonNumber, autoplay: true }),
+    );
+  const mainButtonIntent = mergeIntentHandlers(
+    {
+      onPointerEnter: onMainButtonIntent,
+      onFocus: onMainButtonIntent,
+      onPointerDown: onMainButtonIntent,
+    },
+    role === "student" && course.enrolled ? playIntent.handlers : undefined,
+  );
   const absoluteCourseUrl =
     typeof window === "undefined"
       ? overviewPath
@@ -256,6 +300,10 @@ export function CourseCard({
     if (isDeleting) return;
     if (isPublic) {
       onNavigatePage(overviewPath);
+      return;
+    }
+    if (playTarget) {
+      openPlaying();
       return;
     }
     onOpen(course);
@@ -336,6 +384,7 @@ export function CourseCard({
           className="group/media absolute inset-0 z-10 flex items-center justify-center [@media(hover:none)]:pointer-events-none focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-(--accent)"
           aria-label={thumbnailActionLabel}
           title={thumbnailActionTooltip}
+          {...(playTarget ? playIntent.handlers : {})}
           onClick={openThumbnail}
           disabled={isDeleting}
         >
@@ -354,6 +403,8 @@ export function CourseCard({
             <Play size={30} weight="fill" />
           </span>
         </button>
+
+        {playIntent.pageLinks}
 
         {isDeleting ? (
           <div className="absolute left-3.5 top-3.5 z-20 flex flex-wrap items-center gap-1.5">
@@ -711,9 +762,7 @@ export function CourseCard({
                   : "flex justify-center gap-3 hover:bg-(--accent-hover)"
               }`}
               data-control-radius-action
-              onPointerEnter={onMainButtonIntent}
-              onFocus={onMainButtonIntent}
-              onPointerDown={onMainButtonIntent}
+              {...mainButtonIntent}
               onClick={() => {
                 if (isDeleting) return;
                 if (role === "creator") {
@@ -732,7 +781,7 @@ export function CourseCard({
                 }
 
                 if (course.enrolled) {
-                  onOpen(course);
+                  openPlaying();
                   return;
                 }
 

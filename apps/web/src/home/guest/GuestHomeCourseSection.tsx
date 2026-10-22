@@ -149,11 +149,11 @@ export function GuestHomeCourseSection({
                       cardActions.wishlisted,
                     )}
                     onWishlist={cardActions.onWishlist}
-                    onOpen={(selected) =>
-                      cardActions.onOpenCourse(
-                        selected,
-                        selected.enrolled ? undefined : { preview: true },
-                      )
+                    onOpen={(selected, options) =>
+                      cardActions.onOpenCourse(selected, {
+                        ...(selected.enrolled ? {} : { preview: true }),
+                        ...options,
+                      })
                     }
                     onExplore={(selected) =>
                       onNavigatePage(

@@ -51,3 +51,19 @@ export function useLearningProgressResumeContext(
     retry: false,
   });
 }
+
+/** `useLearningProgressResumeContext`'s answer, from the cache while fresh. */
+export function fetchLearningProgressResumeContext(
+  queryClient: QueryClient,
+  courseKey: string,
+): Promise<LearningProgressResumeContextResponse> {
+  return queryClient.fetchQuery<
+    LearningProgressResumeContextResponse,
+    ApiError
+  >({
+    queryKey: learningProgressKeys.resumeContext(courseKey),
+    queryFn: () => learningProgressService.getResumeContext(courseKey),
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+}

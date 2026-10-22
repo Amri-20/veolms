@@ -85,7 +85,7 @@ export function SidebarBrand({
         className="courses-logo-clip"
         role="img"
         aria-label="ProCodrr"
-        title="Click, then hold to float sidebar"
+        title="Home. Click, then hold to float the sidebar"
         data-second-press-holding={
           sidebarLogoGesture.isSecondPressHolding || undefined
         }

@@ -1,4 +1,5 @@
 import { Play } from "@phosphor-icons/react/Play";
+import type { LessonOpenIntent } from "../../learning/lessonOpenIntent";
 import type { Course } from "../catalogue";
 import { getCourseThumbnailSrcSet } from "../courseThumbnail";
 
@@ -24,7 +25,19 @@ interface CourseHeroArtworkProps {
    * picture, beside the text, stops above that strip so none of it is hidden.
    */
   footRoom?: boolean;
+  /**
+   * While the viewer is not known: the enrolled learner's play button as it
+   * will be, drawn only on a course the head finds the learner holds
+   * (`courseCardEarlyState`), and not pressable until the real one comes.
+   */
+  heldPlaceholder?: boolean;
+  /** Readies the lesson the play button opens, ahead of the press. */
+  previewIntent?: LessonOpenIntent["handlers"];
 }
+
+/** The round play button in the middle of the picture, while stacked. */
+const centerPlayClasses =
+  "absolute top-[44%] left-1/2 z-20 inline-flex size-15 -translate-1/2 cursor-pointer items-center justify-center rounded-full border-0 bg-black/40 text-white shadow-[0_8px_30px_rgb(0_0_0/0.3)] backdrop-blur-md transition-colors duration-160 ease-out hover:bg-black/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-default disabled:hover:bg-black/40 motion-reduce:transition-none @3xl/hero:hidden";
 
 /**
  * The widest the picture is drawn: the hero's full width while it is stacked,
@@ -68,6 +81,8 @@ export function CourseHeroArtwork({
   previewClassName = "",
   previewDependsOnViewer = false,
   footRoom = false,
+  heldPlaceholder = false,
+  previewIntent,
 }: CourseHeroArtworkProps) {
   // A thumbnail from before sizes were kept has an empty list.
   const smallestVariant = thumbnailSrcSet?.length
@@ -129,7 +144,8 @@ export function CourseHeroArtwork({
               data-course-card-early={
                 previewDependsOnViewer ? "offer" : undefined
               }
-              className={`absolute top-[44%] left-1/2 z-20 inline-flex size-15 -translate-1/2 cursor-pointer items-center justify-center rounded-full border-0 bg-black/40 text-white shadow-[0_8px_30px_rgb(0_0_0/0.3)] backdrop-blur-md transition-colors duration-160 ease-out hover:bg-black/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-default disabled:hover:bg-black/40 motion-reduce:transition-none @3xl/hero:hidden ${previewClassName}`}
+              className={`${centerPlayClasses} ${previewClassName}`}
+              {...previewIntent}
               onClick={onPreview}
               disabled={previewDisabled}
               aria-label={previewLabel}
@@ -137,6 +153,18 @@ export function CourseHeroArtwork({
             >
               <Play size={24} weight="fill" aria-hidden="true" />
             </button>
+          ) : null}
+          {heldPlaceholder ? (
+            // Shown as a block by the head; the button inside is placed on
+            // the picture as the real one is.
+            <div className="hidden" data-course-card-early="held">
+              <span
+                aria-hidden="true"
+                className={`${centerPlayClasses} pointer-events-none`}
+              >
+                <Play size={24} weight="fill" aria-hidden="true" />
+              </span>
+            </div>
           ) : null}
         </div>
       ) : null}

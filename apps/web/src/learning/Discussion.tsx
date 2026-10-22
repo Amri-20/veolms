@@ -369,7 +369,7 @@ function DiscussionInner({
         entryFilter === "note"
           ? entryFilter
           : ("all" as const),
-      sort: feedSort === "top" ? ("top" as const) : ("newest" as const),
+      sort: feedSort,
       ...(feedMine ? { mine: true } : {}),
     }),
     [entryFilter, feedMine, feedSort],
@@ -2530,6 +2530,7 @@ function DiscussionInner({
         enabledKinds={enabledKinds}
         promptText={promptText}
         authorAvatar={authorAvatar}
+        viewerKnown={Boolean(currentUser)}
         lessonContentAccess={lessonContentAccess}
         lessonContentAccessReason={lessonContentAccessReason}
         canParticipate={canParticipate}

@@ -109,7 +109,9 @@ function isFeedContext(value: unknown): value is FeedContext {
       candidate.kind === "comment" ||
       candidate.kind === "question" ||
       candidate.kind === "note") &&
-    (candidate.sort === "newest" || candidate.sort === "top") &&
+    (candidate.sort === "newest" ||
+      candidate.sort === "oldest" ||
+      candidate.sort === "top") &&
     typeof candidate.mine === "boolean" &&
     typeof candidate.publicOnly === "boolean" &&
     Boolean(capabilities) &&

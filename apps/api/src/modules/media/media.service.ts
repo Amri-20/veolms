@@ -17,6 +17,7 @@ import { AppError } from "../../lib/errors.ts";
 import type { AppServices } from "../../services/index.ts";
 import { ADMIN_ROLE } from "../auth/index.ts";
 import { createAccessService, isOpenFreeCourse } from "../access/index.ts";
+import type { LessonPositionReader } from "../learning-progress/index.ts";
 import { listLessonChaptersForPlayback } from "../courses/chapters/chapters.playback.service.ts";
 import { createChapterSyncService } from "../courses/chapters/chapters.service.ts";
 import { findLessonResourceForDownload } from "../courses/curriculum/lesson-resource.download.service.ts";
@@ -41,6 +42,12 @@ import type {
 export interface MediaServiceOptions {
   database: Kysely<Database>;
   services: AppServices;
+  /**
+   * Where a learner last was in a lesson's video (the learning-progress
+   * module's), for the playback bootstrap's `resumePosition`. Only the
+   * media routes pass it; without it the bootstrap leaves the field out.
+   */
+  lessonPositions?: LessonPositionReader;
 }
 
 const VIDEO_QUALITIES: VideoQualityLevel[] = ["360p", "720p", "1080p"];
@@ -274,6 +281,7 @@ export interface VideoAssetForPlayback {
 export function createMediaService({
   database,
   services,
+  lessonPositions,
 }: MediaServiceOptions) {
   const chapterSyncService = createChapterSyncService({ database, services });
 
@@ -1462,6 +1470,8 @@ export function createMediaService({
     options: {
       inlineManifest?: boolean;
       storyboard?: boolean;
+      /** Include where this learner last was in the video. */
+      resume?: boolean;
       logger?: FastifyBaseLogger;
     } = {},
   ): Promise<VideoPlaybackBootstrap> {
@@ -1503,11 +1513,20 @@ export function createMediaService({
     const storyboardUrlPromise = options.storyboard
       ? readStoryboardUrl(manifestKey, outputVersion, options.logger)
       : Promise.resolve(undefined);
-    const [chapterRows, inlinedMasterManifest, storyboardUrl] =
+    // Where this learner left the video, from whichever device. Optional:
+    // a failure plays from wherever this browser says.
+    const resumePositionPromise =
+      options.resume && user && lessonPositions
+        ? lessonPositions
+            .findLessonPosition(user.id, context.course_id, context.lesson_id)
+            .catch(() => null)
+        : Promise.resolve(null);
+    const [chapterRows, inlinedMasterManifest, storyboardUrl, resumePosition] =
       await Promise.all([
         chapterRowsPromise,
         inlinedMasterManifestPromise,
         storyboardUrlPromise,
+        resumePositionPromise,
       ]);
     const chapters = chapterRows.map((chapter) => {
       let thumbnailUrl: string | undefined;
@@ -1545,6 +1564,14 @@ export function createMediaService({
       source: "paid-bootstrap-api",
       ...(inlinedMasterManifest ? { inlinedMasterManifest } : {}),
       ...(storyboardUrl ? { storyboardUrl } : {}),
+      ...(resumePosition
+        ? {
+            resumePosition: {
+              seconds: resumePosition.seconds,
+              savedAt: resumePosition.savedAt.toISOString(),
+            },
+          }
+        : {}),
     };
   }
 

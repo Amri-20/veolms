@@ -145,7 +145,13 @@ export function useLessonHeader({
 
   const lessonHeader = (contained = false, titleLoading = false) => (
     <header
-      className="learning-workspace__lesson-header"
+      // At phone width the header goes into the discussion's scroll area,
+      // which is padded 10px at its top; this one stands there until the
+      // page knows it is on a phone (a page built ahead of time does not),
+      // and is set the same so that nothing moves when it is swapped.
+      className={`learning-workspace__lesson-header ${
+        contained ? "" : "max-[640px]:pt-2.5"
+      }`}
       data-lesson-edit={lessonEditPath ? "" : undefined}
       // Tells the video's resize grip when a mouse is over its strip (at
       // phone width the strip lies over the top of this header).

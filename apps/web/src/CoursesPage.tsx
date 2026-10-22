@@ -930,6 +930,11 @@ export function CoursesPage({
     mobileMoreNavigation,
     mobileMoreActive,
   } = useSidebarControls({
+    onLogoPress: () =>
+      selectNavigation(
+        "Home",
+        navigation.find(([label]) => label === "Home"),
+      ),
     setSidebarMode,
     sidebarWidth,
     compactNavigation,

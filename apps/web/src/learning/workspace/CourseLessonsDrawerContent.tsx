@@ -47,6 +47,8 @@ export interface CourseLessonsDrawerContentProps {
   lessonDrawerScrollportRef: RefObject<HTMLElement | null>;
   selectedLesson: number;
   lessonProgress: Record<number, number>;
+  /** See `Curriculum`'s `progressPending`. */
+  progressPending?: boolean;
   lockedLessonNumbers: ReadonlySet<number>;
   selectLesson: (lessonNumber: number, view?: "video" | "quiz") => void;
   onOpenCourseOverview: () => void;
@@ -107,6 +109,7 @@ export function CourseLessonsDrawerContent({
   lessonDrawerScrollportRef,
   selectedLesson,
   lessonProgress,
+  progressPending = false,
   lockedLessonNumbers,
   selectLesson,
   onOpenCourseOverview,
@@ -234,6 +237,7 @@ export function CourseLessonsDrawerContent({
           scrollportId="lesson-drawer-curriculum-scrollport"
           selectedLesson={selectedLesson}
           lessonProgress={lessonProgress}
+          progressPending={progressPending}
           lockedLessonNumbers={lockedLessonNumbers}
           onSelectLesson={selectLesson}
           onOpenCourseOverview={onOpenCourseOverview}

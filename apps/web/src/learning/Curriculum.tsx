@@ -33,12 +33,23 @@ const EMPTY_CURRICULUM_SECTIONS: CourseSection[] = [];
 const EMPTY_LESSONS_BY_ID: ReadonlyMap<number, Lesson> = new Map();
 
 const LESSON_PROGRESS_COMPLETE_THRESHOLD = 99.5;
+/** The course's percentage while the learner's progress is on its way. */
+const PROGRESS_SHIMMER =
+  "animate-pulse rounded-[4px] bg-[color-mix(in_srgb,currentColor_24%,transparent)] motion-reduce:animate-none";
 
 interface CurriculumProps {
   selectedLesson: number;
   sections?: readonly CourseSection[];
   lessonsById?: ReadonlyMap<number, Lesson>;
   lessonProgress?: Readonly<Record<number, number>>;
+  /**
+   * The learner's progress is still on its way (the session has not said
+   * who they are, or theirs has not arrived): the course's progress
+   * shimmers instead of saying 0%. A page built ahead of time does not know
+   * the visitor either; a visitor (no session remembered, see
+   * store/sessionPresence.ts) is shown 0% from the first paint.
+   */
+  progressPending?: boolean;
   onSelectLesson: (lessonNumber: number) => void;
   onOpenCourseOverview?: () => void;
   courseNavigationActionLabel?: string;
@@ -127,6 +138,7 @@ export const Curriculum = memo(function Curriculum({
   sections = EMPTY_CURRICULUM_SECTIONS,
   lessonsById = EMPTY_LESSONS_BY_ID,
   lessonProgress = {},
+  progressPending = false,
   onSelectLesson,
   onOpenCourseOverview,
   courseNavigationActionLabel,
@@ -647,10 +659,27 @@ export const Curriculum = memo(function Curriculum({
             <div className="learning-curriculum__sticky-meta">
               <div className="learning-curriculum__progress-copy">
                 <span>Progress</span>
-                <strong>{formatCourseProgress(courseProgress)}</strong>
+                {progressPending ? (
+                  <>
+                    <strong className="[:root[data-session-hint=signed-in]_&]:hidden">
+                      {formatCourseProgress(0)}
+                    </strong>
+                    <i
+                      aria-hidden="true"
+                      className={`${PROGRESS_SHIMMER} hidden h-[0.95rem] w-[3.1rem] [:root[data-session-hint=signed-in]_&]:inline-block`}
+                    />
+                  </>
+                ) : (
+                  <strong>{formatCourseProgress(courseProgress)}</strong>
+                )}
               </div>
               <div
-                className="learning-curriculum__progress-track"
+                className={`learning-curriculum__progress-track ${
+                  progressPending
+                    ? "[:root[data-session-hint=signed-in]_&]:animate-pulse [:root[data-session-hint=signed-in]_&]:motion-reduce:animate-none"
+                    : ""
+                }`}
+                aria-busy={progressPending || undefined}
                 role="progressbar"
                 aria-label={`Course progress: ${courseProgress} percent`}
                 aria-valuemin={0}
@@ -658,6 +687,11 @@ export const Curriculum = memo(function Curriculum({
                 aria-valuenow={courseProgress}
               >
                 <span
+                  className={
+                    progressPending
+                      ? "[:root[data-session-hint=signed-in]_&]:invisible"
+                      : undefined
+                  }
                   style={{
                     width: `${courseProgress}%`,
                     minWidth: courseStarted ? "0.375rem" : undefined,

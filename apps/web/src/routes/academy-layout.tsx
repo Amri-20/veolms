@@ -44,6 +44,8 @@ import type {
 } from "../learning/player/PersistentLearningPlayerHost";
 import type { LessonPlayerMinimizeGestureState } from "../learning/player/useLessonPlayerMinimizeGesture";
 import { resetLessonPlayerHeight } from "../learning/player/LessonPlayerHeightHandle";
+import { getCoursePlayerPath } from "../learning/coursePlayerNavigation";
+import { requestLessonAutoplay } from "../learning/lessonAutoplayRequest";
 import {
   easeLearningPlayerMotionProgress,
   getLearningBackgroundMotionState,
@@ -68,13 +70,9 @@ import {
   VideoPlaybackBootstrapError,
 } from "../learning/videoPlaybackBootstrap";
 
-const loadPersistentLearningPlayerHost = () =>
-  import("../learning/player/PersistentLearningPlayerHost");
-const PersistentLearningPlayerHost = lazy(() =>
-  loadPersistentLearningPlayerHost().then((module) => ({
-    default: module.PersistentLearningPlayerHost,
-  })),
-);
+const loadPersistentLearningPlayerHost =
+  persistentLearningPlayerHostBody.preload;
+const PersistentLearningPlayerHost = persistentLearningPlayerHostBody.Body;
 const loadLearningMiniPlayer = () =>
   import("../learning/player/LearningMiniPlayer");
 const LearningMiniPlayer = lazy(() =>
@@ -93,6 +91,7 @@ import {
 } from "../learning/player/learningMiniPlayerStore";
 import type { NavigateTo, NavigationOptions } from "../routing/navigation";
 import { AcademyRouteGuard } from "../routing/RouteGuards";
+import { persistentLearningPlayerHostBody } from "../routing/prerenderedBodies";
 import { useCapabilities } from "../services/authorization/authorization.queries";
 import { ProfileNavigationProvider } from "../profiles/ProfileLink";
 import { ProfilePreviewHost } from "../profiles/ProfilePreviewHost";
@@ -1164,7 +1163,9 @@ export default function AcademyLayout() {
   const openCourse = useCallback(
     (course: Course | LearningCourse, options?: CourseOpenOptions) => {
       const courseRouteKey = getCourseRouteKey(course);
-      const playerPath = `/learn/${encodeURIComponent(courseRouteKey)}${options?.preview ? "/1" : ""}`;
+      const playerPath = options?.lessonNumber
+        ? getCoursePlayerPath(courseRouteKey, options.lessonNumber)
+        : `/learn/${encodeURIComponent(courseRouteKey)}${options?.preview ? "/1" : ""}`;
       const activePlayer = persistentPlayerRef.current;
       if (
         shouldRestoreMiniPlayerForMatchingCourse({
@@ -1180,6 +1181,7 @@ export default function AcademyLayout() {
         navigateTo(activePlayer.lessonPath, { exact: true });
         return;
       }
+      if (options?.autoplay) requestLessonAutoplay(courseRouteKey);
       navigateTo(playerPath);
     },
     [navigateTo],

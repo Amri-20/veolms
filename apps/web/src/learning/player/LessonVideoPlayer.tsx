@@ -72,6 +72,7 @@ import {
   lessonPlayerStorageKeys,
   readAmbientPreference,
   readResumePosition,
+  readStartPosition,
   writeAmbientPreference,
   writeMutedPreference,
   writePlaybackRatePreference,
@@ -465,7 +466,13 @@ export function LessonVideoPlayer({
   const requestedMediaKeyRef = useRef(mediaKey);
   // The lesson whose stored resume position has already been applied.
   const resumeAppliedMediaKeyRef = useRef<string | null>(null);
-  const restoreAutoplayRef = useRef(consumeMiniPlayerRestore(mediaKey));
+  // Whether this player takes over from the mini player (see
+  // finishMiniPlayerRestore), and for which lesson.
+  const [openedFromMiniPlayer] = useState(() => {
+    const restore = consumeMiniPlayerRestore(mediaKey);
+    return { mediaKey, restore };
+  });
+  const restoreAutoplayRef = useRef(openedFromMiniPlayer.restore);
   const restoreFramePendingRef = useRef(false);
   const restoreResyncAttemptedRef = useRef(false);
   requestedMediaKeyRef.current = mediaKey;
@@ -529,10 +536,19 @@ export function LessonVideoPlayer({
   const source = useMemo<VideoSource>(() => {
     const resumeFromLastPosition =
       readLearningPreferences().resumeFromLastPosition;
+    // A lesson opened where it was left starts a few seconds before it; one
+    // taken over from the mini player carries on where it is.
+    const handedOver =
+      openedFromMiniPlayer.restore !== null &&
+      openedFromMiniPlayer.mediaKey === mediaKey;
     return createLearningLessonVideoSource({
       media: playbackMedia,
       mediaKey,
-      startTime: resumeFromLastPosition ? readResumePosition(mediaKey) : 0,
+      startTime: !resumeFromLastPosition
+        ? 0
+        : handedOver
+          ? readResumePosition(mediaKey)
+          : readStartPosition(mediaKey),
       protectedPlayback: playbackBootstrap
         ? playbackBootstrap.source === "paid-bootstrap-api"
         : protectedPlayback,
@@ -546,6 +562,7 @@ export function LessonVideoPlayer({
     });
   }, [
     mediaKey,
+    openedFromMiniPlayer,
     playbackBootstrap,
     playbackMedia,
     protectedPlayback,

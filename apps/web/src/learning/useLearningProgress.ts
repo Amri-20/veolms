@@ -26,6 +26,15 @@ import {
   takeWatchedSeconds,
 } from "./learningWatchTime";
 import {
+  hasLessonPositions,
+  refuseLessonPositions,
+  restoreLessonPositions,
+  takeLessonPositions,
+  withLessonPositions,
+} from "./lessonPositionOutbox";
+import { getApiError } from "../lib/api-client";
+import { markCourseResumeStale } from "./courseResumeCache";
+import {
   adoptServerLearningProgress,
   snapshotAnswersSyncedProgress,
 } from "./syncedLearningProgress";
@@ -57,6 +66,10 @@ export function useLearningProgress({
     readLearningProgress(userId, courseKey),
   );
   const localStateRef = useRef(localState);
+  const lessonIdsByNumberRef = useRef(lessonIdsByNumber);
+  useEffect(() => {
+    lessonIdsByNumberRef.current = lessonIdsByNumber;
+  }, [lessonIdsByNumber]);
   const isFlushingRef = useRef(false);
   const retryDelayRef = useRef(0);
   const retryAtRef = useRef(0);
@@ -73,6 +86,7 @@ export function useLearningProgress({
     data: serverProgress,
     dataUpdatedAt: snapshotReceivedAt,
     isFetching: isSnapshotFetching,
+    isError: isSnapshotError,
   } = useLearningProgressSnapshot(courseKey ?? "", { enabled: syncEnabled });
 
   useEffect(() => {
@@ -192,24 +206,35 @@ export function useLearningProgress({
       if (!syncEnabled || !courseKey || isFlushingRef.current) return;
       if (!keepalive && Date.now() < retryAtRef.current) return;
 
-      const pendingItems = getPendingLearningProgress(
-        localStateRef.current,
-      ).slice(0, MAX_BATCH_ITEMS);
-      // A batch goes out for progress, for watch time, or for both: a
-      // lesson replayed after it is complete moves no progress, but the
-      // time spent playing it still counts towards the daily goal.
-      if (pendingItems.length === 0 && peekWatchedSeconds(courseKey) < 1) {
+      const pending = getPendingLearningProgress(localStateRef.current);
+      // A batch goes out for progress, for watch time, for where the
+      // learner is in a video, or for any of them: a lesson replayed after
+      // it is complete moves no progress, but the time spent playing it
+      // still counts towards the daily goal, and it is where they are.
+      if (
+        pending.length === 0 &&
+        peekWatchedSeconds(courseKey) < 1 &&
+        !hasLessonPositions(courseKey)
+      ) {
         return;
       }
 
-      // The seconds of video played since the last report. Taken from the
-      // tally here and handed back below if the request fails.
+      // The seconds of video played since the last report, and where the
+      // learner is in each video played since. Taken here and handed back
+      // below if the request fails.
       const watchedSeconds = takeWatchedSeconds(courseKey);
-      const payload = {
-        items: pendingItems.map(({ lessonId, progressPercent }) => ({
+      const positions = takeLessonPositions(courseKey);
+      const pendingItems = pending.slice(0, MAX_BATCH_ITEMS - positions.length);
+      const items = withLessonPositions(
+        pendingItems.map(({ lessonId, progressPercent }) => ({
           lessonId,
           progressPercent,
         })),
+        positions,
+        lessonIdsByNumberRef.current,
+      );
+      const payload = {
+        items,
         watchedSeconds,
         // Sets the learner's zone if they have never chosen one, so their
         // learning days are local days rather than UTC ones.
@@ -246,11 +271,24 @@ export function useLearningProgress({
           void queryClient.invalidateQueries({
             queryKey: learningGoalKeys.summary(),
           });
+          if (items.some((item) => item.positionSeconds !== undefined)) {
+            markCourseResumeStale(queryClient, courseKey);
+          }
         }
         retryDelayRef.current = 0;
         retryAtRef.current = 0;
-      } catch {
+      } catch (error) {
         restoreWatchedSeconds(courseKey, watchedSeconds);
+        // An API from before positions were kept turns the whole batch
+        // down: it goes again without them.
+        if (
+          getApiError(error).status === 400 &&
+          items.some((item) => item.positionSeconds !== undefined)
+        ) {
+          refuseLessonPositions();
+        } else {
+          restoreLessonPositions(courseKey, positions);
+        }
         // Keep the outbox dirty. The next interval/online event retries the
         // same compact idempotent batch without losing learner progress.
         retryDelayRef.current = Math.min(
@@ -297,8 +335,19 @@ export function useLearningProgress({
     if (pendingCount >= MAX_BATCH_ITEMS) void flushProgress();
   }, [flushProgress, pendingCount]);
 
+  // Whether the progress shown is the learner's: kept in this browser, or
+  // answered by the server. Nothing to wait for while there is no account
+  // to keep it for, nor once the server has refused (a course the learner
+  // is not in) or failed: there is nothing more to show then.
+  const progressKnown =
+    !syncEnabled ||
+    localState.items.length > 0 ||
+    serverProgress !== undefined ||
+    isSnapshotError;
+
   return {
     lessonProgress,
+    progressKnown,
     pendingCount,
     recordProgress,
     flushProgress,

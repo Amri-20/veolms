@@ -2,8 +2,10 @@ import type { EnrolledCourse } from "@veolms/contracts";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { PrefetchPageLinks } from "react-router";
 import type { NavigateTo } from "../../routing/navigation";
+import type { CourseOpenOptions } from "../../courses/catalogue";
 import { getCoursePlayerPath } from "../../learning/coursePlayerNavigation";
 import { requestLessonAutoplay } from "../../learning/lessonAutoplayRequest";
+import { primeRouteStylesheets } from "../../routing/routeStylesheetPrimer";
 import { useCurrentUser } from "../../services/auth";
 import { useCourses } from "../../services/courses";
 import { hasAdminRole } from "../../shell/workspaceRole";
@@ -99,7 +101,7 @@ export function LearnerHome({
   learnerName: string;
   /** What the cards of courses to explore need from the page shell. */
   courseCardActions: GuestHomeCourseCardActions;
-  onOpenCourse: (course: LearningCourse) => void;
+  onOpenCourse: (course: LearningCourse, options?: CourseOpenOptions) => void;
   onNavigatePage: NavigateTo;
 }) {
   const enrolledCourses = knownCourses ?? NO_COURSES;
@@ -230,8 +232,8 @@ export function LearnerHome({
 
   if (!plan || !heroCourse) return null;
 
-  const openCourse = (course: EnrolledCourse) =>
-    onOpenCourse(adaptEnrolledCourseToLearningCourse(course));
+  const openCourse = (course: EnrolledCourse, options?: CourseOpenOptions) =>
+    onOpenCourse(adaptEnrolledCourseToLearningCourse(course), options);
   // The hero's card names the lesson to carry on with, so that is the one
   // it opens. Opening the course without naming a lesson lands on whichever
   // one this browser last remembered, or the first on a new device. A
@@ -304,7 +306,24 @@ export function LearnerHome({
               // The lesson is ready to play (see useHeroLessonWarmUp), and
               // Enter means play it: it opens playing.
               requestLessonAutoplay(resumeContext.courseSlug);
-              onNavigatePage(heroLessonPath);
+              // Its stylesheets were fetched beside the hero; linked
+              // switched off first, they do not restyle this page on the
+              // way out (see primeRouteStylesheets).
+              void primeRouteStylesheets("learning").then(() => {
+                // The focus is on the key just pressed, and Chrome
+                // restyles the whole page (some 35 ms here) when the
+                // element holding the focus is taken out of it, as the
+                // lesson page replaces this one. It would go to the
+                // document then anyway.
+                const focused = document.activeElement;
+                if (
+                  focused instanceof HTMLElement &&
+                  pageRef.current?.contains(focused)
+                ) {
+                  focused.blur();
+                }
+                onNavigatePage(heroLessonPath);
+              });
             }}
             // A course card dragged from the list below is pinned by
             // dropping it on the hero's own course card.

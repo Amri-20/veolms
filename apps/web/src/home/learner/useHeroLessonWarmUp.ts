@@ -1,20 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { prefetchCoursePage } from "../../services/courses";
-import { prefetchLearningProgressSnapshot } from "../../services/learning-progress";
-
-/** How many segments past the learner's place the lesson's video fetches. */
-const HERO_LESSON_SEGMENTS = 3;
+import { readyLessonToOpen } from "../../learning/lessonOpenIntent";
 
 /**
  * Gets the lesson the home page leads with ready before the learner presses
  * Enter, so it opens as if they had never left it: once the page is idle,
- * the course's curriculum file and access answer (what the lesson page asks
- * for first) and the lesson's video, its start-up answer and a few segments
- * from where the learner left off (`preloadLessonPlayback`, which also loads
- * the video engine), the learner's progress in the course (the lesson page
- * waits for it before starting the video), and the player's own code, which
- * the lesson page loads only once it is open. The lesson page's code and
+ * everything `readyLessonToOpen` fetches (the course's curriculum and access
+ * answer, the learner's progress, the player's code, and the lesson's video
+ * from where the learner left off), as every other way into a lesson does
+ * on a hover (see learning/lessonOpenIntent). The lesson page's code and
  * stylesheets are fetched by `<PrefetchPageLinks>` beside the hero (see
  * LearnerHome).
  *
@@ -35,17 +29,7 @@ export function useHeroLessonWarmUp(
     let cancelled = false;
     const warm = () => {
       if (cancelled) return;
-      void prefetchCoursePage(queryClient, courseSlug);
-      void prefetchLearningProgressSnapshot(queryClient, courseSlug);
-      void import("../../learning/player/PersistentLearningPlayerHost");
-      void import("../../learning/earlyHlsPreload").then(
-        ({ preloadLessonPlayback }) => {
-          if (cancelled) return;
-          void preloadLessonPlayback(courseSlug, lessonNumber, {
-            segments: HERO_LESSON_SEGMENTS,
-          });
-        },
-      );
+      readyLessonToOpen(queryClient, courseSlug, lessonNumber);
     };
     // After what the home page itself needs: its own requests come first.
     if (typeof window.requestIdleCallback === "function") {

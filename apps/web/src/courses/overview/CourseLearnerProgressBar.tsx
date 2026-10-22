@@ -11,6 +11,10 @@ import type { CourseAccessResume } from "@veolms/contracts";
 import { useLearningProgressResumeContext } from "../../services/learning-progress";
 import { useCurriculumIntent } from "./curriculumIntent";
 import {
+  mergeIntentHandlers,
+  type LessonOpenIntent,
+} from "../../learning/lessonOpenIntent";
+import {
   priceBarActionClasses,
   priceBarPaddingClasses,
   priceBarSurfaceClasses,
@@ -34,6 +38,11 @@ interface CourseLearnerProgressBarProps {
    */
   resume?: CourseAccessResume | null;
   onNavigatePage?: NavigateTo;
+  /**
+   * The lesson to carry on with, readied ahead of the press and opened
+   * playing (the page's, shared with the play button on its picture).
+   */
+  openIntent?: LessonOpenIntent;
 }
 
 const placeholder =
@@ -56,6 +65,7 @@ export function CourseLearnerProgressBar({
   totalLessons,
   resume,
   onNavigatePage,
+  openIntent,
 }: CourseLearnerProgressBarProps) {
   const resumeQuery = useLearningProgressResumeContext(courseKey, {
     enabled: !resume,
@@ -82,6 +92,12 @@ export function CourseLearnerProgressBar({
       ? "Continue Learning"
       : "Start Learning";
   const openCourse = () => {
+    if (openIntent) {
+      openIntent.open((lessonNumber) =>
+        onNavigatePage?.(getCoursePlayerPath(courseKey, lessonNumber)),
+      );
+      return;
+    }
     onNavigatePage?.(
       lesson
         ? getCoursePlayerPath(courseKey, lesson.lessonNumber)
@@ -160,7 +176,7 @@ export function CourseLearnerProgressBar({
         <Button
           motion="static"
           className={`${priceBarActionClasses} w-full @2xl/price:w-auto @2xl/price:min-w-60`}
-          {...curriculumIntent}
+          {...mergeIntentHandlers(curriculumIntent, openIntent?.handlers)}
           onClick={openCourse}
         >
           <Play

@@ -42,6 +42,8 @@ import { getCourseCardsEarlyStateBootstrapScript } from "./courses/courseCardEar
 import { getLearnerStartedBootstrapScript } from "./home/learner/learnerCoursesSubtitle";
 import { getHomeHintBootstrapScript } from "./store/homeHint";
 import { getLearnerHomeSnapshotBootstrapScript } from "./home/learner/learnerHomeSnapshot";
+import { getPlaybackBootstrapHeadStartScript } from "./learning/playbackBootstrapHeadStart";
+import { getApiBaseUrl } from "./lib/api-client";
 import { getReadingModeBootstrapScript } from "./reading-mode/readingModePreferences";
 import {
   getControlRadiusBootstrapScript,
@@ -274,6 +276,11 @@ export function Layout({ children }: LayoutProps) {
           }}
         />
         <Meta />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: getPlaybackBootstrapHeadStartScript(getApiBaseUrl()),
+          }}
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: getEarlyHlsPreloadInlineScript(

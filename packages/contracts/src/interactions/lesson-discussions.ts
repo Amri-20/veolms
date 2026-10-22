@@ -10,7 +10,7 @@ export const lessonDiscussionKindSchema = z.enum([
 ]);
 export type LessonDiscussionKind = z.infer<typeof lessonDiscussionKindSchema>;
 
-export const lessonDiscussionSortSchema = z.enum(["newest", "top"]);
+export const lessonDiscussionSortSchema = z.enum(["newest", "oldest", "top"]);
 export type LessonDiscussionSort = z.infer<typeof lessonDiscussionSortSchema>;
 
 export const listLessonDiscussionsQuerySchema = z.object({

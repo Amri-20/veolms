@@ -284,13 +284,13 @@ export function CourseCatalogue({
       isAdmin={isAdmin}
       wishlisted={courseMatchesWishlist(course, wishlisted)}
       onWishlist={onWishlist}
-      onOpen={(selected) =>
-        onOpenCourse(
-          selected,
-          role === "student" && !selected.enrolled
+      onOpen={(selected, options) =>
+        onOpenCourse(selected, {
+          ...(role === "student" && !selected.enrolled
             ? { preview: true }
-            : undefined,
-        )
+            : {}),
+          ...options,
+        })
       }
       onExplore={(selected) =>
         onNavigatePage(

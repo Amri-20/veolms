@@ -28,6 +28,13 @@ interface CompactComposerProps {
    */
   guest?: boolean;
   onOpen: () => void;
+  /**
+   * The signed-in viewer before the session check has said who they are:
+   * the picture this tab remembers (the profile hint the document's head
+   * hands to the style, see shell/profileHintEarlyState.ts), drawn before
+   * any script has run.
+   */
+  rememberedViewer?: boolean;
 }
 
 // Rounded like the description card it sits under.
@@ -126,6 +133,24 @@ export function PrerenderedMobileCommentComposer() {
   );
 }
 
+/**
+ * The viewer's picture as this tab remembers it, or the viewer's mark
+ * without one, the same box as `DiscussionAvatar` draws for the viewer.
+ */
+function RememberedViewerAvatar() {
+  return (
+    <span className="pointer-events-none relative size-10 shrink-0">
+      <span
+        aria-hidden="true"
+        className="absolute inset-0 hidden rounded-full border border-[color-mix(in_srgb,var(--text)_16%,transparent)] bg-(image:--profile-hint-avatar) bg-cover bg-center [:root[data-profile-hint-avatar]_&]:block"
+      />
+      <span className="[:root[data-profile-hint-avatar]_&]:hidden">
+        <DiscussionAvatar src={null} viewer className="size-10" />
+      </span>
+    </span>
+  );
+}
+
 export function CompactComposer({
   draft,
   attachmentCount,
@@ -135,6 +160,7 @@ export function CompactComposer({
   label = "Open discussion composer",
   opensOnTyping = false,
   guest = false,
+  rememberedViewer = false,
   onOpen,
 }: CompactComposerProps) {
   const preview =
@@ -179,6 +205,8 @@ export function CompactComposer({
         >
           <GuestProfileIcon size={52} className="shrink-0" />
         </span>
+      ) : rememberedViewer ? (
+        <RememberedViewerAvatar />
       ) : (
         <DiscussionAvatar
           src={avatar}
