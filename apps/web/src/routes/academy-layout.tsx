@@ -138,6 +138,7 @@ import {
   resolveActiveRouteSection,
 } from "../routing/activeRouteSection";
 import { useHydrated } from "../courses/viewerCourseState";
+import { rememberNavigationOrigin } from "../routing/navigationOriginEarlyState";
 import { NO_VIDEO_NOTICE } from "../learning/lessonWithoutVideo";
 import { videoPlaybackFailureNotice } from "../learning/videoPlaybackFailure";
 import {
@@ -539,6 +540,20 @@ export default function AcademyLayout() {
     menuKnown: authUserFetched || Boolean(storeUser),
   });
   const showRouteBackButton = !currentNavigationMatch?.exact;
+  // Kept for a reload of this page in this tab: the hosted site's redirect
+  // to the address with a trailing slash drops the history state.
+  useEffect(() => {
+    if (!hasValidNavigationOrigin) return;
+    rememberNavigationOrigin(location.pathname, {
+      section: originSectionValue as string,
+      path: originPathValue as string,
+    });
+  }, [
+    hasValidNavigationOrigin,
+    location.pathname,
+    originPathValue,
+    originSectionValue,
+  ]);
 
   useLayoutEffect(() => {
     locationPathRef.current = currentLocationPath;
