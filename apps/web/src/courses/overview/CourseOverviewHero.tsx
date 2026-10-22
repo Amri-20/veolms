@@ -10,6 +10,7 @@ import { CourseWishlistHeartButton } from "../CourseWishlistHeartButton";
 import { CourseHeroArtwork } from "./CourseHeroArtwork";
 import { presumedGuestOnlyClasses } from "./courseViewerState";
 import { useCurriculumIntent } from "./curriculumIntent";
+import { useHydrated } from "../viewerCourseState";
 
 export interface CourseOverviewHeroProps {
   title: string;
@@ -202,6 +203,7 @@ export function CourseOverviewHero({
 }: CourseOverviewHeroProps) {
   // The way into the lessons, whose pages use the whole curriculum.
   const curriculumIntent = useCurriculumIntent();
+  const hydrated = useHydrated();
   const placed = heroPlacementClasses[placement];
   // The guest's own controls step aside for their placeholders on a browser
   // that remembers a session.
@@ -258,6 +260,7 @@ export function CourseOverviewHero({
         previewDisabled={preview?.disabled}
         previewLabel={preview?.kind === "open" ? "Open course" : undefined}
         previewClassName={previewGuestOnly}
+        previewDependsOnViewer={Boolean(viewerPlaceholders?.preview)}
       />
 
       {placement === "edge" ? (
@@ -291,7 +294,19 @@ export function CourseOverviewHero({
               onClick={onBack}
             >
               <ArrowLeft size={17} weight="bold" aria-hidden="true" />
-              <span>{backLabel}</span>
+              {hydrated ? (
+                <span>{backLabel}</span>
+              ) : (
+                // The built page names the Courses page; a page opened from
+                // another section is named by the document's head before
+                // the first paint (see navigationOriginEarlyState.ts).
+                <>
+                  <span className="[:root[data-navigation-origin]_&]:hidden">
+                    {backLabel}
+                  </span>
+                  <span className="hidden after:content-(--navigation-origin-label) [:root[data-navigation-origin]_&]:inline" />
+                </>
+              )}
             </button>
           </>
         ) : (
@@ -402,6 +417,9 @@ export function CourseOverviewHero({
           ) : (
             <button
               type="button"
+              data-course-card-early={
+                viewerPlaceholders?.preview ? "offer" : undefined
+              }
               className={`${previewPillClasses} hidden @3xl/hero:inline-flex ${previewGuestOnly}`}
               {...curriculumIntent}
               onClick={preview.onOpen}
@@ -420,7 +438,7 @@ export function CourseOverviewHero({
             className={`${controlPlaceholderClasses} h-12 w-44 ${
               forEveryone
                 ? "hidden @3xl/hero:block"
-                : "hidden [:root[data-session-hint=signed-in]_&]:@3xl/hero:block"
+                : "hidden [:root[data-session-hint=signed-in]:not([data-course-cards-early])_&]:@3xl/hero:block"
             }`}
           />
         ) : null}
@@ -430,24 +448,62 @@ export function CourseOverviewHero({
             className={`${controlPlaceholderClasses} size-11 ${
               forEveryone
                 ? "block"
-                : "hidden [:root[data-session-hint=signed-in]_&]:block"
+                : "hidden [:root[data-session-hint=signed-in]:not([data-course-cards-early])_&]:block"
             }`}
           />
         ) : null}
         {wishlist ? (
-          <div className={viewerPlaceholders?.wishlist ? guestOnly : ""}>
-            <CourseWishlistHeartButton
-              variant="overview-hero"
-              wishlisted={wishlist.wishlisted}
-              disabled={wishlist.disabled}
-              aria-label={
-                wishlist.wishlisted ? "Remove from wishlist" : "Add to wishlist"
+          // While the viewer is not known the heart is marked for the
+          // head's style (`courseCardEarlyState`): hidden on a course the
+          // learner holds, and filled, by the inert one beside it, on a
+          // course in their wishlist, until the page knows.
+          <div
+            className={viewerPlaceholders?.wishlist ? guestOnly : ""}
+            data-course-card-early={
+              viewerPlaceholders?.wishlist ? "offer" : undefined
+            }
+          >
+            <div
+              className="flex"
+              data-course-early-heart={
+                viewerPlaceholders?.wishlist && !wishlist.wishlisted
+                  ? "empty"
+                  : undefined
               }
-              title={
-                wishlist.wishlisted ? "Remove from wishlist" : "Add to wishlist"
-              }
-              onClick={wishlist.onToggle}
-            />
+            >
+              <CourseWishlistHeartButton
+                variant="overview-hero"
+                wishlisted={wishlist.wishlisted}
+                disabled={wishlist.disabled}
+                aria-label={
+                  wishlist.wishlisted
+                    ? "Remove from wishlist"
+                    : "Add to wishlist"
+                }
+                title={
+                  wishlist.wishlisted
+                    ? "Remove from wishlist"
+                    : "Add to wishlist"
+                }
+                onClick={wishlist.onToggle}
+              />
+            </div>
+            {viewerPlaceholders?.wishlist && !wishlist.wishlisted ? (
+              <div
+                className="pointer-events-none hidden"
+                aria-hidden="true"
+                data-course-early-heart="filled"
+              >
+                <CourseWishlistHeartButton
+                  variant="overview-hero"
+                  wishlisted
+                  disabled
+                  aria-label="Remove from wishlist"
+                  title="Remove from wishlist"
+                  onClick={() => undefined}
+                />
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

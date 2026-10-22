@@ -36,6 +36,9 @@ import {
 import { QueryProvider } from "./providers/query-provider";
 import { ReadingModeEffects } from "./reading-mode/ReadingModeEffects";
 import { getSessionPresenceBootstrapScript } from "./store/sessionPresence";
+import { getProfileHintBootstrapScript } from "./shell/profileHintEarlyState";
+import { getNavigationOriginBootstrapScript } from "./routing/navigationOriginEarlyState";
+import { getCourseCardsEarlyStateBootstrapScript } from "./courses/courseCardEarlyState";
 import { getLearnerStartedBootstrapScript } from "./home/learner/learnerCoursesSubtitle";
 import { getHomeHintBootstrapScript } from "./store/homeHint";
 import { getReadingModeBootstrapScript } from "./reading-mode/readingModePreferences";
@@ -266,7 +269,7 @@ export function Layout({ children }: LayoutProps) {
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `${getOauthDialogReturnScript()}${getOauthPopupHandoffScript()}${getLoginDialogSnapshotScript(OAUTH_REDIRECT_RESULT_STORAGE_KEY)}${getSessionPresenceBootstrapScript()}${getLearnerStartedBootstrapScript()}${getHomeHintBootstrapScript()}${getSidebarShellBootstrapScript()}${getSidebarCollapsedMarkupBootstrapScript()}${getSidebarPresentationBootstrapScript()}${getLearningShellBootstrapScript()}${getLearningPlayerBootstrapScript()}`,
+            __html: `${getOauthDialogReturnScript()}${getOauthPopupHandoffScript()}${getLoginDialogSnapshotScript(OAUTH_REDIRECT_RESULT_STORAGE_KEY)}${getSessionPresenceBootstrapScript()}${getProfileHintBootstrapScript()}${getNavigationOriginBootstrapScript()}${getCourseCardsEarlyStateBootstrapScript()}${getLearnerStartedBootstrapScript()}${getHomeHintBootstrapScript()}${getSidebarShellBootstrapScript()}${getSidebarCollapsedMarkupBootstrapScript()}${getSidebarPresentationBootstrapScript()}${getLearningShellBootstrapScript()}${getLearningPlayerBootstrapScript()}`,
           }}
         />
         <Meta />

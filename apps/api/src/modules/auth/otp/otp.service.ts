@@ -398,7 +398,14 @@ export function createOtpService({
   ): Promise<void> {
     if (identifierType === "phone") assertSmsDestinationAllowed(identifier);
 
-    const code = fixedCode ?? crypto.randomInt(100_000, 1_000_000).toString();
+    // On a developer's machine every code is the fixed one (LOCAL_FIXED_OTP)
+    // and, like a test account's, it is neither sent nor held to the limits.
+    const localCode =
+      config.NODE_ENV === "development"
+        ? (config.LOCAL_FIXED_OTP ?? null)
+        : null;
+    const presetCode = fixedCode ?? localCode;
+    const code = presetCode ?? crypto.randomInt(100_000, 1_000_000).toString();
     const otpId = crypto.randomUUID();
 
     // The allowance checks, retiring the previous code and storing the new
@@ -414,7 +421,7 @@ export function createOtpService({
       // resend window and daily allowance; nothing is delivered for it
       // either. Its code is still retired and stored under the lock, so
       // there is one live code for it like for any other address.
-      if (!fixedCode) {
+      if (!presetCode) {
         await assertOtpSendAllowed(
           transaction,
           identifier,
@@ -444,7 +451,7 @@ export function createOtpService({
       });
     });
 
-    if (fixedCode) return;
+    if (presetCode) return;
 
     const brand = await getAcademyBrand();
     const delivery =

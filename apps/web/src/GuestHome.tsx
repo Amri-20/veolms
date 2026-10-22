@@ -24,6 +24,7 @@ import {
 import { courseSurfaceElevation } from "./components/cardElevation";
 import type { NavigateTo } from "./routing/navigation";
 import { useGuestHomePage } from "./services/home";
+import { useViewerCourseState } from "./courses/viewerCourseState";
 import "./home/guest/guest-home-shell.css";
 
 const FREE_COURSES_SECTION_ID = "guest-home-free-courses";
@@ -95,6 +96,9 @@ export function GuestHome({
   const isLoading = !page && pageQuery.isLoading;
   const isError = !page && pageQuery.isError;
   const retry = () => void pageQuery.refetch();
+  // The page is prerendered for everyone, so the rows' prices wait until it
+  // is known who is looking (see `useViewerCourseState`).
+  const viewerState = useViewerCourseState();
 
   // Without a page (still loading, or the request failed) the sections fall
   // back to the default headings around their skeleton or error state.
@@ -171,6 +175,7 @@ export function GuestHome({
                   isError={isError}
                   onRetry={retry}
                   onNavigatePage={onNavigatePage}
+                  viewerState={viewerState}
                 />
               ) : null}
               {showFreeCourses ? (
@@ -185,6 +190,7 @@ export function GuestHome({
                   isError={isError}
                   onRetry={retry}
                   onNavigatePage={onNavigatePage}
+                  viewerState={viewerState}
                 />
               ) : null}
             </div>

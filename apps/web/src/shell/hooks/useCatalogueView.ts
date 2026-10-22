@@ -75,6 +75,7 @@ export interface UseCatalogueViewArgs {
   >;
   publishedCourses: CourseSummary[];
   enrolledCoursesData: ReturnType<typeof useEnrolledCourses>["data"];
+  learnerStateKnown: boolean;
   myCoursesData: ReturnType<typeof useMyCourses>["data"];
   deletedCoursesData:
     | {
@@ -141,6 +142,7 @@ export function useCatalogueView({
   pagedCourseQuery,
   publishedCourses,
   enrolledCoursesData,
+  learnerStateKnown,
   myCoursesData,
   deletedCoursesData,
   deleteCourseMutation,
@@ -274,6 +276,7 @@ export function useCatalogueView({
           started:
             startedSet.has(course.id) ||
             (course.slug ? startedSet.has(course.slug) : false),
+          viewerStatePending: !learnerStateKnown,
         };
       });
     }
@@ -289,6 +292,7 @@ export function useCatalogueView({
     effectiveRole,
     enrollmentFilter,
     enrolledCoursesData,
+    learnerStateKnown,
     myCoursesData?.courses,
     publishedCourses,
   ]);

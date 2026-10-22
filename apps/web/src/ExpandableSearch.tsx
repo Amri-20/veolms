@@ -212,7 +212,7 @@ export function ExpandableSearch({
             type="search"
             autoFocus={open}
             tabIndex={open || persistentDesktop ? 0 : -1}
-            className={`native-search-clear-hidden h-6 min-w-0 flex-1 appearance-none rounded-none bg-transparent text-[15px]! leading-6! outline-none focus-visible:outline-none! ${inputClass} ${inputVisibilityClass} ${useForcedDesktopLayout ? "h-auto text-[0.8rem]! leading-5!" : persistentDesktop ? "min-[821px]:h-auto min-[821px]:text-[0.8rem]! min-[821px]:leading-5!" : ""}`.trim()}
+            className={`native-search-clear-hidden h-6 min-w-0 flex-1 appearance-none rounded-none bg-transparent text-[15px]! leading-6! outline-none focus-visible:outline-none! ${inputClass} ${inputVisibilityClass}`.trim()}
             data-fixed-radius
             value={value}
             onChange={(event) => onValueChange(event.target.value)}

@@ -302,6 +302,19 @@ const serverConfigSchema = z.object({
     }),
 
   /**
+   * Local development only: every sign-in, email and phone verification
+   * code is this six-digit code (for example "123456"), and none is emailed
+   * or texted; the send limits do not apply either. Any account, staff
+   * included, signs in with it, so it is honoured only when `NODE_ENV` is
+   * `development` and the API refuses to start in production with it set.
+   * Unset (the default) sends real codes as usual.
+   */
+  LOCAL_FIXED_OTP: z
+    .string()
+    .regex(/^\d{6}$/u, "Expected a six-digit code, such as 123456.")
+    .optional(),
+
+  /**
    * Enables the `mock_<email>` OAuth short-circuit, which skips both the
    * provider round-trip and the state/CSRF check. Requires `NODE_ENV` to be
    * `development` as well, so it can never be switched on in a deployed
@@ -639,6 +652,12 @@ export function loadServerConfig(
   const missingRequired = findMissingRequiredInProduction(parsed);
 
   if (parsed.NODE_ENV === "production") {
+    if (parsed.LOCAL_FIXED_OTP) {
+      throw new Error(
+        "Refusing to start in production with LOCAL_FIXED_OTP set: it lets anyone sign in to any account. " +
+          "Remove it from the environment.",
+      );
+    }
     if (offenders.length > 0) {
       throw new Error(
         `Refusing to start in production with default value(s) for: ${offenders.join(", ")}. ` +

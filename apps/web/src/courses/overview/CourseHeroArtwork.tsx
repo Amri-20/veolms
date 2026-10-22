@@ -14,6 +14,12 @@ interface CourseHeroArtworkProps {
   /** More classes for the play button (the hero hides it for some viewers). */
   previewClassName?: string;
   /**
+   * The play button is shown only to someone who neither holds nor
+   * manages the course: marked for the head's style (`courseCardEarlyState`),
+   * which hides it on a course the learner holds.
+   */
+  previewDependsOnViewer?: boolean;
+  /**
    * The hero keeps 1rem at its foot for the box that overlaps it there: the
    * picture, beside the text, stops above that strip so none of it is hidden.
    */
@@ -60,6 +66,7 @@ export function CourseHeroArtwork({
   previewDisabled = false,
   previewLabel = "Preview course",
   previewClassName = "",
+  previewDependsOnViewer = false,
   footRoom = false,
 }: CourseHeroArtworkProps) {
   // A thumbnail from before sizes were kept has an empty list.
@@ -119,6 +126,9 @@ export function CourseHeroArtwork({
           {onPreview ? (
             <button
               type="button"
+              data-course-card-early={
+                previewDependsOnViewer ? "offer" : undefined
+              }
               className={`absolute top-[44%] left-1/2 z-20 inline-flex size-15 -translate-1/2 cursor-pointer items-center justify-center rounded-full border-0 bg-black/40 text-white shadow-[0_8px_30px_rgb(0_0_0/0.3)] backdrop-blur-md transition-colors duration-160 ease-out hover:bg-black/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-default disabled:hover:bg-black/40 motion-reduce:transition-none @3xl/hero:hidden ${previewClassName}`}
               onClick={onPreview}
               disabled={previewDisabled}

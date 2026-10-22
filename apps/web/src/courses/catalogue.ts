@@ -54,6 +54,12 @@ export interface Course {
    */
   started?: boolean;
   enrolled: boolean;
+  /**
+   * Whether this viewer holds the course is not known yet (the prerendered
+   * page, or a signed-in browser before its enrolments arrive). The card
+   * then shows neither a price nor progress: either could be wrong.
+   */
+  viewerStatePending?: boolean;
   duration: string;
   students: number;
   thumbnail: string;

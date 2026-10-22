@@ -1,5 +1,4 @@
 import { ArrowCounterClockwiseIcon as ArrowCounterClockwise } from "@phosphor-icons/react/ArrowCounterClockwise";
-import { ArrowRightIcon as ArrowRight } from "@phosphor-icons/react/ArrowRight";
 import { CertificateIcon as Certificate } from "@phosphor-icons/react/Certificate";
 import { ChartBarIcon as ChartBar } from "@phosphor-icons/react/ChartBar";
 import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
@@ -21,7 +20,10 @@ import { SignOutIcon as SignOut } from "@phosphor-icons/react/SignOut";
 import { TrashIcon as Trash } from "@phosphor-icons/react/Trash";
 import { UploadSimpleIcon as UploadSimple } from "@phosphor-icons/react/UploadSimple";
 import { UsersThreeIcon as UsersThree } from "@phosphor-icons/react/UsersThree";
+import { useQueryClient } from "@tanstack/react-query";
 import { Fragment, type ReactNode } from "react";
+import { courseOverviewBody } from "../routing/prerenderedBodies";
+import { prefetchCoursePage } from "../services/courses";
 import { getCourseRouteKey, hasBegunCourse } from "./catalogue";
 import { formatCourseProgress } from "../learning/courseProgressFormat";
 import type { Course, CourseRole } from "./catalogue";
@@ -33,7 +35,13 @@ import {
 } from "./courseCardAction";
 import { CourseCardThumbnail } from "./CourseCardThumbnail";
 import { PinToHomeMenuAction } from "./PinToHomeMenuAction";
-import { CourseThumbnailPlaceholder } from "./CourseThumbnailPlaceholder";
+import {
+  COURSE_CARD_BUTTON_CLASSES,
+  CourseCardEarlyActions,
+  CourseCardPricing,
+  CourseCardProgress,
+  LearnerActionContent,
+} from "./CourseCardActionParts";
 import { raisedCourseCardClasses } from "../components/cardElevation";
 import type { Permission } from "@veolms/contracts";
 import { useCapabilities } from "../services/authorization/authorization.queries";
@@ -176,10 +184,34 @@ export function CourseCard({
     staffPermissions,
   );
   const canOpenStudents = canOpenNavigationPath("/students", staffPermissions);
+  // Neither a price nor progress until it is known which this viewer gets
+  // (see `Course.viewerStatePending`); the actions' place shimmers instead.
+  const viewerStatePending =
+    role === "student" && !isPublic && Boolean(course.viewerStatePending);
   const progress = course.progress ?? 0;
   const begun = hasBegunCourse(course);
   const progressText = formatCourseProgress(progress);
   const overviewPath = courseOverviewPath(course);
+  // The course page, fetched while the pointer is on the way to it (a
+  // hover, keyboard focus, or the touch itself where nothing hovers): its
+  // code, its curriculum file and the viewer's access answer, so the page
+  // opens drawn rather than loading.
+  const queryClient = useQueryClient();
+  const prefetchOverview = () => {
+    void courseOverviewBody.preload();
+    void prefetchCoursePage(queryClient, getCourseRouteKey(course));
+  };
+  // What the main button is about to do, started ahead of the press: the
+  // editor for a creator, the course page for a learner who does not hold
+  // the course (one who does goes to the lessons instead).
+  const onMainButtonIntent = () => {
+    if (isDeleting) return;
+    if (role === "creator") {
+      if (canEdit && !isBin && !course.deletedAt) onEditIntent?.(course);
+      return;
+    }
+    if (!course.enrolled && !viewerStatePending) prefetchOverview();
+  };
   const absoluteCourseUrl =
     typeof window === "undefined"
       ? overviewPath
@@ -274,19 +306,25 @@ export function CourseCard({
           ? "border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) opacity-60 pointer-events-none select-none"
           : `border-(--card-border,var(--border)) bg-(--card-surface,var(--surface)) bg-(image:--raised-surface-image) shadow-(--card-shadow) hover:bg-(--card-surface-hover,var(--hover)) hover:shadow-(--card-hover-shadow) ${raisedCourseCardClasses}`
       }`}
-      aria-label={`${course.title}${isDeleting ? ", deleting..." : isPublic ? ", public course" : role === "creator" ? `, ${course.lifecycleStatus}` : course.enrolled ? `, ${progressText} complete` : ", not enrolled"}`}
+      aria-label={`${course.title}${isDeleting ? ", deleting..." : isPublic ? ", public course" : role === "creator" ? `, ${course.lifecycleStatus}` : viewerStatePending ? "" : course.enrolled ? `, ${progressText} complete` : ", not enrolled"}`}
       aria-busy={isDeleting}
       data-course-card
+      data-course-card-id={course.id}
       data-deleting={isDeleting ? "true" : undefined}
     >
       <div
-        className="relative aspect-video overflow-hidden rounded-t-2xl bg-[#05070c]"
+        className="relative aspect-video overflow-hidden rounded-t-2xl"
         data-course-card-media
       >
+        {/* A course with no image keeps the card's surface, a shade darker,
+            as its image shimmers while loading (without the pulse). */}
         {course.thumbnail ? (
           <CourseCardThumbnail course={course} priority={imagePriority} />
         ) : (
-          <CourseThumbnailPlaceholder />
+          <div
+            className="absolute inset-0 bg-[color-mix(in_srgb,var(--text)_8%,transparent)]"
+            aria-hidden="true"
+          />
         )}
 
         <button
@@ -341,6 +379,9 @@ export function CourseCard({
           aria-label={`View course overview for ${course.title}`}
           title="View Course Overview"
           data-course-card-curriculum
+          onPointerEnter={prefetchOverview}
+          onFocus={prefetchOverview}
+          onPointerDown={prefetchOverview}
           onClick={(event) => {
             if (isDeleting) {
               event.preventDefault();
@@ -623,63 +664,39 @@ export function CourseCard({
           className="relative z-10 mt-auto flex flex-col"
           data-course-card-actions
         >
-          {role === "student" &&
-            !course.enrolled &&
-            Boolean(course.pricing) && (
-              <div
-                className={`${studentHome ? "mt-3 mb-4 flex flex-wrap items-center gap-x-2 gap-y-1" : "mt-3 mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1"}`}
-                data-course-card-pricing
-                aria-label={`Course price ${course.pricing?.price}`}
-              >
-                {Boolean(course.pricing?.originalPrice) && (
-                  <span
-                    className={`${studentHome ? "shrink-0 whitespace-nowrap " : ""}text-[0.95rem] font-medium leading-none text-(--muted) line-through`}
-                  >
-                    {course.pricing?.originalPrice}
-                  </span>
-                )}
-                <strong
-                  className={`${studentHome ? "shrink-0 " : ""}text-[1.55rem] font-extrabold leading-none tracking-[-0.035em] text-(--text)`}
-                >
-                  {course.pricing?.price}
-                </strong>
-                {/* Paid courses opt in from their pricing settings; a free
-                    course with an original price always shows "Free". */}
-                {course.pricing?.showDiscountBadge &&
-                  Boolean(course.pricing.discount) && (
-                    <span className="inline-flex items-center self-center rounded-lg bg-[color-mix(in_srgb,var(--success)_14%,transparent)] px-2.5 py-1.5 text-[0.8rem] leading-none font-bold text-[color-mix(in_srgb,var(--success)_72%,var(--text))]">
-                      {course.pricing.discount}
-                    </span>
-                  )}
-              </div>
-            )}
+          {viewerStatePending ? (
+            <CourseCardEarlyActions
+              course={course}
+              studentHome={studentHome}
+              offerAction={resolveCourseCardLearnerAction({
+                ...cardOffer,
+                enrolled: false,
+              })}
+            />
+          ) : null}
 
-          {role === "student" && course.enrolled && (
-            <div
-              className="mb-4 flex items-center justify-between gap-3 text-xs"
-              data-course-card-progress-container
-              aria-label={`${progressText} complete`}
-            >
-              <span
-                className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-(--track)"
-                data-course-card-progress
-              >
-                <span
-                  // Begun shows a sliver even while it is still 0.00%.
-                  className={`block h-full rounded-full bg-(--accent) ${begun ? "min-w-1.5" : ""}`}
-                  style={{ width: `${progress}%` }}
-                  data-course-card-progress-fill
-                />
-              </span>
-              <strong className="min-w-8 text-right font-semibold text-(--text-secondary)">
-                {progressText}
-              </strong>
-            </div>
-          )}
+          {!viewerStatePending &&
+          role === "student" &&
+          !course.enrolled &&
+          course.pricing ? (
+            <CourseCardPricing
+              pricing={course.pricing}
+              studentHome={studentHome}
+            />
+          ) : null}
 
-          {role === "creator" &&
-          (isBin || course.deletedAt) &&
-          (!onRestoreRequested || !canRestore) ? null : (
+          {!viewerStatePending && role === "student" && course.enrolled ? (
+            <CourseCardProgress
+              progress={progress}
+              progressText={progressText}
+              begun={begun}
+            />
+          ) : null}
+
+          {viewerStatePending ||
+          (role === "creator" &&
+            (isBin || course.deletedAt) &&
+            (!onRestoreRequested || !canRestore)) ? null : (
             <button
               type="button"
               disabled={
@@ -688,42 +705,15 @@ export function CourseCard({
                   Boolean(isBin || course.deletedAt) &&
                   (!onRestoreRequested || !canRestore))
               }
-              className={`relative z-20 min-h-11 w-full items-center !rounded-[10px] border border-[color-mix(in_srgb,var(--accent)_70%,transparent)] bg-(--accent) px-3.25 text-[15px]! font-semibold! text-(--on-accent) shadow-[0_10px_22px_color-mix(in_srgb,var(--accent-shadow)_48%,transparent)] transition-[color,background-color,box-shadow] duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) ${
+              className={`${COURSE_CARD_BUTTON_CLASSES} ${
                 role === "creator"
                   ? "flex justify-center gap-2 hover:bg-(--accent-hover)"
                   : "flex justify-center gap-3 hover:bg-(--accent-hover)"
               }`}
               data-control-radius-action
-              onPointerEnter={() => {
-                if (
-                  role === "creator" &&
-                  canEdit &&
-                  !isBin &&
-                  !course.deletedAt
-                ) {
-                  onEditIntent?.(course);
-                }
-              }}
-              onFocus={() => {
-                if (
-                  role === "creator" &&
-                  canEdit &&
-                  !isBin &&
-                  !course.deletedAt
-                ) {
-                  onEditIntent?.(course);
-                }
-              }}
-              onPointerDown={() => {
-                if (
-                  role === "creator" &&
-                  canEdit &&
-                  !isBin &&
-                  !course.deletedAt
-                ) {
-                  onEditIntent?.(course);
-                }
-              }}
+              onPointerEnter={onMainButtonIntent}
+              onFocus={onMainButtonIntent}
+              onPointerDown={onMainButtonIntent}
               onClick={() => {
                 if (isDeleting) return;
                 if (role === "creator") {
@@ -782,41 +772,10 @@ export function CourseCard({
                   </>
                 )
               ) : (
-                <span
-                  className={`flex min-w-0 items-center ${course.enrolled ? "gap-3" : "gap-2.5"}`}
-                >
-                  {learnerAction === "continue" ? (
-                    <>
-                      <Play
-                        className="shrink-0"
-                        size={17}
-                        weight="fill"
-                        aria-hidden="true"
-                      />
-                      <span className="truncate">{enrolledActionLabel}</span>
-                    </>
-                  ) : learnerAction === "view" ? (
-                    <>
-                      <ListBullets
-                        className="shrink-0"
-                        size={17}
-                        weight="regular"
-                        aria-hidden="true"
-                      />
-                      <span className="truncate">View Course</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="truncate">Enroll Now</span>
-                      <ArrowRight
-                        className="shrink-0 translate-y-[0.5px]"
-                        size={18}
-                        weight="bold"
-                        aria-hidden="true"
-                      />
-                    </>
-                  )}
-                </span>
+                <LearnerActionContent
+                  action={learnerAction}
+                  continueLabel={enrolledActionLabel}
+                />
               )}
             </button>
           )}

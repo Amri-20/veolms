@@ -1,5 +1,6 @@
 import type { CourseSummary } from "@veolms/contracts";
 import { CourseCard } from "../../courses/CourseCard";
+import { ShownCourseThumbnailsScript } from "../../courses/CourseCardThumbnail";
 import { CourseCardSkeleton } from "../../courses/CourseCardSkeleton";
 import {
   courseMatchesWishlist,
@@ -8,6 +9,7 @@ import {
   type CourseOpenOptions,
 } from "../../courses/catalogue";
 import { adaptCourseSummaryToCatalogueCourse } from "../../courses/courseAdapter";
+import type { ViewerCourseState } from "../../courses/viewerCourseState";
 import type { NavigateTo } from "../../routing/navigation";
 import { GUEST_HOME_COURSES_PER_SECTION } from "../guestHomeLimits";
 import { GuestHomeSectionHeader } from "./GuestHomeSectionHeader";
@@ -60,6 +62,7 @@ export function GuestHomeCourseSection({
   isError,
   onRetry,
   onNavigatePage,
+  viewerState,
 }: {
   id: string;
   title: string;
@@ -72,6 +75,12 @@ export function GuestHomeCourseSection({
   isError: boolean;
   onRetry: () => void;
   onNavigatePage: NavigateTo;
+  /**
+   * What the cards may say to this viewer (see `useViewerCourseState`).
+   * Without it every card offers its course: a row that lists only courses
+   * the viewer has not enrolled in, built once their enrolments are known.
+   */
+  viewerState?: ViewerCourseState;
 }) {
   const headingId = `${id}-title`;
 
@@ -120,7 +129,14 @@ export function GuestHomeCourseSection({
                 (_, index) => <CourseCardSkeleton key={index} />,
               )
             : courses.map((summary) => {
-                const course = adaptCourseSummaryToCatalogueCourse(summary);
+                const course = {
+                  ...adaptCourseSummaryToCatalogueCourse(
+                    summary,
+                    viewerState?.enrolled,
+                    viewerState?.progress,
+                  ),
+                  viewerStatePending: viewerState?.pending ?? false,
+                };
                 // The same card, wired the same way, as the Courses page
                 // shows a visitor: the thumbnail plays the free preview.
                 return (
@@ -155,6 +171,7 @@ export function GuestHomeCourseSection({
               })}
         </div>
       )}
+      {isLoading || isError ? null : <ShownCourseThumbnailsScript />}
     </section>
   );
 }

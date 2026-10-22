@@ -1068,6 +1068,7 @@ export function ThreadSurface({
             avatar={null}
             label="Log in to join the discussion"
             opensOnTyping
+            guest
             onOpen={openLoginToParticipate}
           />
         </div>
@@ -1151,6 +1152,7 @@ export function ThreadSurface({
           avatar={null}
           label="Log in to join the discussion"
           opensOnTyping
+          guest
           mobileBottomNavigation={mobileBottomNavigation}
           scrollHidden={compactComposerScrollHidden}
           onOpen={openLoginToParticipate}

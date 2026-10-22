@@ -291,6 +291,30 @@ export function useInfiniteCourses(options: {
   });
 }
 
+/**
+ * What a course's page asks for when it is opened from another page (see
+ * `useCoursePageData`), asked for ahead of the click: the curriculum file
+ * the site was built with and the viewer's access answer. Each is kept as
+ * long as the page's own query keeps it, so the page finds them waiting.
+ */
+export function prefetchCoursePage(
+  queryClient: QueryClient,
+  courseKey: string,
+): Promise<unknown> {
+  return Promise.all([
+    queryClient.prefetchQuery<CoursePublicCurriculum | null, ApiError>({
+      queryKey: courseKeys.staticCurriculum(courseKey, null),
+      queryFn: () => coursesService.getStaticCurriculum(courseKey, null),
+      staleTime: Infinity,
+    }),
+    queryClient.prefetchQuery<CourseAccessResponse, ApiError>({
+      queryKey: courseKeys.access(courseKey),
+      queryFn: () => coursesService.getAccess(courseKey),
+      staleTime: 60 * 1000,
+    }),
+  ]);
+}
+
 export function prefetchCourseEditor(
   queryClient: QueryClient,
   courseId: string,
