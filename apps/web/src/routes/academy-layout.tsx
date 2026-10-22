@@ -137,6 +137,7 @@ import {
   getNavigationMatch,
   resolveActiveRouteSection,
 } from "../routing/activeRouteSection";
+import { useHydrated } from "../courses/viewerCourseState";
 import { NO_VIDEO_NOTICE } from "../learning/lessonWithoutVideo";
 import { videoPlaybackFailureNotice } from "../learning/videoPlaybackFailure";
 import {
@@ -495,7 +496,17 @@ export default function AcademyLayout() {
     currentNavigationState[ACADEMY_NAVIGATION_ORIGIN_PATH];
   const originSectionValue =
     currentNavigationState[ACADEMY_NAVIGATION_ORIGIN_SECTION];
+  // The page is built without knowing where the reader came from; what the
+  // origin changes (the highlighted menu item, the back link's words) is
+  // applied in the render after hydration, an update React does apply. In
+  // the hydrating render itself it would differ from the built page, and
+  // React keeps a built attribute it disagrees with: the menu item stayed
+  // on Courses after a reload of a course page opened from Home. Before
+  // the first paint the document's head shows the origin already (see
+  // `routing/navigationOriginEarlyState.ts`).
+  const hydrated = useHydrated();
   const hasValidNavigationOrigin =
+    hydrated &&
     typeof originPathValue === "string" &&
     originPathValue.startsWith("/") &&
     !originPathValue.startsWith("//") &&

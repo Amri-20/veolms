@@ -35,14 +35,38 @@ export const COURSE_CATALOGUE_SEARCH_SESSION_KEY =
   "veolms-course-catalogue-search";
 
 /**
+ * Answers about the learner as last fetched in this tab, one copy per
+ * account (see `services/accountSessionCopies.ts`): the enrolled courses
+ * (`<prefix><user id>`), the wishlist (the same), and each course page's
+ * access answer (`<prefix><user id>:<course slug>`).
+ */
+export const ENROLLED_COURSES_SESSION_KEY_PREFIX = "veolms-enrolled-courses:";
+export const WISHLIST_SESSION_KEY_PREFIX = "veolms-wishlist:";
+export const COURSE_ACCESS_SESSION_KEY_PREFIX = "veolms-course-access:";
+export const NOTIFICATION_SUMMARY_SESSION_KEY_PREFIX =
+  "veolms-notification-summary:";
+/**
+ * What the sidebar's profile button last showed under the name (the handle,
+ * or the role with its icon), for the next load's first paint (see
+ * `shell/profileHintEarlyState.ts`).
+ */
+export const PROFILE_CHIP_SESSION_KEY = "veolms-profile-chip";
+
+/**
  * Session-storage keys forgotten with the session, besides the remembered
- * Settings and Discussions tabs: the catalogue search, and each course's
+ * Settings and Discussions tabs: the catalogue search, each course's
  * lesson search and whether it was open (`learning/Curriculum.tsx`,
- * `veolms-learning-<course>-curriculum-search[-open]`).
+ * `veolms-learning-<course>-curriculum-search[-open]`), and the copies of
+ * the learner's answers.
  */
 export function isAccountSessionStorageKey(key: string): boolean {
   return (
     key === COURSE_CATALOGUE_SEARCH_SESSION_KEY ||
+    key.startsWith(ENROLLED_COURSES_SESSION_KEY_PREFIX) ||
+    key.startsWith(WISHLIST_SESSION_KEY_PREFIX) ||
+    key.startsWith(COURSE_ACCESS_SESSION_KEY_PREFIX) ||
+    key.startsWith(NOTIFICATION_SUMMARY_SESSION_KEY_PREFIX) ||
+    key === PROFILE_CHIP_SESSION_KEY ||
     /^veolms-learning-.+-curriculum-search(-open)?$/.test(key)
   );
 }

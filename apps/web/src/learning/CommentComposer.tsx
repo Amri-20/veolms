@@ -223,7 +223,11 @@ export function CommentComposer({
             data-comment-toolbar
             className="flex shrink-0 items-center gap-1.5 bg-[color-mix(in_srgb,var(--surface)_84%,transparent)] px-2.5 py-2.5 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--text)_8%,transparent)] sm:gap-2 sm:px-3"
           >
-            <DiscussionAvatar src={avatar} className="size-9 sm:size-10" />
+            <DiscussionAvatar
+              src={avatar}
+              viewer
+              className="size-9 sm:size-10"
+            />
             {editorController ? (
               <CommentFormattingToolbar
                 editor={editorController}

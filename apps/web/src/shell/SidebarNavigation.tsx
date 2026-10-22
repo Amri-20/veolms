@@ -138,7 +138,21 @@ export function SidebarNavigation({
               }
               onBlur={hideCollapsedNavigationTooltip}
             >
-              <Icon size={26} weight={active ? "fill" : "regular"} />
+              {/* Both drawings, the item's active class choosing: the
+                  document's head can then move the highlight to the
+                  section the reader came from before the first paint
+                  (see navigationOriginEarlyState.ts), which a weight
+                  chosen here could not follow. */}
+              <Icon
+                size={26}
+                weight="regular"
+                className="[.is-active>&]:hidden!"
+              />
+              <Icon
+                size={26}
+                weight="fill"
+                className="hidden! [.is-active>&]:block!"
+              />
               <span className="courses-nav__text">{displayLabel}</span>
               {showKeyboardShortcuts && (
                 <ShortcutKeys

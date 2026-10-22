@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { GuestProfileIcon } from "../../icons/GuestProfileIcon";
 import { DiscussionAvatar } from "../DiscussionAvatar";
 import { DESCRIPTION_SURFACE_BASE } from "../LessonDescription";
 import {
@@ -21,6 +22,11 @@ interface CompactComposerProps {
    * somewhere else (logging in), where nothing typed could be kept.
    */
   opensOnTyping?: boolean;
+  /**
+   * Nobody is signed in: the avatar is the sidebar's signed-out profile
+   * mark, in the theme's accent.
+   */
+  guest?: boolean;
   onOpen: () => void;
 }
 
@@ -39,6 +45,7 @@ interface MobileCompactComposerPortalProps {
   avatar?: string | null;
   label?: string;
   opensOnTyping?: boolean;
+  guest?: boolean;
   mobileBottomNavigation: boolean;
   scrollHidden: boolean;
   onOpen: () => void;
@@ -51,6 +58,7 @@ export function MobileCompactComposerPortal({
   avatar,
   label,
   opensOnTyping,
+  guest,
   mobileBottomNavigation,
   scrollHidden,
   onOpen,
@@ -87,6 +95,7 @@ export function MobileCompactComposerPortal({
           avatar={avatar}
           label={label}
           opensOnTyping={opensOnTyping}
+          guest={guest}
           onOpen={onOpen}
         />
       </div>
@@ -125,6 +134,7 @@ export function CompactComposer({
   disabled = false,
   label = "Open discussion composer",
   opensOnTyping = false,
+  guest = false,
   onOpen,
 }: CompactComposerProps) {
   const preview =
@@ -160,7 +170,22 @@ export function CompactComposer({
       }}
       className={`flex w-full cursor-pointer items-center gap-2 p-2 text-left ${COMPACT_COMPOSER_SURFACE} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)${disabled ? " pointer-events-none opacity-60" : ""}`}
     >
-      <DiscussionAvatar src={avatar} className="pointer-events-none size-10" />
+      {guest ? (
+        // Drawn at the sidebar's size (its ring is three quarters of the
+        // mark, 39px), overflowing the 40px avatar box evenly.
+        <span
+          className="pointer-events-none grid size-10 shrink-0 place-items-center text-(--accent)"
+          aria-hidden="true"
+        >
+          <GuestProfileIcon size={52} className="shrink-0" />
+        </span>
+      ) : (
+        <DiscussionAvatar
+          src={avatar}
+          viewer
+          className="pointer-events-none size-10"
+        />
+      )}
       <span className="learning-discussion__composer-prompt min-w-0 flex-1 truncate px-2 py-1.5 text-(--muted)">
         {preview || (attachmentCount > 0 ? attachmentPreview : promptText)}
       </span>

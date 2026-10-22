@@ -75,6 +75,7 @@ import { DiscussionMarkdown } from "../learning/discussion-editor/DiscussionMark
 import { createDiscussionDraft } from "../learning/discussion-editor/types";
 import { formatDuration, resolveCourseDurationSeconds } from "./courseAdapter";
 import { CourseLearnerProgressBar } from "./overview/CourseLearnerProgressBar";
+import { CourseLearnerProgressBarEarly } from "./overview/CourseLearnerProgressBarEarly";
 import { CourseOverviewCurriculum } from "./overview/CourseOverviewCurriculum";
 import {
   CourseOverviewHero,
@@ -1765,6 +1766,12 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
     preview: props.initialCurriculum,
     enabled: !props.previewData && !props.customCourse && Boolean(courseSlug),
     awaitsAccess,
+    viewerKind:
+      props.role === "creator" || props.viewerSettled === false
+        ? null
+        : authUser
+          ? "learner"
+          : "guest",
   });
 
   // If previewData is provided, adapt it cleanly from persisted server state
@@ -2113,12 +2120,11 @@ function CourseOverviewContent({
   // nor holds it is offered: that waits until the viewer is known.
   const previewDependsOnViewer =
     !trailerMediaId && firstFreeLessonNumber !== undefined;
+  // While the viewer is not known the guest's preview is in the page, and
+  // the document's head shows or hides it (see `courseViewerState`).
   const canPreview =
     Boolean(trailerMediaId) ||
-    (viewer !== "pending" &&
-      !managesCourse &&
-      !isEnrolled &&
-      firstFreeLessonNumber !== undefined);
+    (!managesCourse && !isEnrolled && firstFreeLessonNumber !== undefined);
   const openPreview = () => {
     if (isReadOnlyPreview || !onNavigatePage) return;
     const courseKey = getCourseRouteKey(course);
@@ -2161,7 +2167,7 @@ function CourseOverviewContent({
       // No heart for someone who manages the course, nor for a learner who
       // is enrolled in it: a wish list is for courses not yet taken.
       wishlist={
-        managesCourse || isEnrolled || viewer === "pending"
+        managesCourse || isEnrolled
           ? undefined
           : {
               wishlisted,
@@ -2183,7 +2189,9 @@ function CourseOverviewContent({
         viewer === "known"
           ? undefined
           : {
-              for: viewer === "pending" ? "everyone" : "expected-session",
+              // Pending is a browser that remembers a session, as an
+              // expected session is: the same parts, picked by the head.
+              for: "expected-session",
               preview: previewDependsOnViewer,
               wishlist: true,
             }
@@ -2194,6 +2202,9 @@ function CourseOverviewContent({
   return (
     <div
       data-course-overview
+      // What the document's head keys this course's early state on (see
+      // `courseCardEarlyState`), as the course cards do.
+      data-course-card-id={course.id}
       // On the course page the first box touches the hero; in the editor's
       // preview the hero is a card in the column like the rest.
       className={`flex w-full flex-col text-(--text) ${
@@ -2233,50 +2244,55 @@ function CourseOverviewContent({
         <div
           className={isReadOnlyPreview ? undefined : overviewBandColumnClasses}
         >
-          {viewer === "pending" ? (
-            <CourseViewerBandPlaceholder />
-          ) : (
+          {/* While the viewer is not known (presumed a guest, or pending)
+              the box holds every form the band can take and the document's
+              head picks one before the first paint (see
+              `courseViewerState`): the guest's band, the learner's progress
+              band when this tab's copies say the course is theirs, or the
+              placeholder when it has none. The band itself stays the first
+              element throughout. */}
+          <div
+            className={
+              viewer === "known" ? undefined : presumedGuestOnlyClasses
+            }
+            data-course-card-early={viewer === "known" ? undefined : "offer"}
+          >
+            {managesCourse ? (
+              <CourseManagerBar
+                course={course}
+                price={managerPrice}
+                onNavigatePage={onNavigatePage}
+              />
+            ) : isEnrolled ? (
+              <CourseLearnerProgressBar
+                courseKey={getCourseRouteKey(course)}
+                courseTitle={title}
+                progress={course.progress ?? 0}
+                started={Boolean(course.started)}
+                totalLessons={course.lectures}
+                resume={resume}
+                onNavigatePage={onNavigatePage}
+              />
+            ) : (
+              <CoursePurchaseSection
+                course={course}
+                pricing={activePricing}
+                inclusions={inclusions}
+                onNavigatePage={onNavigatePage}
+                isReadOnlyPreview={isReadOnlyPreview}
+                isCreator={isCreator}
+                canSelfEnroll={adaptedFromPreview?.canSelfEnroll}
+              />
+            )}
+          </div>
+          {viewer === "known" ? null : (
             <>
-              <div
-                className={
-                  viewer === "presumed-guest"
-                    ? presumedGuestOnlyClasses
-                    : undefined
-                }
-              >
-                {managesCourse ? (
-                  <CourseManagerBar
-                    course={course}
-                    price={managerPrice}
-                    onNavigatePage={onNavigatePage}
-                  />
-                ) : isEnrolled ? (
-                  <CourseLearnerProgressBar
-                    courseKey={getCourseRouteKey(course)}
-                    courseTitle={title}
-                    progress={course.progress ?? 0}
-                    started={Boolean(course.started)}
-                    totalLessons={course.lectures}
-                    resume={resume}
-                    onNavigatePage={onNavigatePage}
-                  />
-                ) : (
-                  <CoursePurchaseSection
-                    course={course}
-                    pricing={activePricing}
-                    inclusions={inclusions}
-                    onNavigatePage={onNavigatePage}
-                    isReadOnlyPreview={isReadOnlyPreview}
-                    isCreator={isCreator}
-                    canSelfEnroll={adaptedFromPreview?.canSelfEnroll}
-                  />
-                )}
+              <div className="hidden" data-course-card-early="held">
+                <CourseLearnerProgressBarEarly />
               </div>
-              {viewer === "presumed-guest" ? (
-                <div className={sessionExpectedOnlyClasses}>
-                  <CourseViewerBandPlaceholder />
-                </div>
-              ) : null}
+              <div className={sessionExpectedOnlyClasses}>
+                <CourseViewerBandPlaceholder />
+              </div>
             </>
           )}
         </div>

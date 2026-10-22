@@ -24,7 +24,11 @@ import type {
   CourseSort,
   CourseStatusFilter,
 } from "../../courses/catalogue";
-import { authStore } from "../../store/auth.store";
+import {
+  authStore,
+  useAuthIdentityHint,
+  useSessionPresentAtBoot,
+} from "../../store/auth.store";
 import {
   useCourses,
   useInfiniteCourses,
@@ -34,6 +38,10 @@ import {
   useRestoreCourse,
 } from "../../services/courses";
 import { useEnrolledCourses } from "../../services/enrollments";
+import {
+  isViewerCourseStateKnown,
+  useHydrated,
+} from "../../courses/viewerCourseState";
 import type { NavigateTo } from "../../routing/navigation";
 import type { CoursesPageRenderContext } from "../academyShellTypes";
 import type { ApiError } from "../../lib/api-error";
@@ -88,6 +96,8 @@ export interface UseCatalogueQueriesResult {
   completeCourseQuery: UseQueryResult<{ courses: CourseSummary[] }, ApiError>;
   publishedCourses: CourseSummary[];
   enrolledCoursesData: ReturnType<typeof useEnrolledCourses>["data"];
+  /** Whether the cards may show a price or progress yet (see below). */
+  learnerStateKnown: boolean;
   myCoursesQuery: ReturnType<typeof useMyCourses>;
   myCoursesData: ReturnType<typeof useMyCourses>["data"];
   deletedCoursesQuery: UseQueryResult<
@@ -214,12 +224,25 @@ export function useCatalogueQueries({
   const isPublishedFetching = needsCompleteCourseList
     ? completeCourseQuery.isFetching
     : pagedCourseQuery.isFetching;
-  const { data: enrolledCoursesData } = useEnrolledCourses({
+  const enrolledCoursesQuery = useEnrolledCourses({
     enabled:
       isCourseCataloguePage &&
       shouldLoadCourseSurface &&
       effectiveRole === "student" &&
       (isAuthenticated || (!authUserFetched && authStore.hasSessionHint())),
+  });
+  const enrolledCoursesData = enrolledCoursesQuery.data;
+  // What each card may say about this viewer (see the helper).
+  const hydrated = useHydrated();
+  const identityHint = useAuthIdentityHint();
+  const sessionPresentAtBoot = useSessionPresentAtBoot();
+  const learnerStateKnown = isViewerCourseStateKnown({
+    hydrated,
+    signedIn: isAuthenticated,
+    sessionChecked: authUserFetched,
+    sessionRemembered: sessionPresentAtBoot || identityHint !== null,
+    enrolmentsLoaded: enrolledCoursesData !== undefined,
+    enrolmentsFailed: enrolledCoursesQuery.isError,
   });
   const myCoursesQuery = useMyCourses({
     enabled:
@@ -330,6 +353,7 @@ export function useCatalogueQueries({
     completeCourseQuery,
     publishedCourses,
     enrolledCoursesData,
+    learnerStateKnown,
     myCoursesQuery,
     myCoursesData,
     deletedCoursesQuery,

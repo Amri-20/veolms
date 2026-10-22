@@ -41,6 +41,7 @@ import { useCurrentUser } from "../services/auth";
 import { useCapabilities } from "../services/authorization/authorization.queries";
 import { hasAdminRole } from "../shell/workspaceRole";
 import { courseMatchesWishlist, getCourseRouteKey } from "./catalogue";
+import { ShownCourseThumbnailsScript } from "./CourseCardThumbnail";
 
 // Only a learner leaving a free course needs this, so it stays out of the
 // catalogue's own code.
@@ -504,6 +505,7 @@ export function CourseCatalogue({
               renderCard(course, priorityImageIndexes.has(index)),
             )}
           </div>
+          <ShownCourseThumbnailsScript />
         </div>
       ) : (
         <CourseCatalogueEmptyState
