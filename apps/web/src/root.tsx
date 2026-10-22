@@ -41,6 +41,7 @@ import { getNavigationOriginBootstrapScript } from "./routing/navigationOriginEa
 import { getCourseCardsEarlyStateBootstrapScript } from "./courses/courseCardEarlyState";
 import { getLearnerStartedBootstrapScript } from "./home/learner/learnerCoursesSubtitle";
 import { getHomeHintBootstrapScript } from "./store/homeHint";
+import { getLearnerHomeSnapshotBootstrapScript } from "./home/learner/learnerHomeSnapshot";
 import { getReadingModeBootstrapScript } from "./reading-mode/readingModePreferences";
 import {
   getControlRadiusBootstrapScript,
@@ -269,7 +270,7 @@ export function Layout({ children }: LayoutProps) {
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `${getOauthDialogReturnScript()}${getOauthPopupHandoffScript()}${getLoginDialogSnapshotScript(OAUTH_REDIRECT_RESULT_STORAGE_KEY)}${getSessionPresenceBootstrapScript()}${getProfileHintBootstrapScript()}${getNavigationOriginBootstrapScript()}${getCourseCardsEarlyStateBootstrapScript()}${getLearnerStartedBootstrapScript()}${getHomeHintBootstrapScript()}${getSidebarShellBootstrapScript()}${getSidebarCollapsedMarkupBootstrapScript()}${getSidebarPresentationBootstrapScript()}${getLearningShellBootstrapScript()}${getLearningPlayerBootstrapScript()}`,
+            __html: `${getOauthDialogReturnScript()}${getOauthPopupHandoffScript()}${getLoginDialogSnapshotScript(OAUTH_REDIRECT_RESULT_STORAGE_KEY)}${getSessionPresenceBootstrapScript()}${getProfileHintBootstrapScript()}${getNavigationOriginBootstrapScript()}${getCourseCardsEarlyStateBootstrapScript()}${getLearnerStartedBootstrapScript()}${getHomeHintBootstrapScript()}${getLearnerHomeSnapshotBootstrapScript()}${getSidebarShellBootstrapScript()}${getSidebarCollapsedMarkupBootstrapScript()}${getSidebarPresentationBootstrapScript()}${getLearningShellBootstrapScript()}${getLearningPlayerBootstrapScript()}`,
           }}
         />
         <Meta />

@@ -122,7 +122,19 @@ export function LearnerHomeContent({
           {isAuthReady ? null : (
             <>
               <div className={learnerHomePendingClasses}>
-                <LearnerHomeShell />
+                {/* A reload puts the learner's home back here as it was
+                    last drawn, before the first paint, and the placeholders
+                    after it are not shown (see learnerHomeSnapshot.ts).
+                    React leaves what is put here alone while hydrating. */}
+                <div
+                  data-learner-home-snapshot=""
+                  className="contents"
+                  suppressHydrationWarning
+                  dangerouslySetInnerHTML={{ __html: "" }}
+                />
+                <div data-learner-home-shell="" className="contents">
+                  <LearnerHomeShell />
+                </div>
               </div>
               <div className={dashboardHomePendingClasses}>
                 <CreatorDashboardSkeleton />

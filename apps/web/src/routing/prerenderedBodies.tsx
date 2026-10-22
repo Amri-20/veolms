@@ -58,6 +58,21 @@ export const guestHomeBody = definePrerenderedBody(
   (module) => module.GuestHome,
 );
 
+// The signed-in learner's home. A reload of it puts the home up as it was
+// last drawn before any of this runs (see home/learner/learnerHomeSnapshot.ts),
+// and the page's own takes its place as soon as it has hydrated: both
+// modules are loaded first, so that it does so at once, already filled in
+// from the tab's copies, and not by way of its placeholders.
+export const authenticatedHomeBody = definePrerenderedBody(
+  () => import("../home/AuthenticatedHomeBoundary"),
+  (module) => module.AuthenticatedHomeBoundary,
+);
+
+export const learnerHomeBody = definePrerenderedBody(
+  () => import("../home/learner/LearnerHome"),
+  (module) => module.LearnerHome,
+);
+
 export const courseCatalogueBody = definePrerenderedBody(
   () => import("../courses/CourseCatalogue"),
   (module) => module.CourseCatalogue,
@@ -146,6 +161,16 @@ export function preloadPrerenderedBodies(): Promise<unknown> | null {
       readHomeHint() === "new-learner")
   ) {
     pending.push(guestHomeBody.preload());
+  }
+  // A learner who was signed in last time, whose home lists their courses:
+  // the page takes over from what the first paint showed right after
+  // hydrating (see authenticatedHomeBody).
+  if (
+    (isDevelopmentHome || documentPreloads(GUEST_HOME_CHUNK_URL_PLACEHOLDER)) &&
+    document.documentElement.dataset.sessionHint &&
+    readHomeHint() === null
+  ) {
+    pending.push(authenticatedHomeBody.preload(), learnerHomeBody.preload());
   }
   if (documentPreloads(CATALOGUE_CHUNK_URL_PLACEHOLDER)) {
     pending.push(courseCatalogueBody.preload());

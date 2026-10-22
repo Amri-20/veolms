@@ -45,6 +45,15 @@ export const WISHLIST_SESSION_KEY_PREFIX = "veolms-wishlist:";
 export const COURSE_ACCESS_SESSION_KEY_PREFIX = "veolms-course-access:";
 export const NOTIFICATION_SUMMARY_SESSION_KEY_PREFIX =
   "veolms-notification-summary:";
+/** Where in a course to carry on (`<prefix><user id>:<course key>`). */
+export const RESUME_CONTEXT_SESSION_KEY_PREFIX = "veolms-resume-context:";
+/** Today's learning against the daily goal (the laptop on the home). */
+export const LEARNING_SUMMARY_SESSION_KEY_PREFIX = "veolms-learning-summary:";
+/**
+ * The learner's home as it was last drawn in this tab, for the next load's
+ * first paint (see `home/learner/learnerHomeSnapshot.ts`).
+ */
+export const LEARNER_HOME_SNAPSHOT_SESSION_KEY_PREFIX = "veolms-learner-home:";
 /**
  * What the sidebar's profile button last showed under the name (the handle,
  * or the role with its icon), for the next load's first paint (see
@@ -66,6 +75,9 @@ export function isAccountSessionStorageKey(key: string): boolean {
     key.startsWith(WISHLIST_SESSION_KEY_PREFIX) ||
     key.startsWith(COURSE_ACCESS_SESSION_KEY_PREFIX) ||
     key.startsWith(NOTIFICATION_SUMMARY_SESSION_KEY_PREFIX) ||
+    key.startsWith(RESUME_CONTEXT_SESSION_KEY_PREFIX) ||
+    key.startsWith(LEARNING_SUMMARY_SESSION_KEY_PREFIX) ||
+    key.startsWith(LEARNER_HOME_SNAPSHOT_SESSION_KEY_PREFIX) ||
     key === PROFILE_CHIP_SESSION_KEY ||
     /^veolms-learning-.+-curriculum-search(-open)?$/.test(key)
   );

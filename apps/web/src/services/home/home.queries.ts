@@ -17,7 +17,11 @@ import {
   enrolledCoursesQueryOptions,
   enrollmentsService,
 } from "../enrollments";
-import { learningGoalKeys, learningGoalsService } from "../learning-goals";
+import {
+  LEARNING_SUMMARY_STALE_MS,
+  learningGoalKeys,
+  learningGoalsService,
+} from "../learning-goals";
 import { learningProgressKeys } from "../learning-progress";
 import { homeKeys } from "./home.keys";
 import { homeService } from "./home.service";
@@ -116,9 +120,6 @@ export function useHomePageLessonVideoOptions(courseId: string | null) {
     staleTime: 60 * 1000,
   });
 }
-
-/** How long the goal summary is taken as current; `useLearningSummary`'s own. */
-const LEARNING_SUMMARY_STALE_MS = 30_000;
 
 /**
  * Asks for a signed-in learner's home ahead of the page that shows it, in

@@ -28,6 +28,7 @@ export function HeroLaptopScreen({
 
   return (
     <div
+      data-hero-measured=""
       style={{
         transform,
         width: HERO_LAPTOP_SCREEN_WIDTH,

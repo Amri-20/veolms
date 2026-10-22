@@ -728,7 +728,13 @@ export function configureShakaPlayer(
   const configuration = createShakaConfiguration(source, runtime);
   if (options.keepPreloadStreaming) {
     delete configuration.streaming;
-    delete configuration.abr;
+    // The quality the preload fetched is kept until the first frame has
+    // played: its own fast downloads would otherwise have ABR choose again
+    // as the player takes it over, and the start waited for the same
+    // segments in a higher quality (a browser with no bandwidth kept yet
+    // preloads at 360p). The source's ABR settings apply from the first
+    // frame on (`applyStreamingAfterFirstFrame`).
+    configuration.abr = { enabled: false };
   }
   return player.configure(configuration);
 }

@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { prefetchCoursePage } from "../../services/courses";
+import { prefetchLearningProgressSnapshot } from "../../services/learning-progress";
 
 /** How many segments past the learner's place the lesson's video fetches. */
 const HERO_LESSON_SEGMENTS = 3;
@@ -11,8 +12,11 @@ const HERO_LESSON_SEGMENTS = 3;
  * the course's curriculum file and access answer (what the lesson page asks
  * for first) and the lesson's video, its start-up answer and a few segments
  * from where the learner left off (`preloadLessonPlayback`, which also loads
- * the video engine). The lesson page's own code and stylesheets are fetched
- * by `<PrefetchPageLinks>` beside the hero (see LearnerHome).
+ * the video engine), the learner's progress in the course (the lesson page
+ * waits for it before starting the video), and the player's own code, which
+ * the lesson page loads only once it is open. The lesson page's code and
+ * stylesheets are fetched by `<PrefetchPageLinks>` beside the hero (see
+ * LearnerHome).
  *
  * Skipped on a connection that asks to save data (preloadLessonPlayback
  * fetches only the small start-up answer then). Nothing is cancelled when
@@ -32,6 +36,8 @@ export function useHeroLessonWarmUp(
     const warm = () => {
       if (cancelled) return;
       void prefetchCoursePage(queryClient, courseSlug);
+      void prefetchLearningProgressSnapshot(queryClient, courseSlug);
+      void import("../../learning/player/PersistentLearningPlayerHost");
       void import("../../learning/earlyHlsPreload").then(
         ({ preloadLessonPlayback }) => {
           if (cancelled) return;

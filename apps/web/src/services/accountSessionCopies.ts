@@ -16,13 +16,17 @@ import {
 import {
   COURSE_ACCESS_SESSION_KEY_PREFIX,
   ENROLLED_COURSES_SESSION_KEY_PREFIX,
+  LEARNING_SUMMARY_SESSION_KEY_PREFIX,
   NOTIFICATION_SUMMARY_SESSION_KEY_PREFIX,
+  RESUME_CONTEXT_SESSION_KEY_PREFIX,
   WISHLIST_SESSION_KEY_PREFIX,
 } from "../store/accountBrowserState";
 import { authStore } from "../store/auth.store";
 import { authKeys } from "./auth/auth.keys";
 import { courseKeys } from "./courses/courses.keys";
 import { enrollmentKeys } from "./enrollments/enrollments.keys";
+import { learningGoalKeys } from "./learning-goals/learning-goals.keys";
+import { learningProgressKeys } from "./learning-progress/learning-progress.keys";
 import { notificationKeys } from "./notifications/notifications.keys";
 import { wishlistKeys } from "./wishlist/wishlist.keys";
 
@@ -31,8 +35,10 @@ import { wishlistKeys } from "./wishlist/wishlist.keys";
  * a reload draws the course cards and the course page as they were at once,
  * instead of waiting for the session check and these answers: the enrolled
  * courses, the wishlist, the unread notification count (the dot on the
- * profile button), and each course page's access answer (its band:
- * progress and where to resume, or the price).
+ * profile button), each course page's access answer (its band: progress
+ * and where to resume, or the price), and what the learner's home leads
+ * with: where to carry on in each course it has led with, and today's
+ * learning against the daily goal (the laptop).
  *
  * - Right after hydration, before any other effect asks for them, the copies
  *   are put in the query cache with the time they were fetched, so the page
@@ -40,7 +46,9 @@ import { wishlistKeys } from "./wishlist/wishlist.keys";
  *   `staleTime` is taken as current and no request is made; an older one is
  *   shown and refreshed in the background. Only the access answer of the
  *   course in the address is restored; the others are restored when a page
- *   asks (not at all: in-app navigation keeps them in memory).
+ *   asks (not at all: in-app navigation keeps them in memory). Where to
+ *   carry on is restored for every course this tab kept it for: there are
+ *   only ever a few, and the home's hero needs its course's at once.
  * - Whatever marks an answer out of date (a purchase, an enrolment, an
  *   unenrolment, an access change: they invalidate it) deletes its copy at
  *   once, so a reload before the new answer arrives never shows the old
@@ -71,6 +79,17 @@ const hasCourseIds = (list: unknown) =>
 
 const enrolledCoursesHash = hashKey(enrollmentKeys.courses());
 const notificationSummaryHash = hashKey(notificationKeys.summary());
+const learningSummaryHash = hashKey(learningGoalKeys.summary());
+
+/** The course a resume-context query is for, or null: not one of those. */
+const resumeContextCourse = (queryKey: QueryKey): string | null => {
+  const courseKey = queryKey[2];
+  return typeof courseKey === "string" &&
+    courseKey &&
+    hashKey(queryKey) === hashKey(learningProgressKeys.resumeContext(courseKey))
+    ? courseKey
+    : null;
+};
 
 const COPIES: AccountCopy[] = [
   {
@@ -111,7 +130,42 @@ const COPIES: AccountCopy[] = [
       typeof value.courseId === "string" &&
       typeof value.enrolled === "boolean",
   },
+  {
+    storageKeyOf: (queryKey, userId) => {
+      const courseKey = resumeContextCourse(queryKey);
+      return courseKey
+        ? `${RESUME_CONTEXT_SESSION_KEY_PREFIX}${userId}:${courseKey}`
+        : null;
+    },
+    isValid: (value) =>
+      isObject(value) &&
+      typeof value.courseId === "string" &&
+      typeof value.courseSlug === "string",
+  },
+  {
+    storageKeyOf: (queryKey, userId) =>
+      hashKey(queryKey) === learningSummaryHash
+        ? `${LEARNING_SUMMARY_SESSION_KEY_PREFIX}${userId}`
+        : null,
+    isValid: (value) =>
+      isObject(value) && typeof value.todaySeconds === "number",
+  },
 ];
+
+/** The courses this tab kept a resume context for, for an account. */
+function savedResumeContextCourses(userId: string): string[] {
+  const prefix = `${RESUME_CONTEXT_SESSION_KEY_PREFIX}${userId}:`;
+  const courses: string[] = [];
+  try {
+    for (let index = 0; index < sessionStorage.length; index += 1) {
+      const key = sessionStorage.key(index);
+      if (key?.startsWith(prefix)) courses.push(key.slice(prefix.length));
+    }
+  } catch {
+    // Nothing kept, or nothing readable: nothing to restore.
+  }
+  return courses;
+}
 
 const currentUserHash = hashKey(authKeys.me());
 
@@ -156,7 +210,11 @@ export function startAccountSessionCopies(queryClient: QueryClient) {
       enrollmentKeys.courses(),
       wishlistKeys.items(userId),
       notificationKeys.summary(),
+      learningGoalKeys.summary(),
       ...(slug ? [courseKeys.access(slug)] : []),
+      ...savedResumeContextCourses(userId).map((courseKey) =>
+        learningProgressKeys.resumeContext(courseKey),
+      ),
     ];
     for (const queryKey of queryKeys) {
       const found = copyOf(queryKey, userId);
