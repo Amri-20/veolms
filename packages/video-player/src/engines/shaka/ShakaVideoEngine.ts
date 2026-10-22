@@ -303,9 +303,11 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
       const preloadSession =
         speculativeSession ?? this.takeMatchingPreloadSession(source);
       if (!preloadSession) noteShakaSourceLoading(source.src);
+      const keepPreloadStreaming = Boolean(preloadSession?.preloadPromise);
       if (
         !configureShakaPlayer(player, source, runtime, {
           reset: !preloadSession,
+          keepPreloadStreaming,
         })
       ) {
         throw new VideoEngineError({
@@ -345,6 +347,15 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
           this.applyStreamingAfterFirstFrame(player, source, runtime);
         }
       } else {
+        if (keepPreloadStreaming) {
+          // The preload was dropped after all (made for another position):
+          // this source's buffering and quality apply from the start.
+          const configuration = createShakaConfiguration(source, runtime);
+          player.configure({
+            streaming: configuration.streaming,
+            abr: configuration.abr,
+          });
+        }
         await player.load(asset, startTime, mimeType);
       }
 
@@ -594,13 +605,17 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
 
   /**
    * A preload plays with the settings it was made with (a hovered lesson
-   * preloads less); this source's buffering applies once its first frame
-   * has played. Not before: in Shaka 5.2.7 every `configure` call re-runs
-   * the whole configuration, which drops the segments the preload fetched
-   * but has not appended yet (the prefetch limit goes back to 0) and makes
-   * ABR choose again from the preload's fast downloads. The first frame
-   * then waited for a fresh 1080p segment: about 1.6 s of a 4.1 s lesson
-   * switch on production.
+   * preloads less); this source's buffering and quality settings apply once
+   * its first frame has played. Not before: in Shaka 5.2.7 every
+   * `configure` call re-runs the whole configuration, which drops the
+   * segments the preload fetched but has not appended yet (the prefetch
+   * limit goes back to 0) and makes ABR choose again from the preload's
+   * fast downloads. The first frame then waited for a fresh 1080p segment:
+   * about 1.6 s of a 4.1 s lesson switch on production. The quality
+   * settings were still given before the load as well (configureShakaPlayer
+   * with `keepPreloadStreaming` leaves them out now): the lesson opened from
+   * the home page, prepared there at 360p, fetched its start again in
+   * 1080p. Quality then rises from the preload's tier as it plays.
    */
   private applyStreamingAfterFirstFrame(
     player: ShakaPlayerLike,
@@ -612,8 +627,10 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     const apply = (): void => {
       cancel();
       if (this.#player !== player) return;
+      const configuration = createShakaConfiguration(source, runtime);
       player.configure({
-        streaming: createShakaConfiguration(source, runtime).streaming,
+        streaming: configuration.streaming,
+        abr: configuration.abr,
       });
     };
     const cancel = (): void => {

@@ -82,6 +82,7 @@ function startPreloadForBootstrap(
     expiresAt?: number;
   } | null>,
   speculative = false,
+  segmentPrefetchLimit?: number,
 ) {
   const key = `${bootstrap.mediaKey}\u0000${bootstrap.manifestUrl}`;
   if (inFlight?.key === key) return inFlight.promise;
@@ -97,6 +98,7 @@ function startPreloadForBootstrap(
       segmentTokenExpiresAt: bootstrap.segmentTokenExpiresAt,
       inlinedMasterManifest: bootstrap.inlinedMasterManifest,
       refreshSegmentToken,
+      segmentPrefetchLimit,
     }),
     { speculative },
   );
@@ -183,12 +185,15 @@ function mayReplacePreloadSession(): boolean {
 /**
  * Gets a lesson ready to start the moment it is opened: its playback
  * bootstrap (kept for the click that follows) and, unless the connection is
- * asking to save data, a Shaka preload of its manifest and first segments.
- * Every failure is silent; opening the lesson then works as it always has.
+ * asking to save data, a Shaka preload of its manifest and first segments,
+ * from where the learner left off. `segments`: how many to fetch past the
+ * start (one by default). Every failure is silent; opening the lesson then
+ * works as it always has.
  */
 export async function preloadLessonPlayback(
   courseSlug: string,
   lessonNumber: number,
+  options: { segments?: number } = {},
 ): Promise<void> {
   if (!courseSlug || !Number.isInteger(lessonNumber) || lessonNumber < 1) {
     return;
@@ -216,6 +221,7 @@ export async function preloadLessonPlayback(
     playbackBootstrap.source === "paid-bootstrap-api",
     refreshSegmentToken,
     true,
+    options.segments,
   ).catch(() => null);
 }
 
