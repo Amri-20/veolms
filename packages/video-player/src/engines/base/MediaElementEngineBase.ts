@@ -34,6 +34,27 @@ function finiteOrZero(value: number): number {
   return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
+/** A speed a learner can have chosen: finite and above 0. */
+function isLearnerPlaybackRate(rate: number): boolean {
+  return Number.isFinite(rate) && rate > 0;
+}
+
+/**
+ * The element's playback rate as the learner's speed. Shaka holds playback
+ * during a stall by setting the rate to 0 and puts it back afterwards; read
+ * as the learner's speed, that 0 was saved as their rate and the next lesson
+ * (or the mini player) was started with it, which `setPlaybackRate` refuses,
+ * so the video never began. While it is 0, `fallback` (the last real speed)
+ * stands.
+ */
+function learnerPlaybackRate(
+  media: HTMLMediaElement | null | undefined,
+  fallback: number,
+): number {
+  const rate = media?.playbackRate;
+  return rate !== undefined && isLearnerPlaybackRate(rate) ? rate : fallback;
+}
+
 function isExpectedPlayInterruption(error: unknown): boolean {
   return (
     error instanceof DOMException &&
@@ -513,7 +534,7 @@ export abstract class MediaElementEngineBase implements VideoEngine {
       paused: media?.paused ?? true,
       volume: media?.volume ?? 1,
       muted: media?.muted ?? false,
-      playbackRate: media?.playbackRate ?? 1,
+      playbackRate: learnerPlaybackRate(media, 1),
     };
     this.emitSnapshot();
     this.#events.emit("unloaded", undefined);
@@ -680,7 +701,7 @@ export abstract class MediaElementEngineBase implements VideoEngine {
       duration: finiteOrZero(media.duration),
       volume: media.volume,
       muted: media.muted,
-      playbackRate: media.playbackRate,
+      playbackRate: learnerPlaybackRate(media, this.#snapshot.playbackRate),
       buffered: readTimeRanges(media.buffered),
       seekable: readTimeRanges(media.seekable),
     };
@@ -729,6 +750,10 @@ export abstract class MediaElementEngineBase implements VideoEngine {
   private syncPlaybackRate(): void {
     const media = this.#media;
     if (!media) {
+      return;
+    }
+    // A stall's 0 (see learnerPlaybackRate) is not a change of speed.
+    if (!isLearnerPlaybackRate(media.playbackRate)) {
       return;
     }
     this.updateSnapshot({ playbackRate: media.playbackRate });

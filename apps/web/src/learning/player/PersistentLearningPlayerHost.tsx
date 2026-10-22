@@ -39,6 +39,7 @@ import {
   type LearningPlayerMotionFinish,
 } from "./learningPlayerExpandMotion";
 import { useLearningMiniPlayerGestures } from "./useLearningMiniPlayerGestures";
+import { isPhoneLayoutHeld } from "../../shell/phoneVideoFullscreenHold";
 import { MiniPlayerResizeHandles } from "./MiniPlayerResizeHandles";
 import { MiniPlayerInfoBar } from "./MiniPlayerInfoBar";
 import { MiniPlayerReadingModeEffects } from "./MiniPlayerReadingModeEffects";
@@ -46,6 +47,10 @@ import { useLearningPlayerMinimizeShortcut } from "./useLearningPlayerMinimizeSh
 import { LESSON_READING_SCROLL_ATTRIBUTE } from "./useLessonPlayerMinimizeGesture";
 import { useMiniPlayerCurriculumSections } from "./useMiniPlayerCurriculumSections";
 import { Curriculum } from "../Curriculum";
+import {
+  useLiveLessonProgress,
+  type LiveLessonProgress,
+} from "./liveLessonProgress";
 import type { CourseSection, Lesson } from "../courseContent";
 
 import { courseRouteKeyFromLessonPath } from "./persistentMiniPlayerLesson";
@@ -124,7 +129,11 @@ export interface PersistentLearningPlayerRegistration {
   onSelectLesson?: (lessonNumber: number) => void;
   curriculumSections?: readonly CourseSection[];
   curriculumLessonsById?: ReadonlyMap<number, Lesson>;
-  lessonProgress?: Readonly<Record<number, number>>;
+  /**
+   * The lesson page's progress, read rather than handed over as figures so
+   * that progress alone never registers the player again.
+   */
+  lessonProgress?: LiveLessonProgress;
   isLessonAvailable?: (lessonNumber: number) => boolean;
   /**
    * Where watched progress is recorded once the lesson page has unmounted
@@ -338,6 +347,10 @@ export function PersistentLearningPlayerHost({
   const rememberFullPlayerRect = useCallback(() => {
     const host = hostRef.current;
     if (
+      // A video full screen on a phone turned sideways: its place on the
+      // page is not where it rests, and measuring forced a style and layout
+      // pass on every render during the turn (see phoneVideoFullscreenHold).
+      isPhoneLayoutHeld() ||
       !host ||
       expandMotionRef.current ||
       host.hasAttribute("data-learning-mini-player") ||
@@ -654,13 +667,13 @@ export function PersistentLearningPlayerHost({
   const recordsDetachedProgress = Boolean(
     detachedProgressTarget && detachedLessonNumber !== undefined,
   );
-  // The progress handed over with the player is a snapshot from the moment
-  // the lesson page closed. While detached, the lesson list shows what has
-  // been recorded since as well, so its rings move as the video plays.
+  // The lesson page's progress stops moving when the page closes. While
+  // detached, the lesson list shows what has been recorded since as well, so
+  // its rings move as the video plays.
   const liveDetachedProgress = useDetachedLessonProgress(
     detachedProgressTarget,
   );
-  const registeredLessonProgress = player.lessonProgress;
+  const registeredLessonProgress = useLiveLessonProgress(player.lessonProgress);
   const miniLessonProgress = useMemo(() => {
     if (!detachedProgressTarget) return registeredLessonProgress;
     const merged: Record<number, number> = { ...registeredLessonProgress };

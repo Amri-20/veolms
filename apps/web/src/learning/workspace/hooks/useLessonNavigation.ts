@@ -18,9 +18,11 @@ import {
   LESSON_PROGRESS_COMPLETE_THRESHOLD,
 } from "../workspaceConstants";
 import { safeResumeVideo } from "../workspaceDom";
+import { getVideoPlaybackBootstrap } from "../../videoPlaybackBootstrap";
 
 export interface UseLessonNavigationArgs {
   lessonId: number;
+  courseSlug: string | undefined;
   onSelectLesson: (lessonId: number, view?: "video" | "quiz") => void;
   selectedLesson: number;
   setSelectedLesson: Dispatch<SetStateAction<number>>;
@@ -82,6 +84,7 @@ export function useLessonNavigation({
   recordProgress,
   previousLessonId,
   nextLessonId,
+  courseSlug,
 }: UseLessonNavigationArgs): UseLessonNavigationResult {
   const getLessonDrawerCollapsedSnapPoint = useCallback(() => {
     return getPhoneLessonDrawerCollapsedSnapPoint(
@@ -189,6 +192,14 @@ export function useLessonNavigation({
         resumeLessonVideoPlayback();
       }
       if (lessonNumber === selectedLesson) return;
+      // The lesson's bootstrap is asked for at the click, not once the page
+      // has rendered for the new lesson (0.3-0.75 s later on production);
+      // the player's own request for it shares this one.
+      if (courseSlug && !isTargetDedicatedQuiz && view !== "quiz") {
+        void getVideoPlaybackBootstrap({ courseSlug, lessonNumber }).catch(
+          () => undefined,
+        );
+      }
       pendingLessonSelectionRef.current = lessonNumber;
       setSelectedLesson(lessonNumber);
       if (view !== undefined) {
@@ -198,6 +209,7 @@ export function useLessonNavigation({
       }
     },
     [
+      courseSlug,
       curriculumLessonsById,
       hasLessonQuiz,
       onSelectLesson,
@@ -262,6 +274,15 @@ export function useLessonNavigation({
         roundedProgress >= LESSON_PROGRESS_COMPLETE_THRESHOLD
           ? 100
           : roundedProgress;
+      // Not a transition. On 2026-10-22 one here looped until React stopped
+      // with "Maximum update depth exceeded" (error #185) after a seek:
+      // every progress change registered the persistent player again, a
+      // sync update in the layout's commit; the transition kept losing to
+      // those renders and was replayed on each, and `recordProgress` stamped
+      // a new time on every replay. Neither holds any more (progress reaches
+      // the player through `liveLessonProgress`, and a replayed
+      // `recordProgress` gives back the same state); seeking was checked
+      // with the transition put back, but it has not been restored.
       setLocalLessonProgress((current) => {
         if (current[selectedLesson] === nextProgress) return current;
         return { ...current, [selectedLesson]: nextProgress };

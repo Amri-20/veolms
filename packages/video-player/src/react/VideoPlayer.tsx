@@ -77,6 +77,12 @@ export interface VideoPlayerProps extends Omit<
   chapterThumbnails?: Readonly<Record<number, string>>;
   storyboard?: StoryboardSource;
   storyboardLoader?: StoryboardLoader;
+  /**
+   * URL of a sprite storyboard index: seek previews on hover, and the
+   * picture drawn over the video while dragging across parts not
+   * downloaded yet. Ignored when `storyboard` is given.
+   */
+  spriteStoryboardUrl?: string;
   markers?: readonly TimelineMarker[];
   controls?: ReactNode | false;
   /** Replaces the default central play affordance. Pass false to omit it. */
@@ -195,6 +201,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
       seekIntervalSeconds = 10,
       shortcuts,
       source,
+      spriteStoryboardUrl,
       storyboard,
       storyboardLoader,
       style,
@@ -245,11 +252,26 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
           typeof window !== "undefined" &&
           window.innerHeight > window.innerWidth;
         if (!portraitViewport || !orientation.lock) return;
+        const lockLandscape = orientation.lock.bind(orientation);
 
         const generation = orientationLockGenerationRef.current + 1;
         orientationLockGenerationRef.current = generation;
-        void orientation
-          .lock("landscape")
+        // Two frames: the screen turns once the video fills it, so the turn
+        // shows the video, not the page it left.
+        const lockOnceDrawn = () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          );
+        void lockOnceDrawn()
+          .then(() => {
+            if (
+              generation !== orientationLockGenerationRef.current ||
+              currentFullscreenElement() !== presentationContainerRef.current
+            ) {
+              return Promise.reject(new Error("full screen left"));
+            }
+            return lockLandscape("landscape");
+          })
           .then(() => {
             const stillOwnsRequest =
               generation === orientationLockGenerationRef.current;
@@ -387,6 +409,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
             description={description}
             storyboard={storyboard}
             storyboardLoader={storyboardLoader}
+            spriteStoryboardUrl={spriteStoryboardUrl}
             onStoryboardError={onStoryboardError}
           />
           <PlayerZoomMedia

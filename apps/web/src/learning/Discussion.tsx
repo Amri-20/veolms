@@ -13,7 +13,13 @@ import type {
   LearningThreadsListResponse,
 } from "@veolms/contracts";
 import { QueryClientContext } from "@tanstack/react-query";
-import { useInRouterContext, useSearchParams } from "react-router";
+import {
+  useInRouterContext,
+  useRouteLoaderData,
+  useSearchParams,
+} from "react-router";
+import type { AcademyStaticPageData } from "../routes/academyStaticPageData";
+import type { LessonPageSeed } from "./staticLessonPage";
 import { ThreadSurface } from "./discussion/ThreadSurface";
 import {
   CURRENT_USER,
@@ -168,6 +174,8 @@ type SetURLSearchParams = (
 interface DiscussionInnerProps extends DiscussionProps {
   searchParams: URLSearchParams;
   setSearchParams: SetURLSearchParams;
+  /** What the document was built with, when it is a lesson page. */
+  builtLessonPage?: LessonPageSeed;
 }
 
 function DiscussionInner({
@@ -194,6 +202,7 @@ function DiscussionInner({
   onSeekToTimestamp,
   searchParams,
   setSearchParams,
+  builtLessonPage,
 }: DiscussionInnerProps) {
   const capabilities = interactionCapabilities ?? DEFAULT_CAPABILITIES;
   const hasNoteDeepLink = Boolean(noteDeepLinkId);
@@ -274,11 +283,11 @@ function DiscussionInner({
   const [entryFilter, setEntryFilter] = useState<DiscussionEntryFilter>(
     enabledKinds.length === 1 ? enabledKinds[0]! : "all",
   );
-  const [chosenFeedView, setFeedView] = useState<DiscussionFeedView>("newest");
+  const [chosenFeedView, setFeedView] = useState<DiscussionFeedView>("top");
   // "Mine" is only there for a learner who is signed in; one who signs out
-  // while it is chosen is back on the newest.
+  // while it is chosen is back on the top ones.
   const feedView: DiscussionFeedView =
-    chosenFeedView === "mine" && !currentUser ? "newest" : chosenFeedView;
+    chosenFeedView === "mine" && !currentUser ? "top" : chosenFeedView;
   const feedSort: DiscussionFeedSort = getDiscussionFeedSort(feedView);
   const feedMine = feedView === "mine";
 
@@ -365,11 +374,27 @@ function DiscussionInner({
     }),
     [entryFilter, feedMine, feedSort],
   );
+  // A lesson page is built with the first of its discussions in the order
+  // they open with, so they are there at once; they are asked for again
+  // straight away, as they are as old as the build.
+  const builtDiscussions =
+    builtLessonPage?.discussions &&
+    builtLessonPage.curriculum.course.id === courseId &&
+    builtLessonPage.lessonId === lessonId &&
+    builtLessonPage.discussions.kind === unifiedDiscussionQuery.kind &&
+    unifiedDiscussionQuery.sort === "top" &&
+    !feedMine
+      ? {
+          page: builtLessonPage.discussions.page,
+          updatedAt: builtLessonPage.builtAt,
+        }
+      : undefined;
   const unifiedDiscussions = useLessonDiscussions(
     courseId ?? "",
     lessonId ?? "",
     unifiedDiscussionQuery,
     {
+      initialPage: builtDiscussions,
       enabled: Boolean(
         courseId &&
         lessonId &&
@@ -1533,7 +1558,7 @@ function DiscussionInner({
               next.set("thread", selectedServerId);
               return next;
             },
-            { replace: true },
+            { replace: true, state: withKeepScroll(window.history.state?.usr) },
           );
           return;
         }
@@ -1581,7 +1606,7 @@ function DiscussionInner({
             next.delete("thread");
             return next;
           },
-          { replace: true },
+          { replace: true, state: withKeepScroll(window.history.state?.usr) },
         );
       }
     }
@@ -1632,7 +1657,7 @@ function DiscussionInner({
             next.delete("thread");
             return next;
           },
-          { replace: true },
+          { replace: true, state: withKeepScroll(window.history.state?.usr) },
         );
       }
     }
@@ -2109,7 +2134,7 @@ function DiscussionInner({
             next.delete("thread");
             return next;
           },
-          { replace: true },
+          { replace: true, state: withKeepScroll(window.history.state?.usr) },
         );
       }
       return;
@@ -2573,7 +2598,7 @@ function DiscussionInner({
               else next.delete("thread");
               return next;
             },
-            { replace: true },
+            { replace: true, state: withKeepScroll(window.history.state?.usr) },
           );
         }}
         isBackendMode={isBackendMode}
@@ -2621,7 +2646,10 @@ function DiscussionInner({
                     next.delete("thread");
                     return next;
                   },
-                  { replace: true },
+                  {
+                    replace: true,
+                    state: withKeepScroll(window.history.state?.usr),
+                  },
                 );
               }
             }}
@@ -2641,7 +2669,10 @@ function DiscussionInner({
                   else next.delete("thread");
                   return next;
                 },
-                { replace: true },
+                {
+                  replace: true,
+                  state: withKeepScroll(window.history.state?.usr),
+                },
               );
             }}
             onLike={onLike}
@@ -2686,11 +2717,14 @@ function DiscussionInner({
 
 function DiscussionRouterBridge(props: DiscussionProps) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const pageData = useRouteLoaderData("root") as
+    AcademyStaticPageData | null | undefined;
   return (
     <DiscussionInner
       {...props}
       searchParams={searchParams}
       setSearchParams={setSearchParams}
+      builtLessonPage={pageData?.lessonPage}
     />
   );
 }

@@ -1,5 +1,4 @@
 import {
-  lazy,
   Suspense,
   useCallback,
   useEffect,
@@ -23,6 +22,13 @@ import {
 } from "../learning/learningHlsBootstrap";
 import { resolveLessonIdentifier } from "../learning/courseContent";
 import { LearningWorkspaceFallback } from "../learning/LearningWorkspaceFallback";
+// Imported with the route, not lazily: a lesson page is built with the
+// workspace drawn, and the route's code is loaded before the page hydrates,
+// so the built page is hydrated as it is and its stylesheets are linked in
+// the document's head. Loaded lazily, the workspace was not there when the
+// page hydrated: the page painted it unstyled, dropped it for the loading
+// placeholder, then drew it again.
+import { LearningWorkspace } from "../learning/LearningWorkspace";
 import {
   getCoursePlayerNote,
   getCoursePlayerPath,
@@ -48,19 +54,15 @@ import {
   stripLoginDialogParams,
 } from "../routing/routeAccess";
 import { useCurrentUser } from "../services/auth";
-import { useCourseOverview } from "../services/courses";
+import { useLearningCourse } from "../learning/useLearningCourse";
+import { staticCurriculumUrl } from "../courses/staticCurriculum";
+import type { AcademyStaticPageData } from "./academyStaticPageData";
 import { withKeepScroll } from "../shell/applicationScroll";
 import { useAuthStore } from "../store/auth.store";
 import type { AcademyOutletContext } from "./academy-layout";
 import type { LearningMiniPlayerRequest } from "../learning/player/learningMiniPlayerTypes";
 import { getVideoPlaybackApiOrigin } from "../learning/videoPlaybackBootstrap";
 import { useMyQuizAssignments } from "../services/quizzes";
-
-const LearningWorkspace = lazy(() =>
-  import("../learning/LearningWorkspace").then((module) => ({
-    default: module.LearningWorkspace,
-  })),
-);
 
 export function meta({ location, matches, params }: Route.MetaArgs) {
   const descriptors = Object.entries(
@@ -81,7 +83,33 @@ export function meta({ location, matches, params }: Route.MetaArgs) {
         },
       ]
     : [];
-  return [...descriptors, ...safeMetadata];
+  return [...descriptors, ...safeMetadata, ...curriculumPreload(matches)];
+}
+
+/**
+ * A page built for a lesson asks for its course's curriculum file as soon as
+ * the document is read, beside the app's code rather than after it: the
+ * lessons of the other sections are in it. The request is the one the page
+ * makes (`getStaticCurriculum`), so it is downloaded once.
+ */
+function curriculumPreload(matches: Route.MetaArgs["matches"]) {
+  const seed = (
+    matches.find((match) => match?.id === "root")?.loaderData as
+      AcademyStaticPageData | null | undefined
+  )?.lessonPage;
+  if (!seed) return [];
+  return [
+    {
+      tagName: "link",
+      rel: "preload",
+      as: "fetch",
+      crossOrigin: "anonymous",
+      href: staticCurriculumUrl(
+        seed.curriculum.course.slug,
+        seed.curriculum.version,
+      ),
+    },
+  ];
 }
 
 export function links() {
@@ -127,10 +155,13 @@ export default function LearningRoute() {
     getLearningReturnLocation,
     getLearningReturnLocationServerSnapshot,
   ).path;
-  const { data: courseOverview, isLoading: isCourseOverviewLoading } =
-    useCourseOverview(courseSlug, {
-      enabled: Boolean(courseSlug),
-    });
+  const {
+    data: courseOverview,
+    isComplete: isCourseOverviewComplete,
+    isLoading: isCourseOverviewLoading,
+  } = useLearningCourse(courseSlug, {
+    enabled: Boolean(courseSlug),
+  });
   const { data: myQuizAssignments, isLoading: myQuizAssignmentsLoading } =
     useMyQuizAssignments({
       enabled: Boolean(activeUser),
@@ -186,8 +217,12 @@ export default function LearningRoute() {
   // link from the Quizzes page or a notification — has to wait for the course
   // to load. Canonicalising earlier rewrote the address to the last-watched
   // lesson and dropped the id.
+  // A page built for one lesson lists the others only once the course's
+  // curriculum is in, so a lesson it does not list yet is still to come.
   const isLessonUuidResolutionPending = Boolean(
-    targetLessonUuid && isCourseOverviewLoading && !courseOverview,
+    targetLessonUuid &&
+    ((isCourseOverviewLoading && !courseOverview) ||
+      (courseOverview && !isCourseOverviewComplete && !resolvedFromUuid)),
   );
   const isDeepLinkRouteSettled =
     !hasDiscussionDeepLink ||
@@ -386,6 +421,7 @@ export default function LearningRoute() {
         mobileBottomNavigationHidden={mobileBottomNavigationHidden}
         onSelectLesson={selectLesson}
         onOpenCourseOverview={openCourseOverview}
+        onOpenEditor={navigateTo}
         onUnlockCourse={unlockCourse}
         onOpenLogin={openLogin}
         onMinimizeGestureChange={onLearningPlayerMinimizeGestureChange}

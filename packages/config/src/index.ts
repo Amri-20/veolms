@@ -88,7 +88,8 @@ const serverConfigSchema = z.object({
    * and only falls back to the overview's. Set to false once no browser is
    * still running a web build from before that endpoint: each lesson then
    * goes out with a null description, and the overview shrinks by the size
-   * of all of them. The editor is not affected.
+   * of all of them. The editor is not affected, nor is a visitor's overview,
+   * the public curriculum lesson pages are built from.
    */
   COURSE_OVERVIEW_LESSON_DESCRIPTIONS:
     booleanEnvironmentValueSchema.default(true),

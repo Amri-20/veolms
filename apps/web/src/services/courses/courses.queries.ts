@@ -2,8 +2,11 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import type {
   Category,
+  CourseAccessListResponse,
+  CourseAccessResponse,
   CourseEditorDataResponse,
   CourseOverviewResponse,
+  CoursePublicCurriculum,
   CourseStaticPageRefreshStatusResponse,
   CourseListResponse,
   CourseOptionsResponse,
@@ -75,12 +78,88 @@ export function useCourseOverview(
 }
 
 /**
- * One lesson's description. The lesson page shows the course overview's
- * copy until this answers, and keeps it if this fails.
+ * What the viewer may do with one course: which lessons open, what the rest
+ * need, the price now and their progress. Decided by the server by the rule
+ * playback applies, so a lesson shown unlocked plays.
+ */
+export function useCourseAccess(
+  idOrSlug: string | null | undefined,
+  options?: { enabled?: boolean },
+) {
+  return useQuery<CourseAccessResponse, ApiError>({
+    queryKey: idOrSlug
+      ? courseKeys.access(idOrSlug)
+      : ["courses", "overview", null, "access"],
+    queryFn: () => coursesService.getAccess(idOrSlug!),
+    enabled: Boolean(idOrSlug && (options?.enabled ?? true)),
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+}
+
+/**
+ * A published course as every visitor sees it, from the API: for a page
+ * that was not built with it (a course published since the build, the dev
+ * server) or was built before the course last changed.
+ */
+export function useCoursePublicCurriculum(
+  idOrSlug: string | null | undefined,
+  options?: { enabled?: boolean },
+) {
+  return useQuery<CoursePublicCurriculum, ApiError>({
+    queryKey: idOrSlug
+      ? courseKeys.publicCurriculum(idOrSlug)
+      : ["courses", "overview", null, "public-curriculum"],
+    queryFn: () => coursesService.getPublicCurriculum(idOrSlug!),
+    enabled: Boolean(idOrSlug && (options?.enabled ?? true)),
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+}
+
+/**
+ * A course's whole public curriculum as the site was built with it (see
+ * `staticCurriculumUrl`). Null when the build has no copy of that version.
+ * `version` null asks for whichever copy the site has; undefined asks for
+ * nothing.
+ */
+export function useStaticCurriculum(
+  courseSlug: string | null | undefined,
+  version: string | null | undefined,
+  options?: { enabled?: boolean },
+) {
+  const asked = Boolean(courseSlug) && version !== undefined;
+  return useQuery<CoursePublicCurriculum | null, ApiError>({
+    queryKey: asked
+      ? courseKeys.staticCurriculum(courseSlug!, version!)
+      : ["courses", "static-curriculum", null],
+    queryFn: () => coursesService.getStaticCurriculum(courseSlug!, version!),
+    enabled: asked && (options?.enabled ?? true),
+    staleTime: Infinity,
+    retry: 1,
+  });
+}
+
+/** `useCourseAccess` for every published course, for the catalogue. */
+export function useCourseAccessList(options?: { enabled?: boolean }) {
+  return useQuery<CourseAccessListResponse, ApiError>({
+    queryKey: courseKeys.accessList(),
+    queryFn: () => coursesService.listAccess(),
+    enabled: options?.enabled ?? true,
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+}
+
+/**
+ * One lesson's description: a reading lesson's text, which the course's
+ * curriculum leaves out for a viewer it is not open to everyone for (see
+ * `useLessonDescriptionState`).
  */
 export function useLessonDescription(
   courseId: string | null | undefined,
   lessonId: string | null | undefined,
+  options?: { enabled?: boolean },
 ) {
   return useQuery<LessonDescriptionResponse, ApiError>({
     queryKey:
@@ -88,7 +167,7 @@ export function useLessonDescription(
         ? courseKeys.lessonDescription(courseId, lessonId)
         : ["courses", "overview", null, "lesson-description", null],
     queryFn: () => coursesService.getLessonDescription(courseId!, lessonId!),
-    enabled: Boolean(courseId && lessonId),
+    enabled: Boolean(courseId && lessonId && (options?.enabled ?? true)),
     // As long as the overview it stands in for.
     staleTime: 60 * 1000,
     // A lesson that is only text has nothing else to show, so a dropped

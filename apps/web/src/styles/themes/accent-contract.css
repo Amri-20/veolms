@@ -21,6 +21,10 @@
   --accent-ink: #ee667d;
 }
 
+:root[data-theme="dark"][data-palette="live"] {
+  --accent-ink: #ff5c77;
+}
+
 :root[data-theme="dark"][data-palette="barbie"] {
   --accent-ink: #f071b4;
 }
@@ -47,10 +51,6 @@
 
 :root[data-theme="light"][data-palette="barbie"] {
   --accent-ink: #b41f67;
-}
-
-:root[data-theme="light"][data-palette="champagne"] {
-  --accent-ink: #7d5a10;
 }
 
 :root[data-theme="light"][data-palette="ember"] {
@@ -87,4 +87,8 @@
 
 :root[data-theme="light"][data-palette="signal"] {
   --accent-ink: #b81c3c;
+}
+
+:root[data-theme="light"][data-palette="live"] {
+  --accent-ink: #c00027;
 }

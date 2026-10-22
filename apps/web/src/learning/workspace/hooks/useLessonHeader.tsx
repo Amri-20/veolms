@@ -6,6 +6,7 @@ import {
   type JSX,
 } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { PencilSimpleIcon as PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import type {
   LessonVideoPlayerProps,
   RegisterPersistentLearningPlayer,
@@ -13,6 +14,7 @@ import type {
 import type { Lesson } from "../../courseContent";
 import type { AdaptedCurriculumSection } from "../../courseCurriculumAdapter";
 import type { useLessonTitleHeightSwipe } from "../../player/LessonPlayerHeightHandle";
+import type { LiveLessonProgress } from "../../player/liveLessonProgress";
 
 export interface UseLessonHeaderArgs {
   courseSlug: string | undefined;
@@ -35,7 +37,7 @@ export interface UseLessonHeaderArgs {
         lessonIdsByNumber: ReadonlyMap<number, string> | undefined;
       }
     | undefined;
-  lessonProgress: Record<number, number>;
+  liveLessonProgress: LiveLessonProgress;
   stickyPlayer: boolean;
   appliedPlayerHeight: number | null;
   readingGrowable:
@@ -53,6 +55,9 @@ export interface UseLessonHeaderArgs {
   selectLesson: (lessonNumber: number, view?: "video" | "quiz") => void;
   openLessonDrawerInPlace: () => void;
   lessonPlayerProps: LessonVideoPlayerProps;
+  /** The course editor with this lesson open, for those who may edit it. */
+  lessonEditPath: string | null;
+  onOpenLessonEditor?: (path: string) => void;
 }
 
 export interface UseLessonHeaderResult {
@@ -74,7 +79,7 @@ export function useLessonHeader({
   curriculumLessonsById,
   currentLesson,
   detachedProgressTarget,
-  lessonProgress,
+  liveLessonProgress,
   stickyPlayer,
   appliedPlayerHeight,
   readingGrowable,
@@ -84,7 +89,13 @@ export function useLessonHeader({
   selectLesson,
   openLessonDrawerInPlace,
   lessonPlayerProps,
+  lessonEditPath,
+  onOpenLessonEditor,
 }: UseLessonHeaderArgs): UseLessonHeaderResult {
+  // Registers the player again whenever what it shows changes. Progress is
+  // not among those: it is handed over as a live source (see
+  // `liveLessonProgress`), since every registration re-renders the academy
+  // layout in the middle of this commit.
   useLayoutEffect(() => {
     const anchor = playerWrapRef.current;
     if (
@@ -111,7 +122,7 @@ export function useLessonHeader({
       onSelectLesson: selectLesson,
       curriculumSections,
       curriculumLessonsById,
-      lessonProgress,
+      lessonProgress: liveLessonProgress,
       isLessonAvailable,
       progressTarget: detachedProgressTarget,
     });
@@ -122,7 +133,7 @@ export function useLessonHeader({
     detachedProgressTarget,
     isLessonAvailable,
     lessonPlayerProps,
-    lessonProgress,
+    liveLessonProgress,
     persistentPlayerCourseRouteKey,
     persistentPlayerLessonPath,
     persistentPlayerReturnPath,
@@ -135,6 +146,7 @@ export function useLessonHeader({
   const lessonHeader = (contained = false, titleLoading = false) => (
     <header
       className="learning-workspace__lesson-header"
+      data-lesson-edit={lessonEditPath ? "" : undefined}
       // Tells the video's resize grip when a mouse is over its strip (at
       // phone width the strip lies over the top of this header).
       onPointerMove={stickyPlayer ? onHeaderPointerMove : undefined}
@@ -172,6 +184,33 @@ export function useLessonHeader({
           )}
         </div>
       </button>
+      {lessonEditPath ? (
+        // For staff who may change the curriculum: the editor, with this
+        // lesson open. A link, so it can also be opened in a new tab.
+        <a
+          href={lessonEditPath}
+          className="learning-workspace__lesson-edit inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--text)_14%,transparent)] bg-transparent px-3 text-[0.86rem] font-semibold whitespace-nowrap text-(--text) no-underline transition-colors duration-140 hover:border-[color-mix(in_srgb,var(--text)_24%,transparent)] hover:bg-(--hover) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
+          aria-label={`Edit lesson: ${currentLesson[1]}`}
+          title="Edit this lesson in the course editor"
+          onClick={(event) => {
+            if (
+              !onOpenLessonEditor ||
+              event.button !== 0 ||
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey
+            ) {
+              return;
+            }
+            event.preventDefault();
+            onOpenLessonEditor(lessonEditPath);
+          }}
+        >
+          <PencilSimple size={15} weight="bold" aria-hidden="true" />
+          <span>Edit</span>
+        </a>
+      ) : null}
       {/* No quiz button here: the course content list marks a lesson that
           has a quiz and opens it, and the open quiz carries its own way
           back to the video. */}

@@ -54,7 +54,6 @@ await test("before anything is saved, the defaults apply and the phone rule foll
     settings: {
       appearance: { defaultDisplayMode: "dark", defaultColorTheme: "ocean" },
       security: {
-        studentTwoFactorEnabled: true,
         requireVerifiedPhoneForEnrollment:
           config.REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT,
       },
@@ -62,7 +61,6 @@ await test("before anything is saved, the defaults apply and the phone rule foll
     },
     updatedAt: null,
   });
-  assert.equal(await service.isStudentTwoFactorEnabled(), true);
 });
 
 await test("a saved document fills in what it lacks, setting by setting", async () => {
@@ -77,11 +75,11 @@ await test("a saved document fills in what it lacks, setting by setting", async 
     defaultDisplayMode: "light",
     defaultColorTheme: "ocean",
   });
-  assert.equal(settings.security.studentTwoFactorEnabled, false);
-  assert.equal(
-    settings.security.requireVerifiedPhoneForEnrollment,
-    config.REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT,
-  );
+  // The retired student two-factor switch is not read back.
+  assert.deepEqual(settings.security, {
+    requireVerifiedPhoneForEnrollment:
+      config.REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT,
+  });
 });
 
 await test("an appearance the contract no longer accepts falls back to the default look, not a broken page", async () => {
@@ -103,22 +101,25 @@ await test("a save writes only what was set, so the phone rule keeps following t
   const service = createPlatformSettingsService({ database });
 
   const saved = await service.updateSettings(
-    { security: { studentTwoFactorEnabled: false } },
+    { appearance: { defaultDisplayMode: "light" } },
     null,
   );
 
   assert.deepEqual(writes, [
-    {
-      appearance: { defaultColorTheme: "grove" },
-      security: { studentTwoFactorEnabled: false },
-    },
+    { appearance: { defaultColorTheme: "grove", defaultDisplayMode: "light" } },
   ]);
   assert.equal(saved.settings.appearance.defaultColorTheme, "grove");
-  assert.equal(saved.settings.security.studentTwoFactorEnabled, false);
+  assert.equal(
+    saved.settings.security.requireVerifiedPhoneForEnrollment,
+    config.REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT,
+  );
   assert.equal(saved.updatedAt, "2026-10-17T00:00:00.000Z");
   // Every instance on the same database sees the save at once.
   const other = createPlatformSettingsService({ database });
-  assert.equal(await other.isStudentTwoFactorEnabled(), false);
+  assert.equal(
+    (await other.getSettings()).settings.appearance.defaultDisplayMode,
+    "light",
+  );
 });
 
 await test("invoice details are saved field by field, and a field that no longer reads falls back alone", async () => {
@@ -179,12 +180,22 @@ await test("only a change to a security setting drops the cached sign-in answers
   );
   assert.equal(dropped, 0);
   await service.updateSettings(
-    { security: { studentTwoFactorEnabled: true } },
+    {
+      security: {
+        requireVerifiedPhoneForEnrollment:
+          config.REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT,
+      },
+    },
     null,
   );
   assert.equal(dropped, 0, "saving the value already in force changes nothing");
   await service.updateSettings(
-    { security: { studentTwoFactorEnabled: false } },
+    {
+      security: {
+        requireVerifiedPhoneForEnrollment:
+          !config.REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT,
+      },
+    },
     null,
   );
   assert.equal(dropped, 1);

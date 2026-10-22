@@ -11,6 +11,11 @@ const loadVideoPlaybackSchemas = () =>
 import { getOfflineDataProvider } from "@veolms/web-core";
 import { endSessionIfUnauthorized, getApiBaseUrl } from "../lib/api-client";
 import { isNetworkFailure } from "../lib/offline-data";
+import { isLearnerView } from "../lib/learner-view";
+import {
+  LEARNER_VIEW_HEADER,
+  LEARNER_VIEW_HEADER_VALUE,
+} from "@veolms/contracts/learner-view";
 import { authStore } from "../store/auth.store";
 
 const API_BASE_URL = getApiBaseUrl();
@@ -193,17 +198,33 @@ async function readResponsePayload(response: Response): Promise<unknown> {
   }
 }
 
+/**
+ * These requests do not go through the API client, so they say themselves
+ * when a managing account is in its Student view: the API numbers lessons
+ * as a learner sees them then, and the player must ask for the same lesson
+ * the page shows.
+ */
+function playbackRequestHeaders(): Record<string, string> {
+  return isLearnerView()
+    ? {
+        Accept: "application/json",
+        [LEARNER_VIEW_HEADER]: LEARNER_VIEW_HEADER_VALUE,
+      }
+    : { Accept: "application/json" };
+}
+
 async function requestBootstrap(
   options: VideoPlaybackBootstrapRequest,
 ): Promise<VideoPlaybackBootstrap> {
-  // Asks for the master playlist inline, saving the player that request.
-  const path = `${playbackPath(options, "playback-bootstrap")}?inlineManifest=1`;
+  // Asks for the master playlist inline, saving the player that request,
+  // and for the seek-preview storyboard when the video has one.
+  const path = `${playbackPath(options, "playback-bootstrap")}?inlineManifest=1&storyboard=1`;
   let response: Response;
   try {
     response = await fetch(resolveVideoPlaybackApiUrl(path), {
       method: "GET",
       credentials: "include",
-      headers: { Accept: "application/json" },
+      headers: playbackRequestHeaders(),
       signal: options.signal,
     });
   } catch (error) {
@@ -256,7 +277,7 @@ async function requestPlaybackToken(
       method: "GET",
       credentials: "include",
       cache: "no-store",
-      headers: { Accept: "application/json" },
+      headers: playbackRequestHeaders(),
       signal: options.signal,
     },
   );

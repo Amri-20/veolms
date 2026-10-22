@@ -10,7 +10,6 @@ import {
   useState,
 } from "react";
 import type { MouseEvent } from "react";
-import { hasStartedCourse } from "@veolms/contracts/learner-home-plan";
 import { useParams } from "react-router";
 import { BookOpen } from "@phosphor-icons/react/BookOpen";
 import { CaretDown } from "@phosphor-icons/react/CaretDown";
@@ -24,6 +23,7 @@ import {
   MAX_VOLUNTARY_AMOUNT,
   type Category,
   type CheckoutPreviewResponse,
+  type CourseAccessResume,
   type CourseEditorDataResponse,
   type CourseOverviewResponse,
 } from "@veolms/contracts";
@@ -55,8 +55,9 @@ import { getCoursePlayerPath } from "../learning/coursePlayerNavigation";
 import type { NavigateTo } from "../routing/navigation";
 import { productName } from "../routing/routeDescriptors";
 import { useAuthStore } from "../store/auth.store";
-import { useCourseOverview } from "../services/courses";
-import { useEnrolledCourses } from "../services/enrollments";
+import { useCoursePageData } from "./overview/useCoursePageData";
+import { CurriculumIntentContext } from "./overview/curriculumIntent";
+import type { CourseCurriculumPreview } from "./staticCurriculum";
 import { getApiError } from "../lib/api-error";
 import { trackAnalyticsEvent } from "../lib/analytics-track";
 import {
@@ -1491,7 +1492,8 @@ function CourseAboutCard({ description, onEdit }: CourseAboutCardProps) {
 
 export interface CourseOverviewPageProps {
   courseSlug?: string | undefined;
-  initialOverview?: CourseOverviewResponse;
+  /** The course as the page was built with it (see `useCoursePageData`). */
+  initialCurriculum?: CourseCurriculumPreview;
   onNavigateCourses?: () => void;
   /** The menu page the back link returns to, as the menu names it. */
   backSection?: string;
@@ -1770,28 +1772,23 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
   const defaultInstructorName =
     authUser?.displayName || authUser?.username || "Instructor";
 
-  // The prerendered overview belongs to the page that was first loaded. It
-  // is passed down for every course route afterwards, so use it only for
-  // its own course: seeding another route with it showed the first course's
-  // title, price and curriculum there — and its Pay button bought it.
-  const seededOverview =
-    props.initialOverview &&
-    courseSlug &&
-    (props.initialOverview.course.slug === courseSlug ||
-      props.initialOverview.course.id === courseSlug)
-      ? props.initialOverview
-      : undefined;
-
+  const awaitsAccess = Boolean(authUser) && props.role !== "creator";
   const {
-    data: apiOverview,
+    overview: apiOverview,
     isLoading: isOverviewLoading,
     error: overviewError,
     refetch: refetchOverview,
-  } = useCourseOverview(courseSlug, {
-    // A seeded (prerendered) overview is still fetched once: it is shown at
-    // once and then corrected if the course changed since the build.
+    access,
+    accessPending,
+    totalSections,
+    sectionsComplete,
+    requestAllSections,
+    prefetchAllSections,
+  } = useCoursePageData({
+    courseSlug,
+    preview: props.initialCurriculum,
     enabled: !props.previewData && !props.customCourse && Boolean(courseSlug),
-    initialData: seededOverview,
+    awaitsAccess,
   });
 
   // If previewData is provided, adapt it cleanly from persisted server state
@@ -1811,11 +1808,8 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
 
   const course = activeAdapted?.course ?? props.customCourse;
 
-  const awaitsEnrollments = Boolean(authUser) && props.role !== "creator";
-  const { data: enrolledData, isPending: enrollmentsPending } =
-    useEnrolledCourses({ enabled: awaitsEnrollments });
-  // What the parts of the page that depend on the viewer may show yet. A
-  // learner's enrolments are the last answer in: whether this course is
+  // What the parts of the page that depend on the viewer may show yet. The
+  // viewer's access answer is the last one in: whether this course is
   // theirs decides between the price and their progress.
   const viewer: CourseViewerState =
     props.viewerSettled === undefined ||
@@ -1827,30 +1821,22 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
         ? props.presumeGuest
           ? "presumed-guest"
           : "pending"
-        : awaitsEnrollments && enrollmentsPending
+        : accessPending
           ? "pending"
           : "known";
 
-  const enrolledCourse = useMemo(
-    () =>
-      enrolledData?.courses.find(
-        (ec) =>
-          ec.courseId === course?.id ||
-          ec.courseSlug === courseSlug ||
-          (course?.slug && ec.courseSlug === course.slug),
-      ),
-    [enrolledData, course, courseSlug],
-  );
-
+  // The viewer's enrolment, from the same answer that decides which lessons
+  // open to them.
+  const enrolment = access?.enrolled ? access.progress : null;
   const courseWithEnrollment = useMemo(() => {
     if (!course) return undefined;
     return {
       ...course,
-      enrolled: Boolean(enrolledCourse) || course.enrolled,
-      progress: enrolledCourse?.progress ?? course.progress,
-      started: enrolledCourse ? hasStartedCourse(enrolledCourse) : false,
+      enrolled: Boolean(enrolment) || course.enrolled,
+      progress: enrolment?.percent ?? course.progress,
+      started: enrolment?.started ?? false,
     };
-  }, [course, enrolledCourse]);
+  }, [course, enrolment]);
 
   if (
     isOverviewLoading &&
@@ -1922,15 +1908,25 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
         : isCourseOwner);
 
   return (
-    <CourseOverviewContent
-      {...props}
-      key={courseWithEnrollment.id}
-      course={courseWithEnrollment}
-      courseSlug={courseSlug}
-      adaptedFromPreview={activeAdapted}
-      isCreator={isCreator}
-      viewer={viewer}
-    />
+    // A built page holds its first sections only; the controls that show or
+    // use the rest fetch it as the reader reaches for them.
+    <CurriculumIntentContext.Provider
+      value={sectionsComplete ? null : prefetchAllSections}
+    >
+      <CourseOverviewContent
+        {...props}
+        key={courseWithEnrollment.id}
+        course={courseWithEnrollment}
+        courseSlug={courseSlug}
+        adaptedFromPreview={activeAdapted}
+        isCreator={isCreator}
+        viewer={viewer}
+        totalSections={totalSections}
+        sectionsComplete={sectionsComplete}
+        onRequestAllSections={requestAllSections}
+        resume={access?.resume}
+      />
+    </CurriculumIntentContext.Provider>
   );
 }
 
@@ -1940,6 +1936,13 @@ type CourseOverviewContentProps = CourseOverviewPageProps & {
   adaptedFromPreview: AdaptedOverviewData | null;
   isCreator?: boolean;
   viewer?: CourseViewerState;
+  /** How many sections the whole curriculum has. */
+  totalSections?: number;
+  /** Whether the curriculum holds every section yet. */
+  sectionsComplete?: boolean;
+  onRequestAllSections?: () => void;
+  /** Where an enrolled learner carries on, from the access answer. */
+  resume?: CourseAccessResume | null;
 };
 
 function CourseOverviewContent({
@@ -1962,6 +1965,10 @@ function CourseOverviewContent({
   isCreator = false,
   isPaidCourse: propIsPaidCourse,
   viewer = "known",
+  totalSections,
+  sectionsComplete = true,
+  onRequestAllSections,
+  resume,
 }: CourseOverviewContentProps) {
   const user = useAuthStore((state) => state.user);
   const handleSelectLesson = (lessonNumber: number) => {
@@ -2274,6 +2281,7 @@ function CourseOverviewContent({
                     progress={course.progress ?? 0}
                     started={Boolean(course.started)}
                     totalLessons={course.lectures}
+                    resume={resume}
                     onNavigatePage={onNavigatePage}
                   />
                 ) : (
@@ -2308,6 +2316,9 @@ function CourseOverviewContent({
           onSelectLesson={handleSelectLesson}
           isReadOnlyPreview={isReadOnlyPreview}
           isPaidCourse={isPaidCourse}
+          totalSections={totalSections}
+          sectionsComplete={sectionsComplete}
+          onRequestAllSections={onRequestAllSections}
         />
 
         {/* 4. About this course, under the curriculum */}

@@ -1,16 +1,12 @@
 import { DeviceMobileIcon as DeviceMobile } from "@phosphor-icons/react/DeviceMobile";
 import { FingerprintIcon as Fingerprint } from "@phosphor-icons/react/Fingerprint";
 import { IdentificationCardIcon as IdentificationCard } from "@phosphor-icons/react/IdentificationCard";
-import { ShieldCheckIcon as ShieldCheck } from "@phosphor-icons/react/ShieldCheck";
-import { ShieldSlashIcon as ShieldSlash } from "@phosphor-icons/react/ShieldSlash";
 import { UserGearIcon as UserGear } from "@phosphor-icons/react/UserGear";
-import { useState } from "react";
 import {
   SettingRow,
   SettingsToggle,
   StatusNote,
 } from "../settings/SettingsControls";
-import { ConfirmActionModal } from "../shell/ConfirmActionModal";
 import { PlatformSettingsStatus } from "./PlatformSettingsStatus";
 import { usePlatformSettingsEditor } from "./usePlatformSettingsEditor";
 
@@ -29,7 +25,6 @@ export function PlatformSecurityTab({
   setNotice?: (message: string) => void;
 }) {
   const { query, settings, save } = usePlatformSettingsEditor(setNotice);
-  const [confirmingTwoFactorOff, setConfirmingTwoFactorOff] = useState(false);
 
   if (!settings) {
     return (
@@ -40,37 +35,10 @@ export function PlatformSecurityTab({
     );
   }
 
-  const { studentTwoFactorEnabled, requireVerifiedPhoneForEnrollment } =
-    settings.security;
-
-  const setStudentTwoFactor = (enabled: boolean) =>
-    save(
-      { security: { studentTwoFactorEnabled: enabled } },
-      enabled
-        ? "Students can use two-factor sign-in again."
-        : "Two-factor sign-in is off for students.",
-    );
+  const { requireVerifiedPhoneForEnrollment } = settings.security;
 
   return (
     <div className="settings-content">
-      <ConfirmActionModal
-        id="platform-student-two-factor-off"
-        isOpen={confirmingTwoFactorOff}
-        onClose={() => setConfirmingTwoFactorOff(false)}
-        onConfirm={() => {
-          setConfirmingTwoFactorOff(false);
-          setStudentTwoFactor(false);
-        }}
-        icon={ShieldSlash}
-        tone="danger"
-        emphasis="cancel"
-        title="Turn off two-factor sign-in for students?"
-        description="Students will sign in with their code or Google account alone, even those who set up an authenticator app or a passkey. Their setup is kept and asked for again if you turn this back on."
-        cancelLabel="Keep it on"
-        confirmLabel="Turn off"
-        pendingLabel="Turning off…"
-      />
-
       <header className="settings-detail__header">
         <div>
           <h2>Security</h2>
@@ -87,31 +55,13 @@ export function PlatformSecurityTab({
           <div>
             <h3 id="platform-sign-in-heading">Two-factor sign-in</h3>
             <p>
-              A second step after the sign-in code: an authenticator app or a
-              passkey.
+              A second step after the sign-in code, an authenticator app or a
+              passkey, for the academy&rsquo;s team. Students sign in without
+              one.
             </p>
           </div>
         </header>
         <div className="settings-row-list">
-          <SettingRow
-            className={ROW_CLASS}
-            icon={ShieldCheck}
-            label="Students"
-            note={
-              studentTwoFactorEnabled
-                ? "Students can turn it on in Settings > Privacy & Security, and are asked for it each time they sign in."
-                : "Off: students are never asked for a second step and cannot turn it on."
-            }
-          >
-            <SettingsToggle
-              checked={studentTwoFactorEnabled}
-              label="Two-factor sign-in for students"
-              onChange={(enabled) => {
-                if (enabled) setStudentTwoFactor(true);
-                else setConfirmingTwoFactorOff(true);
-              }}
-            />
-          </SettingRow>
           <SettingRow
             className={ROW_CLASS}
             icon={UserGear}

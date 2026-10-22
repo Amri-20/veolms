@@ -29,8 +29,6 @@ export function QuizFormattedText({
     <DiscussionMarkdown
       content={content}
       label={label}
-      // A link in a question is a reference, not a card to preview.
-      enableLinkPreview={false}
       className={`max-w-none! ${className}`}
     />
   );

@@ -28,6 +28,15 @@ export function PlaybackFeedback({
   useEffect(() => {
     let previousPaused = controller.getSnapshot().media.paused;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // A video that starts playing as it opens gets the spinner, not a play
+    // bezel: a play icon over a black frame reads as "press play". Tracked
+    // here, not with useAwaitingFirstFrame, so it is current when the
+    // snapshot listener below runs.
+    let awaitingFirstFrame = !controller.getSnapshot().media.playing;
+    const offEvent = controller.onEvent((event) => {
+      if (event.type === "loadstart") awaitingFirstFrame = true;
+      else if (event.type === "playing") awaitingFirstFrame = false;
+    });
     const unsubscribe = controller.subscribe(() => {
       const { media } = controller.getSnapshot();
       if (media.lifecycle !== "ready" || media.ended) {
@@ -39,6 +48,9 @@ export function PlaybackFeedback({
       }
       if (previousPaused === media.paused) return;
       previousPaused = media.paused;
+      if (!media.paused && awaitingFirstFrame) return;
+      // A drag on the timeline pauses and resumes by itself.
+      if (controller.scrubPausing) return;
 
       sequenceRef.current += 1;
       const nextFeedback: PlaybackFeedbackState = {
@@ -55,6 +67,7 @@ export function PlaybackFeedback({
     });
 
     return () => {
+      offEvent();
       unsubscribe();
       if (timer) clearTimeout(timer);
     };

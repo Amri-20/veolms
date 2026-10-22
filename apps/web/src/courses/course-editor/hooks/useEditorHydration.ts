@@ -22,7 +22,11 @@ import {
   initialAccessRulesState,
   normalizeAccessRulesState,
 } from "../accessRulesState";
-import { type PricingFormState, normalizePricingState } from "../pricingState";
+import {
+  type PricingFormState,
+  normalizePricingState,
+  pricingFormFromServer,
+} from "../pricingState";
 import { type ExtrasFormState, normalizeExtrasState } from "../extrasState";
 import type { ExtrasState } from "../editorLocalTypes";
 
@@ -446,13 +450,7 @@ export function useEditorHydration({
 
       if (editorData.pricing) {
         const p = editorData.pricing;
-        const hasSale = p.salePrice != null && p.salePrice !== undefined;
-        const confirmedPricing: PricingFormState = normalizePricingState({
-          sellingPrice: hasSale ? String(p.salePrice) : String(p.price),
-          originalPrice: hasSale && p.price > 0 ? String(p.price) : "",
-          currency: p.currency || "INR",
-          showDiscountBadge: p.showDiscountBadge === true,
-        });
+        const confirmedPricing: PricingFormState = pricingFormFromServer(p);
         setServerPricing(confirmedPricing);
         serverPricingRef.current = confirmedPricing;
         if (

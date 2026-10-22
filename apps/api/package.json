@@ -15,6 +15,7 @@
     "user:cli": "node --env-file-if-exists=../../.env src/cli/user.ts",
     "check:team-permissions": "node --env-file-if-exists=../../.env src/cli/check-team-permissions.ts",
     "user:mfa-reset": "node --env-file-if-exists=../../.env src/cli/mfa-reset.ts",
+    "encryption-key:rotate": "node --env-file-if-exists=../../.env src/cli/rotate-encryption-key.ts",
     "import:youtube": "node --env-file-if-exists=../../.env src/cli/import-youtube.ts",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",

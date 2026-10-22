@@ -14,6 +14,10 @@ import {
   useLessonTitleHeightSwipe,
 } from "../../player/LessonPlayerHeightHandle";
 import { getLessonReading } from "../../lessonWithoutVideo";
+import {
+  isPhoneLayoutHeld,
+  onPhoneLayoutRelease,
+} from "../../../shell/phoneVideoFullscreenHold";
 import type { CourseLesson } from "@veolms/contracts";
 
 export interface UseLessonPlayerSizingArgs {
@@ -109,6 +113,10 @@ export function useLessonPlayerSizing({
       }
     };
     const place = () => {
+      // Not while a phone plays the video full screen sideways: the page
+      // behind is not laid out then, and measuring it forced a style and
+      // layout pass on every step of the turn (see phoneVideoFullscreenHold).
+      if (isPhoneLayoutHeld()) return;
       const videoHeight = playerWrap.getBoundingClientRect().height;
       clearance = `${Math.round(
         videoHeight <= 0
@@ -122,10 +130,12 @@ export function useLessonPlayerSizing({
     const sizes = new ResizeObserver(place);
     sizes.observe(playerWrap);
     sizes.observe(main);
+    const stopCatchingUp = onPhoneLayoutRelease(place);
     place();
     tellPage();
     return () => {
       sizes.disconnect();
+      stopCatchingUp();
       window.clearTimeout(settleTimer);
       findScroller()?.style.removeProperty(property);
       main.style.removeProperty(property);

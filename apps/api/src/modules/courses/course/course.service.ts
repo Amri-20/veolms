@@ -14,6 +14,7 @@ import type {
   CourseSummary,
   LessonDescriptionResponse,
   CoursePricingSummary,
+  CoursePublicCurriculum,
   ManagedCourseSummary,
 } from "@veolms/contracts";
 import { config } from "../../../config.ts";
@@ -67,6 +68,7 @@ import {
 import {
   createLessonContentAccess,
   findFirstPublishedLessonId,
+  isLessonDescriptionPublic,
 } from "./lesson-content-access.ts";
 import {
   getLessonDurationSeconds,
@@ -154,6 +156,98 @@ const NO_THUMBNAIL: CourseThumbnailUrls = {
 function toSrcSet(variants: readonly PublicThumbnailVariant[]) {
   return variants.map(({ url, width }) => ({ url, width }));
 }
+
+/** What a viewer's access to a course is decided and priced from. */
+export interface CourseAccessFacts {
+  id: string;
+  slug: string;
+  status: string;
+  creatorId: string | null;
+  /**
+   * `course_pricing.pricing_type` as stored: playback and lesson text read
+   * whether a course is open from it, not from the price checkout charges.
+   */
+  storedPricingType: string | null;
+  accessType: string | null;
+  pricing: CoursePricingSummary;
+  canSelfEnroll: boolean;
+}
+
+interface StoredPricingFacts {
+  pricing_type: string | null;
+  price: number | string | null;
+  currency: string | null;
+  sale_price: number | string | null;
+  show_discount_badge: boolean | null;
+}
+
+/** A course's price as every learner-facing answer presents it. */
+function presentPricingSummary(row: StoredPricingFacts): CoursePricingSummary {
+  return row.pricing_type
+    ? {
+        pricingType: row.pricing_type as "free" | "paid",
+        price: Number(row.price ?? 0),
+        currency: row.currency ?? "INR",
+        salePrice:
+          row.sale_price !== null && row.sale_price !== undefined
+            ? Number(row.sale_price)
+            : null,
+        showDiscountBadge: row.show_discount_badge === true,
+      }
+    : {
+        pricingType: "free",
+        price: 0,
+        currency: "INR",
+        salePrice: null,
+        showDiscountBadge: false,
+      };
+}
+
+/**
+ * The same rule, on the same stored values, as the course overview's
+ * `canSelfEnroll`, so a card, the page it opens and the access answers
+ * agree. Whether the course is free is read as checkout reads it: a priced
+ * course that sells for nothing is a free one.
+ */
+function courseOffersSelfEnrollment(
+  row: { pricing_type: string | null; access_type: string | null },
+  pricing: CoursePricingSummary,
+): boolean {
+  return !isRestrictedFreeCourse({
+    pricing_type: resolveCoursePricing(
+      row.pricing_type
+        ? {
+            pricing_type: row.pricing_type,
+            price: pricing.price,
+            sale_price: pricing.salePrice,
+          }
+        : null,
+    ).pricingType,
+    access_type: row.access_type,
+  });
+}
+
+/**
+ * A short fingerprint of a course's public curriculum. Delivery URLs are
+ * read without their query, whose signature and expiry change with every
+ * answer while the image stays the same.
+ */
+function fingerprintPublicCurriculum(curriculum: unknown): string {
+  const stable = JSON.stringify(curriculum, (key, value: unknown) =>
+    (key === "thumbnailUrl" || key === "url") && typeof value === "string"
+      ? value.split("?")[0]
+      : value,
+  );
+  return crypto.createHash("sha256").update(stable).digest("hex").slice(0, 16);
+}
+
+/**
+ * How long a course's curriculum version is reused before it is worked out
+ * again. The access answer carries it on every course and lesson page, and
+ * a page only needs it to notice, a little after an edit, that it was built
+ * before that edit.
+ */
+const CURRICULUM_VERSION_TTL_MS = 30_000;
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
@@ -336,24 +430,7 @@ export function createCourseService({
       row.estimated_duration,
     );
 
-    const pricing: CoursePricingSummary = row.pricing_type
-      ? {
-          pricingType: row.pricing_type as "free" | "paid",
-          price: Number(row.price ?? 0),
-          currency: row.currency ?? "INR",
-          salePrice:
-            row.sale_price !== null && row.sale_price !== undefined
-              ? Number(row.sale_price)
-              : null,
-          showDiscountBadge: row.show_discount_badge === true,
-        }
-      : {
-          pricingType: "free",
-          price: 0,
-          currency: "INR",
-          salePrice: null,
-          showDiscountBadge: false,
-        };
+    const pricing = presentPricingSummary(row);
 
     const { thumbnailUrl, thumbnailSrcSet } = resolvePublicThumbnailUrls(
       services,
@@ -374,22 +451,7 @@ export function createCourseService({
       totalDurationSeconds,
       pricing,
       certificateEnabled: Boolean(row.certificate_enabled ?? false),
-      // The same rule, on the same stored values, as the course overview's
-      // `canSelfEnroll`, so a card and the page it opens agree. Whether the
-      // course is free is read as checkout reads it: a priced course that
-      // sells for nothing is a free one.
-      canSelfEnroll: !isRestrictedFreeCourse({
-        pricing_type: resolveCoursePricing(
-          row.pricing_type
-            ? {
-                pricing_type: row.pricing_type,
-                price: pricing.price,
-                sale_price: pricing.salePrice,
-              }
-            : null,
-        ).pricingType,
-        access_type: row.access_type,
-      }),
+      canSelfEnroll: courseOffersSelfEnrollment(row, pricing),
     } satisfies CourseSummary;
   }
 
@@ -1220,10 +1282,11 @@ export function createCourseService({
       ? resources
       : redactLockedResources(resources);
 
-    // A lesson's description is its content (all of it, for a reading
-    // lesson), so a lesson the viewer may not open goes out without one, by
-    // the rule its video is played by. The lesson page asks for it on its
-    // own and is told to sign in or to get the course.
+    // A reading lesson's description is the lesson, so one the viewer may
+    // not open goes out without it, by the rule a video is played by. The
+    // lesson page asks for it on its own and is told to sign in or to get
+    // the course. Any other lesson's description is for everyone (see
+    // `isLessonDescriptionPublic`).
     const lessonContentAccess = createLessonContentAccess({
       viewer,
       course,
@@ -1234,7 +1297,7 @@ export function createCourseService({
     const firstLessonId = findFirstPublishedLessonId(sections, lessons);
     const withheldDescriptionLessonIds = new Set<string>();
     for (const lesson of lessons) {
-      if (!lesson.description) continue;
+      if (!lesson.description || isLessonDescriptionPublic(lesson)) continue;
       const access = await lessonContentAccess({
         is_preview: lesson.is_preview,
         isFirstLesson: lesson.id === firstLessonId,
@@ -1293,7 +1356,9 @@ export function createCourseService({
         // The map also holds every lesson's own media, and a resource can
         // point at one of those.
         omitResourceMedia: !viewerMayDownloadResources,
-        omitLessonDescriptions: !overviewLessonDescriptions,
+        // The public curriculum (a visitor's overview) always carries them:
+        // lesson pages are built from it.
+        omitLessonDescriptions: !overviewLessonDescriptions && Boolean(user),
         withheldDescriptionLessonIds,
       }),
       pricing: pricing
@@ -1335,6 +1400,77 @@ export function createCourseService({
   }
 
   /**
+   * A published course as every visitor sees it: the overview a visitor who
+   * is not signed in gets, without the price, which is read live from the
+   * access answers instead. Being the same for whoever asks, it is what the
+   * course's static pages are built from. A course that is not published
+   * (a draft, an archived course) is not found.
+   */
+  async function getPublicCurriculum(
+    courseIdOrSlug: string,
+  ): Promise<CoursePublicCurriculum> {
+    const { pricing: _pricing, ...curriculum } = await getCourseOverviewData(
+      courseIdOrSlug,
+      undefined,
+    );
+    return {
+      ...curriculum,
+      version: fingerprintPublicCurriculum(curriculum),
+    };
+  }
+
+  const curriculumVersions = new Map<
+    string,
+    { version: Promise<string>; expiresAt: number }
+  >();
+
+  /**
+   * `getPublicCurriculum(courseId).version`, reused for a short while (see
+   * `CURRICULUM_VERSION_TTL_MS`). Null for a course with no public
+   * curriculum.
+   */
+  async function getPublicCurriculumVersion(
+    courseId: string,
+  ): Promise<string | null> {
+    const now = Date.now();
+    const cached = curriculumVersions.get(courseId);
+    if (cached && cached.expiresAt > now) {
+      return await cached.version.catch(() => null);
+    }
+    const version = getPublicCurriculum(courseId).then(
+      (curriculum) => curriculum.version,
+    );
+    curriculumVersions.set(courseId, {
+      version,
+      expiresAt: now + CURRICULUM_VERSION_TTL_MS,
+    });
+    return await version.catch(() => null);
+  }
+
+  /**
+   * The facts the access answers are decided and priced from: for the
+   * given courses, or for every published course.
+   */
+  async function listCourseAccessFacts(
+    filter: { courseIds: readonly string[] } | { published: true },
+  ): Promise<CourseAccessFacts[]> {
+    const rows = await courseRepo.listCourseAccessFacts(database, filter);
+    return rows.map((row) => {
+      const pricing = presentPricingSummary(row);
+      return {
+        id: row.id,
+        slug: row.slug,
+        status: row.status,
+        creatorId: row.creator_id,
+        storedPricingType: row.pricing_type,
+        accessType: row.access_type,
+        pricing,
+        canSelfEnroll: courseOffersSelfEnrollment(row, pricing),
+      };
+    });
+  }
+
+  /**
    * One lesson's description, for the viewers the overview lists that lesson
    * for and nobody else: the overview is where the lesson page used to read
    * it, so the two must agree. A listed lesson the viewer may not open (see
@@ -1371,6 +1507,9 @@ export function createCourseService({
     );
     if (!lesson || !isLessonListedInOverview(lesson, visibility)) {
       throw new AppError(404, "LESSON_NOT_FOUND", "Lesson not found.");
+    }
+    if (isLessonDescriptionPublic(lesson)) {
+      return { lessonId: lesson.id, description: lesson.description };
     }
 
     const [accessRule, pricing] = await Promise.all([
@@ -1682,6 +1821,9 @@ export function createCourseService({
     archiveCourse,
     getCourseEditorData,
     getCourseOverviewData,
+    getPublicCurriculum,
+    getPublicCurriculumVersion,
+    listCourseAccessFacts,
     getLessonDescription,
     deleteCourse,
     findLessonById,

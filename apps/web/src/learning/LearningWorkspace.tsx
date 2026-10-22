@@ -32,6 +32,7 @@ import { useFloatingLessonDrawerResize } from "./workspace/hooks/useFloatingLess
 import { useCurriculumResize } from "./workspace/hooks/useCurriculumResize";
 import { usePlayerCourseLessons } from "./workspace/hooks/usePlayerCourseLessons";
 import { useLessonPlayerProps } from "./workspace/hooks/useLessonPlayerProps";
+import { useLessonEditPath } from "./workspace/hooks/useLessonEditPath";
 import { useLessonHeader } from "./workspace/hooks/useLessonHeader";
 
 interface LearningWorkspaceProps {
@@ -51,6 +52,8 @@ interface LearningWorkspaceProps {
   /** "Unlock the course" on a locked lesson. */
   onUnlockCourse: () => void;
   onOpenLogin: () => void;
+  /** Opens a page of the app (the course editor, for "Edit"). */
+  onOpenEditor?: (path: string) => void;
   onMinimizePlayer?: (request: LearningMiniPlayerRequest) => void;
   onMinimizeGestureChange?: (state: LessonPlayerMinimizeGestureState) => void;
   onMiniPlayerRestoreReady?: () => void;
@@ -80,6 +83,7 @@ export function LearningWorkspace({
   onOpenCourseOverview,
   onUnlockCourse,
   onOpenLogin,
+  onOpenEditor,
   onMinimizePlayer,
   onMinimizeGestureChange,
   onMiniPlayerRestoreReady,
@@ -96,7 +100,7 @@ export function LearningWorkspace({
     isAuthenticated,
     resolvedAuthUser,
     isAuthResolutionPending,
-    enrolledCoursesQuery,
+    courseAccessQuery,
     isApiRoute,
     courseOverview,
     isCourseOverviewLoading,
@@ -300,7 +304,7 @@ export function LearningWorkspace({
     isAuthenticated,
     resolvedAuthUser,
     isAuthResolutionPending,
-    enrolledCoursesQuery,
+    courseAccessQuery,
     courseOverview,
     selectedLesson,
     adaptedCurriculum,
@@ -329,9 +333,8 @@ export function LearningWorkspace({
     canParticipateInLessonDiscussion,
   } = useLessonAccess({
     isAuthenticated,
-    resolvedAuthUser,
     isAuthResolutionPending,
-    enrolledCoursesQuery,
+    courseAccessQuery,
     courseOverview,
     selectedLesson,
     adaptedCurriculum,
@@ -341,6 +344,7 @@ export function LearningWorkspace({
     recordProgress,
     detachedProgressTarget,
     lessonProgress,
+    liveLessonProgress,
     courseComplete,
     currentLessonIndex,
     previousLessonId,
@@ -419,6 +423,7 @@ export function LearningWorkspace({
     handleLessonEnded,
   } = useLessonNavigation({
     lessonId,
+    courseSlug,
     onSelectLesson,
     selectedLesson,
     setSelectedLesson,
@@ -600,7 +605,7 @@ export function LearningWorkspace({
     curriculumQuizLessonNumbers,
     showingQuiz,
     lockedLessonNumbers,
-    lessonProgress,
+    liveLessonProgress,
     courseThumbnail,
     courseThumbnailSrcSet,
     selectLesson,
@@ -662,6 +667,15 @@ export function LearningWorkspace({
       fullscreenCoursePanel,
     });
 
+  const lessonEditPath = useLessonEditPath({
+    user: resolvedAuthUser,
+    course: courseOverview?.course,
+    sectionId: curriculumSections.find((section) =>
+      section.lessons.some(([lessonNumber]) => lessonNumber === selectedLesson),
+    )?.sectionId,
+    lessonId: backendLessonId,
+  });
+
   const { lessonHeader } = useLessonHeader({
     courseSlug,
     persistentPlayerCourseRouteKey,
@@ -677,7 +691,7 @@ export function LearningWorkspace({
     curriculumLessonsById,
     currentLesson,
     detachedProgressTarget,
-    lessonProgress,
+    liveLessonProgress,
     stickyPlayer,
     appliedPlayerHeight,
     readingGrowable,
@@ -687,6 +701,8 @@ export function LearningWorkspace({
     selectLesson,
     openLessonDrawerInPlace,
     lessonPlayerProps,
+    lessonEditPath: onOpenEditor ? lessonEditPath : null,
+    onOpenLessonEditor: onOpenEditor,
   });
 
   return (

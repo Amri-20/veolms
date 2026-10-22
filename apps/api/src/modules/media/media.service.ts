@@ -28,6 +28,11 @@ import {
   createMasterManifestCache,
   MASTER_MANIFEST_MAX_BYTES,
 } from "./master-manifest-cache.ts";
+import {
+  createStoryboardPresenceCache,
+  STORYBOARD_INDEX_MAX_BYTES,
+  storyboardIndexKeyFor,
+} from "./storyboard-presence-cache.ts";
 import type {
   MediaConvertWebhookPayload,
   MediaConvertWebhookResponse,
@@ -45,6 +50,8 @@ const LESSON_RESOURCE_DOWNLOAD_TTL_SECONDS = 300;
 const accessService = createAccessService();
 // Shared by every request this process serves; see master-manifest-cache.ts.
 const MASTER_MANIFEST_CACHE = createMasterManifestCache();
+// Likewise for storyboards; see storyboard-presence-cache.ts.
+const STORYBOARD_PRESENCE_CACHE = createStoryboardPresenceCache();
 
 /** Reads a small text object, giving up past `maxBytes`. */
 async function readStorageText(
@@ -1417,11 +1424,46 @@ export function createMediaService({
     }
   }
 
+  /**
+   * The CDN address of the video's storyboard index when one was made from
+   * this output. Never fails the bootstrap.
+   */
+  async function readStoryboardUrl(
+    manifestKey: string,
+    outputVersion: string,
+    logger?: FastifyBaseLogger,
+  ): Promise<string | undefined> {
+    const indexKey = storyboardIndexKeyFor(manifestKey);
+    try {
+      const indexPath = await STORYBOARD_PRESENCE_CACHE.resolve(
+        indexKey,
+        outputVersion,
+        (key) =>
+          readStorageText(services.storage, key, STORYBOARD_INDEX_MAX_BYTES),
+      );
+      if (indexPath === false) return undefined;
+      // Not known yet (slow or failed read) is offered too, as the folder's
+      // own index; see storyboard-presence-cache.ts.
+      const playerIndexKey =
+        indexPath === null
+          ? indexKey
+          : indexKey.replace(/index\.json$/u, indexPath);
+      return services.storage.getCdnObjectUrl(playerIndexKey) ?? undefined;
+    } catch (error) {
+      logger?.warn({ err: error, indexKey }, "Storyboard lookup failed.");
+      return undefined;
+    }
+  }
+
   async function getPlaybackBootstrap(
     courseIdOrSlug: string,
     lessonNumber: number,
     user?: PlaybackUser,
-    options: { inlineManifest?: boolean; logger?: FastifyBaseLogger } = {},
+    options: {
+      inlineManifest?: boolean;
+      storyboard?: boolean;
+      logger?: FastifyBaseLogger;
+    } = {},
   ): Promise<VideoPlaybackBootstrap> {
     const context = await resolveAuthorizedPlaybackLesson(
       courseIdOrSlug,
@@ -1458,10 +1500,15 @@ export function createMediaService({
     const inlinedMasterManifestPromise = options.inlineManifest
       ? readInlinedMasterManifest(manifestKey, outputVersion, options.logger)
       : Promise.resolve(undefined);
-    const [chapterRows, inlinedMasterManifest] = await Promise.all([
-      chapterRowsPromise,
-      inlinedMasterManifestPromise,
-    ]);
+    const storyboardUrlPromise = options.storyboard
+      ? readStoryboardUrl(manifestKey, outputVersion, options.logger)
+      : Promise.resolve(undefined);
+    const [chapterRows, inlinedMasterManifest, storyboardUrl] =
+      await Promise.all([
+        chapterRowsPromise,
+        inlinedMasterManifestPromise,
+        storyboardUrlPromise,
+      ]);
     const chapters = chapterRows.map((chapter) => {
       let thumbnailUrl: string | undefined;
       if (chapter.thumbnail_key) {
@@ -1497,6 +1544,7 @@ export function createMediaService({
       title: context.lesson_title,
       source: "paid-bootstrap-api",
       ...(inlinedMasterManifest ? { inlinedMasterManifest } : {}),
+      ...(storyboardUrl ? { storyboardUrl } : {}),
     };
   }
 
@@ -1810,11 +1858,18 @@ export function createMediaService({
         );
       }
 
+      const outputId = crypto.randomUUID();
       await mediaRepo.insertVideoOutput(database, {
-        id: crypto.randomUUID(),
+        id: outputId,
         video_id: job.video_id,
         master_playlist_path: normalizedMaster,
         created_at: new Date(),
+      });
+      services.analyticsEvents?.emit("media.video.ready", {
+        mediaId: job.video_id,
+        manifestKey: normalizedMaster,
+        outputId,
+        at: new Date(),
       });
 
       // The duration is only reliable now, so chapters authored before the

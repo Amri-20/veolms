@@ -126,6 +126,29 @@ ends all its sessions. Administrators and instructors are asked to set up
 two-factor again on their next sign-in; other accounts sign in with the first
 step alone. Run it on the API host so it reads that environment's `.env`.
 
+## Changing MFA_ENCRYPTION_KEY
+
+`MFA_ENCRYPTION_KEY` encrypts authenticator-app secrets
+(`user_totp_credentials.secret_encrypted`) and creator gateway credentials
+(`creator_payment_configs.encrypted_key_id`, `encrypted_key_secret`,
+`encrypted_webhook_secret`). Changing it in `.env` alone makes all of them
+unreadable: authenticator sign-in returns 500. Re-encrypt first, with the API
+stopped:
+
+```bash
+OLD_MFA_ENCRYPTION_KEY=… NEW_MFA_ENCRYPTION_KEY=… \
+  pnpm --filter @veolms/api encryption-key:rotate --dry-run   # counts only
+OLD_MFA_ENCRYPTION_KEY=… NEW_MFA_ENCRYPTION_KEY=… \
+  pnpm --filter @veolms/api encryption-key:rotate             # asks to confirm
+```
+
+It rewrites every value in one transaction and writes nothing if any value
+fails to decrypt with the old key. Then set `MFA_ENCRYPTION_KEY` to the new key
+and start the API. To undo, run it again with the keys swapped (add
+`--allow-shipped-default` if the old key was the shipped default). Back up the
+database first; dumps taken before the change still hold values encrypted
+with the old key.
+
 ## Performance-related env added in this work
 
 | Env                                    | Default | Purpose                                                                                                                                            |

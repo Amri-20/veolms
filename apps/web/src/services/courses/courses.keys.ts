@@ -18,6 +18,18 @@ export const courseKeys = {
       "lesson-description",
       lessonId,
     ] as const,
+  // Under the overviews too: signing in or out, the Student view and a
+  // course edit change what the viewer may do with it.
+  access: (idOrSlug: string) =>
+    [...courseKeys.overviews(), idOrSlug, "access"] as const,
+  accessList: () => [...courseKeys.overviews(), "access-list"] as const,
+  // Under the overviews too, so a course edit makes them stale.
+  publicCurriculum: (idOrSlug: string) =>
+    [...courseKeys.overviews(), idOrSlug, "public-curriculum"] as const,
+  // Never stale: a version names one curriculum for good.
+  // `null`: the copy the site was built with, whatever its version.
+  staticCurriculum: (courseSlug: string, version: string | null) =>
+    [...courseKeys.all, "static-curriculum", courseSlug, version] as const,
   editor: (id: string) => [...courseKeys.all, "editor", id] as const,
   preview: (id: string) => [...courseKeys.all, "preview", id] as const,
   validation: (id: string) => [...courseKeys.all, "validation", id] as const,

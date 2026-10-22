@@ -15,6 +15,7 @@ import {
   courseEditorDataResponseSchema,
   myCoursesListResponseSchema,
   courseOverviewSchema,
+  coursePublicCurriculumSchema,
   lessonDescriptionParamsSchema,
   lessonDescriptionResponseSchema,
   courseDeleteResponseSchema,
@@ -224,6 +225,38 @@ const courseRoutes: RoutePlugin = async (app, options) => {
       ],
     },
     controller.getCourseOverview,
+  );
+
+  app.get(
+    "/courses/:idOrSlug/curriculum",
+    {
+      schema: {
+        operationId: "getCoursePublicCurriculum",
+        tags: ["Courses"],
+        summary: "Get a published course as every visitor sees it",
+        description:
+          "Returns what a published course's pages show everyone: its details, published curriculum, settings and what is included, " +
+          "the same for whoever asks and without the price (read it from `/courses/{idOrSlug}/access`). " +
+          "A lesson's text is included only where every visitor may read it, and attachments are counted but not named. " +
+          "`version` changes whenever any of it does. A course that is not published is not found, whoever asks. " +
+          "The course pages are built from this; a page that was built before the course last changed reads it again.",
+        params: z.object({
+          idOrSlug: z
+            .string()
+            .min(1)
+            .max(160)
+            .meta({ description: "Course UUID or URL-safe slug." }),
+        }),
+        response: {
+          200: jsonResponse(
+            "The course as every visitor sees it.",
+            coursePublicCurriculumSchema,
+          ),
+          404: errorResponse("No published course matches."),
+        },
+      },
+    },
+    controller.getPublicCurriculum,
   );
 
   app.get(

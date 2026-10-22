@@ -223,6 +223,13 @@ export const coursePricingSchema = z.object({
   showDiscountBadge: z.boolean().optional(),
 });
 
+/**
+ * A course's price is always both numbers: `salePrice`, what a learner
+ * pays (zero makes the course free), and `price`, the marked price it is
+ * struck through from, never below it. No discount is the two being equal.
+ * The database refuses any other shape (see the migration that added
+ * `course_pricing_sale_price_rules`).
+ */
 export const updateCoursePricingRequestSchema = z
   .object({
     /**
@@ -230,28 +237,18 @@ export const updateCoursePricingRequestSchema = z
      * derives the type from the price. Accepted for older clients.
      */
     pricingType: pricingTypeSchema.optional(),
+    /** The marked price, struck through when above `salePrice`. */
     price: z.number().int().nonnegative(),
     currency: z.string().min(3).max(3).default("INR"),
-    salePrice: z.number().int().nonnegative().nullable().optional(),
+    /** What a learner pays. */
+    salePrice: z.number().int().nonnegative(),
     /** Show the discount as a badge on the course's cards. Off by default. */
     showDiscountBadge: z.boolean().optional(),
   })
-  .refine(
-    (data) => {
-      if (
-        data.salePrice !== null &&
-        data.salePrice !== undefined &&
-        data.salePrice > data.price
-      ) {
-        return false;
-      }
-      return true;
-    },
-    {
-      message: "salePrice cannot exceed price",
-      path: ["salePrice"],
-    },
-  );
+  .refine((data) => data.salePrice <= data.price, {
+    message: "salePrice cannot exceed price",
+    path: ["salePrice"],
+  });
 
 export type CoursePricing = z.infer<typeof coursePricingSchema>;
 export type UpdateCoursePricingRequest = z.infer<

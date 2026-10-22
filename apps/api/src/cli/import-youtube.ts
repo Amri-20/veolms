@@ -2455,13 +2455,22 @@ ${bold("Examples:")}
         updated_at: now,
       });
 
+      // Both prices, as every course stores them: what is paid, and the
+      // marked price (the same when no sale price was given). Free exactly
+      // when it sells for zero, as the API derives it.
+      const salePrice = cliArgs.salePrice ?? cliArgs.price;
+      if (salePrice > cliArgs.price) {
+        throw new Error(
+          `--sale-price (${salePrice}) cannot be above --price (${cliArgs.price}).`,
+        );
+      }
       await configRepo.upsertPricing(database, {
         id: crypto.randomUUID(),
         course_id: courseId,
-        pricing_type: cliArgs.pricingType,
+        pricing_type: salePrice === 0 ? "free" : "paid",
         price: cliArgs.price,
         currency: cliArgs.currency,
-        sale_price: cliArgs.salePrice,
+        sale_price: salePrice,
         created_at: now,
         updated_at: now,
       });

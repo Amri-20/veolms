@@ -273,6 +273,7 @@ export async function findLiveLessonDescription(
       "course_lessons.description",
       "course_lessons.is_published",
       "course_lessons.is_preview",
+      "course_lessons.content_type",
     ])
     .where("course_lessons.id", "=", lessonId)
     .where("course_lessons.course_id", "=", courseId)

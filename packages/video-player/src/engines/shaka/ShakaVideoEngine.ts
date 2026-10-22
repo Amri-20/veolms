@@ -218,6 +218,8 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
   /** Settles once the player last playing in the standby element is gone. */
   #standbyReleased: Promise<void> = Promise.resolve();
   #stopWatchingSpeculativePreloads: (() => void) | null = null;
+  /** Drops a source's streaming settings still waiting for its first frame. */
+  #cancelDeferredStreaming: (() => void) | null = null;
   #autoQuality = true;
   #selectedTextTrackId: string | null = null;
   #browserSupported: boolean | null = null;
@@ -265,6 +267,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     this.startLoading(source);
     this.#selectedTextTrackId = null;
     this.#autoQuality = source.streaming?.abrEnabled ?? true;
+    this.#cancelDeferredStreaming?.();
     // What the previous video measured sets where this one starts.
     rememberShakaBandwidthEstimate(player);
     markPlayback("shaka-load", { id: source.id });
@@ -338,14 +341,8 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
           return;
         }
         await player.load(asset, startTime);
-        // A preload plays with the settings it was made with (a hovered
-        // lesson preloads less); this source's buffering applies from here.
-        // Only buffering: re-applying ABR would switch quality straight away
-        // and fetch again what the preload already has.
         if (this.isCurrentOperation(generation)) {
-          player.configure({
-            streaming: createShakaConfiguration(source, runtime).streaming,
-          });
+          this.applyStreamingAfterFirstFrame(player, source, runtime);
         }
       } else {
         await player.load(asset, startTime, mimeType);
@@ -431,6 +428,19 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     const quality = this.getQualities().find((item) => item.id === id) ?? null;
     this.setTrackState({ autoQuality: false, selectedQualityId: id });
     this.emit("qualitychange", { quality, auto: false });
+  }
+
+  setBufferAheadLimit(seconds: number | null): void {
+    const player = this.#player;
+    const runtime = this.#runtime;
+    const source = this.getSnapshot().source;
+    if (!player || !runtime || !source) return;
+    player.configure({
+      streaming:
+        seconds === null
+          ? createShakaConfiguration(source, runtime).streaming
+          : { bufferingGoal: seconds },
+    });
   }
 
   override enableAutoQuality(): void {
@@ -540,6 +550,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     _media: HTMLMediaElement,
   ): Promise<void> {
     this.#selectedTextTrackId = null;
+    this.#cancelDeferredStreaming?.();
     rememberShakaBandwidthEstimate(this.#player);
     this.clearNetworkingFilters();
     this.clearTrackMaps();
@@ -549,6 +560,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
   protected override async onDestroying(
     _media: HTMLMediaElement | null,
   ): Promise<void> {
+    this.#cancelDeferredStreaming?.();
     rememberShakaBandwidthEstimate(this.#player);
     this.clearNetworkingFilters();
     this.#stopWatchingSpeculativePreloads?.();
@@ -578,6 +590,44 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     this.#player = null;
     this.#runtime = null;
     this.clearTrackMaps();
+  }
+
+  /**
+   * A preload plays with the settings it was made with (a hovered lesson
+   * preloads less); this source's buffering applies once its first frame
+   * has played. Not before: in Shaka 5.2.7 every `configure` call re-runs
+   * the whole configuration, which drops the segments the preload fetched
+   * but has not appended yet (the prefetch limit goes back to 0) and makes
+   * ABR choose again from the preload's fast downloads. The first frame
+   * then waited for a fresh 1080p segment: about 1.6 s of a 4.1 s lesson
+   * switch on production.
+   */
+  private applyStreamingAfterFirstFrame(
+    player: ShakaPlayerLike,
+    source: VideoSource,
+    runtime: ShakaRuntimeLike,
+  ): void {
+    this.#cancelDeferredStreaming?.();
+    const media = this.mediaElement;
+    const apply = (): void => {
+      cancel();
+      if (this.#player !== player) return;
+      player.configure({
+        streaming: createShakaConfiguration(source, runtime).streaming,
+      });
+    };
+    const cancel = (): void => {
+      media?.removeEventListener("playing", apply);
+      if (this.#cancelDeferredStreaming === cancel) {
+        this.#cancelDeferredStreaming = null;
+      }
+    };
+    if (!media) {
+      apply();
+      return;
+    }
+    media.addEventListener("playing", apply);
+    this.#cancelDeferredStreaming = cancel;
   }
 
   private requirePlayer(): ShakaPlayerLike {
@@ -787,7 +837,9 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
 
     standby.volume = previousMedia.volume;
     standby.muted = previousMedia.muted;
-    standby.playbackRate = previousMedia.playbackRate;
+    // The learner's speed, not the element's: during a stall Shaka holds
+    // the element at 0, and the new lesson would start frozen at it.
+    standby.playbackRate = this.getSnapshot().playbackRate;
     previousMedia.pause();
     this.assignStandbyMedia(previousMedia);
     this.replaceMediaElement(standby, previousMedia);

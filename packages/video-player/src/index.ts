@@ -175,6 +175,11 @@ export {
   parseWebVttTimestamp,
 } from "./storyboard/parseStoryboard";
 export { getThumbnailAtTime } from "./storyboard/getThumbnailAtTime";
+export {
+  parseSpriteStoryboardIndex,
+  type SpriteStoryboardIndex,
+  type SpriteStoryboardLevel,
+} from "./storyboard/spriteStoryboardIndex";
 
 export {
   DEFAULT_PLAYER_SHORTCUTS,

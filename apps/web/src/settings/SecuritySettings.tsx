@@ -23,7 +23,6 @@ import { SignOutIcon as SignOut } from "@phosphor-icons/react/SignOut";
 import { TimerIcon as Timer } from "@phosphor-icons/react/Timer";
 import { XIcon as X } from "@phosphor-icons/react/X";
 import { RecommendedBadge, SettingRow, StatusNote } from "./SettingsControls";
-import { usePublicPlatformSettings } from "../services/platform";
 import { isStaffRole } from "../shell/workspaceRole";
 import {
   CenteredLoadingSpinner,
@@ -444,15 +443,10 @@ export function SecuritySettings({
 
   const totpEnabled = currentUser?.totpEnabled ?? false;
   const passkeyEnabled = currentUser?.passkeyEnabled ?? false;
-  // A student on an academy that turned two-factor sign-in off for students
-  // can neither add a factor nor be asked for one (Platform > Security).
-  const { data: platformSettings } = usePublicPlatformSettings({
-    enabled: isAuthenticated,
-  });
-  const twoFactorOffForStudents = Boolean(
-    currentUser &&
-    !isStaffRole(currentUser.roles) &&
-    platformSettings?.security.studentTwoFactorEnabled === false,
+  // Two-factor sign-in is for the academy's team only: a student can
+  // neither add a factor nor be asked for one, so none of it is shown.
+  const offersTwoFactor = Boolean(
+    currentUser && isStaffRole(currentUser.roles),
   );
   const showEnrollmentSetup = Boolean(
     isAuthenticated &&
@@ -591,23 +585,7 @@ export function SecuritySettings({
         </div>
       </header>
 
-      {twoFactorOffForStudents ? (
-        <section
-          className="settings-section"
-          aria-labelledby="two-factor-off-heading"
-        >
-          <header className="settings-section__heading">
-            <ShieldCheck size={20} weight="duotone" />
-            <div>
-              <h3 id="two-factor-off-heading">Two-factor sign-in</h3>
-              <p>
-                Your academy has turned off two-factor sign-in for students, so
-                signing in takes no second step.
-              </p>
-            </div>
-          </header>
-        </section>
-      ) : showEnrollmentSetup ? (
+      {!offersTwoFactor ? null : showEnrollmentSetup ? (
         <section
           className="settings-section"
           aria-labelledby="mfa-enrollment-heading"

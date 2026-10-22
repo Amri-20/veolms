@@ -5,8 +5,6 @@ import {
   initiateAttachmentUploadRequestSchema,
   initiateAttachmentUploadResponseSchema,
   learningUploadResponseSchema,
-  linkPreviewQuerySchema,
-  linkPreviewResponseSchema,
   uploadedAttachmentSchema,
 } from "@veolms/contracts";
 import { errorResponse } from "../../../../lib/errors.ts";
@@ -136,33 +134,6 @@ const attachmentsRoutes: RoutePlugin = async (app, options) => {
       },
     },
     controller.uploadAttachment,
-  );
-
-  // 5. GET /attachments/link-preview - External link preview
-  app.get(
-    "/attachments/link-preview",
-    {
-      // Each call makes the server fetch a caller-chosen URL.
-      config: {
-        rateLimit: {
-          max: 20,
-          timeWindow: "1 minute",
-        },
-      },
-      preHandler: permissions.requireAuthenticated,
-      schema: {
-        operationId: "getLearningLinkPreview",
-        tags: ["Learning Attachments"],
-        summary: "Fetch metadata preview for external link",
-        querystring: linkPreviewQuerySchema,
-        response: {
-          200: jsonResponse("Link preview metadata", linkPreviewResponseSchema),
-          400: errorResponse("Invalid URL"),
-          401: errorResponse("Unauthorized"),
-        },
-      },
-    },
-    controller.getLinkPreview,
   );
 };
 

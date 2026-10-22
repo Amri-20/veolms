@@ -20,14 +20,7 @@ import {
   tokenizeInlineTimestamps,
 } from "./inlineTimestamp";
 import type { DiscussionAttachmentItem } from "../discussion-attachments";
-import { LinkPreviewCard } from "../LinkPreviewCard";
-import {
-  extractFirstUrl,
-  normalizePreviewUrl,
-  useLinkPreview,
-  useUrlLinkPreview,
-  extractFirstWrittenUrl,
-} from "../../services/learning-interactions";
+import { normalizePreviewUrl } from "@veolms/contracts";
 
 import { renderContentWithMentions } from "./MentionLink";
 
@@ -214,14 +207,6 @@ interface DiscussionMarkdownProps {
   label: string;
   /** Linked attachments allow safe suppression of legacy generated Markdown. */
   linkedAttachments?: readonly DiscussionAttachmentItem[];
-  /** Controls metadata lookups while keeping Markdown links visible. */
-  enableLinkPreview?: boolean;
-  /**
-   * Where the link card's details come from: "api" asks the server for the
-   * page's title and image; "url" makes them from the link alone, with no
-   * request (comments and replies).
-   */
-  linkPreviewSource?: "api" | "url";
   /** Enables Learning Space-only inline video timestamp controls. */
   enableInlineTimestamps?: boolean;
   /** Seeks the current lesson player when an inline timestamp is activated. */
@@ -723,36 +708,17 @@ export function DiscussionMarkdown({
   content,
   label,
   linkedAttachments,
-  enableLinkPreview = true,
-  linkPreviewSource = "api",
   enableInlineTimestamps = false,
   onSeekToTimestamp,
   chapterDeclarations,
   preserveSoftBreaks = false,
   className = "",
 }: DiscussionMarkdownProps) {
-  const rawText =
-    typeof content === "string"
-      ? content
-      : content.plainText || content.markdown || "";
   const markdown =
     typeof content === "string" ? content : content.markdown || "";
   const chapterMarkdown = chapterDeclarations
     ? preparePlainChapterMarkdown(markdown, chapterDeclarations)
     : markdown;
-  const detectedUrl = extractFirstUrl(rawText);
-  const { data: fetchedLinkPreview } = useLinkPreview(detectedUrl, {
-    enabled: enableLinkPreview && linkPreviewSource === "api",
-    debounceMs: 0,
-  });
-  const { data: urlLinkPreview } = useUrlLinkPreview(
-    linkPreviewSource === "url" ? extractFirstWrittenUrl(rawText) : null,
-    {
-      enabled: enableLinkPreview && linkPreviewSource === "url",
-    },
-  );
-  const linkPreview =
-    linkPreviewSource === "url" ? urlLinkPreview : fetchedLinkPreview;
   const renderOptions = useMemo<MarkdownRenderOptions>(
     () => ({
       enableInlineTimestamps,
@@ -794,12 +760,6 @@ export function DiscussionMarkdown({
       <MarkdownRenderOptionsContext.Provider value={renderOptions}>
         {renderedMarkdown}
       </MarkdownRenderOptionsContext.Provider>
-
-      {linkPreview && (
-        <div className="mt-3">
-          <LinkPreviewCard preview={linkPreview} compact />
-        </div>
-      )}
     </div>
   );
 }

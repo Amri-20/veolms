@@ -1,6 +1,8 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useRef,
   type Dispatch,
   type SetStateAction,
   type RefObject,
@@ -217,13 +219,22 @@ export function useLessonDrawerControls({
     setLessonDrawerForcedFloating(false);
   }, [setLessonDrawer, setLessonDrawerForcedFloating]);
 
+  // Read when the player's Lessons button is pressed, not a dependency of
+  // the handler: a new handler re-registered the player with the app layout
+  // as a phone turned sideways in full screen, and the layout's urgent
+  // re-render held up the turned screen.
+  const mobileLandscapeFullscreenRef = useRef(mobileLandscapeFullscreen);
+  useLayoutEffect(() => {
+    mobileLandscapeFullscreenRef.current = mobileLandscapeFullscreen;
+  }, [mobileLandscapeFullscreen]);
+
   const toggleLessonDrawerFromPlayer = useCallback(
     (presentation: "drawer" | "side") => {
       if (presentation === "side") {
         setLessonDrawer(false);
         setLessonDrawerForcedFloating(false);
 
-        if (mobileLandscapeFullscreen) {
+        if (mobileLandscapeFullscreenRef.current) {
           if (!fullscreenLessonPanelOpen) {
             setFullscreenCurriculumFocusRequest((request) => request + 1);
           }
@@ -251,7 +262,6 @@ export function useLessonDrawerControls({
       fullscreenLessonPanelOpen,
       isCourseContentDrawerLayout,
       lessonDrawer,
-      mobileLandscapeFullscreen,
       openLessonDrawer,
       openLessonDrawerAtTop,
       setCurriculumCollapsed,

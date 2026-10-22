@@ -660,7 +660,14 @@ export function useLessonDiscussions(
   courseId: string,
   lessonId: string,
   query?: LessonDiscussionsQuery,
-  options?: { enabled?: boolean },
+  options?: {
+    enabled?: boolean;
+    /**
+     * The first page as the lesson's page was built with it: shown at once
+     * and, being as old as the build, asked for again straight away.
+     */
+    initialPage?: { page: LessonDiscussionsListResponse; updatedAt: number };
+  },
 ) {
   const queryKey = learningInteractionKeys.lessonDiscussions(
     courseId,
@@ -684,6 +691,10 @@ export function useLessonDiscussions(
     initialPageParam: null,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: options?.enabled ?? Boolean(courseId && lessonId),
+    initialData: options?.initialPage
+      ? { pages: [options.initialPage.page], pageParams: [null] }
+      : undefined,
+    initialDataUpdatedAt: options?.initialPage?.updatedAt,
     retry: false,
     staleTime: 30 * 1000,
   });

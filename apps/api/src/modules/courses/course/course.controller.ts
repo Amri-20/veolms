@@ -129,6 +129,12 @@ export function createCourseController({
     return await service.getCourseOverviewData(idOrSlug, user);
   }
 
+  async function getPublicCurriculum(
+    request: FastifyRequest<{ Params: { idOrSlug: string } }>,
+  ) {
+    return await service.getPublicCurriculum(request.params.idOrSlug);
+  }
+
   async function getLessonDescription(
     request: FastifyRequest<{ Params: LessonDescriptionParams }>,
   ) {
@@ -253,6 +259,7 @@ export function createCourseController({
     updateCourseDetails,
     archiveCourse,
     getCourseOverview,
+    getPublicCurriculum,
     getLessonDescription,
     deleteCourse,
     getStaticPageRefreshStatus,

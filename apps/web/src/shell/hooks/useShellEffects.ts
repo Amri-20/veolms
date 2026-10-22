@@ -23,6 +23,10 @@ import { learningProgressKeys } from "../../services/learning-progress";
 import { mediaKeys } from "../../services/media";
 import { clampSidebarWidth } from "../sidebarPreferences";
 import {
+  installPhoneVideoFullscreenHold,
+  watchLayoutQuery,
+} from "../phoneVideoFullscreenHold";
+import {
   COMPACT_NAVIGATION_QUERY,
   getResponsiveSidebarMode,
   SIDEBAR_RESPONSIVE_COLLAPSE_QUERY,
@@ -353,13 +357,13 @@ export function useShellEffects({
     if (!storedPreferencesReady) return undefined;
     const media = window.matchMedia(SIDEBAR_RESPONSIVE_COLLAPSE_QUERY);
     let releaseTransitionFrame: number | null = null;
-    const applyResponsiveSidebarMode = (event: MediaQueryListEvent) => {
+    const applyResponsiveSidebarMode = () => {
       document.documentElement.dataset.responsiveSidebarSwitching = "true";
       if (releaseTransitionFrame !== null) {
         window.cancelAnimationFrame(releaseTransitionFrame);
       }
       setSidebarMode((currentMode) =>
-        getResponsiveSidebarMode(currentMode, event.matches),
+        getResponsiveSidebarMode(currentMode, media.matches),
       );
       releaseTransitionFrame = window.requestAnimationFrame(() => {
         releaseTransitionFrame = window.requestAnimationFrame(() => {
@@ -369,9 +373,11 @@ export function useShellEffects({
       });
     };
 
-    media.addEventListener("change", applyResponsiveSidebarMode);
+    // Not while a phone plays a video full screen sideways (see
+    // phoneVideoFullscreenHold): the viewer's sidebar mode would change.
+    const stopWatching = watchLayoutQuery(media, applyResponsiveSidebarMode);
     return () => {
-      media.removeEventListener("change", applyResponsiveSidebarMode);
+      stopWatching();
       if (releaseTransitionFrame !== null) {
         window.cancelAnimationFrame(releaseTransitionFrame);
       }
@@ -394,13 +400,17 @@ export function useShellEffects({
         : "wide";
     };
     syncNavigationMode();
-    media.addEventListener("change", syncNavigationMode);
-    coarseInput.addEventListener("change", syncNavigationMode);
+    // A phone playing a video full screen sideways keeps the phone layout
+    // (see phoneVideoFullscreenHold).
+    const stopWatchingWidth = watchLayoutQuery(media, syncNavigationMode);
+    const stopWatchingInput = watchLayoutQuery(coarseInput, syncNavigationMode);
     return () => {
-      media.removeEventListener("change", syncNavigationMode);
-      coarseInput.removeEventListener("change", syncNavigationMode);
+      stopWatchingWidth();
+      stopWatchingInput();
     };
   }, [setCoarseNavigationInput, setCompactNavigation]);
+
+  useEffect(() => installPhoneVideoFullscreenHold(), []);
 
   useEffect(() => {
     if (!pendingMobileMenuOpen || !mobileNavigationSheetMounted) {

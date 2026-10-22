@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import { PlayerMedia, type PlayerMediaProps } from "./PlayerMedia";
+import { ScrubFrameOverlay } from "./ScrubFrameOverlay";
 import { usePlayerState } from "./usePlayerState";
 
 export type PlayerZoomOverflowBoundary = "player" | "shell";
@@ -76,6 +77,7 @@ export function PlayerZoomMedia({
           data-player-zoom-scale={zoom.scale.toFixed(3)}
           style={style}
         />
+        <ScrubFrameOverlay />
       </div>
     </div>
   );

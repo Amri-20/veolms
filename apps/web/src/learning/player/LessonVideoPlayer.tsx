@@ -1,4 +1,5 @@
 import {
+  startTransition,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -66,7 +67,6 @@ import {
   prepareLearningMiniPlayerPlaybackHandoff,
 } from "./learningMiniPlayerStore";
 import {
-  clampPlayerVolume,
   clearResumePosition,
   consumeMiniPlayerRestore,
   lessonPlayerStorageKeys,
@@ -76,6 +76,7 @@ import {
   writeMutedPreference,
   writePlaybackRatePreference,
   writeResumePosition,
+  readVolumeChange,
   writeVolumePreference,
 } from "./lessonPlayerPersistence";
 import { createLearningLessonVideoSource } from "./lessonVideoSource";
@@ -103,6 +104,10 @@ const FINISHED_LESSON_RESUME_TAIL_SECONDS = 3;
 // percentage would start hours early in a long lesson.
 const NEAR_LESSON_END_SECONDS = 60;
 const LESSON_PLAYER_CONTROLS_IDLE_DELAY_MS = 1_000;
+/** How long a volume taken from another tab counts as that tab's. */
+const REMOTE_VOLUME_ECHO_MS = 2_000;
+/** Another tab's volume is applied at most this often. */
+const REMOTE_VOLUME_APPLY_INTERVAL_MS = 150;
 const MAX_MINI_PLAYER_RESTORE_DRIFT_SECONDS = 0.35;
 const LESSON_PLAYER_SHORTCUTS = {
   seekBackwardLarge: false,
@@ -439,6 +444,13 @@ export function LessonVideoPlayer({
   const playerPrefsRef = useRef({ ...initialPlayerPreferences });
   const playbackPrefsAppliedRef = useRef(false);
   const applyingPlaybackPrefsRef = useRef(false);
+  // Volumes taken from another tab (a `storage` event) in the last moments.
+  // The volume change each causes here is that tab's, not this one's, and
+  // is not saved again: saved, it reached the other tab as a new change,
+  // and with volume changes reported a moment late the tabs sent each
+  // other's older values back and forth without end (the slider kept
+  // moving on its own, and a tab could hang).
+  const remoteVolumesRef = useRef<Array<{ volume: number; until: number }>>([]);
   const [muted, setMuted] = useState(initialPlayerPreferences.muted);
   const [ambientEnabled, setAmbientEnabled] = useState(false);
   const seekIntervalSeconds = useLearningSeekInterval();
@@ -540,6 +552,46 @@ export function LessonVideoPlayer({
     refreshPlaybackToken,
   ]);
 
+  // Opening another lesson whose bootstrap is still on its way used to swap
+  // the whole player for the waiting surface, so the player, its Shaka
+  // engine and the <video> were destroyed and built again once it arrived:
+  // close to a second of black with no controls on every such switch. The
+  // player now stays, held paused on the lesson it last played under the
+  // same waiting surface, and loads the new lesson in place when its
+  // bootstrap comes, as a hovered lesson does. Nothing of the held lesson
+  // counts for the new one: progress is written under the key of the video
+  // actually loaded (`activeMediaKeyRef`), and it is paused.
+  //
+  // In full screen the element in full screen is the player itself, so
+  // replacing it would also leave full screen and turn a phone back
+  // upright. There it stays for any wait, the same lesson's bootstrap
+  // fetched again or a lesson with no source yet included. Access gates and
+  // failures still show their own stage.
+  const [playerFullscreen, setPlayerFullscreen] = useState(false);
+  // What the player last played; written where the player is drawn.
+  const lastPlayableRef = useRef<{
+    source: VideoSource;
+    mediaKey: string;
+    description: string | null | undefined;
+    chapterThumbnails: Record<number, string>;
+    spriteStoryboardUrl: string | undefined;
+  } | null>(null);
+  const lastPlayable = lastPlayableRef.current;
+  const holdingPreviousLesson =
+    lastPlayable !== null &&
+    !playbackAccessError &&
+    ((playbackBootstrapPending && lastPlayable.mediaKey !== mediaKey) ||
+      (presentation === "full" &&
+        playerFullscreen &&
+        playerRef.current !== null &&
+        !playbackUnavailableMessage &&
+        (playbackBootstrapPending || !playbackMedia.src)));
+  const playbackPaused = playbackSuspended || holdingPreviousLesson;
+  // Read by the player's events, which can arrive (the new lesson loading)
+  // before the callback that handles them is replaced.
+  const holdingPlaybackRef = useRef(holdingPreviousLesson);
+  holdingPlaybackRef.current = holdingPreviousLesson;
+
   useEffect(() => {
     setShowEndScreen(false);
     setAutoplayCancelled(false);
@@ -550,10 +602,10 @@ export function LessonVideoPlayer({
   }, [showCompletionOverlay]);
 
   useEffect(() => {
-    if (playbackSuspended) {
+    if (playbackPaused) {
       playerRef.current?.pause();
     }
-  }, [playbackSuspended]);
+  }, [playbackPaused]);
 
   const persistResumePosition = useCallback((force = false) => {
     const position = latestPositionRef.current;
@@ -674,7 +726,10 @@ export function LessonVideoPlayer({
     (event: VideoPlayerEvent) => {
       trackWatchTime(event);
       playbackTelemetry.handle(event);
-      if (playbackSuspended) {
+      if (event.type === "fullscreenchange") {
+        setPlayerFullscreen(event.detail.active);
+      }
+      if (playbackSuspended || holdingPlaybackRef.current) {
         if (
           event.type === "playing" ||
           event.type === "play" ||
@@ -835,10 +890,24 @@ export function LessonVideoPlayer({
         }
         setMuted(event.detail.muted);
         playerPrefsRef.current.muted = event.detail.muted;
-        if (preferencesReadyRef.current) {
+        // Only a change made in this tab is saved for the others: a tab the
+        // viewer is not using makes no changes of its own, and a volume
+        // taken from another tab is that tab's (see `remoteVolumesRef`).
+        const now = performance.now();
+        remoteVolumesRef.current = remoteVolumesRef.current.filter(
+          (entry) => entry.until > now,
+        );
+        const thisTabInUse =
+          typeof document === "undefined" || document.hasFocus();
+        const volumeFromAnotherTab = remoteVolumesRef.current.some(
+          (entry) => Math.abs(entry.volume - event.detail.volume) < 0.001,
+        );
+        if (playbackPrefsAppliedRef.current) {
+          playerPrefsRef.current.volume = event.detail.volume;
+        }
+        if (preferencesReadyRef.current && thisTabInUse) {
           writeMutedPreference(event.detail.muted);
-          if (playbackPrefsAppliedRef.current) {
-            playerPrefsRef.current.volume = event.detail.volume;
+          if (playbackPrefsAppliedRef.current && !volumeFromAnotherTab) {
             writeVolumePreference(event.detail.volume);
             publishLearningPlayerBootstrap({
               muted: event.detail.muted,
@@ -1041,10 +1110,14 @@ export function LessonVideoPlayer({
     writeAmbientPreference(enabled);
   }, []);
 
+  // A transition, as the turn that sets it (see useLandscapeOrientation in
+  // LessonPlayerControls): the lesson page re-renders for it.
   const handleMobileLandscapeFullscreenChange = useCallback(
     (active: boolean) => {
-      setMobileLandscapeFullscreen(active);
-      onMobileLandscapeFullscreenChange?.(active);
+      startTransition(() => {
+        setMobileLandscapeFullscreen(active);
+        onMobileLandscapeFullscreenChange?.(active);
+      });
     },
     [onMobileLandscapeFullscreenChange],
   );
@@ -1095,17 +1168,42 @@ export function LessonVideoPlayer({
     preferencesReadyRef.current = true;
     setPreferencesReady(true);
 
+    // Another tab's volume is applied a few times a second at most, the
+    // latest one: a burst of changes from other tabs (a slider dragged
+    // there, or older pages still sending volumes back and forth) must not
+    // make this one apply and redraw hundreds of them a second.
+    let pendingRemoteVolume: number | null = null;
+    let remoteVolumeTimer: number | undefined;
+    const applyRemoteVolume = () => {
+      remoteVolumeTimer = undefined;
+      const nextVolume = pendingRemoteVolume;
+      pendingRemoteVolume = null;
+      if (nextVolume === null) return;
+      const now = performance.now();
+      remoteVolumesRef.current = [
+        ...remoteVolumesRef.current.filter((entry) => entry.until > now),
+        { volume: nextVolume, until: now + REMOTE_VOLUME_ECHO_MS },
+      ];
+      if (playbackPrefsAppliedRef.current) {
+        playerRef.current?.setVolume(nextVolume);
+      }
+    };
     const syncPreferences = (event: StorageEvent) => {
       if (event.key === lessonPlayerStorageKeys.muted) {
         const nextMuted = event.newValue === "true" || event.newValue === "on";
         setMuted(nextMuted);
         playerPrefsRef.current.muted = nextMuted;
-      } else if (event.key === lessonPlayerStorageKeys.volume) {
-        const nextVolume = clampPlayerVolume(Number(event.newValue));
+      } else if (event.key === lessonPlayerStorageKeys.volumeChange) {
+        // Only a change a viewer made in another tab moves this one; the
+        // saved volume itself is not followed (see `volumeChange`).
+        const nextVolume = readVolumeChange(event.newValue);
+        if (nextVolume === null) return;
         playerPrefsRef.current.volume = nextVolume;
-        if (playbackPrefsAppliedRef.current) {
-          playerRef.current?.setVolume(nextVolume);
-        }
+        pendingRemoteVolume = nextVolume;
+        remoteVolumeTimer ??= window.setTimeout(
+          applyRemoteVolume,
+          REMOTE_VOLUME_APPLY_INTERVAL_MS,
+        );
       } else if (event.key === lessonPlayerStorageKeys.playbackRate) {
         const nextRate = Number(event.newValue);
         if (!Number.isFinite(nextRate) || nextRate <= 0) return;
@@ -1120,6 +1218,7 @@ export function LessonVideoPlayer({
     return () => {
       preferencesReadyRef.current = false;
       window.removeEventListener("storage", syncPreferences);
+      window.clearTimeout(remoteVolumeTimer);
     };
   }, []);
 
@@ -1182,7 +1281,10 @@ export function LessonVideoPlayer({
       } as FullscreenCoursePanelStyle)
     : undefined;
 
-  if (playbackBootstrapPending || playbackAccessError) {
+  if (
+    (playbackBootstrapPending && !holdingPreviousLesson) ||
+    playbackAccessError
+  ) {
     const MinimizeIcon = playerTheme.icons.minimize;
     const FullscreenEnterIcon = playerTheme.icons.fullscreenEnter;
     const FullscreenExitIcon = playerTheme.icons.fullscreenExit;
@@ -1205,7 +1307,9 @@ export function LessonVideoPlayer({
       courseLessonsOpen &&
       Boolean(courseLessonsPanel);
     const gateIllustration =
-      presentation === "full" && playbackAccessError?.kind === "retry"
+      presentation === "full" &&
+      (playbackAccessError?.kind === "retry" ||
+        playbackAccessError?.kind === "notice")
         ? playbackAccessError.illustration
         : undefined;
     const gateTitle = !playbackAccessError
@@ -1431,17 +1535,28 @@ export function LessonVideoPlayer({
             ) : (
               <div className="relative z-20 max-w-md space-y-4">
                 {/* Drawn only where the player is tall enough to keep the
-                    message and its action whole under it. */}
+                    message and its action whole under it. A notice has no
+                    action, so it keeps the drawing in a shorter player. */}
                 {gateIllustration ? (
                   // The drawing sets its own display, so the box around it
                   // is what comes and goes.
-                  <div className="hidden [@container_(min-height:17rem)]:block">
-                    <OctopusIllustration
-                      kind={gateIllustration}
-                      surface="dark"
-                      className="mx-auto h-[clamp(4.5rem,calc(100cqh_-_13rem),9rem)] w-auto"
-                    />
-                  </div>
+                  playbackAccessError.onAction || playbackAccessError.link ? (
+                    <div className="hidden [@container_(min-height:17rem)]:block">
+                      <OctopusIllustration
+                        kind={gateIllustration}
+                        surface="dark"
+                        className="mx-auto h-[clamp(4.5rem,calc(100cqh_-_13rem),9rem)] w-auto"
+                      />
+                    </div>
+                  ) : (
+                    <div className="hidden [@container_(min-height:10.5rem)]:block">
+                      <OctopusIllustration
+                        kind={gateIllustration}
+                        surface="dark"
+                        className="mx-auto h-[clamp(3.5rem,calc(100cqh_-_8rem),9rem)] w-auto"
+                      />
+                    </div>
+                  )
                 ) : null}
                 <div className="space-y-1">
                   <h2 className="text-base font-semibold">{gateTitle}</h2>
@@ -1474,7 +1589,7 @@ export function LessonVideoPlayer({
     );
   }
 
-  if (!playbackMedia.src) {
+  if (!playbackMedia.src && !holdingPreviousLesson) {
     // API lessons have no playable source until their playback bootstrap
     // resolves. Show the lesson poster instead of handing the engine an
     // empty URL or a placeholder video, and the failure when loading failed.
@@ -1535,21 +1650,40 @@ export function LessonVideoPlayer({
     showEndScreen;
   const chromeSuppressed = minimizeGesture.controlsSuppressed;
 
+  if (!holdingPreviousLesson) {
+    lastPlayableRef.current = {
+      source,
+      mediaKey,
+      description,
+      chapterThumbnails,
+      spriteStoryboardUrl: playbackBootstrap?.storyboardUrl,
+    };
+  }
+  const playerPlayback = lastPlayableRef.current ?? {
+    source,
+    mediaKey,
+    description,
+    chapterThumbnails,
+    spriteStoryboardUrl: playbackBootstrap?.storyboardUrl,
+  };
+  const playerSource = playerPlayback.source;
+
   return (
     <VeoVideoPlayer
       ref={playerRef}
-      source={source}
-      description={description ?? undefined}
-      chapterThumbnails={chapterThumbnails}
+      source={playerSource}
+      description={playerPlayback.description ?? undefined}
+      chapterThumbnails={playerPlayback.chapterThumbnails}
+      spriteStoryboardUrl={playerPlayback.spriteStoryboardUrl}
       theme={playerTheme}
       engine="shaka"
       engineFactory={engineFactory}
       autoPlay={
-        playbackSuspended
+        playbackPaused
           ? false
           : autoPlayOnMediaChange || restoreAutoplayRef.current === true
       }
-      keyboardEnabled={presentation === "full" && !playbackSuspended}
+      keyboardEnabled={presentation === "full" && !playbackPaused}
       zoomEnabled={presentation === "full"}
       zoomOverflowBoundary={
         presentation === "full" && mobileLandscapeFullscreen
@@ -1577,7 +1711,7 @@ export function LessonVideoPlayer({
           false
         ) : (
           <PlayerErrorNotice
-            source={source}
+            source={playerSource}
             backdrop={false}
             // The lesson's own picture behind the message, as on the
             // surface that asks the learner to sign in.
@@ -1683,7 +1817,7 @@ export function LessonVideoPlayer({
             onGoPrevious={onGoPrevious}
             onClose={onMiniClose ?? (() => undefined)}
             onRestore={onMiniRestore ?? (() => undefined)}
-            source={source}
+            source={playerSource}
           />
         ) : (
           <LessonPlayerControls
@@ -1721,7 +1855,23 @@ export function LessonVideoPlayer({
         )
       }
       overlays={
-        presentation === "full" && !minimizeGesture.controlsSuppressed ? (
+        holdingPreviousLesson ? (
+          // The same waiting surface the player used to be replaced with:
+          // black over the held lesson, with the loader, above the controls.
+          // In full screen the controls stay above it, so the learner can
+          // still leave full screen or pick another lesson.
+          <div
+            className={cn(
+              "absolute inset-0 grid place-items-center bg-black",
+              playerFullscreen ? "pointer-events-none z-20" : "z-50",
+            )}
+            role="status"
+            aria-label="Loading video"
+            data-learning-playback-gate="pending"
+          >
+            <VideoLoadingSpinner />
+          </div>
+        ) : presentation === "full" && !minimizeGesture.controlsSuppressed ? (
           <>
             <LessonAmbientProjection enabled={ambientEnabled} />
             {endScreenVisible ? (

@@ -877,9 +877,47 @@ const getRouteCourse = (
   const pageData = matches?.find((match) => match?.id === "root")
     ?.loaderData as AcademyStaticPageData | null | undefined;
   return [
-    pageData?.courseOverview?.course,
+    pageData?.courseCurriculum?.curriculum.course,
+    pageData?.lessonPage?.curriculum.course,
     ...(pageData?.publishedCoursePage?.courses ?? []),
   ].find((course) => course?.slug === courseSlug || course?.id === courseSlug);
+};
+
+/**
+ * The lesson a lesson page's document was built with, when it is the one
+ * the address names: its title and, when it is for everyone, its
+ * description.
+ */
+const getRouteLesson = (
+  params: RouteParams,
+  matches: readonly (RouteMetaMatch | undefined)[] | undefined,
+) => {
+  const pageData = matches?.find((match) => match?.id === "root")
+    ?.loaderData as AcademyStaticPageData | null | undefined;
+  const seed = pageData?.lessonPage;
+  if (
+    !seed ||
+    !params.courseSlug ||
+    (seed.curriculum.course.slug !== params.courseSlug &&
+      seed.curriculum.course.id !== params.courseSlug) ||
+    params.lectureSlug !== `lecture-${seed.lessonNumber}`
+  ) {
+    return undefined;
+  }
+  return seed.curriculum.sections
+    .flatMap((section) => section.lessons ?? [])
+    .find((lesson) => lesson.id === seed.lessonId);
+};
+
+/** A description's first words, as search results show them; none for no text. */
+const toMetaDescription = (text: string | null | undefined) => {
+  const plain = text
+    ?.replace(/<[^>]*>/gu, " ")
+    .replace(/[#*_`>[\]()]/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (!plain) return undefined;
+  return plain.length > 160 ? `${plain.slice(0, 157).trimEnd()}…` : plain;
 };
 
 /**
@@ -984,6 +1022,15 @@ export const getRouteMeta = (
 
   if (effectiveRouteId === "learning") {
     const title = getRouteCourseTitle(params.courseSlug, matches);
+    const lesson = getRouteLesson(params, matches);
+    if (title && lesson) {
+      return {
+        title: [lesson.title, title, productName].join(" · "),
+        description:
+          toMetaDescription(lesson.description) ??
+          `${lesson.title}, a lesson of ${title} on ${productName}.`,
+      };
+    }
     return {
       title: `${title ?? "Course"} \u00B7 ${productName}`,
       description: title

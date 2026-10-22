@@ -8,6 +8,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import {
   getLearningPlayerSwipeSplitX,
   isFullLearningPlayerSwipeTarget,
+  isVideoTimelineSwipeZone,
 } from "../../../gestures/pointerGestureOwnership";
 import {
   isEditingShortcutTarget,
@@ -104,6 +105,7 @@ export function useCurriculumScreenSwipe({
       event.clientX < (event.splitX ?? window.innerWidth / 2) ||
       curriculumResizeRef.current ||
       curriculumScreenSwipeRef.current ||
+      isVideoTimelineSwipeZone(event.target, event) ||
       isCurriculumSwipeExcludedTarget(
         event.target,
         revealsTabletDrawer

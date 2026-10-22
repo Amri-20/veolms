@@ -134,6 +134,21 @@ export function withKeepScroll(state: unknown): Record<string, unknown> {
   };
 }
 
+/**
+ * Takes the keep-scroll request back out of the current history entry once
+ * the shell has acted on it, so returning to the entry later restores its
+ * position like any other.
+ */
+export function forgetKeepScrollRequest(): void {
+  const entry: unknown = window.history.state;
+  if (typeof entry !== "object" || entry === null) return;
+  const { usr } = entry as { usr?: unknown };
+  if (!asksToKeepScroll(usr)) return;
+  const rest = { ...(usr as Record<string, unknown>) };
+  delete rest[KEEP_SCROLL_NAVIGATION_STATE];
+  window.history.replaceState({ ...entry, usr: rest }, "");
+}
+
 export function asksToKeepScroll(state: unknown): boolean {
   return (
     typeof state === "object" &&

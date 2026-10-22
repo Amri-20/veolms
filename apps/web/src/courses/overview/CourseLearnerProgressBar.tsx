@@ -7,7 +7,9 @@ import {
   formatCourseProgress,
   roundCourseProgress,
 } from "../../learning/courseProgressFormat";
+import type { CourseAccessResume } from "@veolms/contracts";
 import { useLearningProgressResumeContext } from "../../services/learning-progress";
+import { useCurriculumIntent } from "./curriculumIntent";
 import {
   priceBarActionClasses,
   priceBarPaddingClasses,
@@ -26,6 +28,11 @@ interface CourseLearnerProgressBarProps {
    */
   started?: boolean;
   totalLessons: number;
+  /**
+   * Where the learner carries on, when the page already has it (the course
+   * access answer carries it). Asked for here otherwise.
+   */
+  resume?: CourseAccessResume | null;
   onNavigatePage?: NavigateTo;
 }
 
@@ -47,10 +54,14 @@ export function CourseLearnerProgressBar({
   progress,
   started = false,
   totalLessons,
+  resume,
   onNavigatePage,
 }: CourseLearnerProgressBarProps) {
-  const resume = useLearningProgressResumeContext(courseKey);
-  const place = resume.data;
+  const resumeQuery = useLearningProgressResumeContext(courseKey, {
+    enabled: !resume,
+  });
+  const place = resume ?? resumeQuery.data;
+  const curriculumIntent = useCurriculumIntent();
   const percent = roundCourseProgress(progress);
   const lessonCount = place?.totalLessons ?? totalLessons;
   const isComplete = percent >= 100;
@@ -120,7 +131,7 @@ export function CourseLearnerProgressBar({
                   {lessonCount === 1 ? "" : "s"}
                 </span>
               </>
-            ) : resume.isPending ? (
+            ) : !resume && resumeQuery.isPending ? (
               <span className={`${placeholder} h-4 w-36 self-center`} />
             ) : null}
           </div>
@@ -149,6 +160,7 @@ export function CourseLearnerProgressBar({
         <Button
           motion="static"
           className={`${priceBarActionClasses} w-full @2xl/price:w-auto @2xl/price:min-w-60`}
+          {...curriculumIntent}
           onClick={openCourse}
         >
           <Play

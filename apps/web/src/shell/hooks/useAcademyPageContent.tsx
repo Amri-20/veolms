@@ -79,7 +79,7 @@ import {
 import { MovedPageRedirect } from "../MovedPageRedirect";
 import type { ThemePreference } from "../academyShellTypes";
 import { CourseCatalogueContent } from "../CourseCatalogueContent";
-import type { CourseOverviewResponse } from "@veolms/contracts";
+import type { CourseCurriculumPreview } from "../../courses/staticCurriculum";
 import type { AuthUser } from "../../store/auth.store";
 import type { useMyCourses } from "../../services/courses";
 import type { ApiError } from "../../lib/api-error";
@@ -89,7 +89,7 @@ export interface UseAcademyPageContentArgs {
   couponId: string | undefined;
   courseSlug: string | undefined;
   discussionTab: string;
-  initialCourseOverview: CourseOverviewResponse | undefined;
+  initialCourseCurriculum: CourseCurriculumPreview | undefined;
   initialGuestHomeCopy: GuestHomePageResponse | undefined;
   initialGuestHomePage: GuestHomePageResponse | undefined;
   initialPublishedCoursePage:
@@ -224,7 +224,7 @@ export function useAcademyPageContent({
   couponId,
   courseSlug,
   discussionTab,
-  initialCourseOverview,
+  initialCourseCurriculum,
   initialGuestHomeCopy,
   initialGuestHomePage,
   initialPublishedCoursePage,
@@ -577,7 +577,7 @@ export function useAcademyPageContent({
           <ChunkStylesheets hrefs={COURSE_OVERVIEW_CSS_URLS} />
           <CourseOverviewPage
             courseSlug={surfaceCourseSlug}
-            initialOverview={initialCourseOverview}
+            initialCurriculum={initialCourseCurriculum}
             onNavigateCourses={
               onNavigateBack ?? (() => onNavigatePage("/courses"))
             }
