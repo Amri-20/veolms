@@ -130,6 +130,16 @@ export const loginDialogBody = definePrerenderedBody(
   (module) => module.default,
 );
 
+// The lesson's video player, kept by the shell across pages. A bare `lazy()`
+// held it back even when its code had been fetched ahead (the learner home
+// does so for its hero lesson): it showed its empty fallback first, and React
+// then waits about 300 ms before replacing a fallback, so the lesson page
+// stood with a black box where the video goes.
+export const persistentLearningPlayerHostBody = definePrerenderedBody(
+  () => import("../learning/player/PersistentLearningPlayerHost"),
+  (module) => module.PersistentLearningPlayerHost,
+);
+
 function documentPreloads(chunkUrl: string) {
   // Anywhere in the document, not only <head>: the link may still be on its
   // way there when this runs.
