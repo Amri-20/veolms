@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useLayoutEffect, useState, type RefObject } from "react";
 import { flushSync } from "react-dom";
 import { guestHeroImage } from "./guestHeroImage";
 import { heroPictureOrigin, measureHeroPicture } from "./heroPictureGeometry";
@@ -148,65 +148,84 @@ export function useHeroLaptopScreen(
   const [transform, setTransform] = useState<string>();
   const [powerSpot, setPowerSpot] = useState<HeroLaptopPowerSpot>();
 
-  useEffect(() => {
-    const image = imageRef.current;
-    if (!image) return undefined;
-    const hero = image.closest("section");
-    const phoneQuery = window.matchMedia(guestHeroImage.phone.media);
+  // Measured before the page is drawn: the home is drawn with its laptop's
+  // screen in place, not without it for a frame (a reload hands the page
+  // over from a copy of itself that has it, see learnerHomeSnapshot.ts).
+  // The picture comes after the laptop in the page, so its element may not
+  // be attached yet when this runs; it is once the commit is over, which is
+  // still before the page is drawn.
+  useLayoutEffect(() => {
+    const follow = (image: HTMLImageElement) => {
+      const hero = image.closest("section");
+      const phoneQuery = window.matchMedia(guestHeroImage.phone.media);
 
-    const place = () => {
-      const { crop, scale, offsetX, offsetY } = measureHeroPicture(
-        image,
-        phoneQuery.matches,
-      );
-      const origin = heroPictureOrigin(image);
-      const cropLeft = crop === "phone" ? PHONE_CROP_LEFT : 0;
-      setTransform(
-        projectOnto(
-          HERO_LAPTOP_SCREEN_WIDTH,
-          HERO_LAPTOP_SCREEN_HEIGHT,
-          screenInWidePicture.map(([x, y]): Point => [
-            origin.left + offsetX + (x - cropLeft) * scale,
-            origin.top + offsetY + y * scale,
-          ]),
-        ),
-      );
+      const place = () => {
+        const { crop, scale, offsetX, offsetY } = measureHeroPicture(
+          image,
+          phoneQuery.matches,
+        );
+        const origin = heroPictureOrigin(image);
+        const cropLeft = crop === "phone" ? PHONE_CROP_LEFT : 0;
+        setTransform(
+          projectOnto(
+            HERO_LAPTOP_SCREEN_WIDTH,
+            HERO_LAPTOP_SCREEN_HEIGHT,
+            screenInWidePicture.map(([x, y]): Point => [
+              origin.left + offsetX + (x - cropLeft) * scale,
+              origin.top + offsetY + y * scale,
+            ]),
+          ),
+        );
 
-      // The power spot starts at the screen's bottom edge and reaches down
-      // over the hinge, so that as little of the screen as possible lies
-      // under it; its light stays on the middle of the bezel strip.
-      const [left, top, right, bottom] = powerSpotInWidePicture;
-      const width = Math.max((right - left) * scale, MIN_POWER_SPOT_WIDTH_PX);
-      const stripHeight = (bottom - top) * scale;
-      setPowerSpot({
-        left:
-          origin.left +
-          offsetX +
-          ((left + right) / 2 - cropLeft) * scale -
-          width / 2,
-        top: origin.top + offsetY + top * scale,
-        width,
-        height: Math.max(stripHeight, MIN_POWER_SPOT_HEIGHT_PX),
-        lightTop: stripHeight / 2,
-      });
+        // The power spot starts at the screen's bottom edge and reaches down
+        // over the hinge, so that as little of the screen as possible lies
+        // under it; its light stays on the middle of the bezel strip.
+        const [left, top, right, bottom] = powerSpotInWidePicture;
+        const width = Math.max((right - left) * scale, MIN_POWER_SPOT_WIDTH_PX);
+        const stripHeight = (bottom - top) * scale;
+        setPowerSpot({
+          left:
+            origin.left +
+            offsetX +
+            ((left + right) / 2 - cropLeft) * scale -
+            width / 2,
+          top: origin.top + offsetY + top * scale,
+          width,
+          height: Math.max(stripHeight, MIN_POWER_SPOT_HEIGHT_PX),
+          lightTop: stripHeight / 2,
+        });
+      };
+
+      place();
+      // While the hero is being resized (the sidebar opening, or dragged) the
+      // picture is laid out anew on every frame, and the laptop's screen has
+      // to be on it in that same frame. A state update made from an observer
+      // is normally rendered a moment later, which left the screen trailing
+      // the laptop; rendering it at once keeps the two together.
+      const measure = () => flushSync(place);
+      const observer = new ResizeObserver(measure);
+      observer.observe(image);
+      // On phones the picture moves, without changing size, whenever the copy
+      // above it changes height.
+      if (hero) observer.observe(hero);
+      phoneQuery.addEventListener("change", measure);
+      return () => {
+        observer.disconnect();
+        phoneQuery.removeEventListener("change", measure);
+      };
     };
-
-    place();
-    // While the hero is being resized (the sidebar opening, or dragged) the
-    // picture is laid out anew on every frame, and the laptop's screen has
-    // to be on it in that same frame. A state update made from an observer
-    // is normally rendered a moment later, which left the screen trailing
-    // the laptop; rendering it at once keeps the two together.
-    const measure = () => flushSync(place);
-    const observer = new ResizeObserver(measure);
-    observer.observe(image);
-    // On phones the picture moves, without changing size, whenever the copy
-    // above it changes height.
-    if (hero) observer.observe(hero);
-    phoneQuery.addEventListener("change", measure);
+    let stop: (() => void) | undefined;
+    let cancelled = false;
+    if (imageRef.current) {
+      stop = follow(imageRef.current);
+    } else {
+      queueMicrotask(() => {
+        if (!cancelled && imageRef.current) stop = follow(imageRef.current);
+      });
+    }
     return () => {
-      observer.disconnect();
-      phoneQuery.removeEventListener("change", measure);
+      cancelled = true;
+      stop?.();
     };
   }, [imageRef]);
 

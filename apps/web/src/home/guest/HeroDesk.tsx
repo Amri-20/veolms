@@ -156,6 +156,7 @@ function HeroLampSwitch({
         title={`${action} (Shift+L)`}
         aria-keyshortcuts="Shift+L"
         data-hero-lamp-switch=""
+        data-hero-measured=""
         style={lampHotspot}
         // Until it has been measured it holds the corner the lamp hangs in
         // (on a phone, where the picture is further down, it waits instead).

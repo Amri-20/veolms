@@ -12,7 +12,7 @@ import {
   primaryActionClasses,
 } from "../guest/heroActionClasses";
 import { formatCourseProgress } from "../../learning/courseProgressFormat";
-import { playEnterKeySound } from "./enterKeySound";
+import { playEnterKeySound, prepareEnterKeySound } from "./enterKeySound";
 import { LearnerCourseThumbnail } from "./LearnerCourseThumbnail";
 import {
   getEnrolledCourseOverviewHref,
@@ -140,7 +140,13 @@ export function LearnerResumeRow({
 
   return (
     <div className={resumeRowBoxClasses}>
-      <div ref={paneRef} className={resumePaneClasses}>
+      <div
+        ref={paneRef}
+        className={resumePaneClasses}
+        // The key's sound is made ready on the way to a press.
+        onPointerEnter={prepareEnterKeySound}
+        onFocus={prepareEnterKeySound}
+      >
         <span aria-hidden="true" className={paneLampLightClasses} />
         {/* The whole row opens the course, so the pointer is a hand all over
             it. This lies under the words, which let the pointer through to

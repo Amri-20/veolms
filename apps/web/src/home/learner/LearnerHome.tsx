@@ -1,8 +1,9 @@
 import type { EnrolledCourse } from "@veolms/contracts";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { PrefetchPageLinks } from "react-router";
 import type { NavigateTo } from "../../routing/navigation";
 import { getCoursePlayerPath } from "../../learning/coursePlayerNavigation";
+import { requestLessonAutoplay } from "../../learning/lessonAutoplayRequest";
 import { useCurrentUser } from "../../services/auth";
 import { useCourses } from "../../services/courses";
 import { hasAdminRole } from "../../shell/workspaceRole";
@@ -36,6 +37,10 @@ import {
 import { LearnerResumeRow } from "./LearnerResumeRow";
 import { useIsPhone } from "./useIsPhone";
 import { useHeroLessonWarmUp } from "./useHeroLessonWarmUp";
+import {
+  useLearnerHomeHandOver,
+  useLearnerHomeSnapshot,
+} from "./learnerHomeSnapshot";
 import { useDraggedPinCourseId } from "./pinCourseDrag";
 import { pinHomeCourse, usePinnedHomeCourseId } from "./pinnedHomeCourse";
 import {
@@ -100,7 +105,8 @@ export function LearnerHome({
   const enrolledCourses = knownCourses ?? NO_COURSES;
   // An admin in Student view can leave any course they enrolled in; doing
   // so clears their progress in it.
-  const isAdmin = hasAdminRole(useCurrentUser().data?.roles);
+  const currentUser = useCurrentUser().data;
+  const isAdmin = hasAdminRole(currentUser?.roles);
   const [pendingUnenroll, setPendingUnenroll] = useState<EnrolledCourse | null>(
     null,
   );
@@ -128,8 +134,10 @@ export function LearnerHome({
   );
   const heroCourseKey = heroCourse ? getEnrolledCourseKey(heroCourse) : "";
 
+  // Asked for once the session is confirmed. Until then the copy this tab
+  // kept is shown (see services/accountSessionCopies.ts).
   const resumeQuery = useLearningProgressResumeContext(heroCourseKey, {
-    enabled: Boolean(heroCourse),
+    enabled: Boolean(heroCourse) && !sessionPending,
   });
   // A course that has just taken the lead must not show the lesson of the
   // one before it while its own is on the way.
@@ -154,7 +162,7 @@ export function LearnerHome({
   const showExplore =
     Boolean(knownCourses) &&
     enrolledCourses.length < EXPLORE_BELOW_ENROLLED_COUNT;
-  const publishedQuery = useCourses({ enabled: showExplore });
+  const publishedQuery = useCourses({ enabled: showExplore, keptInTab: true });
   const coursesToExplore = useMemo(
     () =>
       selectCoursesToExplore(
@@ -170,6 +178,19 @@ export function LearnerHome({
     getHomeTimeGreeting(new Date().getHours()),
   );
   const firstName = learnerName.trim().split(/\s+/u)[0] ?? "";
+
+  // Kept for the next load of this tab once everything on it has arrived,
+  // and put back before that load's first paint (see learnerHomeSnapshot).
+  const pageRef = useRef<HTMLDivElement>(null);
+  useLearnerHomeSnapshot(
+    pageRef,
+    currentUser?.id ?? null,
+    !sessionPending &&
+      Boolean(knownCourses) &&
+      !resumeQuery.isLoading &&
+      Boolean(summaryQuery.data),
+  );
+  useLearnerHomeHandOver();
 
   const coursesKnown = Boolean(knownCourses);
   const anythingStarted = enrolledCourses.some(hasStartedCourse);
@@ -252,7 +273,7 @@ export function LearnerHome({
   };
 
   return (
-    <div className={learnerHomePageClasses}>
+    <div ref={pageRef} className={learnerHomePageClasses}>
       {/* The lesson page's code and stylesheets, fetched ahead of Enter;
           React puts these links in the document's head. */}
       <PrefetchPageLinks
@@ -275,11 +296,16 @@ export function LearnerHome({
             onUnpin={unpinAndSay}
             onNavigatePage={onNavigatePage}
             href={heroLessonPath ?? getCoursePlayerHref(heroCourse)}
-            onOpen={() =>
-              heroLessonPath
-                ? onNavigatePage(heroLessonPath)
-                : openCourse(heroCourse)
-            }
+            onOpen={() => {
+              if (!heroLessonPath || !resumeContext) {
+                openCourse(heroCourse);
+                return;
+              }
+              // The lesson is ready to play (see useHeroLessonWarmUp), and
+              // Enter means play it: it opens playing.
+              requestLessonAutoplay(resumeContext.courseSlug);
+              onNavigatePage(heroLessonPath);
+            }}
             // A course card dragged from the list below is pinned by
             // dropping it on the hero's own course card.
             pinDrop={

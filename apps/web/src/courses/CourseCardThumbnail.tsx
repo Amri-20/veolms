@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Course } from "./catalogue";
 import { courseCardShimmerClass } from "./courseCardShimmer";
 import { courseThumbnailSizes } from "./courseThumbnail";
@@ -99,8 +99,9 @@ export function CourseCardThumbnail({
 
   // An image that finished before the page hydrated (the first ones, or
   // one the inline script gave its source) fired its load or error event
-  // unseen.
-  useEffect(() => {
+  // unseen. One the browser already holds is complete as soon as it is put
+  // up: read before the first paint, so its shimmer is never drawn.
+  useLayoutEffect(() => {
     const image = imageRef.current;
     if (!requested || !image?.complete || !image.getAttribute("src")) return;
     if (image.naturalWidth > 0) {

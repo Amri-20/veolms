@@ -23,16 +23,50 @@ import type { ApiError } from "../../lib/api-error";
 import { courseKeys } from "./courses.keys";
 import { coursesService } from "./courses.service";
 import { withOfflineFallback } from "../../lib/offline-data";
+import { readSessionCache, writeSessionCache } from "../../lib/session-cache";
+
+/**
+ * The published courses as last fetched in this tab, for a page that is
+ * only ever drawn in the browser (never hydrated over a built one): a
+ * reload shows them at once and asks again in the background once they are
+ * older than the query's `staleTime`. They are the same for everyone.
+ */
+const PUBLISHED_COURSES_SESSION_KEY = "veolms-published-courses";
+const PUBLISHED_COURSES_KEPT_MS = 24 * 60 * 60 * 1000;
+const isCourseList = (value: unknown): value is { courses: CourseSummary[] } =>
+  Boolean(value) &&
+  typeof value === "object" &&
+  Array.isArray((value as { courses?: unknown }).courses);
+const readKeptCourses = () =>
+  readSessionCache(
+    PUBLISHED_COURSES_SESSION_KEY,
+    PUBLISHED_COURSES_KEPT_MS,
+    isCourseList,
+  );
 
 export function useCourses(options?: {
   enabled?: boolean;
   initialData?: { courses: CourseSummary[] };
+  /** Keep the answer for this tab's next load (see above). */
+  keptInTab?: boolean;
 }) {
+  const keptInTab = Boolean(options?.keptInTab && !options.initialData);
   return useQuery<{ courses: CourseSummary[] }, ApiError>({
     queryKey: courseKeys.lists(),
-    queryFn: () => coursesService.listAll(),
+    queryFn: keptInTab
+      ? async () => {
+          const answer = await coursesService.listAll();
+          writeSessionCache(PUBLISHED_COURSES_SESSION_KEY, answer);
+          return answer;
+        }
+      : () => coursesService.listAll(),
     enabled: options?.enabled ?? true,
-    initialData: options?.initialData,
+    initialData: keptInTab
+      ? () => readKeptCourses()?.value
+      : options?.initialData,
+    initialDataUpdatedAt: keptInTab
+      ? () => readKeptCourses()?.savedAt
+      : undefined,
     staleTime: options?.initialData ? Infinity : 5 * 60 * 1000,
     retry: false,
   });

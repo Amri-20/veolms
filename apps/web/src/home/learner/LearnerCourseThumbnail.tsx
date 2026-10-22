@@ -1,5 +1,5 @@
 import type { EnrolledCourse } from "@veolms/contracts";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { courseCardShimmerClass } from "../../courses/courseCardShimmer";
 import { getCourseThumbnailCdnUrl } from "../../courses/courseMedia";
 import {
@@ -47,6 +47,14 @@ export function LearnerCourseThumbnail({
   const shownBefore = useCourseThumbnailShownBefore(sources[0] ?? "");
   const retryTimerRef = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(retryTimerRef.current), []);
+  // A picture the browser already holds is complete as soon as it is put
+  // up, before its load event: read before the first paint, so its shimmer
+  // is never drawn (the home redrawn over a copy of itself on a reload).
+  const imageRef = useRef<HTMLImageElement>(null);
+  useLayoutEffect(() => {
+    const image = imageRef.current;
+    if (image?.complete && image.naturalWidth > 0) setLoaded(true);
+  }, [source, tryCount]);
 
   const handleError = () => {
     setErroring(true);
@@ -78,6 +86,7 @@ export function LearnerCourseThumbnail({
         <img
           // A retry is a new element: one that failed keeps its broken state.
           key={tryCount}
+          ref={imageRef}
           src={withThumbnailRetry(source, attempt)}
           alt=""
           width={960}
