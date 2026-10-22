@@ -19,16 +19,69 @@
  *   custom property (see CourseOverviewHero).
  *
  * An origin the menu does not list is left alone, as the app does.
+ *
+ * The history entry's state does not always survive a reload: the hosted
+ * site answers an address without a trailing slash with a redirect to the
+ * one with it, and the browser drops the state on the way. So the app also
+ * keeps each page's origin in the tab's session storage
+ * (`rememberNavigationOrigin`), and on a reload that arrives without it
+ * this script puts it back into the history entry, before the app reads
+ * it.
  */
 export const NAVIGATION_ORIGIN_ATTRIBUTE = "data-navigation-origin";
+
+const STORAGE_PREFIX = "veolms-navigation-origin:";
+
+/** The same page whether or not its address ends in a slash. */
+const pageKey = (pathname: string) =>
+  STORAGE_PREFIX + (pathname.replace(/\/+$/u, "") || "/");
+
+/** Kept for a reload of this page in this tab (see above). */
+export function rememberNavigationOrigin(
+  pathname: string,
+  origin: { section: string; path: string },
+) {
+  try {
+    sessionStorage.setItem(pageKey(pathname), JSON.stringify(origin));
+  } catch {
+    // Not kept: a reload that loses the history state shows Courses.
+  }
+}
 
 function applyNavigationOrigin(keys: {
   sectionKey: string;
   pathKey: string;
   attribute: string;
+  storagePrefix: string;
 }) {
   try {
-    const state = history.state && history.state.usr;
+    let state = history.state && history.state.usr;
+    if (!state || typeof state[keys.sectionKey] !== "string") {
+      // A reload that lost the history state on a redirect: the origin
+      // this tab kept for the page goes back into the entry, where the
+      // app's router reads it when it starts.
+      const navigation = performance.getEntriesByType("navigation")[0] as
+        PerformanceNavigationTiming | undefined;
+      if (navigation && navigation.type === "reload") {
+        const saved = JSON.parse(
+          sessionStorage.getItem(
+            keys.storagePrefix + (location.pathname.replace(/\/+$/, "") || "/"),
+          ) || "null",
+        );
+        if (
+          saved &&
+          typeof saved.section === "string" &&
+          typeof saved.path === "string"
+        ) {
+          state = {
+            ...(state || {}),
+            [keys.sectionKey]: saved.section,
+            [keys.pathKey]: saved.path,
+          };
+          history.replaceState({ ...(history.state || {}), usr: state }, "");
+        }
+      }
+    }
     const section = state && state[keys.sectionKey];
     const path = state && state[keys.pathKey];
     if (
@@ -80,4 +133,5 @@ export const getNavigationOriginBootstrapScript = () =>
     sectionKey: "academyNavigationOriginSection",
     pathKey: "academyNavigationOriginPath",
     attribute: NAVIGATION_ORIGIN_ATTRIBUTE,
+    storagePrefix: STORAGE_PREFIX,
   })});`;
