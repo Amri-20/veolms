@@ -1,4 +1,5 @@
 import type { LearningCourse } from "../StudentPages";
+import type { CourseOpenOptions } from "../courses/catalogue";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import type { NavigateTo } from "../routing/navigation";
 import { useEnrolledCourses } from "../services/enrollments";
@@ -10,7 +11,7 @@ import { LearnerHomeShell } from "./learner/LearnerHomeSkeleton";
 const LearnerHome = learnerHomeBody.Body;
 
 interface AuthenticatedHomeBoundaryProps {
-  onOpenCourse: (course: LearningCourse) => void;
+  onOpenCourse: (course: LearningCourse, options?: CourseOpenOptions) => void;
   onNavigatePage: NavigateTo;
   /** The learner's display name; it may be empty. */
   learnerName: string;

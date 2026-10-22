@@ -44,6 +44,8 @@ import type {
 } from "../learning/player/PersistentLearningPlayerHost";
 import type { LessonPlayerMinimizeGestureState } from "../learning/player/useLessonPlayerMinimizeGesture";
 import { resetLessonPlayerHeight } from "../learning/player/LessonPlayerHeightHandle";
+import { getCoursePlayerPath } from "../learning/coursePlayerNavigation";
+import { requestLessonAutoplay } from "../learning/lessonAutoplayRequest";
 import {
   easeLearningPlayerMotionProgress,
   getLearningBackgroundMotionState,
@@ -1161,7 +1163,9 @@ export default function AcademyLayout() {
   const openCourse = useCallback(
     (course: Course | LearningCourse, options?: CourseOpenOptions) => {
       const courseRouteKey = getCourseRouteKey(course);
-      const playerPath = `/learn/${encodeURIComponent(courseRouteKey)}${options?.preview ? "/1" : ""}`;
+      const playerPath = options?.lessonNumber
+        ? getCoursePlayerPath(courseRouteKey, options.lessonNumber)
+        : `/learn/${encodeURIComponent(courseRouteKey)}${options?.preview ? "/1" : ""}`;
       const activePlayer = persistentPlayerRef.current;
       if (
         shouldRestoreMiniPlayerForMatchingCourse({
@@ -1177,6 +1181,7 @@ export default function AcademyLayout() {
         navigateTo(activePlayer.lessonPath, { exact: true });
         return;
       }
+      if (options?.autoplay) requestLessonAutoplay(courseRouteKey);
       navigateTo(playerPath);
     },
     [navigateTo],

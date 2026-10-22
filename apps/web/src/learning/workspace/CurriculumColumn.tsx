@@ -46,6 +46,8 @@ export interface CurriculumColumnProps {
   curriculumScrollportRef: RefObject<HTMLElement | null>;
   selectedLesson: number;
   lessonProgress: Record<number, number>;
+  /** See `Curriculum`'s `progressPending`. */
+  progressPending?: boolean;
   selectLesson: (lessonNumber: number, view?: "video" | "quiz") => void;
   lockedLessonNumbers: ReadonlySet<number>;
   onOpenCourseOverview: () => void;
@@ -108,6 +110,7 @@ export function CurriculumColumn({
   curriculumScrollportRef,
   selectedLesson,
   lessonProgress,
+  progressPending = false,
   selectLesson,
   lockedLessonNumbers,
   onOpenCourseOverview,
@@ -187,6 +190,7 @@ export function CurriculumColumn({
               scrollportId="learning-course-curriculum-scrollport"
               selectedLesson={selectedLesson}
               lessonProgress={lessonProgress}
+              progressPending={progressPending}
               onSelectLesson={selectLesson}
               lockedLessonNumbers={lockedLessonNumbers}
               onOpenCourseOverview={onOpenCourseOverview}

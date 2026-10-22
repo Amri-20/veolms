@@ -1,4 +1,4 @@
-import { readResumePosition } from "./lessonPlayerPersistence";
+import { readStartPosition } from "./lessonPlayerPersistence";
 import {
   createLearningHlsRequestFilter,
   LEARNING_HLS_MIME_TYPE,
@@ -47,7 +47,7 @@ export function createLearningHlsPreloadSource(options: {
 }) {
   const startTime =
     options.mediaKey && shouldResumeFromLastPosition()
-      ? readResumePosition(options.mediaKey)
+      ? readStartPosition(options.mediaKey)
       : 0;
   const isDash = /\.mpd(?:$|[?#])/i.test(options.manifestUrl);
   return {

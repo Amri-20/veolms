@@ -45,6 +45,8 @@ export interface UseLessonProgressStateResult {
       }
     | undefined;
   lessonProgress: Record<number, number>;
+  /** The learner's progress has arrived (see `useLearningProgress`). */
+  progressKnown: boolean;
   /** The same progress for the player, which must not re-render with it. */
   liveLessonProgress: LiveLessonProgress;
   courseComplete: boolean;
@@ -85,19 +87,22 @@ export function useLessonProgressState({
         : undefined,
     [adaptedCurriculum],
   );
-  const { lessonProgress: persistedLessonProgress, recordProgress } =
-    useLearningProgress({
-      courseKey: courseOverview?.course.slug,
-      userId,
-      lessonIdsByNumber,
-      enabled:
-        Boolean(courseOverview?.course.slug) &&
-        !(
-          courseAccessRefused &&
-          (courseOverview?.pricing?.pricingType === "paid" ||
-            courseOverview?.canSelfEnroll === false)
-        ),
-    });
+  const {
+    lessonProgress: persistedLessonProgress,
+    progressKnown,
+    recordProgress,
+  } = useLearningProgress({
+    courseKey: courseOverview?.course.slug,
+    userId,
+    lessonIdsByNumber,
+    enabled:
+      Boolean(courseOverview?.course.slug) &&
+      !(
+        courseAccessRefused &&
+        (courseOverview?.pricing?.pricingType === "paid" ||
+          courseOverview?.canSelfEnroll === false)
+      ),
+  });
   // Handed to the persistent player so progress is still recorded while it
   // plays as the mini player, after this page has unmounted.
   const progressCourseKey = courseOverview?.course.slug;
@@ -213,6 +218,7 @@ export function useLessonProgressState({
     recordProgress,
     detachedProgressTarget,
     lessonProgress,
+    progressKnown,
     liveLessonProgress,
     courseComplete,
     currentLessonIndex,

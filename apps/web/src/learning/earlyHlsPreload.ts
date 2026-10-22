@@ -16,6 +16,10 @@ import {
   refreshVideoPlaybackToken,
 } from "./videoPlaybackBootstrap";
 import { prefersReducedData } from "../lib/reduced-data";
+import { installSegmentCache } from "./player/segmentCache";
+
+// Before this module loads the player's runtime (see segmentCache.ts).
+installSegmentCache();
 
 let inFlight:
   | {

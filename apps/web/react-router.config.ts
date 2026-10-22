@@ -38,6 +38,17 @@ const learningPrerenderScope: LearningPrerenderScope =
     ? requestedLearningPrerenderScope
     : "all-lectures";
 
+// `VEO_LEARNING_PRERENDER_ONLY` ("<course>:<count>,..."): lesson pages for
+// those courses only, their first <count> lessons each (a local trial, see
+// scripts/build-performance.mjs `--lessons=`).
+const learningPrerenderOnly = new Map(
+  (process.env.VEO_LEARNING_PRERENDER_ONLY ?? "")
+    .split(",")
+    .map((entry) => entry.trim().split(":"))
+    .filter(([slug, count]) => slug && Number(count) > 0)
+    .map(([slug, count]) => [slug, Math.floor(Number(count))] as const),
+);
+
 // React Router evaluates this config through Vite's config runner, whose
 // environment is a dev server even during `react-router build`. The build
 // wrapper sets this explicit flag; without it nothing is prerendered.
@@ -106,6 +117,9 @@ async function getStaticLearningPaths(courseSlugs: readonly string[]) {
   if (learningPrerenderScope === "none") return [];
   const courses = [];
   for (const slug of courseSlugs) {
+    if (learningPrerenderOnly.size > 0 && !learningPrerenderOnly.has(slug)) {
+      continue;
+    }
     const response = await fetchStaticBuildApi(
       `${getStaticApiBaseUrl()}/courses/${encodeURIComponent(slug)}/curriculum`,
       90_000,
@@ -124,11 +138,15 @@ async function getStaticLearningPaths(courseSlugs: readonly string[]) {
         `The build API returned an invalid curriculum for ${slug}.`,
       );
     }
+    const lessonCount = result.data.sections.reduce(
+      (total, section) => total + (section.lessons?.length ?? 0),
+      0,
+    );
     courses.push({
       slug,
-      lessonCount: result.data.sections.reduce(
-        (total, section) => total + (section.lessons?.length ?? 0),
-        0,
+      lessonCount: Math.min(
+        lessonCount,
+        learningPrerenderOnly.get(slug) ?? lessonCount,
       ),
     });
   }

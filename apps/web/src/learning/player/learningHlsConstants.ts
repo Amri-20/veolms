@@ -1,4 +1,5 @@
 import type { VideoNetworkRequest } from "@veolms/video-player";
+import { installSegmentCache } from "./segmentCache";
 
 export const LEARNING_HLS_MIME_TYPE = "application/x-mpegurl";
 
@@ -124,7 +125,7 @@ function carriesPlaybackToken(type: VideoNetworkRequest["type"]): boolean {
   );
 }
 
-export function createLearningHlsRequestFilter(options?: {
+type LearningHlsRequestOptions = {
   protectedPlayback?: boolean;
   segmentToken?: string;
   segmentTokenExpiresAt?: number;
@@ -132,7 +133,22 @@ export function createLearningHlsRequestFilter(options?: {
     token: string;
     expiresAt?: number;
   } | null>;
-}) {
+};
+
+/**
+ * The lesson player's request filter: the cache version and the playback
+ * token on every request that needs them. Segments the browser already
+ * keeps are answered from there (see segmentCache.ts, set up here: this is
+ * made before the player's runtime is loaded).
+ */
+export function createLearningHlsRequestFilter(
+  options?: LearningHlsRequestOptions,
+) {
+  installSegmentCache();
+  return createTokenRequestFilter(options);
+}
+
+function createTokenRequestFilter(options?: LearningHlsRequestOptions) {
   if (!options?.segmentToken && !options?.refreshSegmentToken) {
     return appendLearningHlsCacheVersion;
   }

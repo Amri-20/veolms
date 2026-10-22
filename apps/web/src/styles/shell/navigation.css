@@ -5,7 +5,10 @@
 
 .courses-nav {
   gap: 4px;
-  margin: 5px -14px -5px;
+  /* 10px above the menu (5px more than it had, in every desktop state: see
+     the collapsed rail in courses.css and the drag in cards-responsive.css),
+     so its first item stands clear of the logo. */
+  margin: 10px -14px -5px;
   padding: 5px 14px;
   overflow-x: visible;
   scrollbar-width: none;

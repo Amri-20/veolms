@@ -50,6 +50,13 @@ export const RESUME_CONTEXT_SESSION_KEY_PREFIX = "veolms-resume-context:";
 /** Today's learning against the daily goal (the laptop on the home). */
 export const LEARNING_SUMMARY_SESSION_KEY_PREFIX = "veolms-learning-summary:";
 /**
+ * A lesson's playback answer (its manifest and segment token), kept while
+ * the token lasts (`<prefix><user id or guest>:<view>:<course>:<lesson>`,
+ * see `learning/playbackBootstrapHeadStart.ts`).
+ */
+export const PLAYBACK_BOOTSTRAP_SESSION_KEY_PREFIX =
+  "veolms-playback-bootstrap:";
+/**
  * The learner's home as it was last drawn in this tab, for the next load's
  * first paint (see `home/learner/learnerHomeSnapshot.ts`).
  */
@@ -78,6 +85,7 @@ export function isAccountSessionStorageKey(key: string): boolean {
     key.startsWith(RESUME_CONTEXT_SESSION_KEY_PREFIX) ||
     key.startsWith(LEARNING_SUMMARY_SESSION_KEY_PREFIX) ||
     key.startsWith(LEARNER_HOME_SNAPSHOT_SESSION_KEY_PREFIX) ||
+    key.startsWith(PLAYBACK_BOOTSTRAP_SESSION_KEY_PREFIX) ||
     key === PROFILE_CHIP_SESSION_KEY ||
     /^veolms-learning-.+-curriculum-search(-open)?$/.test(key)
   );

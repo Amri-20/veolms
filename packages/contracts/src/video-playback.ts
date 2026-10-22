@@ -43,6 +43,18 @@ export const videoPlaybackBootstrapSchema = z.strictObject({
    * `segmentToken`.
    */
   storyboardUrl: z.string().min(1).optional(),
+  /**
+   * Where the signed-in learner last was in this lesson's video and when,
+   * saved from whichever device they watched it on. Sent only to callers
+   * that ask for it (`resume=1`), for the same reason as
+   * `inlinedMasterManifest`.
+   */
+  resumePosition: z
+    .strictObject({
+      seconds: z.number().int().min(0),
+      savedAt: z.iso.datetime(),
+    })
+    .optional(),
 });
 
 /** Query of the playback bootstrap request. */
@@ -51,6 +63,8 @@ export const videoPlaybackBootstrapQuerySchema = z.object({
   inlineManifest: z.enum(["0", "1"]).optional(),
   /** `1` asks for `storyboardUrl` when the video has a storyboard. */
   storyboard: z.enum(["0", "1"]).optional(),
+  /** `1` asks for `resumePosition`, the signed-in learner's last position. */
+  resume: z.enum(["0", "1"]).optional(),
 });
 
 /**

@@ -23,6 +23,10 @@ export type CourseLifecycleStatus = "published" | "draft" | "archived";
 
 export interface CourseOpenOptions {
   preview?: boolean;
+  /** The lesson to open, rather than the one the course's address picks. */
+  lessonNumber?: number;
+  /** Pressed to watch: the lesson opens playing (see lessonOpenIntent). */
+  autoplay?: boolean;
 }
 
 export interface CoursePricing {

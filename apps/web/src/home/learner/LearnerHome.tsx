@@ -2,6 +2,7 @@ import type { EnrolledCourse } from "@veolms/contracts";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { PrefetchPageLinks } from "react-router";
 import type { NavigateTo } from "../../routing/navigation";
+import type { CourseOpenOptions } from "../../courses/catalogue";
 import { getCoursePlayerPath } from "../../learning/coursePlayerNavigation";
 import { requestLessonAutoplay } from "../../learning/lessonAutoplayRequest";
 import { primeRouteStylesheets } from "../../routing/routeStylesheetPrimer";
@@ -100,7 +101,7 @@ export function LearnerHome({
   learnerName: string;
   /** What the cards of courses to explore need from the page shell. */
   courseCardActions: GuestHomeCourseCardActions;
-  onOpenCourse: (course: LearningCourse) => void;
+  onOpenCourse: (course: LearningCourse, options?: CourseOpenOptions) => void;
   onNavigatePage: NavigateTo;
 }) {
   const enrolledCourses = knownCourses ?? NO_COURSES;
@@ -231,8 +232,8 @@ export function LearnerHome({
 
   if (!plan || !heroCourse) return null;
 
-  const openCourse = (course: EnrolledCourse) =>
-    onOpenCourse(adaptEnrolledCourseToLearningCourse(course));
+  const openCourse = (course: EnrolledCourse, options?: CourseOpenOptions) =>
+    onOpenCourse(adaptEnrolledCourseToLearningCourse(course), options);
   // The hero's card names the lesson to carry on with, so that is the one
   // it opens. Opening the course without naming a lesson lands on whichever
   // one this browser last remembered, or the first on a new device. A

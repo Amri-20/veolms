@@ -345,6 +345,7 @@ export function LearningWorkspace({
     recordProgress,
     detachedProgressTarget,
     lessonProgress,
+    progressKnown,
     liveLessonProgress,
     courseComplete,
     currentLessonIndex,
@@ -366,6 +367,11 @@ export function LearningWorkspace({
     curriculumLessonsById,
     courseAccessRefused,
   });
+  // The course's progress in the lesson list waits for the learner's own
+  // (a visitor has none to wait for): until then it shimmers, rather than
+  // saying 0% and then changing.
+  const progressPending =
+    isAuthResolutionPending || (isAuthenticated && !progressKnown);
 
   const {
     stickyPlayer,
@@ -826,6 +832,7 @@ export function LearningWorkspace({
           curriculumScrollportRef={curriculumScrollportRef}
           selectedLesson={selectedLesson}
           lessonProgress={lessonProgress}
+          progressPending={progressPending}
           selectLesson={selectLesson}
           lockedLessonNumbers={lockedLessonNumbers}
           onOpenCourseOverview={onOpenCourseOverview}
@@ -906,6 +913,7 @@ export function LearningWorkspace({
           lessonDrawerScrollportRef={lessonDrawerScrollportRef}
           selectedLesson={selectedLesson}
           lessonProgress={lessonProgress}
+          progressPending={progressPending}
           lockedLessonNumbers={lockedLessonNumbers}
           selectLesson={selectLesson}
           onOpenCourseOverview={onOpenCourseOverview}

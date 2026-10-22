@@ -128,7 +128,10 @@ export function LearnerResumeRow({
   const actionRef = useRef<HTMLAnchorElement>(null);
   /** The key's current press is a finger's (or a pen's), not a mouse's. */
   const touchPressRef = useRef(false);
-  const enterPressed = useEnterKeyAction(actionRef, onOpen);
+  // Enter opens the lesson on every page, the row standing in for its key
+  // where the key is not drawn (a phone, and beside the picture on a page
+  // under 56rem).
+  const enterPressed = useEnterKeyAction(actionRef, onOpen, paneRef);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const titleCutOff = useIsCutOff(titleRef, course.courseTitle);
 

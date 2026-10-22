@@ -7,6 +7,15 @@ import { writeStaticCurricula } from "./write-static-curricula.mjs";
 export const FIRST_SECTION_FLAG = "--first-section";
 export const NO_LESSONS_FLAG = "--no-lessons";
 export const LEARNING_PRERENDER_FLAGS = [FIRST_SECTION_FLAG, NO_LESSONS_FLAG];
+/**
+ * `--lessons=<course>:<count>[,<course>:<count>]`: lesson pages for those
+ * courses only, their first <count> lessons each. For trying lesson pages
+ * locally without building every lesson of every course.
+ */
+export const ONLY_LESSONS_PREFIX = "--lessons=";
+export const isLearningPrerenderArgument = (argument) =>
+  LEARNING_PRERENDER_FLAGS.includes(argument) ||
+  argument.startsWith(ONLY_LESSONS_PREFIX);
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const reactRouterCli = path.resolve(
@@ -44,16 +53,25 @@ export const runPerformanceBuild = async (
   environmentOverrides = {},
 ) => {
   const reactRouterArgs = args.filter(
-    (argument) => !LEARNING_PRERENDER_FLAGS.includes(argument),
+    (argument) => !isLearningPrerenderArgument(argument),
   );
-  // Skipping lessons entirely wins when both flags are passed.
+  const onlyLessons =
+    args
+      .find((argument) => argument.startsWith(ONLY_LESSONS_PREFIX))
+      ?.slice(ONLY_LESSONS_PREFIX.length) ?? "";
+  // Skipping lessons entirely wins when both flags are passed; a list of
+  // courses builds every lesson it asks for.
   const scope = args.includes(NO_LESSONS_FLAG)
     ? "none"
-    : args.includes(FIRST_SECTION_FLAG)
-      ? "first-section"
-      : "all-lectures";
+    : onlyLessons
+      ? "all-lectures"
+      : args.includes(FIRST_SECTION_FLAG)
+        ? "first-section"
+        : "all-lectures";
 
-  console.log(`Learning prerender scope: ${scope}`);
+  console.log(
+    `Learning prerender scope: ${scope}${onlyLessons ? ` (only ${onlyLessons})` : ""}`,
+  );
 
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -63,6 +81,7 @@ export const runPerformanceBuild = async (
         env: {
           ...process.env,
           VEO_LEARNING_PRERENDER_SCOPE: scope,
+          VEO_LEARNING_PRERENDER_ONLY: onlyLessons,
           VEO_REACT_ROUTER_BUILD: "true",
           ...environmentOverrides,
         },

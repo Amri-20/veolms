@@ -135,7 +135,20 @@ export function createDiscussionsFeedRepository(): DiscussionsFeedRepository {
             and "entityId" < ${cursor.entityId}::uuid
           )
         )`
-          : sql`where (
+          : options.sort === "oldest"
+            ? sql`where (
+          "createdAt" > ${cursorCreatedAt}
+          or (
+            "createdAt" = ${cursorCreatedAt}
+            and "sourceRank" > ${cursor.sourceRank}
+          )
+          or (
+            "createdAt" = ${cursorCreatedAt}
+            and "sourceRank" = ${cursor.sourceRank}
+            and "entityId" > ${cursor.entityId}::uuid
+          )
+        )`
+            : sql`where (
           "createdAt" < ${cursorCreatedAt}
           or (
             "createdAt" = ${cursorCreatedAt}
@@ -152,10 +165,13 @@ export function createDiscussionsFeedRepository(): DiscussionsFeedRepository {
       // Top: the most liked first, and among equally liked ones the oldest
       // first: the first things said about a lesson, which is what a lesson
       // whose discussions have no likes yet opens with.
+      // Oldest: the newest order turned round, the first said first.
       const orderBy =
         options.sort === "top"
           ? sql`order by score desc, "createdAt" asc, "sourceRank" desc, "entityId" desc`
-          : sql`order by "createdAt" desc, "sourceRank" desc, "entityId" desc`;
+          : options.sort === "oldest"
+            ? sql`order by "createdAt" asc, "sourceRank" asc, "entityId" asc`
+            : sql`order by "createdAt" desc, "sourceRank" desc, "entityId" desc`;
 
       const result = await sql<FeedCandidate>`
     select *

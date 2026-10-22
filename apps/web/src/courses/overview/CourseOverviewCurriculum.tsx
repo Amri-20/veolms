@@ -28,6 +28,7 @@ import {
   scrollApplicationTo,
 } from "../../shell/applicationScroll";
 import { useContinuousLessonNumbering } from "../../learning/useContinuousLessonNumbering";
+import type { LessonOpenIntent } from "../../learning/lessonOpenIntent";
 import {
   bandHeaderClasses,
   bandLinkClasses,
@@ -69,9 +70,19 @@ interface CurriculumSectionRowProps {
   animate: boolean;
   onToggle: () => void;
   onSelectLesson?: (lessonNumber: number) => void;
+  lessonIntentFor?: LessonIntentFor;
   isReadOnlyPreview?: boolean;
   isPaidCourse?: boolean;
 }
+
+/**
+ * A lesson row's handlers that ready its lesson ahead of the press (see
+ * lessonOpenIntent), or none for a lesson the viewer cannot play.
+ */
+export type LessonIntentFor = (
+  lessonNumber: number,
+  isPreview: boolean,
+) => LessonOpenIntent["handlers"] | undefined;
 
 /**
  * One section of the outline, a block of its own: a numbered badge, the
@@ -87,6 +98,7 @@ function CurriculumSectionRow({
   animate,
   onToggle,
   onSelectLesson,
+  lessonIntentFor,
   isReadOnlyPreview = false,
   isPaidCourse = false,
 }: CurriculumSectionRowProps) {
@@ -287,6 +299,10 @@ function CurriculumSectionRow({
                           }`}
                           key={number}
                           disabled={isReadOnlyPreview}
+                          // Only a video has anything to ready.
+                          {...(isDoc || isQuiz
+                            ? undefined
+                            : lessonIntentFor?.(number, Boolean(isPreview)))}
                           onClick={() => {
                             if (isReadOnlyPreview) return;
                             onSelectLesson?.(number);
@@ -385,6 +401,8 @@ interface CourseOverviewCurriculumProps {
   onExpandAll: (count: number) => void;
   onCollapseAll: () => void;
   onSelectLesson?: (lessonNumber: number) => void;
+  /** Readies a lesson while the pointer rests on its row. */
+  lessonIntentFor?: LessonIntentFor;
   isReadOnlyPreview?: boolean;
   isPaidCourse?: boolean;
   /** For someone who manages the course: opens the curriculum editor. */
@@ -408,6 +426,7 @@ export function CourseOverviewCurriculum({
   onExpandAll,
   onCollapseAll,
   onSelectLesson,
+  lessonIntentFor,
   isReadOnlyPreview = false,
   isPaidCourse = false,
   onEdit,
@@ -542,6 +561,7 @@ export function CourseOverviewCurriculum({
                 onToggleSection(index);
               }}
               onSelectLesson={onSelectLesson}
+              lessonIntentFor={lessonIntentFor}
               isReadOnlyPreview={isReadOnlyPreview}
               isPaidCourse={isPaidCourse}
             />

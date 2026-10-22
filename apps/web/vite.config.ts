@@ -526,8 +526,13 @@ function extraStyleSourcesPlugin(): Plugin {
       if (sources.length === 0) return null;
       const [file = "", query = ""] = id.split("?");
       if (path.normalize(file) !== stylesEntry) return null;
-      // Only the stylesheet itself: `?url` and the like are JS modules.
-      if (query && !/^(?:direct|inline)(?:&|$)/u.test(query)) return null;
+      // Only the stylesheet itself: `?url` and the like are JS modules. A
+      // build compiles a stylesheet imported with `?url` (appStylesheet.ts)
+      // as `?transform-only`; without it here the plugins' classes were
+      // never generated in production (the download button had no tile).
+      if (query && !/^(?:direct|inline|transform-only)(?:&|$)/u.test(query)) {
+        return null;
+      }
       const lines = sources.map(
         (source) => `@source ${JSON.stringify(source.replaceAll("\\", "/"))};`,
       );

@@ -43,6 +43,19 @@ function NowPlayingGlyph() {
   );
 }
 
+/**
+ * An action that shows on the lesson being played, and on the others while
+ * the card is hovered, focused or its menu is open, so a list of lessons is
+ * not a column of buttons. A screen with no hover (touch) always shows it.
+ * The space stays taken, so the actions to its right never move.
+ */
+const revealOnHover = (isActive: boolean) =>
+  `flex transition-opacity duration-150 ${
+    isActive
+      ? "opacity-100"
+      : "opacity-0 pointer-events-none group-hover/lesson:pointer-events-auto group-hover/lesson:opacity-100 focus-within:opacity-100 has-data-popup-open:pointer-events-auto has-data-popup-open:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
+  }`;
+
 export interface CurriculumLessonCardProps {
   lesson: Lesson;
   /**
@@ -139,7 +152,12 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
     !isLocked &&
     Boolean(resourceCourseKey) &&
     lessonCardActions.length > 0;
-  const hasActions = showLock || showQuiz || showResources || showContributed;
+  // The card's last place is kept for actions plugins add (a download),
+  // whether or not any have arrived: they arrive once the page is running,
+  // and the actions before them would otherwise move aside then.
+  const keepsPluginSlot =
+    isAvailable && !isLocked && Boolean(resourceCourseKey);
+  const hasActions = showLock || showQuiz || showResources || keepsPluginSlot;
   // Said after the lesson's length to a screen reader; most lessons have
   // nothing to add, and then there is no element for it.
   const spokenState = !isAvailable
@@ -185,9 +203,14 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
           onSelectLesson(number);
           onClose?.();
         }}
-        className={`block w-full px-3 pt-3 text-left focus-visible:-outline-offset-2! ${
-          hasActions ? "pb-2.5" : "pb-3"
-        } ${isAvailable ? "cursor-pointer" : "cursor-not-allowed"}`}
+        // Every card keeps room for an action at its foot (a download, the
+        // quiz, the lock), whether or not it has one yet: actions a plugin
+        // adds arrive once the page is running, and the card used to grow
+        // then. A card is as tall before as after; only a title on two
+        // lines makes it taller.
+        className={`block w-full px-3 pt-3 pb-2.5 text-left focus-visible:-outline-offset-2! ${
+          isAvailable ? "cursor-pointer" : "cursor-not-allowed"
+        }`}
       >
         <span
           className={`line-clamp-2 text-[0.875rem]/[1.4] font-semibold ${
@@ -200,11 +223,7 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
         >
           {displayNumber}. {title}
         </span>
-        <span
-          className={`mt-1.5 flex items-center gap-1.5 text-[0.8125rem] font-medium tabular-nums text-(--muted) ${
-            hasActions ? "min-h-8" : "min-h-5"
-          }`}
-        >
+        <span className="mt-1.5 flex min-h-8 items-center gap-1.5 text-[0.8125rem] font-medium tabular-nums text-(--muted)">
           {!isAvailable ? (
             <LockSimple size={13} weight="fill" aria-hidden="true" />
           ) : isActive && !showLock ? (
@@ -270,18 +289,8 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
             </button>
           ) : null}
           {showResources && resources && resourceCourseKey ? (
-            // Shown on the lesson being played, and on others while the card
-            // is hovered, focused or the menu is open, so a list of lessons
-            // is not a column of buttons. A screen with no hover (touch)
-            // always shows it. The space stays taken, so the actions to its
-            // right never move.
-            <span
-              className={`flex transition-opacity duration-150 ${
-                isActive
-                  ? "opacity-100"
-                  : "opacity-0 pointer-events-none group-hover/lesson:pointer-events-auto group-hover/lesson:opacity-100 focus-within:opacity-100 has-data-popup-open:pointer-events-auto has-data-popup-open:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
-              }`}
-            >
+            // See `revealOnHover`.
+            <span className={revealOnHover(isActive)}>
               <LessonResourcesMenu
                 courseKey={resourceCourseKey}
                 lessonNumber={number}
@@ -291,21 +300,31 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
               />
             </span>
           ) : null}
-          {/* Last, so a download stays at the card's right edge. */}
-          {showContributed && resourceCourseKey
-            ? lessonCardActions.map(({ id, component: Action }) => (
-                <Action
-                  key={id}
-                  courseKey={resourceCourseKey}
-                  lessonNumber={number}
-                  displayNumber={displayNumber}
-                  lessonTitle={title}
-                  contentType={contentType ?? "video"}
-                  isActive={isActive}
-                  actionClassName={LESSON_CARD_ACTION_CLASS}
-                />
-              ))
-            : null}
+          {/* Last, so a download is always at the card's right edge. Its
+              place is kept from the first paint (see `keepsPluginSlot`), and
+              like the resources it shows on the lesson being played and on
+              the others under the pointer. */}
+          {keepsPluginSlot ? (
+            <span
+              data-lesson-card-plugin-actions=""
+              className={`min-w-8 justify-end gap-1.5 ${revealOnHover(isActive)}`}
+            >
+              {showContributed && resourceCourseKey
+                ? lessonCardActions.map(({ id, component: Action }) => (
+                    <Action
+                      key={id}
+                      courseKey={resourceCourseKey}
+                      lessonNumber={number}
+                      displayNumber={displayNumber}
+                      lessonTitle={title}
+                      contentType={contentType ?? "video"}
+                      isActive={isActive}
+                      actionClassName={LESSON_CARD_ACTION_CLASS}
+                    />
+                  ))
+                : null}
+            </span>
+          ) : null}
         </div>
       ) : null}
     </div>

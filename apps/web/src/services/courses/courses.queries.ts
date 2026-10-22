@@ -399,3 +399,20 @@ export function useCategories(options?: { enabled?: boolean }) {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+/**
+ * The viewer's access answer for a course, from the cache while it is
+ * fresh (the course and lesson pages read the same entry). It says, for a
+ * learner who holds the course, which lesson they carry on with.
+ */
+export function fetchCourseAccess(
+  queryClient: QueryClient,
+  courseKey: string,
+): Promise<CourseAccessResponse> {
+  return queryClient.fetchQuery<CourseAccessResponse, ApiError>({
+    queryKey: courseKeys.access(courseKey),
+    queryFn: () => coursesService.getAccess(courseKey),
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+}

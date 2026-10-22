@@ -85,6 +85,10 @@ export type ResumeProgressRow = {
   lesson_id: string;
   progress_percent: number;
   updated_at: Date;
+  /** Where the learner last was in the lesson's video (absent: unknown). */
+  position_seconds?: number | null;
+  /** When that position was saved: when the lesson was last played. */
+  position_updated_at?: Date | null;
 };
 
 interface ResumeCurriculumSection {
@@ -138,6 +142,43 @@ function normalizeProgressPercent(value: number): number {
   return Math.max(0, Math.min(100, Math.trunc(numericValue)));
 }
 
+function timeOf(value: Date | string | null | undefined): number {
+  if (value === null || value === undefined) return Number.NEGATIVE_INFINITY;
+  const timestamp =
+    value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+}
+
+/**
+ * The lesson of the curriculum played last (its position saved last), by
+ * its place in `lessons`, or -1 when no position has been saved for any.
+ */
+export function findLastPlayedIndex(
+  lessons: readonly { id: string }[],
+  rows: readonly ResumeProgressRow[],
+): number {
+  const playedAt = new Map(
+    rows
+      .filter(
+        (row) =>
+          row.position_seconds !== null &&
+          row.position_seconds !== undefined &&
+          row.position_updated_at,
+      )
+      .map((row) => [row.lesson_id, timeOf(row.position_updated_at)]),
+  );
+  let lastIndex = -1;
+  let lastAt = Number.NEGATIVE_INFINITY;
+  lessons.forEach((lesson, index) => {
+    const at = playedAt.get(lesson.id);
+    if (at !== undefined && at > lastAt) {
+      lastAt = at;
+      lastIndex = index;
+    }
+  });
+  return lastIndex;
+}
+
 function progressUpdatedAt(row: ResumeProgressRow): number {
   const timestamp =
     row.updated_at instanceof Date
@@ -147,9 +188,13 @@ function progressUpdatedAt(row: ResumeProgressRow): number {
 }
 
 /**
- * Resolves a persisted-progress-based resume recommendation for one ordered
- * course curriculum. The progress timestamp is used as a recency signal, not
- * as literal last-viewed telemetry.
+ * Resolves where a learner carries on in one ordered course curriculum.
+ *
+ * The lesson they played last (from whichever device: its saved position
+ * is the most recent), at the point they left it; or, once that lesson is
+ * finished, the next one not finished after it. A course with no saved
+ * position (progress from before positions were kept) falls back to the
+ * started lesson whose progress moved last, then the first unfinished one.
  */
 export function resolveResumeContext(
   courseId: string,
@@ -171,13 +216,17 @@ export function resolveResumeContext(
   const toResponseLesson = (
     lesson: ResumeCurriculumLesson,
     index: number,
-  ): LearningProgressResumeLesson => ({
-    lessonId: lesson.id,
-    lessonNumber: index + 1,
-    title: lesson.title,
-    sectionTitle: lesson.sectionTitle,
-    progressPercent: progressByLessonId.get(lesson.id) ?? 0,
-  });
+  ): LearningProgressResumeLesson => {
+    const position = updatedRowsByLessonId.get(lesson.id)?.position_seconds;
+    return {
+      lessonId: lesson.id,
+      lessonNumber: index + 1,
+      title: lesson.title,
+      sectionTitle: lesson.sectionTitle,
+      progressPercent: progressByLessonId.get(lesson.id) ?? 0,
+      ...(typeof position === "number" ? { positionSeconds: position } : {}),
+    };
+  };
 
   const emptyResponse = (): LearningProgressResumeContextResponse => ({
     courseId,
@@ -192,13 +241,30 @@ export function resolveResumeContext(
 
   if (lessons.length === 0) return emptyResponse();
 
+  const isFinished = (index: number) =>
+    (progressByLessonId.get(lessons[index]!.id) ?? 0) >= 100;
+  const lastPlayedIndex = findLastPlayedIndex(lessons, rows);
+  // The lesson played last, unless it is finished: then the next unfinished
+  // one after it (a course finished from there on goes back to the first
+  // unfinished one, below).
+  const playedOnIndex =
+    lastPlayedIndex < 0
+      ? -1
+      : !isFinished(lastPlayedIndex)
+        ? lastPlayedIndex
+        : lessons.findIndex(
+            (_, index) => index > lastPlayedIndex && !isFinished(index),
+          );
+
   const partialIndexes = lessons.flatMap((lesson, index) => {
     const progressPercent = progressByLessonId.get(lesson.id) ?? 0;
     return progressPercent > 0 && progressPercent < 100 ? [index] : [];
   });
 
   let resumeIndex: number;
-  if (partialIndexes.length > 0) {
+  if (playedOnIndex >= 0) {
+    resumeIndex = playedOnIndex;
+  } else if (partialIndexes.length > 0) {
     resumeIndex = partialIndexes.reduce((selectedIndex, candidateIndex) => {
       const selectedLesson = lessons[selectedIndex]!;
       const candidateLesson = lessons[candidateIndex]!;
@@ -376,28 +442,54 @@ export function createLearningProgressService({
     return orderAvailableLessons(sections, lessons, canManageCourse);
   }
 
-  /** The lessons the learner has started, numbered as the player numbers them. */
+  /**
+   * The lessons the learner has started or played, numbered as the player
+   * numbers them, with where they last were in each; and the lesson they
+   * played last.
+   */
   function presentSnapshot(
     lessons: readonly ResumeCurriculumLesson[],
     rows: learningProgressRepository.LearningProgressRow[],
   ): LearningProgressResponse {
-    const progressByLessonId = new Map(
-      rows.map((row) => [row.lesson_id, row.progress_percent]),
-    );
+    const rowsByLessonId = new Map(rows.map((row) => [row.lesson_id, row]));
+    const positionOf = (row: (typeof rows)[number] | undefined) =>
+      row && typeof row.position_seconds === "number" && row.position_updated_at
+        ? {
+            positionSeconds: row.position_seconds,
+            positionUpdatedAt: new Date(row.position_updated_at).toISOString(),
+          }
+        : null;
+    const lastPlayedIndex = findLastPlayedIndex(lessons, rows);
+    const lastPlayedLesson = lessons[lastPlayedIndex];
+    const lastPlayedPosition = lastPlayedLesson
+      ? positionOf(rowsByLessonId.get(lastPlayedLesson.id))
+      : null;
 
     return {
       lessons: lessons.flatMap((lesson, index) => {
-        const progressPercent = progressByLessonId.get(lesson.id) ?? 0;
-        return progressPercent > 0
+        const row = rowsByLessonId.get(lesson.id);
+        const progressPercent = row?.progress_percent ?? 0;
+        const position = positionOf(row);
+        return progressPercent > 0 || position
           ? [
               {
                 lessonId: lesson.id,
                 lessonNumber: index + 1,
                 progressPercent,
+                ...(position ?? {}),
               },
             ]
           : [];
       }),
+      lastPlayed:
+        lastPlayedLesson && lastPlayedPosition
+          ? {
+              lessonId: lastPlayedLesson.id,
+              lessonNumber: lastPlayedIndex + 1,
+              positionSeconds: lastPlayedPosition.positionSeconds,
+              playedAt: lastPlayedPosition.positionUpdatedAt,
+            }
+          : null,
     };
   }
 
@@ -476,9 +568,20 @@ export function createLearningProgressService({
           )
         : new Set<string>();
     const progressByLessonId = new Map<string, number>();
+    // Where the learner is in each lesson's video, the last one reported.
+    // A quiz lesson not yet passed may still say where its video was left.
+    // The page lists them in the order they were played, the last played
+    // last, and they are stamped in that order (a millisecond apart), so
+    // the course's last played lesson is the right one when one batch
+    // carries two (a lesson left for the next).
+    const positionByLessonId = new Map<string, number>();
 
     for (const item of input.items) {
       if (!availableLessonIds.has(item.lessonId)) continue;
+      if (item.positionSeconds !== undefined) {
+        positionByLessonId.delete(item.lessonId);
+        positionByLessonId.set(item.lessonId, item.positionSeconds);
+      }
       if (
         quizLessonIds.has(item.lessonId) &&
         !passedQuizLessonIds.has(item.lessonId)
@@ -492,14 +595,39 @@ export function createLearningProgressService({
     }
 
     const now = new Date();
-    const rowsToUpsert = [...progressByLessonId.entries()]
-      .filter(([, progressPercent]) => progressPercent > 0)
-      .map(([lessonId, progressPercent]) => ({
+    const playedOrder = new Map(
+      [...positionByLessonId.keys()].map((lessonId, index) => [
+        lessonId,
+        index,
+      ]),
+    );
+    const reportedLessonIds = new Set([
+      ...progressByLessonId.keys(),
+      ...positionByLessonId.keys(),
+    ]);
+    const rowsToUpsert = [...reportedLessonIds]
+      .map((lessonId) => ({
+        lessonId,
+        progressPercent: progressByLessonId.get(lessonId) ?? 0,
+        positionSeconds: positionByLessonId.get(lessonId),
+      }))
+      // A lesson with no progress yet is still kept when it says where it
+      // was left: it is the lesson the learner is on.
+      .filter(
+        ({ progressPercent, positionSeconds }) =>
+          progressPercent > 0 || positionSeconds !== undefined,
+      )
+      .map(({ lessonId, progressPercent, positionSeconds }) => ({
         id: crypto.randomUUID(),
         user_id: user.id,
         course_id: course.id,
         lesson_id: lessonId,
         progress_percent: progressPercent,
+        position_seconds: positionSeconds ?? null,
+        position_updated_at:
+          positionSeconds !== undefined
+            ? new Date(now.getTime() + (playedOrder.get(lessonId) ?? 0))
+            : null,
         created_at: now,
         updated_at: now,
       }));

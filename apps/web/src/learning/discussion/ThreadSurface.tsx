@@ -113,6 +113,12 @@ interface ThreadSurfaceProps {
   participationActionLabel?: string;
   onParticipationAction?: () => void;
   loginToParticipate?: boolean;
+  /**
+   * The session has said who the viewer is (their picture is known). Until
+   * then a browser that remembers a session shows the picture this tab
+   * remembers.
+   */
+  viewerKnown?: boolean;
   isAllDisabled: boolean;
   availableFilters: readonly (readonly [DiscussionEntryFilter, string])[];
   enabledKinds: DiscussionEntryKind[];
@@ -225,6 +231,22 @@ function DiscussionLoadingRow({
   );
 }
 
+/**
+ * What only the desktop arrangement has (the composer above the list). The
+ * page knows it is on a phone only once it runs (see
+ * `usePhoneComposerLayout`, the same 640px); a page built ahead of time is
+ * drawn in the desktop arrangement, so at phone width these are hidden
+ * until the phone's takes its place, and nothing moves when it does.
+ */
+const DESKTOP_ONLY = "max-[640px]:hidden";
+
+/** What pressing the composer does, for someone who may not post yet. */
+function getParticipationLabel(actionLabel?: string) {
+  return actionLabel === "Get access"
+    ? "Get access to join the discussion"
+    : "Log in to join the discussion";
+}
+
 export function ThreadSurface({
   scrollMemoryKey,
   lessonDescription,
@@ -274,6 +296,7 @@ export function ThreadSurface({
   participationActionLabel,
   onParticipationAction,
   loginToParticipate = false,
+  viewerKnown = false,
   isAllDisabled,
   availableFilters,
   enabledKinds,
@@ -338,15 +361,47 @@ export function ThreadSurface({
   const compactComposerScrollHidden =
     mobileBottomNavigation && mobileBottomNavigationHidden;
   const [composerMode, setComposerMode] = useState<ComposerMode>("collapsed");
-  // A signed-out visitor sees the same composer, so they can tell they could
-  // join in; pressing it asks them to log in. It is in the prerendered page,
-  // hidden from the first paint in a browser that remembers a session.
+  // Everyone sees the composer, from the first paint on, whether or not
+  // they may post here: pressing it opens it for someone who may, asks a
+  // visitor to log in and someone without access to get it (the course's
+  // page). Pressed before the server has said which, it waits for the
+  // answer. A visitor's has the guest's mark; it is in the prerendered page
+  // and hidden from the first paint in a browser that remembers a session,
+  // where one with the remembered picture is shown instead.
   const guestComposerShown =
     loginToParticipate &&
     !canParticipate &&
     enabledKinds.length > 0 &&
     Boolean(onParticipationAction);
+  const viewerComposerShown =
+    !canParticipate &&
+    enabledKinds.length > 0 &&
+    Boolean(onParticipationAction);
   const openLoginToParticipate = () => onParticipationAction?.();
+  const [openWhenKnown, setOpenWhenKnown] = useState(false);
+  // Assigned below, once the phone's composer can be opened.
+  const openMobileComposerRef = useRef<() => void>(() => undefined);
+  const askToParticipate = () => {
+    if (participationState === "pending") setOpenWhenKnown(true);
+    else onParticipationAction?.();
+  };
+  useEffect(() => {
+    if (!openWhenKnown || participationState === "pending") return;
+    setOpenWhenKnown(false);
+    if (!canParticipate) {
+      onParticipationAction?.();
+    } else if (isPhone) {
+      openMobileComposerRef.current();
+    } else {
+      setComposerMode("desktop");
+    }
+  }, [
+    canParticipate,
+    isPhone,
+    onParticipationAction,
+    openWhenKnown,
+    participationState,
+  ]);
   // The empty list offers to start what its filter shows: a question under
   // Q&As, a note under Notes. It offers nothing to someone who cannot post
   // here, or cannot post that kind.
@@ -406,6 +461,7 @@ export function ThreadSurface({
     setMobileComposerViewportHeight(geometry.visualViewportHeight);
     setComposerMode("mobile");
   }, [getMobileComposerViewportGeometry]);
+  openMobileComposerRef.current = openMobileComposer;
 
   const startFromEmptyState = () => {
     if (emptyStateKind) onEntryKindChange(emptyStateKind);
@@ -837,9 +893,31 @@ export function ThreadSurface({
         {/* The count is of everyone's; it is not said beside only the
             learner's own (the menu beside it then says "My Comments" and
             so on). */}
-        {feedView === "mine" || discussionCount === undefined
-          ? "Discussions"
-          : `${discussionCount} Discussions`}
+        {feedView === "mine" ? (
+          "Discussions"
+        ) : (
+          <>
+            {/* The number has a slot two figures wide from the start, a
+                shimmer until it is known, so neither it nor the words after
+                it move when it arrives. A single figure stands in its
+                middle, and the words follow closer than a space would put
+                them, so a short number does not stand apart from them. */}
+            <span className="mr-[0.22em] inline-block min-w-[2ch] text-center tabular-nums">
+              {discussionCount === undefined ? (
+                // Two unseen figures hold the line at the height the number
+                // will give it; the shimmer is laid over them, a little
+                // taller, without taking any room of its own.
+                <span aria-hidden="true" className="relative">
+                  <span className="invisible">00</span>
+                  <span className="absolute -inset-x-[0.06em] -inset-y-[0.1em] animate-pulse rounded-full bg-[color-mix(in_srgb,var(--text)_14%,transparent)] motion-reduce:animate-none" />
+                </span>
+              ) : (
+                discussionCount
+              )}
+            </span>
+            Discussions
+          </>
+        )}
       </p>
       <span
         className="shrink-0 text-lg leading-none text-(--text-secondary)"
@@ -1006,16 +1084,14 @@ export function ThreadSurface({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {!isPhone && discussionDescription}
-      {/* Someone signed in without access gets no composer and no prompt in
-          its place: just the discussion. Someone signed out gets one that
-          asks them to log in. */}
+      {/* The composer is always there (see `viewerComposerShown`). */}
       {!isPhone && enabledKinds.length > 0 && canParticipate && (
         <div
           ref={composerHostRef}
           data-comment-composer-container
-          className={
+          className={`${
             hasDescriptionSurface ? "mt-3 scroll-mt-4 sm:mt-4" : "scroll-mt-4"
-          }
+          } ${DESKTOP_ONLY}`}
         >
           {canParticipate && composerMode === "desktop" ? (
             <CommentComposer
@@ -1054,12 +1130,34 @@ export function ThreadSurface({
           )}
         </div>
       )}
+      {!isPhone && viewerComposerShown && (
+        <div
+          data-comment-composer-container
+          className={`${
+            hasDescriptionSurface ? "mt-3 scroll-mt-4 sm:mt-4" : "scroll-mt-4"
+          } ${DESKTOP_ONLY} ${loginToParticipate ? "hidden [:root[data-session-hint=signed-in]_&]:block" : ""}`}
+        >
+          <CompactComposer
+            draft={draft}
+            attachmentCount={0}
+            promptText={promptText}
+            avatar={authorAvatar}
+            rememberedViewer={!viewerKnown}
+            label={
+              participationState === "pending"
+                ? "Open discussion composer"
+                : getParticipationLabel(participationActionLabel)
+            }
+            onOpen={askToParticipate}
+          />
+        </div>
+      )}
       {!isPhone && guestComposerShown && (
         <div
           data-comment-composer-container
           className={`${
             hasDescriptionSurface ? "mt-3 scroll-mt-4 sm:mt-4" : "scroll-mt-4"
-          } [:root[data-session-hint=signed-in]_&]:hidden!`}
+          } ${DESKTOP_ONLY} [:root[data-session-hint=signed-in]_&]:hidden!`}
         >
           <CompactComposer
             draft={draft}
@@ -1087,7 +1185,7 @@ export function ThreadSurface({
             ? // No gap above the list on a phone: it carries the space
               // as its own padding.
               "flex min-h-0 min-w-0 flex-1 flex-col"
-            : "mt-2.5 min-w-0 max-w-full"
+            : "mt-2.5 min-w-0 max-w-full max-[640px]:mt-0"
         }
         data-discussion-feed-list
       >
@@ -1117,7 +1215,7 @@ export function ThreadSurface({
                 place. The list still ends clear of the bottom navigation. */}
             {isPhone &&
             !canParticipate &&
-            !guestComposerShown &&
+            !viewerComposerShown &&
             mobileBottomNavigation ? (
               <div
                 aria-hidden="true"
@@ -1144,6 +1242,22 @@ export function ThreadSurface({
             onOpen={openMobileComposer}
           />
         )}
+      {isPhone && viewerComposerShown && !loginToParticipate && (
+        <MobileCompactComposerPortal
+          draft={draft}
+          attachmentCount={0}
+          promptText={promptText}
+          avatar={authorAvatar}
+          label={
+            participationState === "pending"
+              ? "Open discussion composer"
+              : getParticipationLabel(participationActionLabel)
+          }
+          mobileBottomNavigation={mobileBottomNavigation}
+          scrollHidden={compactComposerScrollHidden}
+          onOpen={askToParticipate}
+        />
+      )}
       {isPhone && guestComposerShown && (
         <MobileCompactComposerPortal
           draft={draft}

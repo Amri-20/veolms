@@ -52,6 +52,12 @@ import { formatPlainDescription } from "./overview/formatPlainDescription";
 import { useCourseWishlisted, useToggleWishlistCourse } from "../wishlist";
 import type { CourseSection } from "../learning/courseContent";
 import { getCoursePlayerPath } from "../learning/coursePlayerNavigation";
+import { useLearningProgressResumeContext } from "../services/learning-progress";
+import {
+  useLessonListOpenIntent,
+  useLessonOpenIntent,
+} from "../learning/lessonOpenIntent";
+import type { LessonIntentFor } from "./overview/CourseOverviewCurriculum";
 import type { NavigateTo } from "../routing/navigation";
 import { productName } from "../routing/routeDescriptors";
 import { useAuthStore } from "../store/auth.store";
@@ -1978,12 +1984,17 @@ function CourseOverviewContent({
   resume,
 }: CourseOverviewContentProps) {
   const user = useAuthStore((state) => state.user);
+  // A lesson in the curriculum is readied while the pointer rests on it,
+  // and opens playing.
+  const lessonRowsIntent = useLessonListOpenIntent(
+    isReadOnlyPreview ? null : getCourseRouteKey(course),
+  );
   const handleSelectLesson = (lessonNumber: number) => {
     if (isReadOnlyPreview) return;
     onSelectLesson?.(lessonNumber);
     if (!onNavigatePage) return;
-    onNavigatePage(
-      getCoursePlayerPath(getCourseRouteKey(course), lessonNumber),
+    lessonRowsIntent.open(lessonNumber, (opened) =>
+      onNavigatePage(getCoursePlayerPath(getCourseRouteKey(course), opened)),
     );
   };
   const locationHash =
@@ -2132,6 +2143,57 @@ function CourseOverviewContent({
         : undefined,
   };
   const isEnrolled = Boolean(user && course.enrolled);
+  // An enrolled learner's play button on the picture opens the lesson they
+  // go on with, as the band's button under the hero does (it shares its
+  // request for that lesson when the page was not given it).
+  const learnerPlays =
+    isEnrolled && !managesCourse && viewer === "known" && !isReadOnlyPreview;
+  const learnerResumeQuery = useLearningProgressResumeContext(
+    getCourseRouteKey(course),
+    { enabled: learnerPlays && !resume },
+  );
+  const learnerPercent = course.progress ?? 0;
+  // The lesson the learner carries on with, readied ahead of the press on
+  // the picture's play button or the band's "Continue Learning", and once
+  // the page is idle, as the home readies its hero's: it is the press this
+  // page is most likely to get, and a phone has no hover to ready it on.
+  const learnerIntent = useLessonOpenIntent(
+    learnerPlays
+      ? {
+          courseKey: getCourseRouteKey(course),
+          lesson: "resume",
+          known:
+            (resume ?? learnerResumeQuery.data)?.resumeLesson?.lessonNumber ??
+            null,
+          review: learnerPercent >= 100,
+        }
+      : null,
+  );
+  const readyLearnerLesson = learnerIntent.ready;
+  useEffect(() => {
+    if (!learnerPlays) return undefined;
+    if (typeof window.requestIdleCallback === "function") {
+      const handle = window.requestIdleCallback(readyLearnerLesson, {
+        timeout: 1500,
+      });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const timer = window.setTimeout(readyLearnerLesson, 300);
+    return () => window.clearTimeout(timer);
+  }, [learnerPlays, readyLearnerLesson]);
+  const learnerPlayLabel =
+    learnerPercent >= 100
+      ? "Review course"
+      : course.started || learnerPercent > 0
+        ? "Continue learning"
+        : "Start learning";
+  const openLearning = () => {
+    if (isReadOnlyPreview || !onNavigatePage) return;
+    const courseKey = getCourseRouteKey(course);
+    learnerIntent.open((lessonNumber) =>
+      onNavigatePage(getCoursePlayerPath(courseKey, lessonNumber)),
+    );
+  };
   // What a visitor can watch before buying: the lessons a paid course marks
   // as free previews (the ones the curriculum labels "Free").
   const firstFreeLessonNumber = isPaidCourse
@@ -2146,12 +2208,41 @@ function CourseOverviewContent({
     !trailerMediaId && firstFreeLessonNumber !== undefined;
   // While the viewer is not known the guest's preview is in the page, and
   // the document's head shows or hides it (see `courseViewerState`).
+  // Which lessons in the curriculum the viewer can play, so only those are
+  // readied while the pointer rests on them.
+  const lessonIntentFor: LessonIntentFor | undefined = isReadOnlyPreview
+    ? undefined
+    : (lessonNumber, isPreview) =>
+        managesCourse || isEnrolled || isPreview || !isPaidCourse
+          ? lessonRowsIntent.handlersFor(lessonNumber)
+          : undefined;
   const canPreview =
     Boolean(trailerMediaId) ||
     (!managesCourse && !isEnrolled && firstFreeLessonNumber !== undefined);
+  // A visitor's preview is the course's first free lesson, readied ahead of
+  // the press and opened playing (a trailer opens as it always has).
+  const previewLesson =
+    !isReadOnlyPreview &&
+    !trailerMediaId &&
+    !managesCourse &&
+    !isEnrolled &&
+    firstFreeLessonNumber !== undefined
+      ? firstFreeLessonNumber
+      : null;
+  const previewIntent = useLessonOpenIntent(
+    previewLesson !== null
+      ? { courseKey: getCourseRouteKey(course), lesson: previewLesson }
+      : null,
+  );
   const openPreview = () => {
     if (isReadOnlyPreview || !onNavigatePage) return;
     const courseKey = getCourseRouteKey(course);
+    if (previewLesson !== null) {
+      previewIntent.open((lessonNumber) =>
+        onNavigatePage(getCoursePlayerPath(courseKey, lessonNumber)),
+      );
+      return;
+    }
     onNavigatePage(
       trailerMediaId || firstFreeLessonNumber === undefined
         ? `/learn/${encodeURIComponent(courseKey)}`
@@ -2205,9 +2296,22 @@ function CourseOverviewContent({
       preview={
         managesCourse && viewer === "known"
           ? { onOpen: openCourse, disabled: isReadOnlyPreview, kind: "open" }
-          : canPreview
-            ? { onOpen: openPreview, disabled: isReadOnlyPreview }
-            : undefined
+          : learnerPlays
+            ? {
+                onOpen: openLearning,
+                disabled: false,
+                kind: "open",
+                label: learnerPlayLabel,
+                intent: learnerIntent.handlers,
+              }
+            : canPreview
+              ? {
+                  onOpen: openPreview,
+                  disabled: isReadOnlyPreview,
+                  intent:
+                    previewLesson !== null ? previewIntent.handlers : undefined,
+                }
+              : undefined
       }
       viewerPlaceholders={
         viewer === "known"
@@ -2218,6 +2322,7 @@ function CourseOverviewContent({
               for: "expected-session",
               preview: previewDependsOnViewer,
               wishlist: true,
+              heldPlay: !isReadOnlyPreview,
             }
       }
     />
@@ -2237,6 +2342,10 @@ function CourseOverviewContent({
           : overviewPageContainerClasses
       }`}
     >
+      {/* The lesson pages readied ahead of a press (see lessonOpenIntent). */}
+      {learnerIntent.pageLinks}
+      {previewIntent.pageLinks}
+      {lessonRowsIntent.pageLinks}
       {/* 1. Title and course facts over the thumbnail */}
       {isReadOnlyPreview ? null : hero}
 
@@ -2296,6 +2405,7 @@ function CourseOverviewContent({
                 totalLessons={course.lectures}
                 resume={resume}
                 onNavigatePage={onNavigatePage}
+                openIntent={learnerPlays ? learnerIntent : undefined}
               />
             ) : (
               <CoursePurchaseSection
@@ -2330,6 +2440,7 @@ function CourseOverviewContent({
           onExpandAll={expandAllSections}
           onCollapseAll={collapseAllSections}
           onSelectLesson={handleSelectLesson}
+          lessonIntentFor={lessonIntentFor}
           isReadOnlyPreview={isReadOnlyPreview}
           isPaidCourse={isPaidCourse}
           totalSections={totalSections}

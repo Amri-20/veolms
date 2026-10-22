@@ -15,6 +15,7 @@ import {
 } from "@veolms/contracts";
 
 import { errorResponse } from "../../lib/errors.ts";
+import { createLessonPositionReader } from "../learning-progress/index.ts";
 import { jsonResponse } from "../../lib/responses.ts";
 import type { RoutePlugin } from "../../lib/route-plugin.ts";
 import { createAuthMiddleware } from "../../middlewares/auth.middleware.ts";
@@ -60,6 +61,7 @@ const mediaRoutes: RoutePlugin = async (app, options) => {
   const service = createMediaService({
     database: options.database,
     services: options.services,
+    lessonPositions: createLessonPositionReader({ database: options.database }),
   });
   const controller = createMediaController({ service });
 
