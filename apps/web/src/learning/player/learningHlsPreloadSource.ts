@@ -39,6 +39,11 @@ export function createLearningHlsPreloadSource(options: {
     token: string;
     expiresAt?: number;
   } | null>;
+  /**
+   * How many segments the preload fetches past the start; one unless the
+   * lesson is very likely to be opened next (the home page's).
+   */
+  segmentPrefetchLimit?: number;
 }) {
   const startTime =
     options.mediaKey && shouldResumeFromLastPosition()
@@ -53,7 +58,8 @@ export function createLearningHlsPreloadSource(options: {
     startTime,
     streaming: {
       ...LEARNING_HLS_STREAMING,
-      segmentPrefetchLimit: PRELOAD_SEGMENT_PREFETCH_LIMIT,
+      segmentPrefetchLimit:
+        options.segmentPrefetchLimit ?? PRELOAD_SEGMENT_PREFETCH_LIMIT,
     },
     inlinedManifest: options.inlinedMasterManifest,
     networking: {

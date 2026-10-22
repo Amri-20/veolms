@@ -261,11 +261,45 @@ const MAX_REMEMBERED_BANDWIDTH = 10_000_000;
 const MAX_WARM_START_BANDWIDTH = 2_500_000;
 const WARM_START_BANDWIDTH_FRACTION = 0.7;
 
-let lastEstimatedBandwidth: number | null = null;
+/**
+ * The last measurement is also kept on the device, for the next page load:
+ * a lesson prepared ahead of time (the home page's, a hovered one) then
+ * starts at the tier the player will choose when it takes the preparation
+ * over. With nothing measured the preparation fetched 360p, and the player,
+ * judging the connection by those fast downloads, fetched the start again
+ * in 1080p. Older than a day it is not trusted (another network).
+ */
+const BANDWIDTH_STORAGE_KEY = "veolms-shaka-bandwidth";
+const BANDWIDTH_STORAGE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function readStoredBandwidth(): number | null {
+  try {
+    const stored = JSON.parse(
+      globalThis.localStorage?.getItem(BANDWIDTH_STORAGE_KEY) ?? "null",
+    ) as { value?: unknown; savedAt?: unknown } | null;
+    if (
+      !stored ||
+      typeof stored.value !== "number" ||
+      typeof stored.savedAt !== "number" ||
+      Date.now() - stored.savedAt > BANDWIDTH_STORAGE_MAX_AGE_MS
+    ) {
+      return null;
+    }
+    return Math.min(
+      MAX_REMEMBERED_BANDWIDTH,
+      Math.max(MIN_REMEMBERED_BANDWIDTH, stored.value),
+    );
+  } catch {
+    return null;
+  }
+}
+
+let lastEstimatedBandwidth: number | null = readStoredBandwidth();
 
 /**
- * Remembers what Shaka measured, so the next video in this page starts at a
- * tier the connection is known to sustain.
+ * Remembers what Shaka measured, so the next video in this page (and the
+ * next page load, see above) starts at a tier the connection is known to
+ * sustain.
  */
 export function rememberShakaBandwidthEstimate(
   player: Pick<ShakaPlayerLike, "getStats"> | null | undefined,
@@ -282,6 +316,14 @@ export function rememberShakaBandwidthEstimate(
     MAX_REMEMBERED_BANDWIDTH,
     Math.max(MIN_REMEMBERED_BANDWIDTH, estimate),
   );
+  try {
+    globalThis.localStorage?.setItem(
+      BANDWIDTH_STORAGE_KEY,
+      JSON.stringify({ value: lastEstimatedBandwidth, savedAt: Date.now() }),
+    );
+  } catch {
+    // Not kept: the next page load starts from the default estimate.
+  }
 }
 
 /**
@@ -669,12 +711,26 @@ export function configureShakaPlayer(
   player: ShakaPlayerLike,
   source: VideoSource,
   runtime: ShakaRuntimeLike,
-  options: { reset?: boolean } = {},
+  options: {
+    reset?: boolean;
+    /**
+     * Leaves buffering and quality as a preload set them, for a player
+     * about to load that preload: either one given here would drop the
+     * segments it fetched and choose the quality again (see
+     * `ShakaVideoEngine.applyStreamingAfterFirstFrame`).
+     */
+    keepPreloadStreaming?: boolean;
+  } = {},
 ): boolean {
   if (options.reset !== false) {
     player.resetConfiguration?.();
   }
-  return player.configure(createShakaConfiguration(source, runtime));
+  const configuration = createShakaConfiguration(source, runtime);
+  if (options.keepPreloadStreaming) {
+    delete configuration.streaming;
+    delete configuration.abr;
+  }
+  return player.configure(configuration);
 }
 
 export interface ShakaNetworkingFilters {

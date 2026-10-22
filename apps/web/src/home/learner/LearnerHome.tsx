@@ -1,5 +1,6 @@
 import type { EnrolledCourse } from "@veolms/contracts";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { PrefetchPageLinks } from "react-router";
 import type { NavigateTo } from "../../routing/navigation";
 import { getCoursePlayerPath } from "../../learning/coursePlayerNavigation";
 import { useCurrentUser } from "../../services/auth";
@@ -34,6 +35,7 @@ import {
 } from "./LearnerHomeSkeleton";
 import { LearnerResumeRow } from "./LearnerResumeRow";
 import { useIsPhone } from "./useIsPhone";
+import { useHeroLessonWarmUp } from "./useHeroLessonWarmUp";
 import { useDraggedPinCourseId } from "./pinCourseDrag";
 import { pinHomeCourse, usePinnedHomeCourseId } from "./pinnedHomeCourse";
 import {
@@ -138,6 +140,17 @@ export function LearnerHome({
 
   const summaryQuery = useLearningSummary({ enabled: !sessionPending });
 
+  // The lesson the hero's Enter opens, readied before it is pressed (see
+  // useHeroLessonWarmUp). A finished course opens as a whole, on no lesson.
+  const warmLesson =
+    !sessionPending && plan?.intent !== "review" && resumeContext?.resumeLesson
+      ? {
+          courseSlug: resumeContext.courseSlug,
+          lessonNumber: resumeContext.resumeLesson.lessonNumber,
+        }
+      : null;
+  useHeroLessonWarmUp(warmLesson);
+
   const showExplore =
     Boolean(knownCourses) &&
     enrolledCourses.length < EXPLORE_BELOW_ENROLLED_COUNT;
@@ -240,6 +253,11 @@ export function LearnerHome({
 
   return (
     <div className={learnerHomePageClasses}>
+      {/* The lesson page's code and stylesheets, fetched ahead of Enter;
+          React puts these links in the document's head. */}
+      <PrefetchPageLinks
+        page={heroLessonPath ?? getCoursePlayerHref(heroCourse)}
+      />
       <LearnerHomeHero
         timeGreeting={timeGreeting}
         firstName={firstName}
