@@ -3,13 +3,13 @@ import type { CourseVideo } from "../courseContent";
 import {
   createLearningHlsRequestFilter,
   LEARNING_HLS_MIME_TYPE,
-  LEARNING_HLS_STREAMING,
+  learningHlsStreaming,
   toAbsoluteLearningMediaUrl,
 } from "./learningHlsConstants";
 
 export {
   LEARNING_HLS_MIME_TYPE,
-  LEARNING_HLS_STREAMING,
+  learningHlsStreaming,
 } from "./learningHlsConstants";
 export { createLearningHlsPreloadSource } from "./learningHlsPreloadSource";
 
@@ -71,7 +71,7 @@ export function createLearningLessonVideoSource(options: {
       duration: options.media.duration,
       // Editable lesson titles belong to the UI, not the media load request.
     },
-    streaming: streaming ? { ...LEARNING_HLS_STREAMING } : undefined,
+    streaming: streaming ? learningHlsStreaming() : undefined,
     inlinedManifest: streaming ? options.inlinedMasterManifest : undefined,
     networking: streaming
       ? {
