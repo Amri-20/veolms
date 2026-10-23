@@ -668,12 +668,6 @@ export function createShakaConfiguration(
       drmConfiguration.preferredKeySystems = keySystems;
     }
 
-    if (networking?.licenseRetry) {
-      drmConfiguration.retryParameters = retryConfiguration(
-        networking.licenseRetry,
-      );
-    }
-
     const fairPlay = drm.fairplay;
     if (fairPlay?.transformInitData || fairPlay?.getContentId) {
       drmConfiguration.initDataTransform = (
@@ -704,6 +698,17 @@ export function createShakaConfiguration(
 
     result.drm = drmConfiguration;
   }
+
+  // A licence rides out a flaky mobile link as a segment does. Shaka's own
+  // default is two tries, and a licence that fails stops the lesson (Shaka
+  // 6007). Shaka never retries a refusal (401/403). Set for every source:
+  // an extension (DRM) may supply the licence server itself.
+  result.drm = {
+    ...(result.drm as Record<string, unknown> | undefined),
+    retryParameters: networking?.licenseRetry
+      ? retryConfiguration(networking.licenseRetry)
+      : { ...SHAKA_SEGMENT_RETRY_DEFAULTS },
+  };
 
   return result;
 }
