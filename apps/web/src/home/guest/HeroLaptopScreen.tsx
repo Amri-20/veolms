@@ -36,7 +36,14 @@ export function HeroLaptopScreen({
       }}
       // Under the fades that lie over the picture, so they dim the screen
       // with the rest of the laptop.
-      className="absolute top-0 left-0 -z-12 origin-top-left overflow-hidden rounded-2xl bg-black transition-opacity duration-300 motion-reduce:transition-none starting:opacity-0"
+      //
+      // Safari (the only engine that knows `font: -apple-system-body`)
+      // paints the page picture a theme change animates without the
+      // perspective in this transform, so for the length of the change the
+      // screen sat smaller and up and to the left of the laptop. Named, it
+      // is captured as a picture of its own and laid on with its transform
+      // whole, as it is drawn the rest of the time.
+      className="absolute top-0 left-0 -z-12 origin-top-left overflow-hidden rounded-2xl bg-black transition-opacity duration-300 motion-reduce:transition-none starting:opacity-0 supports-[font:-apple-system-body]:[view-transition-name:hero-laptop-screen]"
     >
       <div className="size-full blur-[0.5px] brightness-90 saturate-[0.92] transition-[filter] duration-300 motion-reduce:transition-none [:root[data-theme=light]_&]:brightness-105 [:root[data-theme=light]_&]:contrast-[0.86] [:root[data-theme=light]_&]:saturate-[0.82] [:root:not([data-theme=light])_[data-lamp=off]_&]:brightness-[0.8]">
         {children}

@@ -105,7 +105,10 @@ export function SidebarBrand({
         }
         {...sidebarToggleGesture.handlers}
       >
-        <span className="sidebar-collapse__asset" aria-hidden="true">
+        <span
+          className="sidebar-collapse__asset [--sidebar-resize-preview-width:inherit]"
+          aria-hidden="true"
+        >
           <SidebarToggleIcon
             direction={
               compactNavigation

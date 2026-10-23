@@ -99,12 +99,17 @@ export function SidebarNavigation({
         // A size container, so menu items can tell when the rail
         // has finished narrowing. The side padding lines the menu
         // items up with the profile button's left and right edges.
-        // The top padding is 6px more than the stylesheet's in both
-        // states, which keeps the first item on the same row in each.
-        // It is padding rather than margin because the list clips at
-        // its own edge: the room has to be inside it, or the first
-        // item's shadow is cut off at the top.
-        "courses-nav @container gap-2! px-[9.5px]! pt-[11px]! [.courses-app--collapsed_&]:pt-[22px]!",
+        // The top padding keeps the first item on the same row in every
+        // state: collapsed, the list starts 16px higher (a 2px shorter
+        // brand above it and the stylesheet's -4px margin instead of
+        // 10px), so it has 16px more room inside. While a drag out of
+        // the rail shows the labels (`resize-content-visible`), the brand
+        // is back to its full height and the margin is -1px, so the list
+        // starts 11px higher and has 11px more. It is padding rather
+        // than margin because the list clips at its own edge: the room
+        // has to be inside it, or the first item's shadow is cut off at
+        // the top.
+        "courses-nav @container gap-2! px-[9.5px]! pt-[11px]! [.courses-app--collapsed_&]:pt-[22px]! [.courses-app--collapsed:not(.courses-app--resize-content-visible)_&]:pt-[27px]!",
         // The list scrolls, and a browser decides how a finger may pan
         // from the scroll area itself, not from the sidebar around
         // it. Without this it claims sideways swipes on the menu

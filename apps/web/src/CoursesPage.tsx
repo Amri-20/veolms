@@ -1101,7 +1101,12 @@ export function CoursesPage({
             />
           )}
           <aside
-            className="courses-sidebar touch-pan-y"
+            // The sidebar toggle's picture and the logo's opacity follow the
+            // width a drag is giving the sidebar. Both are written on the
+            // shell and are not handed down by themselves (see its registration in
+            // foundation.css), so each box on the way to the picture
+            // asks for it.
+            className="courses-sidebar touch-pan-y [--sidebar-resize-preview-width:inherit] [--sidebar-resize-logo-opacity:inherit]"
             data-header-layout={sidebarHeaderLayout}
             aria-label={`${effectiveRole === "creator" ? "Creator" : "Student"} navigation`}
             aria-hidden={

@@ -420,6 +420,27 @@ function routeChunkPreloadPlugin(): Plugin {
   };
 }
 
+// Dev server only. Vite's page script reloads the whole page whenever its
+// live-update socket closes and the server answers again. Tunnels such as
+// BrowserStack Local close a socket that carries nothing for a while, so a
+// page opened through one reloaded by itself every few minutes (mid-video
+// too). A small message every 20 s keeps the socket in use; pages ignore it.
+const DEV_SOCKET_KEEPALIVE_MS = 20_000;
+
+function devSocketKeepalivePlugin(): Plugin {
+  return {
+    name: "veo-dev-socket-keepalive",
+    apply: "serve",
+    configureServer(server) {
+      const timer = setInterval(() => {
+        server.ws.send({ type: "custom", event: "veo:keepalive" });
+      }, DEV_SOCKET_KEEPALIVE_MS);
+      timer.unref();
+      server.httpServer?.once("close", () => clearInterval(timer));
+    },
+  };
+}
+
 // Dev server only. Each `import picture from "./a.webp"` is a module of its
 // own in dev (`export default "/src/assets/a.webp"`), fetched and checked
 // for changes on every page load: about 120 requests before the app can
@@ -697,6 +718,7 @@ export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
       earlyHlsPreloadPlugin(),
       routeChunkPreloadPlugin(),
       devAssetImportInlinePlugin(),
+      devSocketKeepalivePlugin(),
       bundleReportPlugin(),
       extraStyleSourcesPlugin(),
       tailwindcss(),
