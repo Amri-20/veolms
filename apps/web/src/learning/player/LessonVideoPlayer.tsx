@@ -84,6 +84,10 @@ import { createLearningLessonVideoSource } from "./lessonVideoSource";
 import { useLearningPlayerTheme } from "./useLearningPlayerTheme";
 import { useLearningSeekInterval } from "./useLearningSeekInterval";
 import { MiniPlayerControls } from "./MiniPlayerControls";
+import {
+  MINI_PLAYER_VIDEO_CORNERS_CLASS,
+  MINI_PLAYER_VIDEO_SHELL_CLASS,
+} from "./MiniPlayerInfoBar";
 import { LearningMiniPlayerBufferingIndicator } from "./learningMiniPlayerBufferingIndicator";
 import {
   useLessonPlayerMinimizeGesture,
@@ -1793,7 +1797,7 @@ export function LessonVideoPlayer({
         presentation === "full" &&
           "touch-pan-x touch-pinch-zoom min-[641px]:[@media(pointer:fine)]:touch-pan-y [@media(pointer:coarse)]:[&_[data-player-zoom-surface]]:touch-none!",
         presentation === "mini"
-          ? "!rounded-none"
+          ? MINI_PLAYER_VIDEO_SHELL_CLASS
           : fullscreenCoursePanelActive
             ? "flex h-full items-center justify-start overflow-hidden bg-black"
             : undefined,
@@ -1806,10 +1810,13 @@ export function LessonVideoPlayer({
       {...(presentation === "full" ? minimizeGesture.handlers : {})}
       playerClassName={
         presentation === "mini"
-          ? "!rounded-none !shadow-none"
+          ? `${MINI_PLAYER_VIDEO_CORNERS_CLASS} !shadow-none`
           : fullscreenCoursePanelActive
             ? "border-0 !h-auto !max-h-full !w-(--learning-fullscreen-video-width) !max-w-none !translate-x-(--learning-fullscreen-video-offset-x) !shrink-0 !rounded-none !shadow-none"
             : "border-0 !rounded-none"
+      }
+      mediaClassName={
+        presentation === "mini" ? MINI_PLAYER_VIDEO_CORNERS_CLASS : undefined
       }
       centralControl={
         presentation === "mini" ? (

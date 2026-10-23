@@ -52,7 +52,11 @@ import {
   lessonReadingShellClasses,
 } from "./LessonReadingStage";
 import { LearningMiniPlayerBufferingIndicator } from "./learningMiniPlayerBufferingIndicator";
-import { MiniPlayerInfoBar } from "./MiniPlayerInfoBar";
+import {
+  MINI_PLAYER_VIDEO_CORNERS_CLASS,
+  MINI_PLAYER_VIDEO_SHELL_CLASS,
+  MiniPlayerInfoBar,
+} from "./MiniPlayerInfoBar";
 import { MiniPlayerReadingModeEffects } from "./MiniPlayerReadingModeEffects";
 import { MiniPlayerResizeHandles } from "./MiniPlayerResizeHandles";
 import { useLearningPlayerMinimizeShortcut } from "./useLearningPlayerMinimizeShortcut";
@@ -665,8 +669,9 @@ export function LearningMiniPlayer({
           // The controls draw a failure under their own expand and close.
           errorOverlay={false}
           ariaLabel={`Mini player video for ${session.lessonTitle}`}
-          className="!rounded-none"
-          playerClassName="!rounded-none !shadow-none"
+          className={MINI_PLAYER_VIDEO_SHELL_CLASS}
+          playerClassName={`${MINI_PLAYER_VIDEO_CORNERS_CLASS} !shadow-none`}
+          mediaClassName={MINI_PLAYER_VIDEO_CORNERS_CLASS}
           centralControl={false}
           playbackFeedback={false}
           bufferingIndicator={<LearningMiniPlayerBufferingIndicator />}
