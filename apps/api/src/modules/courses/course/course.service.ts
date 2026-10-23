@@ -18,6 +18,10 @@ import type {
   ManagedCourseSummary,
 } from "@veolms/contracts";
 import { config } from "../../../config.ts";
+import {
+  getCachedPublicCourseContent,
+  type PublicCourseContent,
+} from "../shared/course-content-cache.ts";
 import { AppError } from "../../../lib/errors.ts";
 import type { AppServices } from "../../../services/index.ts";
 import {
@@ -241,13 +245,8 @@ function fingerprintPublicCurriculum(curriculum: unknown): string {
   return crypto.createHash("sha256").update(stable).digest("hex").slice(0, 16);
 }
 
-/**
- * How long a course's curriculum version is reused before it is worked out
- * again. The access answer carries it on every course and lesson page, and
- * a page only needs it to notice, a little after an edit, that it was built
- * before that edit.
- */
-const CURRICULUM_VERSION_TTL_MS = 30_000;
+const COURSE_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
@@ -1177,9 +1176,21 @@ export function createCourseService({
   }
 
   /**
-   * Assembles public course overview data for learners.
+   * Public course overview data for learners. A signed-out visitor's is the
+   * same for everyone, so it comes from the shared course content cache.
    */
   async function getCourseOverviewData(
+    courseIdOrSlug: string,
+    user?: Parameters<typeof buildCourseOverviewData>[1],
+  ): Promise<CourseOverviewResponse> {
+    if (user) return await buildCourseOverviewData(courseIdOrSlug, user);
+    return (await getPublicCourseContent(courseIdOrSlug)).overview;
+  }
+
+  /**
+   * Assembles public course overview data for learners.
+   */
+  async function buildCourseOverviewData(
     courseIdOrSlug: string,
     user?: {
       id: string;
@@ -1188,10 +1199,7 @@ export function createCourseService({
       learnerView?: boolean;
     },
   ): Promise<CourseOverviewResponse> {
-    const isUuid =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        courseIdOrSlug,
-      );
+    const isUuid = COURSE_UUID_PATTERN.test(courseIdOrSlug);
 
     const course = isUuid
       ? await courseRepo.findCourseById(database, courseIdOrSlug)
@@ -1409,42 +1417,49 @@ export function createCourseService({
   async function getPublicCurriculum(
     courseIdOrSlug: string,
   ): Promise<CoursePublicCurriculum> {
-    const { pricing: _pricing, ...curriculum } = await getCourseOverviewData(
-      courseIdOrSlug,
-      undefined,
-    );
-    return {
-      ...curriculum,
-      version: fingerprintPublicCurriculum(curriculum),
-    };
+    return (await getPublicCourseContent(courseIdOrSlug)).curriculum;
   }
 
-  const curriculumVersions = new Map<
-    string,
-    { version: Promise<string>; expiresAt: number }
-  >();
+  /**
+   * The signed-out overview and the public curriculum built from it, from
+   * the shared cache when it is fresh (see `course-content-cache.ts`).
+   */
+  async function getPublicCourseContent(
+    courseIdOrSlug: string,
+  ): Promise<PublicCourseContent> {
+    return await getCachedPublicCourseContent(
+      courseIdOrSlug,
+      config.COURSE_CACHE_TTL_MS,
+      async () => {
+        const overview = await buildCourseOverviewData(
+          courseIdOrSlug,
+          undefined,
+        );
+        const { pricing: _pricing, ...curriculum } = overview;
+        return {
+          courseId: overview.course.id,
+          overview,
+          curriculum: {
+            ...curriculum,
+            version: fingerprintPublicCurriculum(curriculum),
+          },
+        };
+      },
+      COURSE_UUID_PATTERN.test(courseIdOrSlug),
+    );
+  }
 
   /**
-   * `getPublicCurriculum(courseId).version`, reused for a short while (see
-   * `CURRICULUM_VERSION_TTL_MS`). Null for a course with no public
-   * curriculum.
+   * `getPublicCurriculum(courseId).version`. Null for a course with no
+   * public curriculum.
    */
   async function getPublicCurriculumVersion(
     courseId: string,
   ): Promise<string | null> {
-    const now = Date.now();
-    const cached = curriculumVersions.get(courseId);
-    if (cached && cached.expiresAt > now) {
-      return await cached.version.catch(() => null);
-    }
-    const version = getPublicCurriculum(courseId).then(
+    return await getPublicCurriculum(courseId).then(
       (curriculum) => curriculum.version,
+      () => null,
     );
-    curriculumVersions.set(courseId, {
-      version,
-      expiresAt: now + CURRICULUM_VERSION_TTL_MS,
-    });
-    return await version.catch(() => null);
   }
 
   /**
