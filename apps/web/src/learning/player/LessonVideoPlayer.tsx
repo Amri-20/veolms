@@ -1288,9 +1288,12 @@ export function LessonVideoPlayer({
     Boolean(courseLessonsPanel);
   const playerShellStyle = fullscreenCoursePanelActive
     ? ({
-        "--learning-fullscreen-video-pane-width": `${courseLessonsVideoWidthPercent}dvw`,
+        // The screen as the player sees it: a page full screen can turn the
+        // player sideways on an upright phone (pageFullscreen.ts in the video
+        // player), and then sets these to the turned size.
+        "--learning-fullscreen-video-pane-width": `calc(var(--player-screen-width, 100dvw) * ${courseLessonsVideoWidthPercent} / 100)`,
         "--learning-fullscreen-video-width":
-          "min(var(--learning-fullscreen-video-pane-width), calc(100dvh * 16 / 9))",
+          "min(var(--learning-fullscreen-video-pane-width), calc(var(--player-screen-height, 100dvh) * 16 / 9))",
         "--learning-fullscreen-panel-offset-x":
           "max(0px, calc(var(--learning-fullscreen-video-pane-width) - var(--learning-fullscreen-video-width)))",
         "--learning-fullscreen-video-offset-x":

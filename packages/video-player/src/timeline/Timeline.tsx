@@ -9,6 +9,7 @@ import {
 import { formatMediaTime } from "../accessibility/formatMediaTime";
 import type { Chapter } from "../chapters/chapterTypes";
 import { usePlayerController } from "../react/context";
+import { playerRectOf, toPlayerPoint } from "../react/pageFullscreen";
 import { usePlayerState } from "../react/usePlayerState";
 import {
   clamp,
@@ -139,24 +140,39 @@ export function Timeline({
       left.scrubbing === right.scrubbing,
   );
 
+  // Where along the track a pointer is, in the player's own axes (a player
+  // turned a quarter for a page full screen runs its track down the screen).
+  const trackPosition = useCallback(
+    (event: { clientX: number; clientY: number }) => {
+      const track = trackRef.current;
+      if (!track) return null;
+      return {
+        bounds: playerRectOf(track),
+        x: toPlayerPoint(event.clientX, event.clientY, track).x,
+      };
+    },
+    [],
+  );
+
   const previewAtPointer = useCallback(
-    (clientX: number) => {
-      const bounds = trackRef.current?.getBoundingClientRect();
-      if (!bounds) return 0;
-      const time = pointerPositionToTime(clientX, bounds, duration);
+    (event: { clientX: number; clientY: number }) => {
+      const position = trackPosition(event);
+      if (!position) return 0;
+      const time = pointerPositionToTime(position.x, position.bounds, duration);
       controller.setPreviewTime(time);
       return time;
     },
-    [controller, duration],
+    [controller, duration, trackPosition],
   );
 
-  // Where a drag at `clientX` puts the playhead: on the pointer, or on the
+  // Where a drag at the pointer puts the playhead: on the pointer, or on the
   // start of a chapter when the pointer is close enough to one.
   const scrubAtPointer = useCallback(
-    (clientX: number) => {
-      const bounds = trackRef.current?.getBoundingClientRect();
-      if (!bounds || bounds.width <= 0) return 0;
-      const time = pointerPositionToTime(clientX, bounds, duration);
+    (event: { clientX: number; clientY: number }) => {
+      const position = trackPosition(event);
+      if (!position || position.bounds.width <= 0) return 0;
+      const { bounds } = position;
+      const time = pointerPositionToTime(position.x, bounds, duration);
       const snapSeconds = (CHAPTER_SNAP_DISTANCE_PX / bounds.width) * duration;
       let snapped: number | null = null;
       const origin = scrubOriginRef.current;
@@ -189,7 +205,7 @@ export function Timeline({
       controller.setPreviewTime(target);
       return target;
     },
-    [chapters, controller, duration],
+    [chapters, controller, duration, trackPosition],
   );
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -202,13 +218,13 @@ export function Timeline({
     event.currentTarget.setPointerCapture(event.pointerId);
     controller.setScrubbing(true);
     controller.setControlsVisible(true);
-    controller.scrubTo(scrubAtPointer(event.clientX));
+    controller.scrubTo(scrubAtPointer(event));
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "touch" && pointerIdRef.current === null) return;
     if (pointerIdRef.current === event.pointerId) {
-      controller.scrubTo(scrubAtPointer(event.clientX));
+      controller.scrubTo(scrubAtPointer(event));
       return;
     }
     if (releaseXRef.current !== null) {
@@ -220,12 +236,12 @@ export function Timeline({
       }
       releaseXRef.current = null;
     }
-    previewAtPointer(event.clientX);
+    previewAtPointer(event);
   };
 
   const finishPointerInteraction = (event: PointerEvent<HTMLDivElement>) => {
     if (pointerIdRef.current !== event.pointerId) return;
-    controller.seekTo(scrubAtPointer(event.clientX));
+    controller.seekTo(scrubAtPointer(event));
     pointerIdRef.current = null;
     snappedChapterTimeRef.current = null;
     scrubOriginRef.current = null;
@@ -333,7 +349,7 @@ export function Timeline({
         }}
         onPointerEnter={(event) => {
           releaseXRef.current = null;
-          previewAtPointer(event.clientX);
+          previewAtPointer(event);
         }}
         onPointerLeave={() => {
           releaseXRef.current = null;

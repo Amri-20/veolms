@@ -365,6 +365,9 @@
     .video-shell:fullscreen,
     .video-shell:fullscreen .youtube-player,
     .video-shell:fullscreen video,
+    .video-shell[data-player-page-fullscreen],
+    .video-shell[data-player-page-fullscreen] .youtube-player,
+    .video-shell[data-player-page-fullscreen] video,
     .youtube-player:fullscreen,
     [data-learning-persistent-player]:fullscreen,
     [data-learning-persistent-player]:fullscreen
