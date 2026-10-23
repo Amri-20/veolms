@@ -48,6 +48,11 @@ export interface ProfileMenuLinkContribution {
   icon?: ComponentType<ProfileMenuIconProps>;
   /** Workspace roles the link is shown for; all roles when omitted. */
   roles?: readonly string[];
+  /**
+   * Shown to admins only when true. A workspace role cannot say this: the
+   * "creator" workspace is an instructor's too.
+   */
+  adminOnly?: boolean;
 }
 
 /**

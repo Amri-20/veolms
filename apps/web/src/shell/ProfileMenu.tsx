@@ -13,7 +13,7 @@ import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import type { AvatarImageVariant } from "@veolms/contracts";
 import { isValidPublicProfileUsername } from "@veolms/contracts/username-rules";
 import type { CourseRole } from "../courses/catalogue";
-import { getRoleDisplayName } from "./workspaceRole";
+import { getRoleDisplayName, hasAdminRole } from "./workspaceRole";
 import { useWebContributions } from "../lib/web-contributions";
 
 export interface ProfileIdentityData {
@@ -201,8 +201,11 @@ export function ProfileMenu({
   };
 
   // Links plugins add to the account section (see web-core contributions).
+  const isAdmin = hasAdminRole(userRoles);
   const contributedLinks = useWebContributions().profileMenuLinks.filter(
-    (link) => !link.roles || link.roles.includes(role),
+    (link) =>
+      (!link.roles || link.roles.includes(role)) &&
+      (!link.adminOnly || isAdmin),
   );
 
   const canPreviewAsStudent = allowedRoles.includes("student");
