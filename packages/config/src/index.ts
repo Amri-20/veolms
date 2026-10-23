@@ -180,6 +180,21 @@ const serverConfigSchema = z.object({
     .max(60_000)
     .default(10_000),
   /**
+   * TTL for the process-local cache of a course as every visitor sees it
+   * (the signed-out overview, the public curriculum and its version), in
+   * ms. A change made through the API clears that course at once in the
+   * process that made it; other instances, and writes from the CLI or a
+   * background job, are seen when the entry expires. At most 30 s so a
+   * signed thumbnail URL in a cached answer (valid for at least 60 s, see
+   * CDN_TOKEN_TTL_SECONDS) is never handed out expired. 0 disables it.
+   */
+  COURSE_CACHE_TTL_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(30_000)
+    .default(30_000),
+  /**
    * Runs the notification outbox/email processor inside the API process.
    * Nothing in the repository schedules the standalone worker scripts, so
    * without this, notifications and emails are only delivered if ops runs

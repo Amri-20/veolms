@@ -151,12 +151,13 @@ with the old key.
 
 ## Performance-related env added in this work
 
-| Env                                    | Default | Purpose                                                                                                                                            |
-| -------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SESSION_AUTH_CACHE_TTL_MS`            | 10000   | Per-request auth context cache; `0` disables. Revocation/MFA changes evict immediately in-process; cross-instance staleness is bounded by the TTL. |
-| `NOTIFICATION_INLINE_WORKER`           | true    | See above.                                                                                                                                         |
-| `NOTIFICATION_INLINE_INTERVAL_SECONDS` | 5       | Inline processor cycle.                                                                                                                            |
-| `OPS_HEARTBEAT_SECONDS`                | 60      | Ops gauge interval; `0` disables.                                                                                                                  |
+| Env                                    | Default | Purpose                                                                                                                                                          |
+| -------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SESSION_AUTH_CACHE_TTL_MS`            | 10000   | Per-request auth context cache; `0` disables. Revocation/MFA changes evict immediately in-process; cross-instance staleness is bounded by the TTL.               |
+| `COURSE_CACHE_TTL_MS`                  | 30000   | Public course content cache (signed-out overview, curriculum, version); `0` disables, max 30000. Course writes evict in-process; other instances within the TTL. |
+| `NOTIFICATION_INLINE_WORKER`           | true    | See above.                                                                                                                                                       |
+| `NOTIFICATION_INLINE_INTERVAL_SECONDS` | 5       | Inline processor cycle.                                                                                                                                          |
+| `OPS_HEARTBEAT_SECONDS`                | 60      | Ops gauge interval; `0` disables.                                                                                                                                |
 
 ## Migration notes
 

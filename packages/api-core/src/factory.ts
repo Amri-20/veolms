@@ -12,7 +12,10 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { createCorsMatcher } from "./cors.ts";
 import { AppError, registerErrorHandler } from "./errors.ts";
 import { registerOpenApi } from "./openapi.ts";
-import { detectSiteContentChange } from "./site-content-changes.ts";
+import {
+  detectSiteContentChange,
+  notifySiteContentChange,
+} from "./site-content-changes.ts";
 import type {
   CoreAppServices,
   CreateVeoLMSApiOptions,
@@ -124,6 +127,25 @@ export async function createVeoLMSApi<
     FastifyRequest,
     PendingCourseStaticRefresh
   >();
+
+  // Caches of what the site shows are cleared before the response goes out,
+  // so whoever made the change reads it back fresh.
+  app.addHook("onSend", async (request, reply, payload) => {
+    if (reply.statusCode < 200 || reply.statusCode >= 300) return payload;
+    const change = detectSiteContentChange({
+      method: request.method,
+      url: request.url,
+      routeUrl: request.routeOptions.url,
+      userRoles: (request as { user?: { roles?: readonly string[] } }).user
+        ?.roles,
+    });
+    if (change) {
+      notifySiteContentChange(change, (error) =>
+        request.log.error({ err: error }, "Site content listener failed"),
+      );
+    }
+    return payload;
+  });
 
   app.addHook("onSend", async (request, _reply, payload) => {
     const pending = getCourseMutation(request);

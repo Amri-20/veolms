@@ -95,3 +95,36 @@ export function detectSiteContentChange(request: {
 
   return null;
 }
+
+type SiteContentChangeListener = (change: SiteContentChange) => void;
+
+const listeners = new Set<SiteContentChangeListener>();
+
+/**
+ * Be told of every change a successful request made to what the site shows
+ * (see `detectSiteContentChange`), before its response is sent, so a
+ * process-local cache of that content is cleared before the writer reads it
+ * back. Returns a function that stops the listener.
+ */
+export function onSiteContentChange(
+  listener: SiteContentChangeListener,
+): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+/** Tell every listener; one that throws does not stop the others. */
+export function notifySiteContentChange(
+  change: SiteContentChange,
+  onError?: (error: unknown) => void,
+): void {
+  for (const listener of listeners) {
+    try {
+      listener(change);
+    } catch (error) {
+      onError?.(error);
+    }
+  }
+}
