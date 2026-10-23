@@ -137,6 +137,7 @@ export interface ShakaPlayerLike {
   destroy(): Promise<void>;
   configure(configuration: unknown): boolean;
   resetConfiguration?(): void;
+  getConfiguration?(): { drm?: { servers?: Record<string, string> } };
   getNetworkingEngine(): ShakaNetworkingEngineLike | null;
   getStats?(): { estimatedBandwidth?: number };
   getVariantTracks(): ShakaVariantTrackLike[];
@@ -705,6 +706,21 @@ export function createShakaConfiguration(
   }
 
   return result;
+}
+
+/**
+ * The licence servers a player is configured with, as a comparable string
+ * (undefined when this Shaka build cannot say). A preload keeps the ones it
+ * was started with, so it is only played by a player configured the same.
+ */
+export function shakaDrmServers(player: ShakaPlayerLike): string | undefined {
+  const servers = player.getConfiguration?.()?.drm?.servers;
+  if (!servers) return undefined;
+  return JSON.stringify(
+    Object.entries(servers).sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
+  );
 }
 
 export function configureShakaPlayer(

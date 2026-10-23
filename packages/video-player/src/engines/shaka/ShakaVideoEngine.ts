@@ -32,6 +32,7 @@ import {
   rememberShakaBandwidthEstimate,
   resolveShakaLoadMimeType,
   resolveShakaRuntime,
+  shakaDrmServers,
   unregisterShakaNetworkingFilters,
 } from "./shaka-internal";
 import type {
@@ -330,6 +331,18 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
           preloaded: preloadSession.startTime ?? 0,
           requested: startTime ?? 0,
         });
+        await discardEarlyShakaPreloadManager(preloadSession);
+      }
+      // A preload keeps the licence servers it was started with. The page's
+      // first lesson is preloaded from the document head, and when Shaka
+      // comes from the browser cache that can be before an extension (DRM)
+      // has added its licence server: played, it fails with Shaka 6012.
+      if (
+        preloadSession?.preloadPromise &&
+        preloadSession.drmServers !== undefined &&
+        preloadSession.drmServers !== shakaDrmServers(player)
+      ) {
+        markPlayback("preload-drm-mismatch");
         await discardEarlyShakaPreloadManager(preloadSession);
       }
       const mimeType = resolveShakaLoadMimeType(source, options);

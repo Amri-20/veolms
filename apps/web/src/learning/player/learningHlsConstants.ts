@@ -1,5 +1,4 @@
 import type { VideoNetworkRequest } from "@veolms/video-player";
-import { prefersReducedData } from "../../lib/reduced-data";
 import { installSegmentCache } from "./segmentCache";
 
 export const LEARNING_HLS_MIME_TYPE = "application/x-mpegurl";
@@ -212,47 +211,43 @@ function appendLearningHlsQueryParameter(
   }
 }
 
-/** Buffer ahead where data and memory are plentiful: ~40MB of 1080p. */
-const LEARNING_BUFFER_AHEAD_SECONDS = 120;
-/** On mobile data, Save-Data or 2G, or a phone with 2GB of memory or less. */
-const LEARNING_LEAN_BUFFER_AHEAD_SECONDS = 60;
+/**
+ * Played video kept in memory: 3 minutes, so going back that far needs no
+ * download at all. With the 60s ahead that is ~80MB of 1080p, inside every
+ * browser's per-video buffer cap (Chrome 150MB, Firefox 100MB) with room
+ * for bitrate peaks. Further back is still on this device, in the segment
+ * cache (segmentCache.ts), so it costs no network either.
+ */
+const LEARNING_BUFFER_BEHIND_SECONDS = 180;
+/** A phone with 2GB of memory or less keeps what it kept before. */
+const LEARNING_LEAN_BUFFER_BEHIND_SECONDS = 30;
 const LEARNING_LEAN_DEVICE_MEMORY_GB = 2;
 
-/**
- * How far ahead to buffer on this device. A longer cushion rides out longer
- * signal drops, but what a learner skips or leaves is downloaded for
- * nothing, and Chrome caps a video's buffer at 150MB (less under memory
- * pressure), so the lean cushion stays where data costs or memory is short.
- * Browsers without these hints (Safari, Firefox) get the full cushion.
- */
-export function learningBufferAheadSeconds(): number {
-  if (typeof navigator === "undefined") return LEARNING_BUFFER_AHEAD_SECONDS;
-  const hints = navigator as Navigator & {
-    connection?: { type?: string };
-    deviceMemory?: number;
-  };
-  const lean =
-    prefersReducedData() ||
-    hints.connection?.type === "cellular" ||
-    (typeof hints.deviceMemory === "number" &&
-      hints.deviceMemory <= LEARNING_LEAN_DEVICE_MEMORY_GB);
-  return lean
-    ? LEARNING_LEAN_BUFFER_AHEAD_SECONDS
-    : LEARNING_BUFFER_AHEAD_SECONDS;
+/** How much played video this device keeps in memory. */
+export function learningBufferBehindSeconds(): number {
+  const deviceMemory =
+    typeof navigator === "undefined"
+      ? undefined
+      : (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  return typeof deviceMemory === "number" &&
+    deviceMemory <= LEARNING_LEAN_DEVICE_MEMORY_GB
+    ? LEARNING_LEAN_BUFFER_BEHIND_SECONDS
+    : LEARNING_BUFFER_BEHIND_SECONDS;
 }
 
 /**
- * Start as soon as one 2s segment is in (1.5s), then build the cushion
- * above. 30s is kept behind the playhead, so seeking back a little needs no
- * network. The cushion sits in MSE SourceBuffers, which the page cannot
- * read back. Read per source, so a phone that moved to mobile data gets
- * the lean cushion on its next lesson.
+ * Start as soon as one 2s segment is in (1.5s), then build a 60s cushion so
+ * a phone losing signal for half a minute keeps playing; more ahead is
+ * downloaded for nothing when a learner skips or leaves. Played video is
+ * kept as above. The buffer sits in MSE SourceBuffers, which the page
+ * cannot read back. Read per source, and the live and preload sources share
+ * it, so a preload is not cleared by a config mismatch.
  */
 export function learningHlsStreaming() {
   return {
     abrEnabled: true,
     rebufferingGoal: 1.5,
-    bufferingGoal: learningBufferAheadSeconds(),
-    bufferBehind: 30,
+    bufferingGoal: 60,
+    bufferBehind: learningBufferBehindSeconds(),
   } as const;
 }

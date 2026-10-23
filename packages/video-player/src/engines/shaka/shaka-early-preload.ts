@@ -6,6 +6,7 @@ import {
   registerShakaNetworkingFilters,
   resolveShakaLoadMimeType,
   resolveShakaRuntime,
+  shakaDrmServers,
   unregisterShakaNetworkingFilters,
   type ShakaNetworkingFilters,
   type ShakaPlayerLike,
@@ -31,6 +32,8 @@ export interface EarlyShakaPreloadSession {
   speculative?: boolean;
   /** The position (seconds) the preload was made for. */
   startTime?: number;
+  /** The licence servers the preload was made with (`shakaDrmServers`). */
+  drmServers?: string;
   /**
    * Set when a playing engine loaded this preload into its hidden standby
    * element: `ready` settles true once the first frame is decoded there,
@@ -334,6 +337,8 @@ export async function startEarlyShakaPreload(
     session.player = player;
     session.networkingFilters = networkingFilters;
     session.startTime = source.startTime ?? 0;
+    // Read just before the preload copies the configuration it will keep.
+    session.drmServers = shakaDrmServers(player);
     session.preloadPromise = startPreload(player, source).catch(() => null);
     settleEarlySession();
     if (session.speculative) {
