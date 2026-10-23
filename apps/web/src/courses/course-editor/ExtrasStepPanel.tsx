@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { CircleNotchIcon as CircleNotch } from "@phosphor-icons/react/CircleNotch";
 import { ClockIcon as Clock } from "@phosphor-icons/react/Clock";
@@ -58,6 +59,8 @@ export interface ExtrasStepPanelProps {
   handleDeleteManualInclusion: (id: string) => Promise<void>;
   suggestedInclusions: string[];
   handleAddManualInclusion: (customText?: string) => Promise<void>;
+  /** Sections plugins added to this step (PluginCourseEditorSections). */
+  children?: ReactNode;
 }
 
 export function ExtrasStepPanel({
@@ -89,6 +92,7 @@ export function ExtrasStepPanel({
   handleDeleteManualInclusion,
   suggestedInclusions,
   handleAddManualInclusion,
+  children,
 }: ExtrasStepPanelProps) {
   // prettier-ignore
   return (
@@ -676,6 +680,7 @@ export function ExtrasStepPanel({
           </div>
         </div>
       </div>
+      {children}
     </div>
   );
 }

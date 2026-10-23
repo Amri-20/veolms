@@ -48,6 +48,11 @@ export interface ProfileMenuLinkContribution {
   icon?: ComponentType<ProfileMenuIconProps>;
   /** Workspace roles the link is shown for; all roles when omitted. */
   roles?: readonly string[];
+  /**
+   * Shown to admins only when true. A workspace role cannot say this: the
+   * "creator" workspace is an instructor's too.
+   */
+  adminOnly?: boolean;
 }
 
 /**
@@ -166,10 +171,34 @@ export interface AnalyticsTabContribution {
   placeholder?: AnalyticsTabPlaceholderSpec;
 }
 
+/** What the course editor hands a section a plugin added to it. */
+export interface CourseEditorSectionProps {
+  courseId: string;
+  courseSlug: string;
+  /** Shows a short message as the editor's own notices. */
+  notify(message: string): void;
+}
+
+/**
+ * A section a plugin adds to a step of the course editor, drawn after the
+ * step's own cards. It saves its own settings, as the editor's cards do
+ * (each change at once, with its own saving / saved state).
+ */
+export interface CourseEditorSectionContribution {
+  id: string;
+  order?: number;
+  /** The editor step whose panel the section is drawn in. */
+  step: "access-rules" | "extras";
+  component: ComponentType<CourseEditorSectionProps>;
+  /** Drawn for admins only when true (an instructor never sees it). */
+  adminOnly?: boolean;
+}
+
 export interface WebContributions {
   lessonCardActions: readonly LessonCardActionContribution[];
   profileMenuLinks: readonly ProfileMenuLinkContribution[];
   analyticsTabs: readonly AnalyticsTabContribution[];
+  courseEditorSections: readonly CourseEditorSectionContribution[];
 }
 
 /**
@@ -292,6 +321,7 @@ function getStore(): ContributionStore {
       lessonCardActions: [],
       profileMenuLinks: [],
       analyticsTabs: [],
+      courseEditorSections: [],
     },
     listeners: new Set(),
   };
@@ -360,6 +390,25 @@ export function registerAnalyticsTab(
   return () =>
     update({
       analyticsTabs: getStore().snapshot.analyticsTabs.filter(
+        (entry) => entry !== contribution,
+      ),
+    });
+}
+
+/**
+ * Adds (or replaces, by id) a section to a step of the course editor.
+ * Returns a function that removes it again.
+ */
+export function registerCourseEditorSection(
+  contribution: CourseEditorSectionContribution,
+): () => void {
+  const others = getStore().snapshot.courseEditorSections.filter(
+    (entry) => entry.id !== contribution.id,
+  );
+  update({ courseEditorSections: [...others, contribution].sort(byOrder) });
+  return () =>
+    update({
+      courseEditorSections: getStore().snapshot.courseEditorSections.filter(
         (entry) => entry !== contribution,
       ),
     });

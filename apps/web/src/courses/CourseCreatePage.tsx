@@ -53,6 +53,7 @@ import { type BasicsFieldKey } from "./course-editor/statusIndicators";
 import { CourseWizardSkeleton } from "./course-editor/CourseWizardSkeleton";
 import { PricingStepPanel } from "./course-editor/PricingStepPanel";
 import { AccessRulesStepPanel } from "./course-editor/AccessRulesStepPanel";
+import { PluginCourseEditorSections } from "./course-editor/PluginCourseEditorSections";
 import { PublishStepPanel } from "./course-editor/PublishStepPanel";
 import { ExtrasStepPanel } from "./course-editor/ExtrasStepPanel";
 import { BasicsStepPanel } from "./course-editor/BasicsStepPanel";
@@ -1696,7 +1697,14 @@ export function CourseCreatePage({
                   handleToggleQA={handleToggleQA}
                   handleToggleComments={handleToggleComments}
                   handleToggleNotes={handleToggleNotes}
-                />
+                >
+                  <PluginCourseEditorSections
+                    step="access-rules"
+                    courseId={currentCourseId}
+                    courseSlug={editorData?.course.slug}
+                    notify={setToastMessage}
+                  />
+                </AccessRulesStepPanel>
               ) : panelStep === "pricing" ? (
                 <PricingStepPanel
                   pricingValidationError={pricingValidationError}
@@ -1752,7 +1760,14 @@ export function CourseCreatePage({
                   handleDeleteManualInclusion={handleDeleteManualInclusion}
                   suggestedInclusions={suggestedInclusions}
                   handleAddManualInclusion={handleAddManualInclusion}
-                />
+                >
+                  <PluginCourseEditorSections
+                    step="extras"
+                    courseId={currentCourseId}
+                    courseSlug={editorData?.course.slug}
+                    notify={setToastMessage}
+                  />
+                </ExtrasStepPanel>
               ) : panelStep === "publish" ? (
                 <PublishStepPanel
                   isPublished={isPublished}
