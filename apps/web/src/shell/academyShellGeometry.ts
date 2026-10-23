@@ -5,6 +5,7 @@ import {
   SIDEBAR_SWIPE_EXCLUSION_SELECTOR,
   SIDEBAR_DOCK_VERTICAL_MAX_WIDTH,
 } from "./academyShellConstants";
+import { SIDEBAR_MIN_WIDTH } from "./sidebarPreferences";
 
 export const getLearningMobileMenuSnapPoint = () => {
   const player = document.querySelector<HTMLElement>(
@@ -54,6 +55,33 @@ export const getSidebarResizeRenderKey = (width: number) =>
   (width > SIDEBAR_DOCK_VERTICAL_MAX_WIDTH ? 4 : 0) +
   (width >= SIDEBAR_COLLAPSED_WIDTH + SIDEBAR_CONTENT_REVEAL_DISTANCE ? 2 : 0) +
   (width <= SIDEBAR_COLLAPSED_WIDTH ? 1 : 0);
+
+/**
+ * Puts a dragged sidebar's width on the shell, with the opacity of the logo
+ * at that width: whole from the narrowest expanded sidebar up, nothing on
+ * the collapsed rail, and in proportion between, so a drag fades the logo
+ * out and in under the pointer. Both are registered as not inherited
+ * (foundation.css), so a write restyles the shell alone.
+ */
+export const writeSidebarResizeWidth = (
+  shell: HTMLElement | null | undefined,
+  width: number,
+) => {
+  if (!shell) return;
+  shell.style.setProperty("--sidebar-resize-preview-width", `${width}px`);
+  const logoOpacity = Math.min(
+    1,
+    Math.max(
+      0,
+      (width - SIDEBAR_COLLAPSED_WIDTH) /
+        (SIDEBAR_MIN_WIDTH - SIDEBAR_COLLAPSED_WIDTH),
+    ),
+  );
+  shell.style.setProperty(
+    "--sidebar-resize-logo-opacity",
+    String(+logoOpacity.toFixed(3)),
+  );
+};
 
 export const subscribeToNothing = () => () => {};
 
