@@ -526,8 +526,13 @@ function extraStyleSourcesPlugin(): Plugin {
       if (sources.length === 0) return null;
       const [file = "", query = ""] = id.split("?");
       if (path.normalize(file) !== stylesEntry) return null;
-      // Only the stylesheet itself: `?url` and the like are JS modules.
-      if (query && !/^(?:direct|inline)(?:&|$)/u.test(query)) return null;
+      // Only the stylesheet itself: `?url` and the like are JS modules. The
+      // app links styles.css with `?url`, and a build turns that stylesheet
+      // into CSS under Vite's own `?transform-only`; skipping that one left
+      // every class only a plugin uses out of the build.
+      if (query && !/^(?:direct|inline|transform-only)(?:&|$)/u.test(query)) {
+        return null;
+      }
       const lines = sources.map(
         (source) => `@source ${JSON.stringify(source.replaceAll("\\", "/"))};`,
       );
