@@ -74,6 +74,11 @@ export type {
 } from "./react/playerState";
 export { usePlayerMobileInteraction } from "./react/PlayerInteractionMode";
 export type { PlayerInteractionMode } from "./react/PlayerInteractionMode";
+export {
+  getPageFullscreenElement,
+  isPageFullscreenTurned,
+  PAGE_FULLSCREEN_CHANGE_EVENT,
+} from "./react/pageFullscreen";
 export type {
   PlayerPresentationEvent,
   VideoPlayerEvent,

@@ -5,6 +5,7 @@ import {
   type PointerEvent,
   type TouchEvent,
 } from "react";
+import { playerRectOf, toPlayerPoint } from "../react/pageFullscreen";
 import { usePlayerController } from "../react/context";
 import { usePlayerState } from "../react/usePlayerState";
 import { usePlayerMobileInteraction } from "../react/PlayerInteractionMode";
@@ -192,12 +193,13 @@ export function PlayerGestureSurface({
     return true;
   }, [controller]);
 
+  // `x` is in the player's own axes (see `pressX`).
   const updatePausedScrub = useCallback(
-    (clientX: number) => {
+    (x: number) => {
       const gesture = pausedScrubRef.current;
       if (!gesture) return false;
       const deltaTime =
-        ((clientX - gesture.startX) / gesture.width) * gesture.duration;
+        ((x - gesture.startX) / gesture.width) * gesture.duration;
       const nextTime = Math.min(
         gesture.duration,
         Math.max(0, gesture.startTime + deltaTime),
@@ -288,9 +290,16 @@ export function PlayerGestureSurface({
     if (zoomGestureActive) cancelCompetingGestures();
   }, [cancelCompetingGestures, zoomGestureActive]);
 
-  const getSeekDirection = (element: HTMLButtonElement, clientX: number) => {
-    const bounds = element.getBoundingClientRect();
-    return clientX < bounds.left + bounds.width / 2 ? -1 : 1;
+  // Positions are read in the player's own axes: a player turned a quarter
+  // for a page full screen has its left half at the top of the screen.
+  const pressX = (
+    element: HTMLButtonElement,
+    point: { clientX: number; clientY: number },
+  ) => toPlayerPoint(point.clientX, point.clientY, element).x;
+
+  const getSeekDirection = (element: HTMLButtonElement, x: number) => {
+    const bounds = playerRectOf(element);
+    return x < bounds.left + bounds.width / 2 ? -1 : 1;
   };
 
   const scheduleSingleTap = useCallback(
@@ -388,12 +397,11 @@ export function PlayerGestureSurface({
     scheduleSingleTap(direction, timestamp, pointerType);
   };
 
-  const capturePressGeometry = (
-    element: HTMLButtonElement,
-    clientX: number,
-  ) => {
-    const bounds = element.getBoundingClientRect();
-    pressGeometryRef.current = { startX: clientX, width: bounds.width };
+  const capturePressGeometry = (element: HTMLButtonElement, x: number) => {
+    pressGeometryRef.current = {
+      startX: x,
+      width: playerRectOf(element).width,
+    };
   };
 
   const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
@@ -404,11 +412,9 @@ export function PlayerGestureSurface({
       x: event.clientX,
       y: event.clientY,
     };
-    capturePressGeometry(event.currentTarget, event.clientX);
-    pressDirectionRef.current = getSeekDirection(
-      event.currentTarget,
-      event.clientX,
-    );
+    const x = pressX(event.currentTarget, event);
+    capturePressGeometry(event.currentTarget, x);
+    pressDirectionRef.current = getSeekDirection(event.currentTarget, x);
     if (event.pointerType === "touch") {
       touchPressRef.current = { completed: false, pointerDown: true };
     }
@@ -421,7 +427,7 @@ export function PlayerGestureSurface({
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     if (pausedScrubRef.current !== null) {
       gesture.moved = true;
-      updatePausedScrub(event.clientX);
+      updatePausedScrub(pressX(event.currentTarget, event));
       return;
     }
     if (
@@ -437,7 +443,9 @@ export function PlayerGestureSurface({
   const handlePointerUp = (event: PointerEvent<HTMLButtonElement>) => {
     const gesture = pointerPressRef.current;
     const pausedScrubActive = pausedScrubRef.current !== null;
-    if (pausedScrubActive) updatePausedScrub(event.clientX);
+    if (pausedScrubActive) {
+      updatePausedScrub(pressX(event.currentTarget, event));
+    }
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
       event.currentTarget.releasePointerCapture?.(event.pointerId);
     }
@@ -457,8 +465,9 @@ export function PlayerGestureSurface({
       captureControlsVisibility();
       touchPressRef.current = { completed: false, pointerDown: false };
     }
-    const direction = getSeekDirection(event.currentTarget, touch.clientX);
-    capturePressGeometry(event.currentTarget, touch.clientX);
+    const x = pressX(event.currentTarget, touch);
+    const direction = getSeekDirection(event.currentTarget, x);
+    capturePressGeometry(event.currentTarget, x);
     pressDirectionRef.current = direction;
     touchGestureRef.current = {
       direction,
@@ -482,7 +491,7 @@ export function PlayerGestureSurface({
       gesture.moved = true;
       if (pointerPressRef.current) pointerPressRef.current.moved = true;
       event.preventDefault();
-      updatePausedScrub(touch.clientX);
+      updatePausedScrub(pressX(event.currentTarget, touch));
       return;
     }
     if (
@@ -504,7 +513,7 @@ export function PlayerGestureSurface({
       const touch = Array.from(event.changedTouches).find(
         (candidate) => candidate.identifier === gesture?.identifier,
       );
-      if (touch) updatePausedScrub(touch.clientX);
+      if (touch) updatePausedScrub(pressX(event.currentTarget, touch));
       completePress(gesture?.direction ?? pressDirectionRef.current, "touch");
       return;
     }

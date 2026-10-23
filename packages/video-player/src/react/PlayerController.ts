@@ -12,6 +12,13 @@ import type {
 import type { StoryboardFrame } from "../storyboard/storyboardTypes";
 import type { TimelineMarker } from "../timeline/timelineMath";
 import {
+  canUseElementFullscreen,
+  enterPageFullscreen,
+  exitPageFullscreen,
+  getPageFullscreenElement,
+  PAGE_FULLSCREEN_CHANGE_EVENT,
+} from "./pageFullscreen";
+import {
   forwardedVideoEngineEvents,
   type VideoPlayerEvent,
   type VideoPlayerEventListener,
@@ -100,10 +107,6 @@ interface WebkitFullscreenElement extends HTMLElement {
   webkitRequestFullscreen?: () => Promise<void> | void;
 }
 
-interface WebkitFullscreenVideo extends HTMLVideoElement {
-  webkitEnterFullscreen?: () => void;
-}
-
 interface PictureInPictureDocument {
   pictureInPictureEnabled?: boolean;
   pictureInPictureElement?: Element | null;
@@ -119,7 +122,9 @@ const getFullscreenElement = () => {
   if (typeof document === "undefined") return null;
   const webkitDocument = document as WebkitFullscreenDocument;
   return (
-    document.fullscreenElement ?? webkitDocument.webkitFullscreenElement ?? null
+    document.fullscreenElement ??
+    webkitDocument.webkitFullscreenElement ??
+    getPageFullscreenElement()
   );
 };
 
@@ -146,6 +151,8 @@ export class PlayerController {
   #focusTarget: HTMLElement | null = null;
   #presentationContainer: HTMLElement | null = null;
   #presentationContainerResolver: (() => HTMLElement | null) | null = null;
+  // The shell this player put in a page full screen (see pageFullscreen.ts).
+  #pageFullscreenShell: HTMLElement | null = null;
   #media: HTMLVideoElement | null = null;
   #requestedMedia: HTMLVideoElement | null = null;
   #mediaAttached = false;
@@ -245,6 +252,10 @@ export class PlayerController {
         "webkitfullscreenchange",
         this.handleFullscreenChange,
       );
+      document.addEventListener(
+        PAGE_FULLSCREEN_CHANGE_EVENT,
+        this.handleFullscreenChange,
+      );
     }
 
     const media = this.engine.getSnapshot();
@@ -274,6 +285,10 @@ export class PlayerController {
       );
       document.removeEventListener(
         "webkitfullscreenchange",
+        this.handleFullscreenChange,
+      );
+      document.removeEventListener(
+        PAGE_FULLSCREEN_CHANGE_EVENT,
         this.handleFullscreenChange,
       );
     }
@@ -936,15 +951,28 @@ export class PlayerController {
     const container =
       this.getPresentationContainer() as WebkitFullscreenElement | null;
     if (!container) return;
-    if (container.requestFullscreen) await container.requestFullscreen();
-    else if (container.webkitRequestFullscreen)
-      await container.webkitRequestFullscreen();
-    else this.enterVideoFullscreen();
+    if (!canUseElementFullscreen(container)) {
+      this.#pageFullscreenShell = container;
+      enterPageFullscreen(container, {
+        contentLandscape: () => this.isContentLandscape(),
+        onExitRequest: () => void this.exitFullscreen().catch(() => undefined),
+      });
+    } else if (container.requestFullscreen) {
+      await container.requestFullscreen();
+    } else {
+      await container.webkitRequestFullscreen?.();
+    }
     this.syncFullscreen();
   }
 
   async exitFullscreen(): Promise<void> {
     if (typeof document === "undefined") return;
+    const shell = this.#pageFullscreenShell;
+    this.#pageFullscreenShell = null;
+    if (shell && exitPageFullscreen(shell)) {
+      this.syncFullscreen();
+      return;
+    }
     const webkitDocument = document as WebkitFullscreenDocument;
     if (document.exitFullscreen) await document.exitFullscreen();
     else await webkitDocument.webkitExitFullscreen?.();
@@ -1022,6 +1050,10 @@ export class PlayerController {
       recoverable: false,
     });
     for (const waiter of this.#mediaWaiters.splice(0)) waiter.reject(error);
+    // A page full screen is the page's own: it does not end with the player.
+    if (this.#pageFullscreenShell)
+      exitPageFullscreen(this.#pageFullscreenShell);
+    this.#pageFullscreenShell = null;
     this.deactivate();
     this.#listeners.clear();
     this.#eventListeners.clear();
@@ -1067,18 +1099,14 @@ export class PlayerController {
   }
 
   /**
-   * A browser that cannot make an element fullscreen (Safari on iPhone) can
-   * still hand the video itself to the system's fullscreen player. Without
-   * this the fullscreen button did nothing there. The system player has its
-   * own controls and its own way out, and this page is not what it shows,
-   * so the player's fullscreen state is left as it is.
+   * Whether the picture is wider than tall, which decides whether a page
+   * full screen on an upright phone turns it (see pageFullscreen.ts). A
+   * video whose size is not known yet counts as wide, as lessons are.
    */
-  private enterVideoFullscreen(): void {
-    try {
-      (this.#media as WebkitFullscreenVideo | null)?.webkitEnterFullscreen?.();
-    } catch {
-      // Refused until the video has loaded enough to show; a later press works.
-    }
+  private isContentLandscape(): boolean {
+    const media = this.#media;
+    if (!media?.videoWidth || !media.videoHeight) return true;
+    return media.videoWidth >= media.videoHeight;
   }
 
   private syncFullscreen(): void {

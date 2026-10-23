@@ -48,6 +48,7 @@ import {
   resolvePlayerTheme,
   type PlayerTheme,
 } from "../themes/playerThemes";
+import { getPageFullscreenElement } from "./pageFullscreen";
 import type { PlayerInteractionMode } from "./PlayerInteractionMode";
 
 export interface VideoPlayerProgress {
@@ -149,7 +150,7 @@ function currentFullscreenElement(): Element | null {
   return (
     document.fullscreenElement ??
     (document as WebkitFullscreenDocument).webkitFullscreenElement ??
-    null
+    getPageFullscreenElement()
   );
 }
 
@@ -386,6 +387,12 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
             "youtube-player group relative z-10 aspect-video w-full overflow-hidden rounded-xl bg-black shadow-[0_18px_50px_rgba(0,0,0,.22)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--video-player-accent,#ff7a1a)]",
             theaterMode &&
               "lg:h-[calc(100vh-94px)] lg:min-h-105 lg:aspect-auto",
+            // A page full screen (pageFullscreen.ts) sizes the shell, which
+            // may be turned: the player fills it, edge to edge. The size is
+            // not important, as a browser full screen's is not (player.css),
+            // so a layout of its own (the lessons beside the video) still
+            // sets it.
+            "[[data-player-page-fullscreen]>&]:size-full [[data-player-page-fullscreen]>&]:max-h-none [[data-player-page-fullscreen]>&]:rounded-none! [[data-player-page-fullscreen]>&]:border-0! [[data-player-page-fullscreen]>&]:shadow-none! [[data-player-page-fullscreen]>&]:transition-none!",
             playerClassName,
           )}
         >

@@ -10,6 +10,8 @@ import {
   VolumeControl,
   ZoomLevelIndicator,
   getPlayerThemeStyle,
+  isPageFullscreenTurned,
+  PAGE_FULLSCREEN_CHANGE_EVENT,
   useChapters,
   usePlayerMobileInteraction,
   usePlayerState,
@@ -61,23 +63,38 @@ export const MOBILE_INVISIBLE_HIT_SURFACE_CLASS =
 const LANDSCAPE_ORIENTATION_QUERY = "(orientation: landscape)";
 
 /**
- * Whether the screen is sideways. A turn is applied as a transition: the
- * controls' landscape layout reaches the lesson page, whose re-render took
- * over a second on a phone in development, and an urgent update kept the
- * phone from drawing the turned screen meanwhile (it stayed black). As a
- * transition the turned video is drawn first and the layout follows.
+ * Whether the screen is sideways, or the player is turned sideways on an
+ * upright phone (a page full screen on an iPhone, see pageFullscreen.ts in
+ * the video player). A turn is applied as a transition: the controls'
+ * landscape layout reaches the lesson page, whose re-render took over a
+ * second on a phone in development, and an urgent update kept the phone from
+ * drawing the turned screen meanwhile (it stayed black). As a transition the
+ * turned video is drawn first and the layout follows.
  */
 function useLandscapeOrientation(): boolean {
   const [landscape, setLandscape] = useState(false);
   useEffect(() => {
     const media = window.matchMedia(LANDSCAPE_ORIENTATION_QUERY);
-    setLandscape(media.matches);
-    const sync = () => startTransition(() => setLandscape(media.matches));
+    const read = () => media.matches || isPageFullscreenTurned();
+    setLandscape(read());
+    const sync = () => startTransition(() => setLandscape(read()));
     media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
+    document.addEventListener(PAGE_FULLSCREEN_CHANGE_EVENT, sync);
+    return () => {
+      media.removeEventListener("change", sync);
+      document.removeEventListener(PAGE_FULLSCREEN_CHANGE_EVENT, sync);
+    };
   }, []);
   return landscape;
 }
+
+// A player turned sideways on an upright phone (a page full screen, see
+// pageFullscreen.ts in the video player) is laid out as on a sideways phone,
+// but the screen is still narrow, so the `sm:` placements of a sideways phone
+// are repeated for it: the timeline 44px up, the corner controls 64px up.
+const QUARTER_TURN_TIMELINE_CLASS =
+  "[[data-player-quarter-turn]_&]:!bottom-11 [[data-player-quarter-turn]_&]:!translate-y-0";
+const QUARTER_TURN_CORNER_CLASS = "[[data-player-quarter-turn]_&]:!bottom-16";
 
 // Matches Tailwind's `sm` breakpoint. Settings and autoplay are rendered in
 // exactly one place, so their desktop position is decided in JS, not CSS.
@@ -1050,7 +1067,7 @@ export function LessonPlayerControls({
     <div
       data-player-timeline-wrap=""
       data-player-timeline-layer=""
-      className={`pointer-events-none absolute inset-x-0 bottom-0 translate-y-1/2 z-80 overflow-visible max-sm:z-170 transition-opacity duration-200 motion-reduce:transition-none sm:inset-x-3 sm:bottom-16 sm:translate-y-0 ${EXPAND_MOTION_HIDDEN_CLASS} ${timelineDisplayed ? "visible opacity-100" : "invisible opacity-0"} ${visible ? "" : "[&_*]:!pointer-events-none"} ${mobileInteraction ? (mobileFullscreen ? (fullscreenCoursePanelVisible ? "!left-(--learning-fullscreen-video-offset-x) !right-auto !bottom-0 !z-170 !w-(--learning-fullscreen-video-width) !max-w-full !translate-x-0 !translate-y-1/2 !px-3 sm:!left-(--learning-fullscreen-video-offset-x) sm:!right-auto sm:!bottom-11 sm:!w-(--learning-fullscreen-video-width) sm:!translate-x-0 sm:!translate-y-0 sm:!px-3" : "!left-1/2 !right-auto !bottom-0 !z-170 !w-[min(100%,calc(100dvh*16/9))] !max-w-full !-translate-x-1/2 !translate-y-1/2 !px-3 sm:!left-1/2 sm:!right-auto sm:!bottom-11 sm:!w-[min(100%,calc(100dvh*16/9))] sm:!-translate-x-1/2 sm:!translate-y-0 sm:!px-3") : "!z-170 sm:!inset-x-0 sm:!bottom-2 sm:!translate-y-0") : ""}`}
+      className={`pointer-events-none absolute inset-x-0 bottom-0 translate-y-1/2 z-80 overflow-visible max-sm:z-170 transition-opacity duration-200 motion-reduce:transition-none sm:inset-x-3 sm:bottom-16 sm:translate-y-0 ${EXPAND_MOTION_HIDDEN_CLASS} ${timelineDisplayed ? "visible opacity-100" : "invisible opacity-0"} ${visible ? "" : "[&_*]:!pointer-events-none"} ${mobileInteraction ? (mobileFullscreen ? (fullscreenCoursePanelVisible ? `!left-(--learning-fullscreen-video-offset-x) !right-auto !bottom-0 !z-170 !w-(--learning-fullscreen-video-width) !max-w-full !translate-x-0 !translate-y-1/2 !px-3 sm:!left-(--learning-fullscreen-video-offset-x) sm:!right-auto sm:!bottom-11 sm:!w-(--learning-fullscreen-video-width) sm:!translate-x-0 sm:!translate-y-0 sm:!px-3 ${QUARTER_TURN_TIMELINE_CLASS}` : `!left-1/2 !right-auto !bottom-0 !z-170 !w-[min(100%,calc(var(--player-screen-height,100dvh)*16/9))] !max-w-full !-translate-x-1/2 !translate-y-1/2 !px-3 sm:!left-1/2 sm:!right-auto sm:!bottom-11 sm:!w-[min(100%,calc(var(--player-screen-height,100dvh)*16/9))] sm:!-translate-x-1/2 sm:!translate-y-0 sm:!px-3 ${QUARTER_TURN_TIMELINE_CLASS}`) : "!z-170 sm:!inset-x-0 sm:!bottom-2 sm:!translate-y-0") : ""}`}
       aria-hidden={visible ? undefined : true}
       inert={visible ? undefined : true}
     >
@@ -1065,8 +1082,8 @@ export function LessonPlayerControls({
 
   const mobileSheetPanelClassName = mobileLandscapeFullscreen
     ? fullscreenCoursePanelVisible
-      ? "[&&]:!rounded-b-none !inset-x-auto !right-auto !left-[calc(var(--learning-fullscreen-video-offset-x)+var(--learning-fullscreen-video-width)/2)] !w-[min(100dvh,var(--learning-fullscreen-video-width))] !-translate-x-1/2"
-      : "[&&]:!rounded-b-none mx-auto max-w-[100dvh]"
+      ? "[&&]:!rounded-b-none !inset-x-auto !right-auto !left-[calc(var(--learning-fullscreen-video-offset-x)+var(--learning-fullscreen-video-width)/2)] !w-[min(var(--player-screen-height,100dvh),var(--learning-fullscreen-video-width))] !-translate-x-1/2"
+      : "[&&]:!rounded-b-none mx-auto max-w-[var(--player-screen-height,100dvh)]"
     : undefined;
   const mobileSheetPortalTarget = mobileLandscapeFullscreen
     ? mobileSettingsSheetHost
@@ -1109,7 +1126,7 @@ export function LessonPlayerControls({
     <div
       data-mobile-player-corner="time"
       data-preview-obscured={previewTime !== null ? "true" : "false"}
-      className={`pointer-events-none absolute bottom-2.5 left-2 flex h-11 w-fit items-center transition-opacity duration-150 ease-out motion-reduce:transition-none sm:bottom-2.5 sm:left-3 sm:right-auto sm:h-auto ${mobileInteraction ? `sm:!h-11 ${mobileFullscreen ? "!bottom-15 !left-3 sm:!bottom-16 sm:!left-3" : "sm:!left-2"}` : ""} ${
+      className={`pointer-events-none absolute bottom-2.5 left-2 flex h-11 w-fit items-center transition-opacity duration-150 ease-out motion-reduce:transition-none sm:bottom-2.5 sm:left-3 sm:right-auto sm:h-auto ${mobileInteraction ? `sm:!h-11 ${mobileFullscreen ? `!bottom-15 !left-3 sm:!bottom-16 sm:!left-3 ${QUARTER_TURN_CORNER_CLASS}` : "sm:!left-2"}` : ""} ${
         fullscreenCoursePanelVisible ? "!static sm:!static" : ""
       } ${
         previewTime !== null
@@ -1163,7 +1180,7 @@ export function LessonPlayerControls({
     <div
       data-mobile-player-corner="fullscreen"
       data-preview-obscured={previewTime !== null ? "true" : "false"}
-      className={`pointer-events-auto absolute bottom-2.5 right-2 z-60 transition-opacity duration-150 ease-out motion-reduce:transition-none sm:hidden ${mobileInteraction ? `sm:!block ${mobileFullscreen ? "!bottom-15 !right-3 sm:!bottom-16 sm:!right-3" : ""}` : ""} ${
+      className={`pointer-events-auto absolute bottom-2.5 right-2 z-60 transition-opacity duration-150 ease-out motion-reduce:transition-none sm:hidden ${mobileInteraction ? `sm:!block ${mobileFullscreen ? `!bottom-15 !right-3 sm:!bottom-16 sm:!right-3 ${QUARTER_TURN_CORNER_CLASS}` : ""}` : ""} ${
         fullscreenCoursePanelVisible ? "!static sm:!static" : ""
       } ${
         previewTime !== null
@@ -1200,7 +1217,7 @@ export function LessonPlayerControls({
       data-player-bottom-corner-controls-layer=""
       className={`pointer-events-none absolute z-180 text-white transition-opacity duration-200 motion-reduce:transition-none ${EXPAND_MOTION_HIDDEN_CLASS} ${
         mobileFullscreen
-          ? "inset-y-0 left-1/2 right-auto w-[min(100%,calc(100dvh*16/9))] max-w-full -translate-x-1/2"
+          ? "inset-y-0 left-1/2 right-auto w-[min(100%,calc(var(--player-screen-height,100dvh)*16/9))] max-w-full -translate-x-1/2"
           : "inset-0"
       } ${
         visible
@@ -1219,7 +1236,7 @@ export function LessonPlayerControls({
   const fullscreenBottomControlsLayer = (
     <div
       data-player-fullscreen-bottom-controls=""
-      className={`pointer-events-none absolute bottom-15 sm:bottom-16 left-(--learning-fullscreen-video-offset-x) z-180 flex h-11 w-(--learning-fullscreen-video-width) max-w-full items-center justify-between px-3 text-white transition-opacity duration-200 motion-reduce:transition-none ${
+      className={`pointer-events-none absolute bottom-15 sm:bottom-16 ${QUARTER_TURN_CORNER_CLASS} left-(--learning-fullscreen-video-offset-x) z-180 flex h-11 w-(--learning-fullscreen-video-width) max-w-full items-center justify-between px-3 text-white transition-opacity duration-200 motion-reduce:transition-none ${
         visible
           ? "visible opacity-100"
           : "invisible opacity-0 [&_*]:!pointer-events-none"
@@ -1479,7 +1496,7 @@ export function LessonPlayerControls({
               mobileFullscreen
                 ? fullscreenCoursePanelVisible
                   ? "absolute inset-0"
-                  : "absolute inset-y-0 left-1/2 w-[min(100%,calc(100dvh*16/9))] max-w-full -translate-x-1/2"
+                  : "absolute inset-y-0 left-1/2 w-[min(100%,calc(var(--player-screen-height,100dvh)*16/9))] max-w-full -translate-x-1/2"
                 : "absolute inset-0"
             }
           >
@@ -1513,7 +1530,7 @@ export function LessonPlayerControls({
             mobileFullscreen
               ? fullscreenCoursePanelVisible
                 ? "absolute inset-0"
-                : "absolute inset-y-0 left-1/2 w-[min(100%,calc(100dvh*16/9))] max-w-full -translate-x-1/2"
+                : "absolute inset-y-0 left-1/2 w-[min(100%,calc(var(--player-screen-height,100dvh)*16/9))] max-w-full -translate-x-1/2"
               : "absolute inset-0"
           }
           ref={controlFrameRef}
