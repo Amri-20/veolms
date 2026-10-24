@@ -212,14 +212,21 @@ export const CurriculumLessonRows = memo(function CurriculumLessonRows(
     // the height its lessons usually come to. A different number of
     // lessons (a search) starts it afresh: the height it was last seen
     // with would no longer be its own.
+    //
+    // The skipping is a plain block's around the list, not the padded list's
+    // own: Safari held a skipped list at its padding and gaps (its cards
+    // counted as nothing) instead of that height, so the panel's scroll
+    // height jumped once a later section came near; a plain block keeps it.
+    // Unpadded, the block's placeholder is also the list's whole height,
+    // padding included.
     <div
       key={count}
-      className="flex flex-col gap-1.5 px-2 pt-2 pb-4 [content-visibility:auto]"
+      className="[content-visibility:auto]"
       style={{
         containIntrinsicBlockSize: `auto ${count * (CARD_HEIGHT + CARD_GAP) - CARD_GAP + CARD_LIST_PADDING_TOP + CARD_LIST_PADDING_BOTTOM}px`,
       }}
     >
-      {rows}
+      <div className="flex flex-col gap-1.5 px-2 pt-2 pb-4">{rows}</div>
     </div>
   );
 });

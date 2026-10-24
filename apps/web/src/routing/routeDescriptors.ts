@@ -108,6 +108,9 @@ const notFoundRouteDescriptor = {
   description: "This page does not exist or is no longer available.",
 } as const;
 
+/** The tab title of the not-found screen, for a page that finds out late. */
+export const notFoundDocumentTitle = `${notFoundRouteDescriptor.title} · ${productName}`;
+
 export const routeDescriptors = {
   "root-courses": {
     kind: "shell",

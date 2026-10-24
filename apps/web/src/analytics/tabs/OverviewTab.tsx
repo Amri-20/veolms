@@ -226,7 +226,7 @@ export default function OverviewTab({
   ];
 
   return (
-    <div className="grid gap-3.5 sm:gap-6">
+    <div className="grid grid-cols-1 gap-3.5 sm:gap-6">
       <section className={kpiGridClass}>
         <KpiCard
           icon={<CurrencyInr size={20} weight="bold" />}
