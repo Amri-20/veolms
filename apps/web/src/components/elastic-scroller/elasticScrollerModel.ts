@@ -15,7 +15,13 @@ const ELASTIC_SCROLL_CONTROL_DRAG_MID_SPEED = 2800;
 const ELASTIC_SCROLL_CONTROL_DRAG_MID_DISTANCE =
   ELASTIC_SCROLL_CONTROL_DRAG_MAX_DISTANCE / 2;
 const ELASTIC_SCROLL_CONTROL_DRAG_MAX_SPEED = 5600;
-const SCROLL_EDGE_THRESHOLD = 0.5;
+/**
+ * How near an edge counts as being at it. `scrollTop` is fractional while
+ * `scrollHeight` and `clientHeight` are whole numbers, so a scrollport that
+ * is scrolled as far as it goes can still read up to a pixel short of its
+ * end (the phone lessons sheet reads 0.6px short): within 1px is at it.
+ */
+const SCROLL_EDGE_THRESHOLD = 1;
 
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.min(maximum, Math.max(minimum, value));

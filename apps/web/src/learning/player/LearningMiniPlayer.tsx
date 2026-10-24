@@ -704,7 +704,6 @@ export function LearningMiniPlayer({
         expandedSectionIds={expandedSectionIds}
         onExpandAllSections={expandAllSections}
         onCollapseAllSections={collapseAllSections}
-        onOpenCourseOverview={onOpenCourseOverview}
         contextMenuPortalHostRef={miniPlayerRef}
       />
       {isExpanded ? (

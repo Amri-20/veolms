@@ -343,6 +343,12 @@ export function LearningSettings({
                 update({ continuousLessonNumbering })
               }
             />
+            <LearningToggleRow
+              label="Keep the open section's heading in view"
+              note="The heading of an open section stays at the top of the course outline while its lessons scroll."
+              checked={preferences.stickOpenSection}
+              onChange={(stickOpenSection) => update({ stickOpenSection })}
+            />
           </div>
         </section>
       </div>

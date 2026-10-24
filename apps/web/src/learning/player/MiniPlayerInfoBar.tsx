@@ -31,7 +31,6 @@ export interface MiniPlayerInfoBarProps {
   expandedSectionIds?: readonly number[];
   onExpandAllSections?: () => void;
   onCollapseAllSections?: () => void;
-  onOpenCourseOverview?: () => void;
   contextMenuPortalHostRef?: RefObject<HTMLElement | null>;
 }
 
@@ -47,7 +46,6 @@ export function MiniPlayerInfoBar({
   expandedSectionIds = [],
   onExpandAllSections,
   onCollapseAllSections,
-  onOpenCourseOverview,
   contextMenuPortalHostRef,
 }: MiniPlayerInfoBarProps) {
   const subtitleParts = [
@@ -135,7 +133,6 @@ export function MiniPlayerInfoBar({
         expandedSectionIds={expandedSectionIds}
         onExpandAllSections={onExpandAllSections}
         onCollapseAllSections={onCollapseAllSections}
-        onOpenCourseOverview={onOpenCourseOverview}
         portalContainer={contextMenuPortalHostRef}
         ariaLabel="Mini player curriculum actions"
       />

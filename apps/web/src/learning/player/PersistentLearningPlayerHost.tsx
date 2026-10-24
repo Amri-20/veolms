@@ -841,7 +841,6 @@ export function PersistentLearningPlayerHost({
           expandedSectionIds={miniExpandedSectionIds}
           onExpandAllSections={expandAllMiniSections}
           onCollapseAllSections={collapseAllMiniSections}
-          onOpenCourseOverview={onOpenCourseOverview}
           contextMenuPortalHostRef={hostRef}
         />
       </div>
