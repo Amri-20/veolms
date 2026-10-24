@@ -159,7 +159,16 @@ interface CurriculumLessonRowsProps {
  * off the shadow it casts.
  */
 const CARD_HEIGHT = 86;
-const CARD_GAP = 8;
+const CARD_GAP = 6;
+/**
+ * The list's own padding: a little above its first card, and under its
+ * last as much as the block's bottom corners are deep: once the last card
+ * has passed behind a heading that holds to the top of the panel
+ * (Curriculum.tsx), only that rounded foot is left under it, which the
+ * heading then takes over.
+ */
+const CARD_LIST_PADDING_TOP = 8;
+const CARD_LIST_PADDING_BOTTOM = 16;
 const OFFSCREEN_CARD_CLASSES =
   "[content-visibility:auto] [contain-intrinsic-size:auto_86px]";
 const OFFSCREEN_ROW_CLASSES =
@@ -193,8 +202,9 @@ export const CurriculumLessonRows = memo(function CurriculumLessonRows(
 
   const count = props.lessons.length;
   return (
-    // The cards stand in from the panel by as much as the section heading
-    // above them does (its 14px), on both sides.
+    // The cards stand inside their section's block, right under its
+    // heading (whose progress bar parts the two), with the same small room
+    // around them as the course page's outline gives its lessons.
     //
     // The whole list is skipped too while the section is off screen, so a
     // change to the panel's width lays out the sections in view and passes
@@ -204,9 +214,9 @@ export const CurriculumLessonRows = memo(function CurriculumLessonRows(
     // with would no longer be its own.
     <div
       key={count}
-      className="flex flex-col gap-2 px-3.5 py-2 [content-visibility:auto]"
+      className="flex flex-col gap-1.5 px-2 pt-2 pb-4 [content-visibility:auto]"
       style={{
-        containIntrinsicBlockSize: `auto ${count * (CARD_HEIGHT + CARD_GAP) + CARD_GAP}px`,
+        containIntrinsicBlockSize: `auto ${count * (CARD_HEIGHT + CARD_GAP) - CARD_GAP + CARD_LIST_PADDING_TOP + CARD_LIST_PADDING_BOTTOM}px`,
       }}
     >
       {rows}

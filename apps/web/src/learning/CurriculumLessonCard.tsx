@@ -1,3 +1,4 @@
+import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { CheckCircleIcon as CheckCircle } from "@phosphor-icons/react/CheckCircle";
 import { ExamIcon as Exam } from "@phosphor-icons/react/Exam";
 import { LockSimpleIcon as LockSimple } from "@phosphor-icons/react/LockSimple";
@@ -25,8 +26,32 @@ const NOW_PLAYING_BARS = [
   { height: "45%", delay: "0s" },
 ];
 
-/** Animated equalizer shown on the lesson that is open right now. */
-function NowPlayingGlyph() {
+/**
+ * The mark of the lesson that is open right now: an animated equalizer for
+ * a video, since one is playing; an open book for a reading and the exam
+ * sheet for a quiz, which play nothing.
+ */
+function NowPlayingGlyph({ contentType }: { contentType: string }) {
+  if (contentType === "document") {
+    return (
+      <BookOpen
+        size={15}
+        weight="fill"
+        className="text-(--accent)"
+        aria-hidden="true"
+      />
+    );
+  }
+  if (contentType === "quiz") {
+    return (
+      <Exam
+        size={15}
+        weight="fill"
+        className="text-(--accent)"
+        aria-hidden="true"
+      />
+    );
+  }
   return (
     <span
       className="flex size-3.5 items-end justify-center gap-[2.5px] text-(--accent)"
@@ -162,7 +187,7 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
   // nothing to add, and then there is no element for it.
   const spokenState = !isAvailable
     ? ", log in to watch"
-    : `${isActive && !showLock ? ", now playing" : ""}${completed ? ", completed" : ""}${showLock ? ", locked" : ""}`;
+    : `${isActive && !showLock ? (contentType === "document" ? ", now reading" : contentType === "quiz" ? ", now open" : ", now playing") : ""}${completed ? ", completed" : ""}${showLock ? ", locked" : ""}`;
   const lengthLabel =
     (contentType && NON_VIDEO_LESSON_LABELS[contentType]) || duration;
 
@@ -172,7 +197,7 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
       data-curriculum-lesson-card=""
       data-active={isActive || undefined}
       data-completed={completed || undefined}
-      className={`${className} group/lesson relative overflow-hidden rounded-lg transition-[background-color,box-shadow] duration-150 ${
+      className={`${className} group/lesson relative overflow-hidden rounded-xl transition-[background-color,box-shadow] duration-150 ${
         isActive
           ? // The sidebar's active surface, with a tighter bottom cast: the
             // sidebar shadow token spreads too far for cards stacked in a
@@ -227,10 +252,10 @@ export const CurriculumLessonCard = memo(function CurriculumLessonCard({
           {!isAvailable ? (
             <LockSimple size={13} weight="fill" aria-hidden="true" />
           ) : isActive && !showLock ? (
-            // Nothing is playing on a locked lesson, so no equalizer. A
-            // lesson already finished keeps its tick beside the bars.
+            // Nothing is open on a locked lesson, so no mark. A lesson
+            // already finished keeps its tick beside the mark.
             <>
-              <NowPlayingGlyph />
+              <NowPlayingGlyph contentType={contentType ?? "video"} />
               {completed ? (
                 <CheckCircle
                   size={17}

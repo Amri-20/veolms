@@ -13,7 +13,7 @@ import {
   type LessonDrawerHeroControlProps,
 } from "../../useLessonDrawerHeroControl";
 import type { LessonDrawerViewportBounds } from "../../useLessonDrawerHeroControl";
-import { useStuckSectionHeaderSheetDrag } from "../../useStuckSectionHeaderSheetDrag";
+import { useStickyBarSheetDrag } from "../../useStickyBarSheetDrag";
 import { COURSE_CONTENT_DRAWER_QUERY } from "../workspaceConstants";
 import type { TouchEvent as ReactTouchEvent } from "react";
 
@@ -323,7 +323,7 @@ export function useLessonDrawerControls({
     onCollapse: () => setLessonDrawerSnapPoint(lessonDrawerCollapsedSnapPoint),
     onClose: closeLessonDrawer,
   });
-  const handleLessonDrawerTouchStartCapture = useStuckSectionHeaderSheetDrag(
+  const handleLessonDrawerTouchStartCapture = useStickyBarSheetDrag(
     lessonDrawerScrollportRef,
     phoneLessonDrawer,
   );

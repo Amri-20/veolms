@@ -1,20 +1,23 @@
 import { useCallback } from "react";
 import type { RefObject, TouchEvent as ReactTouchEvent } from "react";
 
-const SECTION_HEADER_SELECTOR = ".learning-curriculum__section-toggle";
+const STICKY_BAR_SELECTOR = "[data-curriculum-sticky-bar]";
 
 /**
- * A section header stuck to the top of the phone curriculum sheet acts as the
- * sheet's top edge: a drag that starts on it pulls the sheet, like the grab
- * handle, even when the list is scrolled partway.
+ * The bar of chips (the current section and lesson) held to the top of the
+ * phone curriculum sheet acts as the sheet's top edge: a drag that starts on
+ * it pulls the sheet, like the grab handle, even when the list is scrolled
+ * partway. A stuck section heading does not: a drag on it scrolls the list
+ * as anywhere else. (With the list at its top, the drawer itself takes a
+ * downward drag wherever it starts, so nothing is needed here then.)
  *
  * Base UI's drawer leaves a touch that starts inside a scrolled list to the
  * list. So while such a touch is down, the list stops being a scroll container
  * (`overflow-y: hidden` keeps its scroll position) and the drawer takes the
- * gesture as it does on the handle. Taps and long presses on the header are
- * untouched. Runs in the capture phase, before the drawer's own touchstart.
+ * gesture as it does on the handle. Taps on the chips are untouched. Runs in
+ * the capture phase, before the drawer's own touchstart.
  */
-export function useStuckSectionHeaderSheetDrag(
+export function useStickyBarSheetDrag(
   scrollportRef: RefObject<HTMLElement | null>,
   enabled: boolean,
 ) {
@@ -31,14 +34,14 @@ export function useStuckSectionHeaderSheetDrag(
       )
         return;
 
-      const header = target.closest(SECTION_HEADER_SELECTOR);
-      if (!header || !scrollport.contains(header)) return;
+      const bar = target.closest(STICKY_BAR_SELECTOR);
+      if (!bar || !scrollport.contains(bar)) return;
 
-      const stickyTop = Number.parseFloat(getComputedStyle(header).top) || 0;
-      const headerOffset =
-        header.getBoundingClientRect().top -
+      const stickyTop = Number.parseFloat(getComputedStyle(bar).top) || 0;
+      const barOffset =
+        bar.getBoundingClientRect().top -
         scrollport.getBoundingClientRect().top;
-      if (headerOffset > stickyTop + 1) return;
+      if (barOffset > stickyTop + 1) return;
 
       const previousOverflowY = scrollport.style.overflowY;
       scrollport.style.overflowY = "hidden";

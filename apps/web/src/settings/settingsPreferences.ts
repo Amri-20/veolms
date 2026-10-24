@@ -354,6 +354,11 @@ export interface LearningPreferences {
    * again in every section.
    */
   continuousLessonNumbering: boolean;
+  /**
+   * An open section's heading holds to the top of the curriculum panel
+   * while its lessons scroll under it.
+   */
+  stickOpenSection: boolean;
 }
 
 export const LEARNING_PREFERENCES_KEY = "veolms-learning-preferences";
@@ -394,6 +399,7 @@ export const LEARNING_PREFERENCE_DEFAULTS: LearningPreferences = {
   automaticallyMoveNextSection: true,
   keepCompletedLecturesVisible: true,
   continuousLessonNumbering: false,
+  stickOpenSection: true,
 };
 
 export const LEARNING_REMINDER_DAYS: readonly (readonly [
@@ -775,4 +781,27 @@ export const readLearningPreferences = (): LearningPreferences => {
   } catch {
     return LEARNING_PREFERENCE_DEFAULTS;
   }
+};
+
+/**
+ * Stores a change to the learning settings and tells the page's listeners
+ * (the curriculum's lesson numbering, the player's seek interval and theme),
+ * as the settings page does when one of its controls is changed.
+ */
+export const updateLearningPreferences = (
+  next: Partial<LearningPreferences>,
+): LearningPreferences => {
+  const preferences = { ...readLearningPreferences(), ...next };
+  try {
+    window.localStorage.setItem(
+      LEARNING_PREFERENCES_KEY,
+      JSON.stringify(preferences),
+    );
+  } catch {
+    // The change still reaches this page's listeners when storage is blocked.
+  }
+  window.dispatchEvent(
+    new CustomEvent(LEARNING_PREFERENCES_EVENT, { detail: preferences }),
+  );
+  return preferences;
 };
