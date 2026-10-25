@@ -1228,6 +1228,8 @@ function resolveVideoMimeType(filename: string): string {
 interface MediaStreamInfo {
   videoCodec: string | null;
   audioCodec: string | null;
+  /** ffmpeg's AAC profile name ("LC", "HE-AAC", "HE-AACv2"), when audio is AAC. */
+  audioProfile: string | null;
   width: number | null;
   height: number | null;
   fps: number | null;
@@ -1250,7 +1252,10 @@ async function probeMediaStreamInfo(
     /Stream #\d+:\d+.*?: Video:\s*([a-zA-Z0-9_]+).*?(\d{2,5})x(\d{2,5})(?:.*?(\d+(?:\.\d+)?)\s*fps)?/.exec(
       text,
     );
-  const audioLine = /Stream #\d+:\d+.*?: Audio:\s*([a-zA-Z0-9_]+)/.exec(text);
+  const audioLine =
+    /Stream #\d+:\d+.*?: Audio:\s*([a-zA-Z0-9_]+)(?:\s*\(([A-Za-z0-9-]+)\))?/.exec(
+      text,
+    );
 
   return {
     videoCodec: videoLine?.[1]?.toLowerCase() ?? null,
@@ -1258,11 +1263,47 @@ async function probeMediaStreamInfo(
     height: videoLine?.[3] ? Number(videoLine[3]) : null,
     fps: videoLine?.[4] ? Number(videoLine[4]) : null,
     audioCodec: audioLine?.[1]?.toLowerCase() ?? null,
+    audioProfile: audioLine?.[2] ?? null,
   };
 }
 
+// The master playlist's CODECS attribute, read from what ffmpeg actually
+// wrote rather than guessed from the encode settings: Safari picks a
+// rendition by it and iOS wants every rendition identified up front. H.264
+// is "avc1." + the profile, constraint and level bytes of the init
+// segment's avcC box; AAC is "mp4a.40." + the audio object type.
+async function readAvc1CodecString(
+  initSegmentPath: string,
+): Promise<string | null> {
+  const bytes = await fsp.readFile(initSegmentPath);
+  const at = bytes.indexOf("avcC", 0, "latin1");
+  // Box type, then AVCDecoderConfigurationRecord version 1.
+  if (at === -1 || bytes[at + 4] !== 1) return null;
+  const hex = (b: number | undefined) => (b ?? 0).toString(16).padStart(2, "0");
+  return `avc1.${hex(bytes[at + 5])}${hex(bytes[at + 6])}${hex(bytes[at + 7])}`;
+}
+
+const AAC_AUDIO_OBJECT_TYPES: Record<string, number> = {
+  Main: 1,
+  LC: 2,
+  SSR: 3,
+  LTP: 4,
+  "HE-AAC": 5,
+  "HE-AACv2": 29,
+};
+
+function aacCodecString(profile: string | null): string {
+  const objectType = (profile && AAC_AUDIO_OBJECT_TYPES[profile]) || 2;
+  return `mp4a.40.${objectType}`;
+}
+
+/** A local path as ffmpeg takes it on every platform (forward slashes). */
+function toFfmpegPath(filePath: string): string {
+  return filePath.split(path.sep).join("/");
+}
+
 // ffmpeg names these differently from yt-dlp/common usage; normalize to
-// what actually matters for MPEG-TS + Safari/iOS HLS compatibility.
+// what actually matters for Safari/iOS HLS compatibility.
 function isTsSafeVideoCodec(codec: string | null): boolean {
   return codec === "h264";
 }
@@ -1391,6 +1432,7 @@ interface HlsVariant {
   bandwidth: number;
   videoCodec: string | null;
   audioCodec: string | null;
+  audioProfile: string | null;
   fps: number | null;
 }
 
@@ -1632,11 +1674,10 @@ async function packageDirectHls(
 ): Promise<{ success: boolean; transcoded: boolean }> {
   await fsp.mkdir(outputHlsDir, { recursive: true });
 
-  const successfulVariants: HlsVariant[] = [];
+  const successfulVariants: Array<{ variant: HlsVariant; codecs: string }> = [];
 
-  // MPEG-TS (what these HLS segments use) only reliably carries H.264/AAC —
-  // Safari/iOS will not decode VP9/AV1/Opus in .ts regardless of container
-  // support elsewhere. yt-dlp's format selector prefers avc1 but can fall
+  // Safari/iOS HLS only reliably plays H.264/AAC — not VP9/AV1/Opus,
+  // whatever the container. yt-dlp's format selector prefers avc1 but can fall
   // back to "any codec" per-height, so renditions of the *same* video can
   // come back on different codecs. If even one does, re-encode every
   // rendition (not just the offending one) to a uniform H.264/AAC with a
@@ -1661,7 +1702,12 @@ async function packageDirectHls(
     const qualityDir = path.join(outputHlsDir, variant.quality);
     await fsp.mkdir(qualityDir, { recursive: true });
     const variantPlaylist = path.join(qualityDir, `${variant.quality}.m3u8`);
-    const segmentPattern = path.join(qualityDir, "segment_%03d.ts");
+    // Fragmented MP4 (CMAF) segments with one init segment per rendition,
+    // not MPEG-TS: Safari on iOS plays fMP4 straight from media source,
+    // whereas TS has to be transmuxed in JavaScript by the player, and its
+    // decoder then failed on every quality switch of the transmuxed stream.
+    const initSegmentName = "init.mp4";
+    const segmentPattern = path.join(qualityDir, "segment_%03d.m4s");
 
     const fps = variant.fps && variant.fps > 0 ? variant.fps : 30;
     const gopSize = Math.max(1, Math.round(fps * HLS_SEGMENT_SECONDS));
@@ -1706,21 +1752,53 @@ async function packageDirectHls(
         "-i",
         variant.filePath,
         ...codecArgs,
+        "-f",
+        "hls",
+        "-hls_segment_type",
+        "fmp4",
         "-hls_time",
         String(HLS_SEGMENT_SECONDS),
         "-hls_playlist_type",
         "vod",
         "-hls_flags",
         "independent_segments",
+        "-hls_fmp4_init_filename",
+        initSegmentName,
+        // ffmpeg writes the init segment next to the playlist only when it
+        // can split the playlist path on "/": with Windows backslashes it
+        // lands in the working directory instead.
         "-hls_segment_filename",
-        segmentPattern,
-        variantPlaylist,
+        toFfmpegPath(segmentPattern),
+        toFfmpegPath(variantPlaylist),
       ],
       { timeoutMs: DOWNLOAD_PROCESS_TIMEOUT_MS },
     );
 
-    if (res.code === 0 && fs.existsSync(variantPlaylist)) {
-      successfulVariants.push(variant);
+    const initSegmentPath = path.join(qualityDir, initSegmentName);
+    if (
+      res.code === 0 &&
+      fs.existsSync(variantPlaylist) &&
+      fs.existsSync(initSegmentPath)
+    ) {
+      const videoCodec = await readAvc1CodecString(initSegmentPath);
+      if (!videoCodec) {
+        console.log(
+          yellow(
+            `  [warn] ${variant.quality}: no H.264 avcC in its init segment; the master playlist will not carry CODECS for it.`,
+          ),
+        );
+      }
+      // Re-encodes use ffmpeg's AAC encoder (always AAC-LC); copies keep
+      // the source's profile. A rendition without audio has no audio codec.
+      const audioCodec = needsTranscode
+        ? aacCodecString("LC")
+        : variant.audioCodec === null
+          ? null
+          : aacCodecString(variant.audioProfile);
+      successfulVariants.push({
+        variant,
+        codecs: [videoCodec, audioCodec].filter(Boolean).join(","),
+      });
     } else {
       console.log(
         yellow(
@@ -1814,8 +1892,14 @@ async function packageDirectHls(
     });
   }
 
-  // Generate master.m3u8
-  const masterPlaylistLines = ["#EXTM3U", "#EXT-X-VERSION:3"];
+  // Generate master.m3u8. INDEPENDENT-SEGMENTS here says it for every
+  // rendition at once (each media playlist repeats it); CODECS lets Safari
+  // choose renditions without probing them.
+  const masterPlaylistLines = [
+    "#EXTM3U",
+    "#EXT-X-VERSION:3",
+    "#EXT-X-INDEPENDENT-SEGMENTS",
+  ];
 
   const hasSubtitles = processedSubtitles.length > 0;
   if (hasSubtitles) {
@@ -1826,10 +1910,11 @@ async function packageDirectHls(
     });
   }
 
-  for (const v of successfulVariants) {
+  for (const { variant: v, codecs } of successfulVariants) {
     const subsAttr = hasSubtitles ? `,SUBTITLES="subs"` : "";
+    const codecsAttr = codecs ? `,CODECS="${codecs}"` : "";
     masterPlaylistLines.push(
-      `#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidth},RESOLUTION=${v.width}x${v.height}${subsAttr}`,
+      `#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidth},RESOLUTION=${v.width}x${v.height}${subsAttr}${codecsAttr}`,
       `${v.quality}/${v.quality}.m3u8`,
     );
   }
@@ -2687,6 +2772,7 @@ ${bold("Examples:")}
               bandwidth: Math.max(100000, bandwidth),
               videoCodec: streamInfo.videoCodec,
               audioCodec: streamInfo.audioCodec,
+              audioProfile: streamInfo.audioProfile,
               fps: streamInfo.fps,
             });
 
