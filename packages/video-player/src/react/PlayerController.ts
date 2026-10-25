@@ -107,6 +107,19 @@ interface WebkitFullscreenElement extends HTMLElement {
   webkitRequestFullscreen?: () => Promise<void> | void;
 }
 
+/**
+ * The video element's own full screen (Safari on iPhone, which has no
+ * element full screen): the system player, entered and left here, reported
+ * by `webkitbeginfullscreen` / `webkitendfullscreen` on the element itself,
+ * never by the document.
+ */
+interface WebkitFullscreenVideo extends HTMLVideoElement {
+  webkitEnterFullscreen?: () => void;
+  webkitExitFullscreen?: () => void;
+  webkitDisplayingFullscreen?: boolean;
+  webkitSupportsFullscreen?: boolean;
+}
+
 interface PictureInPictureDocument {
   pictureInPictureEnabled?: boolean;
   pictureInPictureElement?: Element | null;
@@ -371,23 +384,9 @@ export class PlayerController {
     if (!(media instanceof HTMLVideoElement)) return;
     const previous = this.#media;
     if (previous) {
-      previous.removeEventListener(
-        "enterpictureinpicture",
-        this.handlePictureInPictureChange,
-      );
-      previous.removeEventListener(
-        "leavepictureinpicture",
-        this.handlePictureInPictureChange,
-      );
+      this.unlistenMedia(previous);
     }
-    media.addEventListener(
-      "enterpictureinpicture",
-      this.handlePictureInPictureChange,
-    );
-    media.addEventListener(
-      "leavepictureinpicture",
-      this.handlePictureInPictureChange,
-    );
+    this.listenToMedia(media);
     this.#media = media;
     this.#requestedMedia = media;
     this.#standbyMedia = standby instanceof HTMLVideoElement ? standby : null;
@@ -952,11 +951,25 @@ export class PlayerController {
       this.getPresentationContainer() as WebkitFullscreenElement | null;
     if (!container) return;
     if (!canUseElementFullscreen(container)) {
-      this.#pageFullscreenShell = container;
-      enterPageFullscreen(container, {
-        contentLandscape: () => this.isContentLandscape(),
-        onExitRequest: () => void this.exitFullscreen().catch(() => undefined),
-      });
+      const video = this.videoFullscreen();
+      if (video) {
+        // Safari on iPhone: the video's own system player, as YouTube's site
+        // uses there. The page comes back as it was, with its own controls,
+        // when the player is closed (`webkitendfullscreen`).
+        try {
+          video.webkitEnterFullscreen?.();
+        } catch {
+          // Refused until the video has loaded enough to show; a later
+          // press works.
+        }
+      } else {
+        this.#pageFullscreenShell = container;
+        enterPageFullscreen(container, {
+          contentLandscape: () => this.isContentLandscape(),
+          onExitRequest: () =>
+            void this.exitFullscreen().catch(() => undefined),
+        });
+      }
     } else if (container.requestFullscreen) {
       await container.requestFullscreen();
     } else {
@@ -967,6 +980,12 @@ export class PlayerController {
 
   async exitFullscreen(): Promise<void> {
     if (typeof document === "undefined") return;
+    const video = this.videoFullscreen();
+    if (video && (this.#videoFullscreen || video.webkitDisplayingFullscreen)) {
+      video.webkitExitFullscreen?.();
+      this.syncFullscreen();
+      return;
+    }
     const shell = this.#pageFullscreenShell;
     this.#pageFullscreenShell = null;
     if (shell && exitPageFullscreen(shell)) {
@@ -980,8 +999,76 @@ export class PlayerController {
   }
 
   async toggleFullscreen(): Promise<void> {
-    if (getFullscreenElement()) await this.exitFullscreen();
+    if (this.isFullscreenActive()) await this.exitFullscreen();
     else await this.enterFullscreen();
+  }
+
+  /** The media as its own full-screen player, where the browser has one. */
+  private videoFullscreen(): WebkitFullscreenVideo | null {
+    const video = this.#media as WebkitFullscreenVideo | null;
+    if (!video || typeof video.webkitEnterFullscreen !== "function")
+      return null;
+    if (video.webkitSupportsFullscreen === false) return null;
+    return video;
+  }
+
+  /**
+   * Whether the video is in its own system player, by its begin and end
+   * events: `webkitDisplayingFullscreen` can still read true while the end
+   * event is being delivered, which left the player believing it was full
+   * screen after the system player had closed.
+   */
+  #videoFullscreen = false;
+
+  /** Whether the player is full screen in any of its three ways. */
+  private isFullscreenActive(): boolean {
+    const presentationContainer = this.getPresentationContainer();
+    if (
+      presentationContainer &&
+      getFullscreenElement() === presentationContainer
+    ) {
+      return true;
+    }
+    return this.#videoFullscreen;
+  }
+
+  private listenToMedia(media: HTMLVideoElement): void {
+    media.addEventListener(
+      "enterpictureinpicture",
+      this.handlePictureInPictureChange,
+    );
+    media.addEventListener(
+      "leavepictureinpicture",
+      this.handlePictureInPictureChange,
+    );
+    media.addEventListener(
+      "webkitbeginfullscreen",
+      this.handleVideoFullscreenBegin,
+    );
+    media.addEventListener(
+      "webkitendfullscreen",
+      this.handleVideoFullscreenEnd,
+    );
+  }
+
+  private unlistenMedia(media: HTMLVideoElement | null | undefined): void {
+    if (!media) return;
+    media.removeEventListener(
+      "enterpictureinpicture",
+      this.handlePictureInPictureChange,
+    );
+    media.removeEventListener(
+      "leavepictureinpicture",
+      this.handlePictureInPictureChange,
+    );
+    media.removeEventListener(
+      "webkitbeginfullscreen",
+      this.handleVideoFullscreenBegin,
+    );
+    media.removeEventListener(
+      "webkitendfullscreen",
+      this.handleVideoFullscreenEnd,
+    );
   }
 
   canUsePictureInPicture(): boolean {
@@ -1058,20 +1145,30 @@ export class PlayerController {
     this.#listeners.clear();
     this.#eventListeners.clear();
     await this.#mediaTransition;
-    this.#media?.removeEventListener(
-      "enterpictureinpicture",
-      this.handlePictureInPictureChange,
-    );
-    this.#media?.removeEventListener(
-      "leavepictureinpicture",
-      this.handlePictureInPictureChange,
-    );
+    this.unlistenMedia(this.#media);
     this.#media = null;
     this.#mediaAttached = false;
     await this.engine.destroy();
   }
 
   private readonly handleFullscreenChange = (): void => this.syncFullscreen();
+
+  /**
+   * The system player closed (iPhone): the page is back, and the lesson's
+   * controls are shown again so it does not come back bare. Safari may
+   * close the player with the video paused; the controls say so.
+   */
+  private readonly handleVideoFullscreenBegin = (): void => {
+    this.#videoFullscreen = true;
+    this.syncFullscreen();
+  };
+
+  private readonly handleVideoFullscreenEnd = (): void => {
+    this.#videoFullscreen = false;
+    this.syncFullscreen();
+    this.setSettingsView("closed");
+    this.setControlsVisible(true);
+  };
 
   private readonly handlePictureInPictureChange = (): void =>
     this.syncPictureInPicture();
@@ -1110,10 +1207,7 @@ export class PlayerController {
   }
 
   private syncFullscreen(): void {
-    const presentationContainer = this.getPresentationContainer();
-    const active = Boolean(
-      presentationContainer && getFullscreenElement() === presentationContainer,
-    );
+    const active = this.isFullscreenActive();
     if (active === this.#snapshot.ui.fullscreen) return;
     this.updateUi({ fullscreen: active });
     this.emit({ type: "fullscreenchange", detail: { active } });
@@ -1239,22 +1333,8 @@ export class PlayerController {
     ) {
       return;
     }
-    media.removeEventListener(
-      "enterpictureinpicture",
-      this.handlePictureInPictureChange,
-    );
-    media.removeEventListener(
-      "leavepictureinpicture",
-      this.handlePictureInPictureChange,
-    );
-    media.addEventListener(
-      "enterpictureinpicture",
-      this.handlePictureInPictureChange,
-    );
-    media.addEventListener(
-      "leavepictureinpicture",
-      this.handlePictureInPictureChange,
-    );
+    this.unlistenMedia(media);
+    this.listenToMedia(media);
     this.#settledMediaGeneration = generation;
     this.flushPendingMediaProperties();
     this.syncCapabilities();
@@ -1265,14 +1345,7 @@ export class PlayerController {
   private async detachAttachedMedia(): Promise<void> {
     const media = this.#media;
     if (!media || !this.#mediaAttached) return;
-    media.removeEventListener(
-      "enterpictureinpicture",
-      this.handlePictureInPictureChange,
-    );
-    media.removeEventListener(
-      "leavepictureinpicture",
-      this.handlePictureInPictureChange,
-    );
+    this.unlistenMedia(media);
     this.#media = null;
     this.#mediaAttached = false;
     this.#settledMediaGeneration = 0;

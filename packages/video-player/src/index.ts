@@ -72,6 +72,11 @@ export type {
   PlayerSettingsView,
   PlayerZoomState,
 } from "./react/playerState";
+export {
+  BUFFERED_PLAYBACK_GRACE_SECONDS,
+  isCurrentPositionBuffered,
+  isPlaybackStalled,
+} from "./core/playbackStall";
 export { usePlayerMobileInteraction } from "./react/PlayerInteractionMode";
 export type { PlayerInteractionMode } from "./react/PlayerInteractionMode";
 export {

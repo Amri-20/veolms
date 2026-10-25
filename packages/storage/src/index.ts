@@ -726,6 +726,9 @@ export function getMimeType(filename: string): string {
   if (filename.endsWith(".mp4")) {
     return "video/mp4";
   }
+  if (filename.endsWith(".m4s")) {
+    return "video/iso.segment";
+  }
   if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")) {
     return "image/jpeg";
   }

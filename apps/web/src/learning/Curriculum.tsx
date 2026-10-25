@@ -57,75 +57,75 @@ const HEAD_BUTTON_CLASS =
   "relative isolate flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full! border-0 bg-transparent text-(--text) before:absolute before:inset-1 before:-z-1 before:rounded-full before:bg-[color-mix(in_srgb,var(--text)_6%,transparent)] before:transition-colors before:duration-150 before:content-[''] hover:before:bg-[color-mix(in_srgb,var(--text)_10%,transparent)] active:before:bg-[color-mix(in_srgb,var(--text)_14%,transparent)] data-popup-open:before:bg-[color-mix(in_srgb,var(--text)_14%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--accent)";
 /**
  * The two places the learner is at, under the progress: the section and the
- * lesson being played, each a chip that brings its own into view. On a phone
- * the chips grow with the bar as it comes to hold (`--bar-stick`, see the
- * bar) into two full buttons: as tall as the bar, square, joined, in a deep
- * shade of the accent, their words moved out to 16px, where the section
- * titles under them begin.
+ * lesson being played, each a chip that brings its own into view. The chips
+ * grow with the bar as it comes to hold (`--bar-stick`, see the bar) into
+ * two full buttons: as tall as the bar, square, joined, in a deep shade of
+ * the accent, their words moved out to 16px, where the section titles under
+ * them begin. Every measure is one calc of `--bar-stick`, so the growth
+ * follows the scroll and nothing moves after the bar holds. (The chip's
+ * height, radius, padding and fill are those calcs alone: a plain utility
+ * for any of them would contend with its calc.)
  */
-const JUMP_CHIP_CLASS = `group/jump inline-flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-lg border-0 ${TINT_4} max-[820px]:[background-color:color-mix(in_srgb,color-mix(in_srgb,var(--accent)_14%,var(--canvas))_calc(var(--bar-stick,0)_*_100%),color-mix(in_srgb,var(--text)_4%,transparent))] max-[820px]:[border-radius:calc(8px_*_(1_-_var(--bar-stick,0)))] max-[820px]:[height:calc(32px_+_24px_*_var(--bar-stick,0))] max-[820px]:[padding-left:calc(10px_+_6px_*_var(--bar-stick,0))] px-2.5 text-left text-[0.85rem]! font-medium text-(--muted) transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)] hover:text-(--text) active:bg-[color-mix(in_srgb,var(--text)_12%,transparent)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--accent)`;
+const JUMP_CHIP_CLASS =
+  "group/jump inline-flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 border-0 [background-color:color-mix(in_srgb,color-mix(in_srgb,var(--accent)_14%,var(--canvas))_calc(var(--bar-stick,0)_*_100%),color-mix(in_srgb,var(--text)_4%,transparent))] [border-radius:calc(8px_*_(1_-_var(--bar-stick,0)))] [height:calc(32px_+_24px_*_var(--bar-stick,0))] [padding-left:calc(10px_+_6px_*_var(--bar-stick,0))] pr-2.5 text-left text-[0.85rem]! font-medium text-(--muted) transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)] hover:text-(--text) active:bg-[color-mix(in_srgb,var(--text)_12%,transparent)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--accent)";
 /**
- * On a phone the two buttons close up as they grow (the bar's gap goes to
- * nothing), and a thin line of the accent comes in between them, tapering
- * away towards their top and bottom (its fade eases out, so the ends thin
- * to nothing instead of stopping): each draws a 1px half of it along the
- * edge that faces the other, as the bar comes to hold (`--bar-stick`), so
- * the two halves come in together and meet as one 2px line once joined.
- * Once they have (`data-stuck` on the bar), the line draws back from the
- * top, fading out before it reaches the chip under the grab handle: a mask
- * that is clear for its first 10px and fades in over the next 20, kept
- * above the line until then, moves down over it (a gradient itself cannot
- * be transitioned) — sliding when the halves met slowly (`data-collision`),
- * at once after a flick.
+ * The two buttons close up as they grow (the bar's gap goes to nothing),
+ * and a thin line of the accent comes in between them, tapering away
+ * towards their top and bottom (its fade eases out, so the ends thin to
+ * nothing instead of stopping): each draws a 1px half of it along the edge
+ * that faces the other, as the bar comes to hold (`--bar-stick`), so the
+ * two halves come in together and meet as one 2px line once joined.
+ *
+ * On a phone, once they have (`data-stuck` on the bar), the line draws back
+ * from the top, fading out before it reaches the chip under the sheet's
+ * grab handle: a mask that is clear for its first 10px and fades in over
+ * the next 20, kept above the line until then, moves down over it (a
+ * gradient itself cannot be transitioned) — sliding when the halves met
+ * slowly (`data-collision`), at once after a flick. The panel has no handle
+ * over the line, so there it stays whole.
  */
 const JUMP_CHIP_DIVIDER_CLASS =
-  "max-[820px]:relative max-[820px]:before:pointer-events-none max-[820px]:before:absolute max-[820px]:before:inset-y-0 max-[820px]:before:w-px max-[820px]:before:bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,color-mix(in_srgb,var(--accent)_75%,white)_5%,transparent)_14%,color-mix(in_srgb,color-mix(in_srgb,var(--accent)_75%,white)_40%,transparent)_32%,color-mix(in_srgb,var(--accent)_75%,white)_50%,color-mix(in_srgb,color-mix(in_srgb,var(--accent)_75%,white)_40%,transparent)_68%,color-mix(in_srgb,color-mix(in_srgb,var(--accent)_75%,white)_5%,transparent)_86%,transparent)] max-[820px]:before:opacity-(--bar-stick,0) max-[820px]:before:[mask-image:linear-gradient(to_bottom,transparent_10px,black_30px)] max-[820px]:before:[mask-size:100%_calc(100%_+_30px)] max-[820px]:before:[mask-repeat:no-repeat] max-[820px]:before:[mask-position:0_-30px] max-[820px]:before:content-[''] [[data-stuck]>&]:before:[mask-position:0_0] [[data-collision]>&]:before:transition-[mask-position] [[data-collision]>&]:before:duration-300 [[data-collision]>&]:before:ease-out motion-reduce:before:transition-none";
+  "relative before:pointer-events-none before:absolute before:inset-y-0 before:w-px before:bg-[linear-gradient(to_bottom,transparent,color-mix(in_srgb,color-mix(in_srgb,var(--accent)_75%,white)_5%,transparent)_14%,color-mix(in_srgb,color-mix(in_srgb,var(--accent)_75%,white)_40%,transparent)_32%,color-mix(in_srgb,var(--accent)_75%,white)_50%,color-mix(in_srgb,color-mix(in_srgb,var(--accent)_75%,white)_40%,transparent)_68%,color-mix(in_srgb,color-mix(in_srgb,var(--accent)_75%,white)_5%,transparent)_86%,transparent)] before:opacity-(--bar-stick,0) before:content-[''] max-[820px]:before:[mask-image:linear-gradient(to_bottom,transparent_10px,black_30px)] max-[820px]:before:[mask-size:100%_calc(100%_+_30px)] max-[820px]:before:[mask-repeat:no-repeat] max-[820px]:before:[mask-position:0_-30px] max-[820px]:[[data-stuck]>&]:before:[mask-position:0_0] max-[820px]:[[data-collision]>&]:before:transition-[mask-position] max-[820px]:[[data-collision]>&]:before:duration-300 max-[820px]:[[data-collision]>&]:before:ease-out motion-reduce:before:transition-none";
 /**
  * The moment the two halves meet, when they met slowly (the bar marked
  * `data-collision`, see useStuckSectionHeadings; a flick lands them met
  * with nothing played), a ripple sets off from the seam across each
- * button, as if the two had collided:
- * a band of light a quarter of the button wide, brightest down its middle,
- * that widens and fades as it runs to the far edge (keyframes in
- * learning.css). It is a pseudo-element on each button, clipped to it, and
- * replays each time the bar comes to hold again.
+ * button, as if the two had collided: a band of light a quarter of the
+ * button wide, brightest down its middle, that widens and fades as it runs
+ * to the far edge (keyframes in learning.css). It is a pseudo-element on
+ * each button, clipped to it, and replays each time the bar comes to hold
+ * again.
  *
- * The two outer top corners, which come to lie in the sheet's own rounded
- * top corners, round out from 8px to the sheet's 16px as the buttons
- * grow, so nothing square of theirs is ever drawn into the sheet's
- * corners, even in a frame where the sheet's clip has not caught up with
- * a scrolling layer.
+ * The two outer top corners come to lie in the rounded top corners of what
+ * holds the list (the panel, or the phone's sheet): they round out from
+ * 8px to that radius (`--curriculum-top-radius`, set on the bar) as the
+ * buttons grow, so nothing square of theirs is ever drawn into those
+ * corners, even in a frame where the clip has not caught up with a
+ * scrolling layer.
  */
 const JUMP_CHIP_RIPPLE_CLASS =
-  "max-[820px]:overflow-hidden max-[820px]:after:pointer-events-none max-[820px]:after:absolute max-[820px]:after:inset-y-0 max-[820px]:after:w-1/4 max-[820px]:after:opacity-0 max-[820px]:after:content-[''] motion-reduce:after:animate-none!";
-const JUMP_CHIP_FIRST_CLASS = `${JUMP_CHIP_DIVIDER_CLASS} ${JUMP_CHIP_RIPPLE_CLASS} max-[820px]:[border-start-start-radius:calc(8px_+_8px_*_var(--bar-stick,0))] max-[820px]:before:right-0 max-[820px]:after:right-0 max-[820px]:after:origin-right max-[820px]:after:bg-[linear-gradient(to_right,color-mix(in_srgb,var(--accent)_55%,white),color-mix(in_srgb,var(--accent)_30%,transparent)_45%,transparent)] [[data-collision]>&]:after:animate-[curriculum-seam-ripple-start_720ms_cubic-bezier(0.2,0.7,0.3,1)_both]`;
-const JUMP_CHIP_LAST_CLASS = `${JUMP_CHIP_DIVIDER_CLASS} ${JUMP_CHIP_RIPPLE_CLASS} max-[820px]:[border-start-end-radius:calc(8px_+_8px_*_var(--bar-stick,0))] max-[820px]:before:left-0 max-[820px]:after:left-0 max-[820px]:after:origin-left max-[820px]:after:bg-[linear-gradient(to_left,color-mix(in_srgb,var(--accent)_55%,white),color-mix(in_srgb,var(--accent)_30%,transparent)_45%,transparent)] [[data-collision]>&]:after:animate-[curriculum-seam-ripple-end_720ms_cubic-bezier(0.2,0.7,0.3,1)_both]`;
+  "overflow-hidden after:pointer-events-none after:absolute after:inset-y-0 after:w-1/4 after:opacity-0 after:content-[''] motion-reduce:after:animate-none!";
+const JUMP_CHIP_FIRST_CLASS = `${JUMP_CHIP_DIVIDER_CLASS} ${JUMP_CHIP_RIPPLE_CLASS} [border-start-start-radius:calc(8px_+_(var(--curriculum-top-radius,16px)_-_8px)_*_var(--bar-stick,0))] before:right-0 after:right-0 after:origin-right after:bg-[linear-gradient(to_right,color-mix(in_srgb,var(--accent)_55%,white),color-mix(in_srgb,var(--accent)_30%,transparent)_45%,transparent)] [[data-collision]>&]:after:animate-[curriculum-seam-ripple-start_720ms_cubic-bezier(0.2,0.7,0.3,1)_both]`;
+const JUMP_CHIP_LAST_CLASS = `${JUMP_CHIP_DIVIDER_CLASS} ${JUMP_CHIP_RIPPLE_CLASS} [border-start-end-radius:calc(8px_+_(var(--curriculum-top-radius,16px)_-_8px)_*_var(--bar-stick,0))] before:left-0 after:left-0 after:origin-left after:bg-[linear-gradient(to_left,color-mix(in_srgb,var(--accent)_55%,white),color-mix(in_srgb,var(--accent)_30%,transparent)_45%,transparent)] [[data-collision]>&]:after:animate-[curriculum-seam-ripple-end_720ms_cubic-bezier(0.2,0.7,0.3,1)_both]`;
 
 /**
- * The panel's own surface, for the bar that holds to its top: the shade the
- * panel (by day) and its column (by night) are painted, so the bar is one
- * with them. Its tail is a short fade of the same shade, through which the
- * sections pass out of sight instead of being cut off.
- */
-/**
- * The bar of chips, solid to a little under the chips: whatever scrolls up
- * passes behind it. As the list scrolls it towards the top of the panel,
- * over its last 48px of travel (`--bar-stick`, 0 to 1, set in the scroll
- * event by useStuckSectionHeadings), the bar grows a little at its foot
- * and a thin line comes in there, edge to edge, so that by the moment it
- * holds nothing is left to move. On a phone it instead gives up its padding
- * and the chips grow into two full buttons, edge to edge and 56px tall
- * (JUMP_CHIP_CLASS), joined, with a thin line between them (the bar
- * itself stays the sheet's colour). A small chip of the sheet's colour sits
- * behind the grab handle over their top, 10px deep and a little wider than
- * the handle, so the line between them is not seen above the handle; it
- * lets presses through. The two buttons need no line under them, so
- * on a phone the bar draws none. In the panel it stays one with the
- * panel's shade.
+ * The bar of chips: whatever scrolls up passes behind it. As the list
+ * scrolls it towards the top of the panel, over its last 48px of travel
+ * (`--bar-stick`, 0 to 1, set in the scroll event by
+ * useStuckSectionHeadings), it gives up its padding and gap and the chips
+ * grow into two full buttons, edge to edge and 56px tall (JUMP_CHIP_CLASS),
+ * joined, with a thin line between them, so that by the moment it holds
+ * nothing is left to move. At rest it is one with the panel's shade (the
+ * sheet's, on a phone). The two buttons need no line under them, so the
+ * bar draws none. On a phone a small chip of the sheet's colour sits behind
+ * the grab handle over their top, 10px deep and a little wider than the
+ * handle, so the line between them is not seen above the handle; it lets
+ * presses through. `--curriculum-top-radius` tells the buttons the radius
+ * of the corners they grow into.
  */
 // Written out in full: Tailwind only generates classes it can read whole.
 const STICKY_BAR_CLASS =
-  "sticky top-0 z-4 flex min-w-0 shrink-0 gap-1.5 px-4 pt-2.5 [padding-bottom:calc(8px_+_3px_*_var(--bar-stick,0))] bg-[color-mix(in_srgb,var(--surface)_91%,var(--canvas))] max-[820px]:[padding:calc(10px_*_(1_-_var(--bar-stick,0)))_calc(16px_*_(1_-_var(--bar-stick,0)))_calc(8px_*_(1_-_var(--bar-stick,0)))] max-[820px]:[gap:calc(6px_*_(1_-_var(--bar-stick,0)))] max-[820px]:before:pointer-events-none max-[820px]:before:absolute max-[820px]:before:top-0 max-[820px]:before:left-1/2 max-[820px]:before:z-1 max-[820px]:before:h-2.5 max-[820px]:before:w-28 max-[820px]:before:-translate-x-1/2 max-[820px]:before:rounded-b-lg max-[820px]:before:bg-(--canvas) max-[820px]:before:opacity-(--bar-stick,0) max-[820px]:before:content-[''] max-[820px]:bg-(--canvas) after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-[color-mix(in_srgb,var(--text)_10%,transparent)] after:opacity-(--bar-stick,0) after:content-[''] max-[820px]:after:hidden";
+  "sticky top-0 z-4 flex min-w-0 shrink-0 [padding:calc(10px_*_(1_-_var(--bar-stick,0)))_calc(16px_*_(1_-_var(--bar-stick,0)))_calc(8px_*_(1_-_var(--bar-stick,0)))] [gap:calc(6px_*_(1_-_var(--bar-stick,0)))] [--curriculum-top-radius:var(--control-radius-learning-panel,8px)] bg-[color-mix(in_srgb,var(--surface)_91%,var(--canvas))] max-[820px]:[--curriculum-top-radius:16px] max-[820px]:bg-(--canvas) max-[820px]:before:pointer-events-none max-[820px]:before:absolute max-[820px]:before:top-0 max-[820px]:before:left-1/2 max-[820px]:before:z-1 max-[820px]:before:h-2.5 max-[820px]:before:w-28 max-[820px]:before:-translate-x-1/2 max-[820px]:before:rounded-b-lg max-[820px]:before:bg-(--canvas) max-[820px]:before:opacity-(--bar-stick,0) max-[820px]:before:content-['']";
 /**
  * How far below the bar's line the first section stands, and an open
  * section's heading holds (the list's top padding, learning.css).
@@ -133,11 +133,11 @@ const STICKY_BAR_CLASS =
 const STICKY_BAR_GAP = 10;
 /**
  * How far down the panel an open section's heading holds: under the bar of
- * chips as it stands once stuck (53px, its line included; 56px on a phone)
- * and the room kept under that (STICKY_BAR_GAP). The classes are the one
- * place it is set; code that needs the number reads it off the heading.
+ * chips as it stands once stuck (56px, the two buttons) and the room kept
+ * under that (STICKY_BAR_GAP). The class is the one place it is set; code
+ * that needs the number reads it off the heading.
  */
-const STUCK_HEADING_TOP_CLASS = "top-[63px] max-[820px]:top-[66px]";
+const STUCK_HEADING_TOP_CLASS = "top-[66px]";
 const stuckHeadingTopOf = (heading: HTMLElement | null) =>
   (heading && Number.parseFloat(getComputedStyle(heading).top)) || 0;
 /**

@@ -116,7 +116,7 @@ export function useStuckSectionHeadings(
       if (!stickHeadings) return;
 
       // Headings hold a little under the bar's foot (wherever that stands
-      // once the bar is stuck: it grows a little then, more on a phone). A
+      // once the bar is stuck: it grows into the two buttons by then). A
       // heading on its way out keeps its foot until it has passed behind the
       // bar, not just above the line it held at: it is still in sight in
       // the room between the two.
