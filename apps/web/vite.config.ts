@@ -14,6 +14,8 @@ import {
 } from "vite";
 
 import { parseSiteOrigin } from "./src/routing/siteOrigin.ts";
+import { colorMixFallbackPlugin } from "./scripts/colorMixFallbackPlugin.ts";
+import { containerUnitFallbackPlugin } from "./scripts/containerUnitFallbackPlugin.ts";
 
 const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
 const webSourceRoot = fileURLToPath(new URL("./src", import.meta.url));
@@ -722,6 +724,9 @@ export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
       bundleReportPlugin(),
       extraStyleSourcesPlugin(),
       tailwindcss(),
+      // Older Safari (iOS 15): see each plugin.
+      colorMixFallbackPlugin(),
+      containerUnitFallbackPlugin(),
       reactRouter(),
     ],
     // React Router's prerender pass fetches route data from Vite's temporary
@@ -771,6 +776,13 @@ export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
       ],
     },
     build: {
+      // The default targets, with Safari and iPhones from 15 instead of
+      // 16.4. With the default the minifier writes every breakpoint in
+      // range syntax (`@media (width>=40rem)`), which Safari reads only
+      // from 16.4: on iOS 15 no breakpoint applied at all (a phone got the
+      // desktop rail and its sheets). These targets keep `min-width` and
+      // `max-width`. See also the two fallback plugins above.
+      cssTarget: ["chrome111", "edge111", "firefox114", "safari15", "ios15"],
       rollupOptions: {
         output: {
           manualChunks(id) {
