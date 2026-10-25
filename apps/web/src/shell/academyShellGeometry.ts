@@ -62,13 +62,18 @@ export const getSidebarResizeRenderKey = (width: number) =>
  * the collapsed rail, and in proportion between, so a drag fades the logo
  * out and in under the pointer. Both are registered as not inherited
  * (foundation.css), so a write restyles the shell alone.
+ *
+ * The elements inside that read them (marked `data-sidebar-resize-reader`)
+ * get the same values written on themselves: Safari does not restyle an
+ * element that takes a not-inherited property with `inherit` when its
+ * parent's value changes, so they kept the value from before the drag (the
+ * logo stayed invisible while the sidebar was dragged).
  */
 export const writeSidebarResizeWidth = (
   shell: HTMLElement | null | undefined,
   width: number,
 ) => {
   if (!shell) return;
-  shell.style.setProperty("--sidebar-resize-preview-width", `${width}px`);
   const logoOpacity = Math.min(
     1,
     Math.max(
@@ -77,10 +82,18 @@ export const writeSidebarResizeWidth = (
         (SIDEBAR_MIN_WIDTH - SIDEBAR_COLLAPSED_WIDTH),
     ),
   );
-  shell.style.setProperty(
-    "--sidebar-resize-logo-opacity",
-    String(+logoOpacity.toFixed(3)),
-  );
+  const previewWidth = `${width}px`;
+  const opacity = String(+logoOpacity.toFixed(3));
+  const targets: (HTMLElement | SVGElement)[] = [
+    shell,
+    ...shell.querySelectorAll<HTMLElement | SVGElement>(
+      "[data-sidebar-resize-reader]",
+    ),
+  ];
+  for (const target of targets) {
+    target.style.setProperty("--sidebar-resize-preview-width", previewWidth);
+    target.style.setProperty("--sidebar-resize-logo-opacity", opacity);
+  }
 };
 
 export const subscribeToNothing = () => () => {};

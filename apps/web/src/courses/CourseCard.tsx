@@ -459,17 +459,37 @@ export function CourseCard({
             <h2 className="truncate text-base font-semibold leading-10 tracking-[-0.015em] text-(--text) lg:text-lg">
               {course.title}
             </h2>
-            <p className="mt-0.5 flex min-w-0 items-center gap-x-2 overflow-hidden text-[0.8125rem] leading-6 whitespace-nowrap text-(--muted)">
+            <p className="@container mt-0.5 flex min-w-0 items-center gap-x-2 overflow-hidden text-[0.8125rem] leading-6 whitespace-nowrap text-(--muted)">
               {facts.map((fact, index) => {
                 const { Icon, text } = courseCardFacts[fact](course);
                 const isLast = index === facts.length - 1;
+                // Only the last fact gives way when the line is short. On a
+                // line too short for the others whole (a narrow card), the
+                // last one is left out with its dot, and the one before it
+                // gives way instead, so no fact is cut off mid-word.
+                const dropsWhenNarrow = isLast && facts.length > 1;
+                const givesWayWhenNarrow = index === facts.length - 2;
                 return (
                   <Fragment key={fact}>
-                    {index > 0 ? <span aria-hidden="true">•</span> : null}
-                    {/* Only the last fact gives way when the line is short. */}
+                    {index > 0 ? (
+                      <span
+                        aria-hidden="true"
+                        className={
+                          dropsWhenNarrow ? "@max-[13rem]:hidden" : undefined
+                        }
+                      >
+                        •
+                      </span>
+                    ) : null}
                     <CourseCardFact
                       Icon={factIcons ? Icon : undefined}
-                      className={isLast ? "min-w-0 truncate" : undefined}
+                      className={
+                        isLast
+                          ? `min-w-0 truncate${dropsWhenNarrow ? " @max-[13rem]:hidden" : ""}`
+                          : givesWayWhenNarrow
+                            ? "shrink-0 @max-[13rem]:min-w-0 @max-[13rem]:shrink @max-[13rem]:truncate"
+                            : undefined
+                      }
                     >
                       {text}
                     </CourseCardFact>

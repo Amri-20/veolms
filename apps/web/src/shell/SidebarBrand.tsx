@@ -83,6 +83,7 @@ export function SidebarBrand({
     >
       <span
         className="courses-logo-clip"
+        data-sidebar-resize-reader=""
         role="img"
         aria-label="ProCodrr"
         title="Home. Click, then hold to float the sidebar"

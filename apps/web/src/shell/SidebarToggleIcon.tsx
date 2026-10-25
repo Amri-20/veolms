@@ -52,6 +52,7 @@ export function SidebarToggleIcon({
         <rect x="0" y="0" width="64" height="64" fill="white" />
         <rect
           data-sidebar-toggle-cut=""
+          data-sidebar-resize-reader=""
           x="9"
           y="9"
           width={direction === "left" ? 26 : 17}

@@ -3,6 +3,7 @@ import { HOME_PAGE_DISCUSSIONS_PER_PAGE } from "@veolms/contracts/home-page-defa
 import { useState } from "react";
 import { ResponsiveAvatar } from "../../components/ResponsiveAvatar";
 import { getCoursePlayerPath } from "../../learning/coursePlayerNavigation";
+import { markdownToPlainText } from "../../learning/discussion-editor/types";
 import type { NavigateTo } from "../../routing/navigation";
 import { GuestHomeLink } from "./GuestHomeLink";
 import { GuestHomeSectionHeader } from "./GuestHomeSectionHeader";
@@ -136,7 +137,11 @@ export function GuestHomeDiscussions({
             {shown.map((discussion) => {
               const author =
                 discussion.author.displayName.trim() || "Anonymous Learner";
-              const comment = discussion.title?.trim() || discussion.snippet;
+              // A snippet can be the start of a Markdown note; it is shown as
+              // the text it reads as, without its `#` and `**` marks.
+              const comment =
+                discussion.title?.trim() ||
+                markdownToPlainText(discussion.snippet);
 
               return (
                 <li key={discussion.id} className="min-w-0">

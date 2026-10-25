@@ -1105,8 +1105,11 @@ export function CoursesPage({
             // width a drag is giving the sidebar. Both are written on the
             // shell and are not handed down by themselves (see its registration in
             // foundation.css), so each box on the way to the picture
-            // asks for it.
+            // asks for it. The sidebar reads the width itself while floating
+            // (foundation.css), so it is also written on it (Safari, see
+            // writeSidebarResizeWidth).
             className="courses-sidebar touch-pan-y [--sidebar-resize-preview-width:inherit] [--sidebar-resize-logo-opacity:inherit]"
+            data-sidebar-resize-reader=""
             data-header-layout={sidebarHeaderLayout}
             aria-label={`${effectiveRole === "creator" ? "Creator" : "Student"} navigation`}
             aria-hidden={

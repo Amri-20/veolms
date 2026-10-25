@@ -22,6 +22,7 @@ import {
   setLearningMiniPlayerPreferredLeft,
   getLearningMiniPlayerBottomEdge as getSettledBottomEdge,
   getLearningMiniPlayerHeight,
+  getLearningMiniPlayerLeftDock as getLeftDock,
   getLearningMiniPlayerPointerResizeLayout,
   getLearningMiniPlayerWidthBounds as getWidthBounds,
   getLearningMiniPlayerPlaylistHeight as getPlaylistHeight,
@@ -100,6 +101,25 @@ interface PinchGesture {
 
 type MiniPlayerGestureMode =
   "idle" | "dragging" | "resizing" | "settling" | "dismissing";
+
+/**
+ * Where the mini player was last put to rest (by a gesture, or where it
+ * first appeared), and whether that was against the right and bottom edges,
+ * or in the bottom-left corner beside the sidebar. A change of the viewport's
+ * size (or of the sidebar's width) fits this again rather than the place the
+ * last change squeezed it into, so it keeps to its edges as the window grows,
+ * stays clear of a sidebar that widens, and comes back to its size when a
+ * squeeze is undone.
+ */
+interface MiniPlayerRestingPlace {
+  layout: MiniPlayerLayout;
+  againstRight: boolean;
+  againstBottom: boolean;
+  againstLeftDock: boolean;
+}
+
+/** Within this many pixels of an edge, the player counts as resting on it. */
+const EDGE_TOLERANCE = 2;
 
 const clampLayout = (
   layout: MiniPlayerLayout,
@@ -317,6 +337,7 @@ export function useLearningMiniPlayerGestures(
   const [dismissDistance, setDismissDistance] = useState(0);
   const [dismissShift, setDismissShift] = useState(0);
   const layoutRef = useRef<MiniPlayerLayout | null>(null);
+  const restingPlaceRef = useRef<MiniPlayerRestingPlace | null>(null);
   const modeRef = useRef<MiniPlayerGestureMode>("idle");
   const pointersRef = useRef(new Map<number, PointerSample>());
   const singleGestureRef = useRef<SinglePointerGesture | null>(null);
@@ -427,8 +448,42 @@ export function useLearningMiniPlayerGestures(
     };
   }, [containerRef, enabled]);
 
+  const rememberRestingPlace = useCallback(
+    (restingLayout: MiniPlayerLayout) => {
+      const viewport = getViewportBounds();
+      const height = getLearningMiniPlayerHeight(
+        restingLayout.width,
+        isDesktopLearningMinimizeViewport(),
+        isExpanded,
+        getPlaylistHeight(restingLayout),
+      );
+      const rightmostLeft =
+        viewport.left +
+        viewport.width -
+        MINI_PLAYER_MARGIN -
+        restingLayout.width;
+      const downmostTop = getSettledBottomEdge(viewport) - height;
+      const againstRight =
+        Math.abs(restingLayout.left - rightmostLeft) <= EDGE_TOLERANCE;
+      restingPlaceRef.current = {
+        layout: restingLayout,
+        againstRight,
+        againstBottom:
+          Math.abs(restingLayout.top - downmostTop) <= EDGE_TOLERANCE,
+        againstLeftDock:
+          !againstRight &&
+          Math.abs(restingLayout.left - getLeftDock(viewport)) <=
+            EDGE_TOLERANCE,
+      };
+    },
+    [isExpanded],
+  );
+
   const commitLayout = useCallback(
-    (nextLayout: MiniPlayerLayout) => {
+    (
+      nextLayout: MiniPlayerLayout,
+      { fromViewportChange = false }: { fromViewportChange?: boolean } = {},
+    ) => {
       const isDesktop = isDesktopLearningMinimizeViewport();
       const targetLayout = isDesktop
         ? clampLayout(nextLayout, undefined, isExpanded)
@@ -436,9 +491,10 @@ export function useLearningMiniPlayerGestures(
       layoutRef.current = targetLayout;
       setLayout(targetLayout);
       rememberRestingSide(targetLayout);
+      if (!fromViewportChange) rememberRestingPlace(targetLayout);
       return targetLayout;
     },
-    [isExpanded],
+    [isExpanded, rememberRestingPlace],
   );
 
   const showLiveLayout = useCallback((nextLayout: MiniPlayerLayout) => {
@@ -465,6 +521,7 @@ export function useLearningMiniPlayerGestures(
       }
       showLiveLayout(settledLayout);
       rememberRestingSide(settledLayout);
+      rememberRestingPlace(settledLayout);
       needsSettleRef.current = false;
       settleCandidateRef.current = null;
 
@@ -482,7 +539,7 @@ export function useLearningMiniPlayerGestures(
       }
       return settledLayout;
     },
-    [isExpanded, showLiveLayout, updateMode],
+    [isExpanded, rememberRestingPlace, showLiveLayout, updateMode],
   );
 
   const measureLayout = useCallback(() => {
@@ -516,6 +573,7 @@ export function useLearningMiniPlayerGestures(
     // The place a minimizing swipe asked for was for that mini player.
     setLearningMiniPlayerPreferredLeft(null);
     layoutRef.current = null;
+    restingPlaceRef.current = null;
     setLayout(null);
     modeRef.current = "idle";
     setMode("idle");
@@ -557,18 +615,69 @@ export function useLearningMiniPlayerGestures(
   useEffect(() => {
     if (!enabled) return undefined;
     const handleViewportResize = () => {
-      if (layoutRef.current) commitLayout(layoutRef.current);
+      const currentLayout = layoutRef.current;
+      if (!currentLayout) return;
+      const restingPlace = restingPlaceRef.current;
+      const isAtRest =
+        modeRef.current === "idle" || modeRef.current === "settling";
+      // Mid-gesture, the place under the finger is the one to keep in view.
+      if (!restingPlace || !isAtRest) {
+        commitLayout(currentLayout, { fromViewportChange: true });
+        return;
+      }
+      const viewport = getViewportBounds();
+      const { maximumWidth, minimumWidth } = getWidthBounds(viewport);
+      const width = clamp(
+        restingPlace.layout.width,
+        minimumWidth,
+        maximumWidth,
+      );
+      const height = getLearningMiniPlayerHeight(
+        width,
+        isDesktopLearningMinimizeViewport(),
+        isExpanded,
+        getPlaylistHeight(restingPlace.layout),
+      );
+      const rightmostLeft =
+        viewport.left + viewport.width - MINI_PLAYER_MARGIN - width;
+      commitLayout(
+        {
+          ...restingPlace.layout,
+          width,
+          left: restingPlace.againstRight
+            ? rightmostLeft
+            : restingPlace.againstLeftDock
+              ? Math.min(getLeftDock(viewport), rightmostLeft)
+              : restingPlace.layout.left,
+          top: restingPlace.againstBottom
+            ? getSettledBottomEdge(viewport) - height
+            : restingPlace.layout.top,
+        },
+        { fromViewportChange: true },
+      );
+    };
+    // The sidebar widens and collapses on its own (its toggle, or a resize
+    // that changes the layout), and a player beside it moves with it.
+    const handleSidebarResize = () => {
+      if (restingPlaceRef.current?.againstLeftDock) handleViewportResize();
     };
     const viewport = window.visualViewport;
     window.addEventListener("resize", handleViewportResize);
     viewport?.addEventListener("resize", handleViewportResize);
     viewport?.addEventListener("scroll", handleViewportResize);
+    const sidebar = document.querySelector(".courses-sidebar");
+    const sidebarSizes =
+      sidebar && typeof ResizeObserver === "function"
+        ? new ResizeObserver(handleSidebarResize)
+        : null;
+    if (sidebar) sidebarSizes?.observe(sidebar);
     return () => {
       window.removeEventListener("resize", handleViewportResize);
       viewport?.removeEventListener("resize", handleViewportResize);
       viewport?.removeEventListener("scroll", handleViewportResize);
+      sidebarSizes?.disconnect();
     };
-  }, [commitLayout, enabled]);
+  }, [commitLayout, enabled, isExpanded]);
 
   const isExpandedRef = useRef(isExpanded);
   useEffect(() => {
@@ -1102,6 +1211,7 @@ export function useLearningMiniPlayerGestures(
             writeMiniPlayerWidthPreference(settledLayout.width);
           }
         } else {
+          if (currentLayout) rememberRestingPlace(currentLayout);
           updateMode("idle");
         }
         scheduleClickRelease();
@@ -1110,6 +1220,7 @@ export function useLearningMiniPlayerGestures(
     [
       dismiss,
       isExpanded,
+      rememberRestingPlace,
       scheduleClickRelease,
       settleLayout,
       showLiveLayout,
