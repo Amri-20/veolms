@@ -1,4 +1,5 @@
 import {
+  isPlaybackStalled,
   FullscreenButton,
   MuteButton,
   PlayerIconButton,
@@ -962,7 +963,7 @@ export function LessonPlayerControls({
   const MinimizeIcon = playerTheme.icons.minimize;
   const mobileInteraction = usePlayerMobileInteraction();
   const {
-    buffering,
+    stalled,
     controlsVisible,
     error,
     fullscreen,
@@ -972,7 +973,7 @@ export function LessonPlayerControls({
     settingsOpen,
   } = usePlayerState(
     ({ media, ui }) => ({
-      buffering: media.buffering,
+      stalled: isPlaybackStalled(media),
       controlsVisible: ui.controlsVisible,
       error: media.error,
       fullscreen: ui.fullscreen,
@@ -982,7 +983,7 @@ export function LessonPlayerControls({
       settingsOpen: ui.settingsView !== "closed",
     }),
     (left, right) =>
-      left.buffering === right.buffering &&
+      left.stalled === right.stalled &&
       left.controlsVisible === right.controlsVisible &&
       left.error === right.error &&
       left.fullscreen === right.fullscreen &&
@@ -993,7 +994,8 @@ export function LessonPlayerControls({
   );
   const ready = lifecycle === "ready";
   const hasError = lifecycle === "error" || Boolean(error);
-  const loading = lifecycle !== "ready" || buffering;
+  // Held up for data (not the raw buffering flag: see isPlaybackStalled).
+  const loading = lifecycle !== "ready" || stalled;
   const visible =
     !controlsSuppressed && (controlsVisible || settingsOpen || endScreenOpen);
   // Moving the timeline means the learner is going back into the video:
@@ -1604,17 +1606,17 @@ export function LessonCentralControls({
   onGoNext,
   onGoPrevious,
 }: LessonCentralControlsProps) {
-  const { buffering, controlsVisible, lifecycle, paused, scrubbing } =
+  const { stalled, controlsVisible, lifecycle, paused, scrubbing } =
     usePlayerState(
       ({ media, ui }) => ({
-        buffering: media.buffering,
+        stalled: isPlaybackStalled(media),
         controlsVisible: ui.controlsVisible,
         lifecycle: media.lifecycle,
         paused: media.paused,
         scrubbing: ui.scrubbing,
       }),
       (left, right) =>
-        left.buffering === right.buffering &&
+        left.stalled === right.stalled &&
         left.controlsVisible === right.controlsVisible &&
         left.lifecycle === right.lifecycle &&
         left.paused === right.paused &&
@@ -1622,9 +1624,9 @@ export function LessonCentralControls({
     );
   const mobileInteraction = usePlayerMobileInteraction();
   // A paused video is not waiting for anything the learner can see; its play
-  // button stays, whatever the buffer reports (Safari on iPhone reports a
-  // paused video as buffering).
-  const loading = lifecycle !== "ready" || (buffering && !paused);
+  // button stays. While playing, only a playhead with nothing buffered under
+  // it counts (Safari on iPhone reports buffering with plenty buffered).
+  const loading = lifecycle !== "ready" || (stalled && !paused);
   // A drag on the timeline shows the moment over the whole picture; the
   // play and lesson buttons in its middle step aside for it.
   const visible =
