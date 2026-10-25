@@ -42,9 +42,21 @@ export function useAnchorPositionFallback(
     const host = hostRef.current;
     if (!host || !anchor || supportsAnchorPositioning()) return undefined;
 
+    // What this hook wrote, so that leaving takes away only its own values:
+    // the mini player that follows sets its own box on the same element in
+    // the same commit, before this cleanup runs, and must keep it.
+    const written: Partial<
+      Record<(typeof GEOMETRY_PROPERTIES)[number], string>
+    > = {};
     const clear = () => {
       for (const property of GEOMETRY_PROPERTIES) {
-        host.style.removeProperty(property);
+        if (
+          written[property] !== undefined &&
+          host.style.getPropertyValue(property) === written[property] &&
+          host.style.getPropertyPriority(property) === "important"
+        ) {
+          host.style.removeProperty(property);
+        }
       }
     };
     let frame = 0;
@@ -74,6 +86,7 @@ export function useAnchorPositionFallback(
         if (host.style.getPropertyValue(property) !== next[property]) {
           host.style.setProperty(property, next[property], "important");
         }
+        written[property] = next[property];
       }
     };
     const schedule = () => {
