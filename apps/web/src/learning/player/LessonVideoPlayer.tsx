@@ -109,6 +109,9 @@ const FINISHED_LESSON_RESUME_TAIL_SECONDS = 3;
 // percentage would start hours early in a long lesson.
 const NEAR_LESSON_END_SECONDS = 60;
 const LESSON_PLAYER_CONTROLS_IDLE_DELAY_MS = 1_000;
+// On a touch screen the controls stay as long as YouTube's do: a second was
+// gone before the finger that showed them reached a button.
+const LESSON_PLAYER_CONTROLS_TOUCH_IDLE_DELAY_MS = 3_000;
 /** How long a volume taken from another tab counts as that tab's. */
 const REMOTE_VOLUME_ECHO_MS = 2_000;
 /** Another tab's volume is applied at most this often. */
@@ -1721,6 +1724,7 @@ export function LessonVideoPlayer({
       seekIntervalSeconds={seekIntervalSeconds}
       emptyTapBehavior="responsive"
       controlsIdleDelay={LESSON_PLAYER_CONTROLS_IDLE_DELAY_MS}
+      controlsTouchIdleDelay={LESSON_PLAYER_CONTROLS_TOUCH_IDLE_DELAY_MS}
       keepControlsVisibleUntilFirstPlay
       keepPosterVisibleUntilFirstPlay
       onEvent={handleEvent}

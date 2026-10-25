@@ -100,6 +100,8 @@ export interface VideoPlayerProps extends Omit<
   /** Action performed by a single pointer tap on empty video space. */
   emptyTapBehavior?: VideoPlayerEmptyTapBehavior;
   controlsIdleDelay?: number;
+  /** How long the controls stay after a touch (defaults to the idle delay). */
+  controlsTouchIdleDelay?: number;
   /** Keeps controls pinned until the current source begins playback once. */
   keepControlsVisibleUntilFirstPlay?: boolean;
   /** Keeps a player-owned poster visible until the current source plays once. */
@@ -172,6 +174,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
       className,
       controls,
       controlsIdleDelay,
+      controlsTouchIdleDelay,
       description,
       engine = "shaka",
       engineFactory,
@@ -401,6 +404,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
             shortcuts={shortcuts}
             keyboardEnabled={keyboardEnabled}
             controlsIdleDelay={controlsIdleDelay}
+            controlsTouchIdleDelay={controlsTouchIdleDelay}
             keepControlsVisibleUntilFirstPlay={
               keepControlsVisibleUntilFirstPlay
             }
