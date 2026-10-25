@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { useAnchorPositionFallback } from "./useAnchorPositionFallback";
 import "../learning-feature.css";
 import { createPortal } from "react-dom";
 import {
@@ -172,6 +173,12 @@ export function PersistentLearningPlayerHost({
   presentation,
 }: PersistentLearningPlayerHostProps) {
   const hostRef = useRef<HTMLElement>(null);
+  // Over its slot by measurement where the stylesheet's anchor positioning
+  // is not understood (Safari before 26); nothing elsewhere.
+  useAnchorPositionFallback(
+    hostRef,
+    presentation === "mini" ? null : player.anchor,
+  );
   const mainScrollportRef = useRef<HTMLElement | null>(
     player.anchor?.closest<HTMLElement>(".courses-main") ?? null,
   );

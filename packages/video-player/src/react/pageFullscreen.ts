@@ -120,11 +120,21 @@ function notify(): void {
   document.dispatchEvent(new Event(PAGE_FULLSCREEN_CHANGE_EVENT));
 }
 
+/**
+ * Whether an upright phone gives a landscape video a quarter turn. Off: the
+ * turned picture sat inside the browser's upright bars (the page cannot hide
+ * them), which looked less like full screen, not more; as on YouTube's
+ * mobile site, the learner turns the phone and the page follows. The turn
+ * is kept behind this switch, with the coordinate helpers that undo it.
+ */
+const QUARTER_TURN_ENABLED = false;
+
 /** Sizes (and turns) the shell for the screen; returns whether it turned. */
 function layout(state: PageFullscreen): boolean {
   const width = window.innerWidth;
   const height = window.innerHeight;
-  const turned = height > width && state.contentLandscape();
+  const turned =
+    QUARTER_TURN_ENABLED && height > width && state.contentLandscape();
   const style = state.element.style;
   const set = (property: string, value: string) =>
     style.setProperty(property, value, "important");
