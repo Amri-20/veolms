@@ -540,6 +540,21 @@ export abstract class MediaElementEngineBase implements VideoEngine {
     this.#events.emit("unloaded", undefined);
   }
 
+  /**
+   * The error state is left behind once the loaded source plays again. A
+   * media error is not always the end: Safari on iPhone reports a decode
+   * error mid-stream, Shaka Player resets its media source and playback
+   * carries on from the same position, with metadata loaded and `playing`
+   * fired again. Staying in "error" then kept the controls that wait for a
+   * ready player hidden for the rest of the lesson.
+   */
+  private recoverFromMediaError(): void {
+    if (this.#snapshot.lifecycle !== "error" || !this.#snapshot.source) {
+      return;
+    }
+    this.updateSnapshot({ lifecycle: "ready", error: null });
+  }
+
   protected setBuffering(buffering: boolean): void {
     if (this.#snapshot.buffering === buffering) {
       return;
@@ -632,6 +647,7 @@ export abstract class MediaElementEngineBase implements VideoEngine {
     });
     listen("playing", () => {
       this.setBuffering(false);
+      this.recoverFromMediaError();
       this.updateSnapshot({
         paused: false,
         playing: true,
@@ -684,6 +700,7 @@ export abstract class MediaElementEngineBase implements VideoEngine {
     listen("ratechange", () => this.syncPlaybackRate());
     listen("loadedmetadata", () => {
       this.syncMediaState();
+      this.recoverFromMediaError();
       this.refreshNativeTextTracks();
     });
     listen("error", () =>

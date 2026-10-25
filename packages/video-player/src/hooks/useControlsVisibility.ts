@@ -11,11 +11,19 @@ type PlayerInputMode = "keyboard" | "pointer";
 export interface UseControlsVisibilityOptions {
   rootRef: RefObject<HTMLElement | null>;
   idleDelay?: number;
+  /**
+   * How long the controls stay after a touch, when that differs from
+   * `idleDelay`. A finger has no hover to keep them: a tap shows them and
+   * the next tap must find them still there, so a phone keeps them longer
+   * than a mouse that can wake them by moving.
+   */
+  touchIdleDelay?: number;
   keepVisibleUntilFirstPlay?: boolean;
 }
 
 export function useControlsVisibility({
   idleDelay = 2_200,
+  touchIdleDelay = idleDelay,
   keepVisibleUntilFirstPlay = false,
   rootRef,
 }: UseControlsVisibilityOptions): void {
@@ -140,14 +148,17 @@ export function useControlsVisibility({
         return;
       }
 
-      hideTimerRef.current = setTimeout(() => {
-        hideTimerRef.current = null;
-        if (controlsMustRemainVisible()) {
-          controller.setControlsVisible(true);
-          return;
-        }
-        controller.setControlsVisible(false);
-      }, idleDelay);
+      hideTimerRef.current = setTimeout(
+        () => {
+          hideTimerRef.current = null;
+          if (controlsMustRemainVisible()) {
+            controller.setControlsVisible(true);
+            return;
+          }
+          controller.setControlsVisible(false);
+        },
+        pointerModeRef.current === "touch" ? touchIdleDelay : idleDelay,
+      );
     };
 
     const revealFromPointer = (event: PointerEvent) => {
@@ -339,6 +350,7 @@ export function useControlsVisibility({
     controlsLocked,
     controlsVisible,
     idleDelay,
+    touchIdleDelay,
     keepVisibleUntilFirstPlay,
     mobileInteraction,
     paused,
