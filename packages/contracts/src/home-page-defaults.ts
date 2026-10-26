@@ -16,7 +16,7 @@ export const HOME_PAGE_MAX_SELECTED_COURSES = HOME_PAGE_COURSES_PER_SECTION;
 /** How many comments the home page holds, shown a page at a time. */
 export const HOME_PAGE_DISCUSSION_COUNT = 36;
 export const HOME_PAGE_DISCUSSIONS_PER_PAGE = 6;
-export const HOME_PAGE_MAX_PINNED_DISCUSSIONS = 5;
+export const HOME_PAGE_MAX_PINNED_DISCUSSIONS = 100;
 export const HOME_PAGE_MAX_HIDDEN_DISCUSSIONS = 200;
 
 /**

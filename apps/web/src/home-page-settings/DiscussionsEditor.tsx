@@ -64,7 +64,7 @@ export function DiscussionsEditor({
     <SettingsSection
       id="home-page-discussions-heading"
       title="Student comments"
-      description={`The comment cards below the courses. They show the most popular public comment from each student, up to ${HOME_PAGE_DISCUSSION_COUNT}.`}
+      description={`The comment cards below the courses. They show the pinned comments, then the most popular public comment from each student, up to ${HOME_PAGE_DISCUSSION_COUNT} in all (or every pinned one when more are pinned).`}
       visible={section.visible}
       onVisibleChange={(visible) => onChange({ ...section, visible })}
     >

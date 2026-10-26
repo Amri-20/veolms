@@ -459,6 +459,12 @@ export interface ThreadsRepository {
       limit: number;
       /** Keep only each author's most popular thread. */
       onePerAuthor?: boolean;
+      /**
+       * Read only these threads, chosen by an admin for the home page. They
+       * may be on any published lesson, not only the preview and free ones,
+       * and are not capped at 40.
+       */
+      threadIds?: readonly string[];
     },
   ): Promise<PublicPopularThreadRow[]>;
 
@@ -1048,8 +1054,12 @@ export function createThreadsRepository(): ThreadsRepository {
       return rows as ThreadRowWithAuthor[];
     },
 
-    async listPublicPopularThreads(db, { academyId, limit, onePerAuthor }) {
-      const ranked = db
+    async listPublicPopularThreads(
+      db,
+      { academyId, limit, onePerAuthor, threadIds },
+    ) {
+      if (threadIds && threadIds.length === 0) return [];
+      let ranked = db
         .selectFrom("learning_threads as t")
         .innerJoin("courses as c", "c.id", "t.course_id")
         .innerJoin("course_lessons as l", "l.id", "t.lesson_id")
@@ -1089,16 +1099,24 @@ export function createThreadsRepository(): ThreadsRepository {
         .where("t.academy_id", "=", academyId)
         .where("t.kind", "in", ["comment", "question"])
         .where("t.status", "=", "active")
-        .where(
-          publicLessonDiscussionPredicate({
-            course: "c",
-            lesson: "l",
-            section: "s",
-            pricing: "p",
-            accessRules: "ar",
-          }),
-        )
         .where(discussionVisibilityPredicate("t", null, false));
+      ranked = threadIds
+        ? ranked
+            .where("t.id", "in", [...threadIds])
+            .where("c.status", "=", "published")
+            .where("c.deleted_at", "is", null)
+            .where("l.is_published", "=", true)
+            .where("l.deleted_at", "is", null)
+            .where("s.deleted_at", "is", null)
+        : ranked.where(
+            publicLessonDiscussionPredicate({
+              course: "c",
+              lesson: "l",
+              section: "s",
+              pricing: "p",
+              accessRules: "ar",
+            }),
+          );
 
       let query = db.selectFrom(ranked.as("r")).selectAll("r");
       if (onePerAuthor) query = query.where("r.authorRank", "=", 1);
@@ -1106,7 +1124,7 @@ export function createThreadsRepository(): ThreadsRepository {
         .orderBy("r.engagementScore", "desc")
         .orderBy("r.updatedAt", "desc")
         .orderBy("r.id", "desc")
-        .limit(Math.min(40, limit))
+        .limit(threadIds ? threadIds.length : Math.min(40, limit))
         .execute();
 
       return rows.map(
