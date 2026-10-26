@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { cacheTags, clearAllCaches, invalidateCache } from "@veolms/api-core";
 import type { Database } from "@veolms/database";
 import type { Kysely } from "kysely";
 
 import type { AppServices } from "../../../services/index.ts";
-import {
-  clearCourseContentCache,
-  evictCachedCourseContent,
-} from "../shared/course-content-cache.ts";
 import { createCourseService } from "./course.service.ts";
 
 // The public course (the signed-out overview, the curriculum course pages
@@ -88,7 +85,7 @@ function build() {
 }
 
 await test("the signed-out overview, the curriculum and its version are built once and shared by every course service", async () => {
-  clearCourseContentCache();
+  clearAllCaches();
   const one = build();
   const another = build();
 
@@ -104,16 +101,16 @@ await test("the signed-out overview, the curriculum and its version are built on
 });
 
 await test("after the course changes, the next read builds it again", async () => {
-  clearCourseContentCache();
+  clearAllCaches();
   const { service, reads } = build();
   await service.getPublicCurriculum(COURSE);
-  evictCachedCourseContent(COURSE);
+  invalidateCache([cacheTags.course(COURSE)]);
   await service.getPublicCurriculum(COURSE);
   assert.equal(reads.lessons, 2);
 });
 
 await test("a signed-in viewer's overview is never taken from the cache", async () => {
-  clearCourseContentCache();
+  clearAllCaches();
   const { service, reads } = build();
   const learner = { id: LEARNER, roles: ["student"] };
   await service.getPublicCurriculum(COURSE);

@@ -1,3 +1,5 @@
+import { cacheTags } from "./cache/tags.ts";
+
 /**
  * Which requests change what the site's static pages show (the course
  * pages, the catalogue, the home page, the platform's look), so the pages
@@ -96,35 +98,14 @@ export function detectSiteContentChange(request: {
   return null;
 }
 
-type SiteContentChangeListener = (change: SiteContentChange) => void;
-
-const listeners = new Set<SiteContentChangeListener>();
-
 /**
- * Be told of every change a successful request made to what the site shows
- * (see `detectSiteContentChange`), before its response is sent, so a
- * process-local cache of that content is cleared before the writer reads it
- * back. Returns a function that stops the listener.
+ * The cache tags a change clears: a course's own entries and the course
+ * lists, or for a site-wide change everything pages draw from.
  */
-export function onSiteContentChange(
-  listener: SiteContentChangeListener,
-): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-/** Tell every listener; one that throws does not stop the others. */
-export function notifySiteContentChange(
+export function cacheTagsForSiteContentChange(
   change: SiteContentChange,
-  onError?: (error: unknown) => void,
-): void {
-  for (const listener of listeners) {
-    try {
-      listener(change);
-    } catch (error) {
-      onError?.(error);
-    }
-  }
+): string[] {
+  return change.scope === "course"
+    ? [cacheTags.course(change.courseId), cacheTags.catalog]
+    : [cacheTags.site, cacheTags.catalog];
 }

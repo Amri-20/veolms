@@ -195,6 +195,20 @@ const serverConfigSchema = z.object({
     .max(30_000)
     .default(30_000),
   /**
+   * Master switch for every process-local cache built on api-core's
+   * `createCache`. Off, every read goes to the database: for diagnosing a
+   * suspected stale answer without a deploy.
+   */
+  CACHE_ENABLED: booleanEnvironmentValueSchema.default(true),
+  /**
+   * Tells the other API processes when cached data changes (Postgres
+   * LISTEN/NOTIFY, one extra connection per process), so a write made in one
+   * process is not served stale by another until its TTL runs out. Needs a
+   * direct connection: LISTEN does not work through a transaction-mode
+   * pooler. Off, other processes see a change when their entry expires.
+   */
+  CACHE_BUS_ENABLED: booleanEnvironmentValueSchema.default(true),
+  /**
    * Runs the notification outbox/email processor inside the API process.
    * Nothing in the repository schedules the standalone worker scripts, so
    * without this, notifications and emails are only delivered if ops runs

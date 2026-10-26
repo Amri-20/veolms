@@ -1540,7 +1540,6 @@ export function createCourseService({
   ): Promise<PublicCourseContent> {
     return await getCachedPublicCourseContent(
       courseIdOrSlug,
-      config.COURSE_CACHE_TTL_MS,
       async () => {
         const overview = await buildCourseOverviewData(
           courseIdOrSlug,
