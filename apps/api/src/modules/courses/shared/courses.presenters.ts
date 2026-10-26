@@ -37,13 +37,16 @@ type CourseRow = Pick<
   | "created_at"
   | "updated_at"
   | "published_at"
->;
+> &
+  // List queries do not read the banner; the editor and single-course reads do.
+  Partial<Pick<Selectable<Database["courses"]>, "banner_media_id">>;
 
 /** The full authoring view of a course (`courseSchema`). */
 export function presentCourse(
   course: CourseRow,
   extras: {
     thumbnail?: CourseThumbnailUrls;
+    banner?: CourseThumbnailUrls;
     totalDurationSeconds?: number;
   } = {},
 ): Course {
@@ -63,6 +66,15 @@ export function presentCourse(
       ? {
           thumbnailUrl: extras.thumbnail.thumbnailUrl,
           thumbnailSrcSet: extras.thumbnail.thumbnailSrcSet,
+        }
+      : {}),
+    ...(course.banner_media_id !== undefined
+      ? { bannerMediaId: course.banner_media_id }
+      : {}),
+    ...(extras.banner
+      ? {
+          bannerUrl: extras.banner.thumbnailUrl,
+          bannerSrcSet: extras.banner.thumbnailSrcSet,
         }
       : {}),
     instructorAlias: course.instructor_alias,

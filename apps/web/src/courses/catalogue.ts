@@ -68,6 +68,9 @@ export interface Course {
   students: number;
   thumbnail: string;
   thumbnailSrcSet?: readonly { url: string; width: number }[];
+  /** The wide picture behind the overview hero on desktop, when one is set. */
+  banner?: string;
+  bannerSrcSet?: readonly { url: string; width: number }[];
   lifecycleStatus: CourseLifecycleStatus;
   pricing?: CoursePricing;
   certificateAvailable?: boolean;

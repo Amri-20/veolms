@@ -7,6 +7,12 @@ interface CourseHeroArtworkProps {
   title: string;
   thumbnail: string;
   thumbnailSrcSet?: Course["thumbnailSrcSet"];
+  /**
+   * A wide picture that, once the hero is wide, fills all of it in place of
+   * the thumbnail and its blurred wash. Stacked, the thumbnail stays.
+   */
+  banner?: string;
+  bannerSrcSet?: Course["bannerSrcSet"];
   /** Opens the course's preview. Without it there is no play button. */
   onPreview?: () => void;
   previewDisabled?: boolean;
@@ -69,12 +75,18 @@ const heroPictureSizes =
  *    layer of its own, over the shade, which is solid there and hides the
  *    first grid; the first one is what shows faintly on the picture.
  *
+ * With a banner, once wide, 1. and 3. give way to the banner across the
+ * whole hero (its right side kept when cropped); the shade (4.) and the dot
+ * grids lie over it as they do over the thumbnail, so the text still reads.
+ *
  * The parent is the `@container/hero` these layers size themselves against.
  */
 export function CourseHeroArtwork({
   title,
   thumbnail,
   thumbnailSrcSet,
+  banner,
+  bannerSrcSet,
   onPreview,
   previewDisabled = false,
   previewLabel = "Preview course",
@@ -90,6 +102,8 @@ export function CourseHeroArtwork({
         variant.width < smallest.width ? variant : smallest,
       )
     : undefined;
+  // Classes for the thumbnail's layers that the banner replaces once wide.
+  const bannerHides = banner ? "@3xl/hero:hidden" : "";
 
   return (
     <>
@@ -98,7 +112,7 @@ export function CourseHeroArtwork({
           src={smallestVariant?.url ?? thumbnail}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 size-full scale-125 object-cover object-right opacity-55 blur-3xl saturate-150 @3xl/hero:left-auto @3xl/hero:aspect-video @3xl/hero:w-auto @3xl/hero:max-w-[62%] @3xl/hero:origin-right @3xl/hero:scale-[1.7]"
+          className={`pointer-events-none absolute inset-0 size-full scale-125 object-cover object-right opacity-55 blur-3xl saturate-150 @3xl/hero:left-auto @3xl/hero:aspect-video @3xl/hero:w-auto @3xl/hero:max-w-[62%] @3xl/hero:origin-right @3xl/hero:scale-[1.7] ${bannerHides}`}
           decoding="async"
           fetchPriority="low"
         />
@@ -118,9 +132,26 @@ export function CourseHeroArtwork({
         className="pointer-events-none absolute inset-0 hidden bg-[radial-gradient(circle,color-mix(in_srgb,var(--hero-ink)_20%,transparent)_1px,transparent_1.5px)] bg-size-[24px_24px] [mask-image:radial-gradient(110%_95%_at_58%_0%,black,transparent_74%)] @3xl/hero:block"
       />
 
+      {banner ? (
+        // Loaded lazily: stacked (a phone) it is display:none and never
+        // fetched; wide it is the hero's picture.
+        <img
+          src={banner}
+          srcSet={getCourseThumbnailSrcSet({ thumbnailSrcSet: bannerSrcSet })}
+          sizes="100vw"
+          alt=""
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-0 hidden size-full object-cover object-right @3xl/hero:block ${
+            footRoom ? "@3xl/hero:h-[calc(100%_-_1rem)]" : ""
+          }`}
+          loading="lazy"
+          decoding="async"
+        />
+      ) : null}
+
       {thumbnail ? (
         <div
-          className={`relative aspect-video w-full @3xl/hero:absolute @3xl/hero:inset-y-0 @3xl/hero:right-0 @3xl/hero:h-full @3xl/hero:w-auto @3xl/hero:max-w-[62%] ${
+          className={`relative aspect-video w-full ${bannerHides} @3xl/hero:absolute @3xl/hero:inset-y-0 @3xl/hero:right-0 @3xl/hero:h-full @3xl/hero:w-auto @3xl/hero:max-w-[62%] ${
             footRoom
               ? "@3xl/hero:bottom-4! @3xl/hero:h-[calc(100%_-_1rem)]!"
               : ""

@@ -42,6 +42,10 @@ export interface LessonVideoUploadProps {
   hideTrigger?: boolean;
   inline?: boolean;
   attachedActionLabel?: string;
+  /** The trigger's words while no video is attached. */
+  uploadLabel?: string;
+  /** What the video is called in the pop-up, lower case: "trailer". */
+  videoNoun?: string;
   stackStatusBelow?: boolean;
   onPreviewFile?: (file: File | null) => void;
   onMediaAttached: (
@@ -54,6 +58,10 @@ export interface LessonVideoUploadProps {
    * exists once processing passes THUMBNAIL_READY_PROGRESS_PERCENT.
    */
   onThumbnailAvailable?: (mediaAssetId: string) => void;
+}
+
+function toTitleCase(words: string): string {
+  return words.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export interface LessonVideoUploadHandle {
@@ -108,6 +116,8 @@ export const LessonVideoUpload = forwardRef<
     hideTrigger = false,
     inline = false,
     attachedActionLabel = "Change Video",
+    uploadLabel = "Upload",
+    videoNoun = "lesson video",
     stackStatusBelow = false,
     onPreviewFile,
     onMediaAttached,
@@ -1085,6 +1095,7 @@ export const LessonVideoUpload = forwardRef<
     <TranscodingProgressStage
       file={selectedFile}
       mediaAttached={!selectedFile && Boolean(activeMediaId)}
+      videoNoun={videoNoun}
       progress={hasReceivedProgress ? transcodeProgress : null}
       status={transcodeStatus}
       errorMessage={isStreamError ? null : errorMessage}
@@ -1131,7 +1142,7 @@ export const LessonVideoUpload = forwardRef<
               className={`${stackStatusBelow ? "inline-flex h-8.5 items-center justify-center gap-1.5 rounded-[8px] border-none bg-(--accent) text-(--on-accent,#ffffff) shadow-[0_3px_10px_var(--accent-shadow)] text-[0.8rem] font-bold" : "inline-flex h-8.5 items-center justify-center gap-1.5 rounded-[8px] border-none bg-(--accent) px-4 text-[0.8rem] font-bold text-(--on-accent,#ffffff) shadow-[inset_0_1px_0_color-mix(in_srgb,white_25%,transparent),0_2px_6px_rgba(0,0,0,0.2)]"} transition-all duration-150 hover:bg-(--accent-hover,var(--accent)) active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 max-[768px]:flex-1 cursor-pointer`}
             >
               {hasVideo ? <PlayCircle size={15} /> : <UploadSimple size={15} />}
-              <span>{hasVideo ? attachedActionLabel : "Upload"}</span>
+              <span>{hasVideo ? attachedActionLabel : uploadLabel}</span>
             </button>
           )}
           {isReplacementFlow && mediaAssetId ? (
@@ -1196,7 +1207,7 @@ export const LessonVideoUpload = forwardRef<
                 className="mt-0.5 shrink-0 text-emerald-400"
               />
               <span>
-                Your current lesson video stays available until this replacement
+                Your current {videoNoun} stays available until this replacement
                 is ready.
               </span>
             </div>
@@ -1262,10 +1273,10 @@ export const LessonVideoUpload = forwardRef<
                         className="m-0 truncate text-[0.98rem] sm:text-[1.05rem] font-semibold tracking-[-0.01em] text-(--text)"
                       >
                         {isReplacingVideo
-                          ? "Replace Lesson Video"
+                          ? `Replace ${toTitleCase(videoNoun)}`
                           : phase === "ready" || phase === "attached"
-                            ? "Lesson Video"
-                            : "Upload Lesson Video"}
+                            ? toTitleCase(videoNoun)
+                            : `Upload ${toTitleCase(videoNoun)}`}
                       </h2>
                     </div>
                   </div>
@@ -1641,6 +1652,7 @@ function UploadProgressStage({
 interface TranscodingProgressStageProps {
   file: File | null;
   mediaAttached: boolean;
+  videoNoun: string;
   progress?: number | null;
   status?: string;
   errorMessage?: string | null;
@@ -1652,6 +1664,7 @@ interface TranscodingProgressStageProps {
 function TranscodingProgressStage({
   file,
   mediaAttached,
+  videoNoun,
   progress = null,
   status,
   errorMessage,
@@ -1672,6 +1685,7 @@ function TranscodingProgressStage({
       <VideoFileSummary
         file={file}
         mediaAttached={mediaAttached}
+        videoNoun={videoNoun}
         badge={badge}
         processingProgress={badge === "Processing" ? progress : undefined}
         embedded={embedded}
@@ -1688,6 +1702,7 @@ interface VideoFileSummaryProps {
   isUploading?: boolean;
   onUpload?: () => void;
   mediaAttached?: boolean;
+  videoNoun?: string;
   onRemove?: () => void;
   onReplace?: () => void;
   processingProgress?: number | null;
@@ -1702,6 +1717,7 @@ function VideoFileSummary({
   isUploading = false,
   onUpload,
   mediaAttached = false,
+  videoNoun = "lesson video",
   onRemove,
   onReplace,
   processingProgress = null,
@@ -1759,16 +1775,16 @@ function VideoFileSummary({
           className="m-0 truncate text-[0.78rem] sm:text-[0.82rem] font-medium text-(--text)"
           title={
             file?.name ||
-            (mediaAttached ? "Current lesson video" : "Selected video")
+            (mediaAttached ? `Current ${videoNoun}` : "Selected video")
           }
         >
           {file?.name ||
-            (mediaAttached ? "Current lesson video" : "Selected video")}
+            (mediaAttached ? `Current ${videoNoun}` : "Selected video")}
         </p>
         <p className="m-0 mt-0.5 text-[0.7rem] sm:text-[0.72rem] text-(--muted)">
           {file
             ? `${formatBytes(file.size)}${videoDimensions ? ` • ${videoDimensions}` : ""}`
-            : "Existing lesson media"}
+            : `Existing ${videoNoun}`}
         </p>
       </div>
       {onReplace && (

@@ -25,6 +25,9 @@ export interface CourseOverviewHeroProps {
   duration: string;
   thumbnail: string;
   thumbnailSrcSet?: Course["thumbnailSrcSet"];
+  /** Fills the hero behind the text once it is wide (desktop); see the artwork. */
+  banner?: string;
+  bannerSrcSet?: Course["bannerSrcSet"];
   onBack?: () => void;
   /** Where the back link leads, as the link reads: "All courses", "Home". */
   backLabel?: string;
@@ -208,6 +211,8 @@ export function CourseOverviewHero({
   duration,
   thumbnail,
   thumbnailSrcSet,
+  banner,
+  bannerSrcSet,
   onBack,
   backLabel = "Back",
   wishlist,
@@ -274,6 +279,8 @@ export function CourseOverviewHero({
         title={title}
         thumbnail={thumbnail}
         thumbnailSrcSet={thumbnailSrcSet}
+        banner={banner}
+        bannerSrcSet={bannerSrcSet}
         onPreview={preview?.onOpen}
         previewDisabled={preview?.disabled}
         previewLabel={preview?.kind === "open" ? openLabel : undefined}

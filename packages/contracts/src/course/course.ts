@@ -470,6 +470,9 @@ export const courseSchema = z.object({
     )
     .optional(),
   trailerMediaId: z.uuid().nullable().optional(),
+  bannerMediaId: z.uuid().nullable().optional(),
+  bannerUrl: z.string().nullable().optional(),
+  bannerSrcSet: z.array(courseThumbnailVariantSchema).optional(),
   instructorAlias: z.string().max(120).nullable().optional(),
   version: z.number().int(),
   createdAt: z.string(),
@@ -573,6 +576,8 @@ export const updateCourseBasicsRequestSchema = z.object({
     .optional(),
   thumbnailMediaId: z.uuid().nullable().optional(),
   trailerMediaId: z.uuid().nullable().optional(),
+  // The desktop overview banner; null removes it.
+  bannerMediaId: z.uuid().nullable().optional(),
   instructorAlias: z.string().max(120).nullable().optional(),
   version: z.number().int(),
 });
@@ -736,6 +741,9 @@ export const courseOverviewCourseSchema = z.object({
   creatorId: z.uuid().nullable(),
   thumbnailUrl: z.string().nullable().optional(),
   thumbnailSrcSet: z.array(courseThumbnailVariantSchema).optional(),
+  // The wide picture behind the hero on desktop; the thumbnail elsewhere.
+  bannerUrl: z.string().nullable().optional(),
+  bannerSrcSet: z.array(courseThumbnailVariantSchema).optional(),
   trailerMediaId: z.uuid().nullable().optional(),
   // Null when the instructor is hidden from learners.
   instructorAlias: z.string().max(120).nullable().optional(),

@@ -72,7 +72,7 @@ export async function findMediaAssetSummaryById(
  * which makes it publicly deliverable.
  *
  * The asset's own type has to match the slot: only an image counts as a
- * thumbnail and only a video as a trailer. Matching on the id alone meant
+ * thumbnail or banner and only a video as a trailer. Matching on the id alone meant
  * any asset that ended up in `thumbnail_media_id` — a paid lesson's source
  * file, a private document — was served to anonymous callers.
  */
@@ -121,6 +121,7 @@ async function listCourseIdsShowingMedia(
           assetOfType("image"),
         ]),
         eb.and([eb("c.trailer_media_id", "=", mediaId), assetOfType("video")]),
+        eb.and([eb("c.banner_media_id", "=", mediaId), assetOfType("image")]),
       ]);
     })
     .execute();
