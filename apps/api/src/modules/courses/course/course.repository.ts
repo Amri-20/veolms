@@ -655,6 +655,7 @@ export async function updateCourse(
     difficulty?: "beginner" | "intermediate" | "advanced" | null;
     thumbnail_media_id?: string | null;
     trailer_media_id?: string | null;
+    banner_media_id?: string | null;
     instructor_alias?: string | null;
     status?: "draft" | "published" | "archived";
     published_at?: Date | null;

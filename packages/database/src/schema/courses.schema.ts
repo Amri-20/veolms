@@ -25,6 +25,7 @@ export interface CourseTable {
   thumbnail_media_id: string | null;
   thumbnail_url: string | null;
   trailer_media_id: string | null;
+  banner_media_id: string | null;
   instructor_alias: string | null;
   version: Generated<number>;
   created_at: Generated<Date>;

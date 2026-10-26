@@ -1,6 +1,7 @@
 import { coursePublicCurriculumSchema } from "@veolms/contracts";
 import { api } from "../../lib/api-client";
 import { staticCurriculumUrl } from "../../courses/staticCurriculum";
+import type { HeroVideoPlayback, VideoPlaybackToken } from "@veolms/contracts";
 import type {
   Category,
   CourseAccessListResponse,
@@ -205,6 +206,21 @@ export const coursesService = {
     payload: UpdateCourseBasicsRequest,
   ): Promise<CourseBasicsResponse> => {
     return api.patch<CourseBasicsResponse>(`/courses/${id}/basics`, payload);
+  },
+
+  /** The trailer's stream, for the course editor's preview and the overview. */
+  getCourseTrailerPlayback: (idOrSlug: string): Promise<HeroVideoPlayback> => {
+    return api.get<HeroVideoPlayback>(
+      `/courses/${encodeURIComponent(idOrSlug)}/trailer/playback`,
+    );
+  },
+
+  getCourseTrailerPlaybackToken: (
+    idOrSlug: string,
+  ): Promise<VideoPlaybackToken> => {
+    return api.get<VideoPlaybackToken>(
+      `/courses/${encodeURIComponent(idOrSlug)}/trailer/playback-token`,
+    );
   },
 
   deleteCourse: (id: string): Promise<CourseDeleteResponse> => {

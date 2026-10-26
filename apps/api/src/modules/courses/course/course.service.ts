@@ -1006,6 +1006,25 @@ export function createCourseService({
       }
     }
 
+    if (updates.bannerMediaId) {
+      const banner = await mediaService.getMediaAsset(
+        updates.bannerMediaId,
+        creatorId,
+        userRoles,
+      );
+      if (
+        !banner ||
+        banner.type !== "image" ||
+        !ALLOWED_THUMBNAIL_MIME_TYPES.has(banner.mime_type)
+      ) {
+        throw new AppError(
+          400,
+          "INVALID_BANNER",
+          "Banner must be a valid image asset.",
+        );
+      }
+    }
+
     if (updates.trailerMediaId) {
       const trailer = await mediaService.getMediaAsset(
         updates.trailerMediaId,
@@ -1036,6 +1055,7 @@ export function createCourseService({
         difficulty: difficultyUpdate,
         thumbnail_media_id: updates.thumbnailMediaId,
         trailer_media_id: updates.trailerMediaId,
+        banner_media_id: updates.bannerMediaId,
         instructor_alias: updates.instructorAlias,
         version: newVersion,
         updated_at: now,
@@ -1123,6 +1143,7 @@ export function createCourseService({
       settings,
       includes,
       thumbnail,
+      banner,
     ] = await Promise.all([
       curriculumService.findSectionsByCourseId(courseId),
       curriculumService.findLessonsByCourseId(courseId),
@@ -1133,6 +1154,11 @@ export function createCourseService({
       includesService.listIncludesForAuthorizedCourse(courseId),
       resolveCourseThumbnailUrls(
         course.thumbnail_media_id,
+        mediaOwnerId,
+        userRoles,
+      ),
+      resolveCourseThumbnailUrls(
+        course.banner_media_id,
         mediaOwnerId,
         userRoles,
       ),
@@ -1149,7 +1175,11 @@ export function createCourseService({
     );
 
     return {
-      course: presentCourse(course, { thumbnail, totalDurationSeconds }),
+      course: presentCourse(course, {
+        thumbnail,
+        banner,
+        totalDurationSeconds,
+      }),
       sections: presentCurriculum({ sections, lessons, resources, mediaById }),
       accessRules: accessRules ? presentAccessRule(accessRules) : null,
       pricing: pricing ? presentPricing(pricing) : null,
@@ -1185,6 +1215,79 @@ export function createCourseService({
   ): Promise<CourseOverviewResponse> {
     if (user) return await buildCourseOverviewData(courseIdOrSlug, user);
     return (await getPublicCourseContent(courseIdOrSlug)).overview;
+  }
+
+  /**
+   * The course's trailer, for whoever may see the course's overview: a
+   * published course's trailer plays for everyone, a draft's for those who
+   * manage it (the course editor's preview).
+   */
+  async function resolveCourseTrailer(
+    courseIdOrSlug: string,
+    user?: { id: string; roles?: string[] },
+  ) {
+    const course = COURSE_UUID_PATTERN.test(courseIdOrSlug)
+      ? await courseRepo.findCourseById(database, courseIdOrSlug)
+      : await courseRepo.findCourseBySlug(database, courseIdOrSlug);
+    if (!course) {
+      throw new AppError(404, "COURSE_NOT_FOUND", "Course not found.");
+    }
+
+    const visibility = resolveOverviewVisibility(
+      course,
+      await withPreviewReach(user),
+    );
+    if (
+      !visibility.mayOpen &&
+      !(await accessService.isCourseOpenToLearner(database, user?.id, course))
+    ) {
+      throw new AppError(404, "COURSE_NOT_FOUND", "Course not published.");
+    }
+
+    const media = course.trailer_media_id
+      ? await mediaService.getMediaAsset(
+          course.trailer_media_id,
+          course.creator_id ?? user?.id,
+          user?.roles,
+        )
+      : undefined;
+    if (!media || media.type !== "video") {
+      throw new AppError(
+        404,
+        "TRAILER_NOT_FOUND",
+        "This course has no trailer.",
+      );
+    }
+
+    return {
+      course,
+      media: {
+        id: media.id,
+        type: media.type,
+        status: media.status,
+        storageKey: media.storage_key,
+        durationSeconds: media.duration_seconds,
+      },
+    };
+  }
+
+  async function getCourseTrailerPlayback(
+    courseIdOrSlug: string,
+    user?: { id: string; roles?: string[] },
+  ) {
+    const { course, media } = await resolveCourseTrailer(courseIdOrSlug, user);
+    return await mediaService.getVideoAssetPlayback(media, {
+      mediaKey: `course-trailer-${media.id}`,
+      title: course.title,
+    });
+  }
+
+  async function getCourseTrailerPlaybackToken(
+    courseIdOrSlug: string,
+    user?: { id: string; roles?: string[] },
+  ) {
+    const { media } = await resolveCourseTrailer(courseIdOrSlug, user);
+    return await mediaService.getVideoAssetPlaybackToken(media);
   }
 
   /**
@@ -1233,6 +1336,7 @@ export function createCourseService({
       settings,
       includes,
       thumbnail,
+      banner,
     ] = await Promise.all([
       course.category_id
         ? categoryService.findCategoryById(course.category_id)
@@ -1246,6 +1350,11 @@ export function createCourseService({
       includesService.listIncludesForAuthorizedCourse(courseId),
       resolveCourseThumbnailUrls(
         course.thumbnail_media_id,
+        course.creator_id ?? user?.id,
+        user?.roles,
+      ),
+      resolveCourseThumbnailUrls(
+        course.banner_media_id,
         course.creator_id ?? user?.id,
         user?.roles,
       ),
@@ -1349,6 +1458,8 @@ export function createCourseService({
         creatorId: course.creator_id,
         thumbnailUrl: thumbnail.thumbnailUrl,
         thumbnailSrcSet: toSrcSet(thumbnail.thumbnailSrcSet),
+        bannerUrl: banner.thumbnailUrl,
+        bannerSrcSet: toSrcSet(banner.thumbnailSrcSet),
         trailerMediaId: course.trailer_media_id,
         instructorAlias: instructorHidden ? null : course.instructor_alias,
       },
@@ -1666,8 +1777,12 @@ export function createCourseService({
           c.creator_id ?? undefined,
         )
       : { thumbnailUrl: c.thumbnail_url ?? null, thumbnailSrcSet: [] };
+    const banner = await resolveCourseThumbnailUrls(
+      c.banner_media_id,
+      c.creator_id ?? undefined,
+    );
 
-    return presentCourse(c, { thumbnail });
+    return presentCourse(c, { thumbnail, banner });
   }
 
   /**
@@ -1836,6 +1951,8 @@ export function createCourseService({
     archiveCourse,
     getCourseEditorData,
     getCourseOverviewData,
+    getCourseTrailerPlayback,
+    getCourseTrailerPlaybackToken,
     getPublicCurriculum,
     getPublicCurriculumVersion,
     listCourseAccessFacts,

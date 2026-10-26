@@ -1605,6 +1605,8 @@ export function adaptCourseOverviewResponse(
     students: 0,
     thumbnail: resolvedThumbnail,
     thumbnailSrcSet: c.thumbnailSrcSet,
+    banner: c.bannerUrl || undefined,
+    bannerSrcSet: c.bannerSrcSet,
     lifecycleStatus: (c.status === "published" || c.status === "archived"
       ? c.status
       : "draft") as CourseLifecycleStatus,
@@ -1712,6 +1714,8 @@ export function adaptPreviewDataToOverview(
     students: 0,
     thumbnail: c.thumbnailUrl || "",
     thumbnailSrcSet: c.thumbnailSrcSet,
+    banner: c.bannerUrl || undefined,
+    bannerSrcSet: c.bannerSrcSet,
     lifecycleStatus: (c.status === "published" || c.status === "archived"
       ? c.status
       : "draft") as CourseLifecycleStatus,
@@ -2267,6 +2271,8 @@ function CourseOverviewContent({
       duration={course.duration}
       thumbnail={thumbnail}
       thumbnailSrcSet={course.thumbnailSrcSet}
+      banner={course.banner}
+      bannerSrcSet={course.bannerSrcSet}
       onBack={onNavigateCourses}
       // The link names the page it returns to. The course list is "All
       // courses" from here, where one course is open; any other page keeps
