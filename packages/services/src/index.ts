@@ -23,6 +23,10 @@ import {
 } from "./analytics-events.ts";
 import { createPaymentGateway } from "./payment/index.ts";
 import {
+  createMediaImportRegistry,
+  type MediaImportRegistry,
+} from "./media-import/index.ts";
+import {
   createCourseStaticPageRefreshService,
   type CourseStaticPageRefreshService,
 } from "./course-static-pages/index.ts";
@@ -34,6 +38,7 @@ export * from "./payment/index.ts";
 export * from "./video/index.ts";
 export * from "./course-static-pages/index.ts";
 export * from "./cdn/index.ts";
+export * from "./media-import/index.ts";
 export * from "./utils/secure-compare.ts";
 
 /** Every outbound-integration service, injected into routes as one unit. */
@@ -47,6 +52,8 @@ export interface AppServices {
   courseStaticPages?: CourseStaticPageRefreshService;
   /** Facts the API announces as they happen, for plugins to listen to. */
   analyticsEvents: AnalyticsEventBus;
+  /** How imported (YouTube) videos are packaged; plugins may replace it. */
+  mediaImport: MediaImportRegistry;
 }
 
 export interface CreateServicesOptions {
@@ -118,6 +125,7 @@ export function createServices({
 
   return {
     analyticsEvents: createAnalyticsEventBus(),
+    mediaImport: createMediaImportRegistry(),
     email: createEmailService({
       logger,
       config: emailConfig,

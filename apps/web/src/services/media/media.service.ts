@@ -11,6 +11,14 @@ import type {
   PresignMediaResponse,
   VideoTranscodeCancelResponse,
   VideoTranscodeRetryResponse,
+  YoutubeImportAvailabilityResponse,
+  YoutubeImportControlResponse,
+  YoutubeImportLessonQuery,
+  YoutubeImportLessonResponse,
+  YoutubeImportPreviewRequest,
+  YoutubeImportPreviewResponse,
+  YoutubeImportRequest,
+  YoutubeImportResponse,
 } from "@veolms/contracts";
 import { api, getApiBaseUrl } from "../../lib/api-client";
 
@@ -231,6 +239,56 @@ export const mediaService = {
   cancelTranscode(mediaAssetId: string): Promise<VideoTranscodeCancelResponse> {
     return api.post<VideoTranscodeCancelResponse>(
       `/media/${mediaAssetId}/transcode/cancel`,
+    );
+  },
+
+  getYoutubeImportAvailability(): Promise<YoutubeImportAvailabilityResponse> {
+    return api.get<YoutubeImportAvailabilityResponse>(
+      "/media/youtube-import/availability",
+    );
+  },
+
+  previewYoutubeImport(
+    payload: YoutubeImportPreviewRequest,
+  ): Promise<YoutubeImportPreviewResponse> {
+    return api.post<YoutubeImportPreviewResponse>(
+      "/media/youtube-import/preview",
+      payload,
+    );
+  },
+
+  /** Queues the import; follow it with the usual video progress stream. */
+  startYoutubeImport(
+    payload: YoutubeImportRequest,
+  ): Promise<YoutubeImportResponse> {
+    return api.post<YoutubeImportResponse>("/media/youtube-import", payload);
+  },
+
+  /** The lesson's running or retryable import, for the editor to show again. */
+  getLessonYoutubeImport(
+    query: YoutubeImportLessonQuery,
+  ): Promise<YoutubeImportLessonResponse> {
+    return api.get<YoutubeImportLessonResponse>(
+      "/media/youtube-import/lesson",
+      {
+        params: query,
+      },
+    );
+  },
+
+  retryYoutubeImport(
+    mediaAssetId: string,
+  ): Promise<YoutubeImportControlResponse> {
+    return api.post<YoutubeImportControlResponse>(
+      `/media/${mediaAssetId}/youtube-import/retry`,
+    );
+  },
+
+  cancelYoutubeImport(
+    mediaAssetId: string,
+  ): Promise<YoutubeImportControlResponse> {
+    return api.post<YoutubeImportControlResponse>(
+      `/media/${mediaAssetId}/youtube-import/cancel`,
     );
   },
 };

@@ -1,7 +1,12 @@
 import { useMutation } from "@tanstack/react-query";
-import type { PresignMediaRequest } from "@veolms/contracts";
+import type {
+  PresignMediaRequest,
+  YoutubeImportPreviewResponse,
+  YoutubeImportRequest,
+  YoutubeImportResponse,
+} from "@veolms/contracts";
 import { uploadVideoResumable } from "./resumable-upload";
-import { type UploadProgressHandler } from "./media.service";
+import { mediaService, type UploadProgressHandler } from "./media.service";
 
 export interface VideoUploadInput {
   file: File;
@@ -29,5 +34,22 @@ export function useUploadVideo() {
       });
       return result.mediaAssetId;
     },
+  });
+}
+
+/** Reads a YouTube video's title, length and qualities (nothing is downloaded). */
+export function usePreviewYoutubeImport() {
+  return useMutation<YoutubeImportPreviewResponse, Error, string>({
+    mutationFn: (url) => mediaService.previewYoutubeImport({ url }),
+  });
+}
+
+/**
+ * Queues a YouTube import into a lesson. Resolves with the new media
+ * asset's id; its progress is followed like an upload's transcoding.
+ */
+export function useStartYoutubeImport() {
+  return useMutation<YoutubeImportResponse, Error, YoutubeImportRequest>({
+    mutationFn: (payload) => mediaService.startYoutubeImport(payload),
   });
 }

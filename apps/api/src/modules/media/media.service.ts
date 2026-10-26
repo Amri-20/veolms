@@ -26,6 +26,7 @@ import { listLessonChaptersForPlayback } from "../courses/chapters/chapters.play
 import { createChapterSyncService } from "../courses/chapters/chapters.service.ts";
 import { findLessonResourceForDownload } from "../courses/curriculum/lesson-resource.download.service.ts";
 import * as mediaRepo from "./media.repository.ts";
+import { findYoutubeImportProgress } from "./youtube-import/youtube-import.progress.ts";
 import { enqueueImageJob } from "@veolms/database";
 import { probeVideoSource } from "../../lib/video-prober.ts";
 import { getCdnDeliveryUrl } from "../../services/cdn-delivery.ts";
@@ -122,6 +123,14 @@ function buildAttachmentDisposition(fileName: string): string {
 
 function normalizeOutputPrefix(outputPrefix: string): string {
   return outputPrefix.replace(/^\/+|\/+$/g, "");
+}
+
+function isYoutubeImportMedia(metadata: unknown): boolean {
+  return (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    (metadata as { source?: unknown }).source === "youtube"
+  );
 }
 
 function resolveMediaVisibility(storageKey: string): "public" | "protected" {
@@ -871,6 +880,12 @@ export function createMediaService({
       return { should202: false, jobId: null };
     }
 
+    // A YouTube import is packaged by its own worker, never transcoded:
+    // attaching one (to a new lesson, or again) only waits for it.
+    if (isYoutubeImportMedia(media.metadata)) {
+      return { should202: media.status !== "ready", jobId: null };
+    }
+
     if (
       media.status !== "uploaded" &&
       media.status !== "ready" &&
@@ -1344,6 +1359,10 @@ export function createMediaService({
     }
 
     if (!progress.job_id || !progress.job_status) {
+      // A video being imported from YouTube has no transcode job until the
+      // import finishes; its import job reports the progress instead.
+      const imported = await findYoutubeImportProgress(database, videoId);
+      if (imported) return imported;
       throw new AppError(
         404,
         "JOB_NOT_FOUND",

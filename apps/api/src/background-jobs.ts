@@ -17,6 +17,8 @@ import { createDiscussionUploadStore } from "./modules/discussion-uploads/index.
 import { createAttachmentsRepository } from "./modules/learning/discussions/attachments/attachments.repository.ts";
 import { createAttachmentsService } from "./modules/learning/discussions/attachments/attachments.service.ts";
 import { createNotificationProcessor } from "./modules/notifications/index.ts";
+import { startYoutubeImportWorker } from "./modules/media/youtube-import/youtube-import.worker.ts";
+import { getYoutubeImportTools } from "./modules/media/youtube-import/youtube-import.tools.ts";
 import {
   createInvoiceService,
   invoiceStorage,
@@ -98,6 +100,17 @@ export function registerBackgroundJobs(
 
   const stopInvoicePdfJob = startInvoicePdfJob(app, database, services);
 
+  // "Import from YouTube": off unless an operator turns it on, because it
+  // downloads and packages video on this host.
+  const stopYoutubeImportWorker = config.YOUTUBE_IMPORT_ENABLED
+    ? startYoutubeImportWorker({
+        database,
+        services,
+        tools: getYoutubeImportTools(services.config, app.log),
+        logger: app.log,
+      })
+    : null;
+
   app.addHook("onClose", async () => {
     await paymentEventQueue.stop?.();
     // Awaited so an in-flight reconciliation cycle finishes before the
@@ -107,6 +120,7 @@ export function registerBackgroundJobs(
     await stopNotificationLoop?.();
     await stopDiscussionUploadPurge?.();
     await stopInvoicePdfJob?.();
+    await stopYoutubeImportWorker?.();
     stopHeartbeat?.();
   });
 
