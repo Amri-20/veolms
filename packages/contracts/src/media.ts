@@ -226,6 +226,10 @@ export const videoJobProgressResponseSchema = z.object({
   status: videoJobStatusSchema,
   progressPercent: z.number().int().min(0).max(100),
   error: z.string().nullable().optional(),
+  /** What is happening now, in words (YouTube imports report their stage). */
+  stage: z.string().nullable().optional(),
+  /** Set for a video being imported from YouTube rather than transcoded. */
+  source: z.enum(["upload", "youtube"]).optional(),
 });
 
 /** Whether a transcode was (re)queued. Internal job ids stay server-side. */

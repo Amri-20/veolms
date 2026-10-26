@@ -65,6 +65,7 @@ import type {
   MediaAssetTable,
   VideoJobTable,
   VideoOutputTable,
+  YoutubeImportJobTable,
 } from "./media.schema.ts";
 
 import type {
@@ -178,6 +179,7 @@ export interface Database {
   image_jobs: ImageJobTable;
   video_outputs: VideoOutputTable;
   video_jobs: VideoJobTable;
+  youtube_import_jobs: YoutubeImportJobTable;
 
   // Commerce, Orders & Payments
   course_bundles: CourseBundleTable;

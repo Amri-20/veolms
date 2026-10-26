@@ -73,6 +73,13 @@ export interface StorageUploadItem {
   contentType?: string;
 }
 
+export interface UploadFilesOptions {
+  /** Stops starting new uploads (and retries) once aborted. */
+  signal?: AbortSignal;
+  /** Called after each file is uploaded, with the running count and the file. */
+  onUploaded?: (uploadedCount: number, item: StorageUploadItem) => void;
+}
+
 export type StorageVisibility = "public" | "protected";
 
 /**
@@ -349,6 +356,7 @@ export class S3StorageService {
   async uploadFiles(
     files: readonly StorageUploadItem[],
     concurrency = 6,
+    options: UploadFilesOptions = {},
   ): Promise<number> {
     if (files.length === 0) {
       return 0;
@@ -359,6 +367,7 @@ export class S3StorageService {
 
     const uploadWorker = async (): Promise<void> => {
       while (cursor < files.length) {
+        options.signal?.throwIfAborted();
         const itemIndex = cursor++;
         const item = files[itemIndex];
         if (!item) {
@@ -374,10 +383,11 @@ export class S3StorageService {
           try {
             await this.uploadFile(item.key, item.localFilePath, contentType);
             uploadedCount++;
+            options.onUploaded?.(uploadedCount, item);
             break;
           } catch (err) {
             attempts++;
-            if (attempts >= maxRetries) {
+            if (attempts >= maxRetries || options.signal?.aborted) {
               throw err;
             }
             await new Promise((resolve) =>
@@ -722,6 +732,15 @@ export function getMimeType(filename: string): string {
   }
   if (filename.endsWith(".ts")) {
     return "video/mp2t";
+  }
+  if (filename.endsWith(".mpd")) {
+    return "application/dash+xml";
+  }
+  if (filename.endsWith(".m4s")) {
+    return "video/iso.segment";
+  }
+  if (filename.endsWith(".vtt")) {
+    return "text/vtt";
   }
   if (filename.endsWith(".mp4")) {
     return "video/mp4";

@@ -59,6 +59,7 @@ import {
 import { CurriculumItemStatusIndicator } from "./statusIndicators";
 import type { ApiError } from "../../lib/api-error";
 import type { PersistLessonOptions } from "./editorLocalTypes";
+import { getYoutubeImportTarget } from "../lesson-video-upload/youtube-import-target";
 
 export interface CurriculumStepPanelProps {
   editingLessonTarget: { sectionId: string; lessonId: string } | null;
@@ -552,6 +553,11 @@ export function CurriculumStepPanel({
                   mediaAssetId,
                 )
               }
+              youtubeImport={getYoutubeImportTarget(
+                currentCourseId,
+                activeLesson.id,
+                activeLesson.isPendingCreation,
+              )}
               onProcessingComplete={() =>
                 handleLessonProcessingComplete()
               }
@@ -1722,6 +1728,11 @@ export function CurriculumStepPanel({
                                                     mediaAssetId,
                                                   )
                                                 }
+                                                youtubeImport={getYoutubeImportTarget(
+                                                  currentCourseId,
+                                                  les.id,
+                                                  les.isPendingCreation,
+                                                )}
                                                 onProcessingComplete={() =>
                                                   handleLessonProcessingComplete()
                                                 }
@@ -2160,6 +2171,11 @@ export function CurriculumStepPanel({
                                                                 mediaAssetId,
                                                               )
                                                             }
+                                                            youtubeImport={getYoutubeImportTarget(
+                                                              currentCourseId,
+                                                              les.id,
+                                                              les.isPendingCreation,
+                                                            )}
                                                             onProcessingComplete={() =>
                                                               handleLessonProcessingComplete()
                                                             }

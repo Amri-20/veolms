@@ -131,6 +131,12 @@ export const permissionCatalogue: readonly PermissionCatalogueGroup[] = [
         ["lesson.read"],
       ),
       entry(
+        "lesson.video.import_youtube",
+        "Import lesson videos from YouTube",
+        "Download a YouTube video the academy owns into a lesson.",
+        ["lesson.video.update"],
+      ),
+      entry(
         "lesson.thumbnail.update",
         "Change lesson thumbnails",
         "Upload or replace a lesson's image.",

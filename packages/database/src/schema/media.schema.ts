@@ -1,6 +1,10 @@
 import type { Generated, JSONColumnType } from "kysely";
 import type { Json } from "./json.schema.ts";
-import type { VideoJobStatus, VideoQualityLevel } from "@veolms/contracts";
+import type {
+  VideoJobStatus,
+  VideoQualityLevel,
+  YoutubeImportStatus,
+} from "@veolms/contracts";
 
 export type MediaAssetStatus =
   "uploading" | "uploaded" | "processing" | "ready" | "failed";
@@ -82,6 +86,40 @@ export interface ImageJobTable {
   started_at: Date | null;
   completed_at: Date | null;
   created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+}
+
+export type YoutubeImportStage =
+  "resolved" | "downloaded" | "packaged" | "uploaded";
+
+export interface YoutubeImportJobTable {
+  id: string;
+  media_id: string;
+  owner_id: string;
+  course_id: string | null;
+  lesson_id: string | null;
+  /** The lesson's video when the import started; replaced only if unchanged. */
+  replaces_media_id: string | null;
+  source_url: string;
+  youtube_id: string;
+  status: YoutubeImportStatus;
+  /** The last stage whose output is complete on disk/in storage. */
+  completed_stage: YoutubeImportStage | null;
+  stage_detail: string | null;
+  progress_percent: Generated<number>;
+  title: string | null;
+  duration_seconds: number | null;
+  qualities: JSONColumnType<string[], string[] | string, string[] | string>;
+  attempts: Generated<number>;
+  max_attempts: Generated<number>;
+  error_message: string | null;
+  cancel_requested: Generated<boolean>;
+  lease_owner: string | null;
+  lease_expires_at: Date | null;
+  scratch_dir: string | null;
+  created_at: Generated<Date>;
+  started_at: Date | null;
+  completed_at: Date | null;
   updated_at: Generated<Date>;
 }
 
