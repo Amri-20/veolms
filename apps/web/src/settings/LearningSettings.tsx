@@ -21,6 +21,19 @@ import {
   readLearningPreferences,
 } from "./settingsPreferences";
 import type { LearningPreferences } from "./settingsPreferences";
+import { VIDEO_QUALITY_LEVELS } from "@veolms/contracts";
+
+/**
+ * Every height the pipeline encodes, stored as the player stores a quality
+ * picked in its menu ("1080"): the two set the same preference.
+ */
+const VIDEO_QUALITY_OPTIONS: [string, string][] = [
+  ["auto", "Auto (Recommended)"],
+  ...VIDEO_QUALITY_LEVELS.map((level): [string, string] => [
+    level.replace(/p$/u, ""),
+    level,
+  ]),
+];
 
 export function LearningSettings({
   isAuthenticated = true,
@@ -32,8 +45,9 @@ export function LearningSettings({
   });
   // Shown to admins alone (see `useAdminOnlySettings`): the player theme,
   // which learners are not offered yet (see `useLearningPlayerTheme`), and
-  // the settings below that nothing reads yet, so changing them did nothing:
-  // default quality and speed (the player keeps its own), theatre mode on
+  // the default quality (also set by picking one in the player), and the
+  // settings below that nothing reads yet, so changing them did nothing:
+  // default speed (the player keeps its own), theatre mode on
   // opening, captions by default and their language, the transcript (there
   // is none), four course navigation choices, and the two scrollbars (with
   // scrollbars hidden by default they changed nothing either).
@@ -127,12 +141,7 @@ export function LearningSettings({
                   note="Select quality for all videos."
                   value={preferences.videoQuality}
                   onChange={(videoQuality) => update({ videoQuality })}
-                  options={[
-                    ["auto", "Auto (Recommended)"],
-                    ["1080", "1080p"],
-                    ["720", "720p"],
-                    ["480", "480p"],
-                  ]}
+                  options={VIDEO_QUALITY_OPTIONS}
                 />
                 <LearningSelectRow
                   id="learning-playback-speed"

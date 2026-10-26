@@ -236,16 +236,39 @@ export function learningBufferBehindSeconds(): number {
 }
 
 /**
+ * The picture height the learner picked in the player's quality menu, kept
+ * with the learning settings as `videoQuality` ("1080", or "auto"), or
+ * undefined for auto. Read from storage directly, as the preload's resume
+ * setting is (learningHlsPreloadSource.ts): this module is in the early
+ * preload chunk, which the settings module would weigh down.
+ */
+export function readPreferredVideoHeight(): number | undefined {
+  try {
+    const stored = JSON.parse(
+      globalThis.localStorage?.getItem("veolms-learning-preferences") || "{}",
+    ) as { videoQuality?: unknown };
+    const height = Number(stored.videoQuality);
+    return Number.isInteger(height) && height > 0 ? height : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Start as soon as one 2s segment is in (1.5s), then build a 60s cushion so
  * a phone losing signal for half a minute keeps playing; more ahead is
  * downloaded for nothing when a learner skips or leaves. Played video is
  * kept as above. The buffer sits in MSE SourceBuffers, which the page
- * cannot read back. Read per source, and the live and preload sources share
- * it, so a preload is not cleared by a config mismatch.
+ * cannot read back. A video starts at the quality the learner picked, if
+ * any (else ABR starts low and climbs). Read per source, and the live and
+ * preload sources share it, so a preload is made at the quality playback
+ * starts at and is not cleared by a config mismatch.
  */
 export function learningHlsStreaming() {
+  const preferredVideoHeight = readPreferredVideoHeight();
   return {
     abrEnabled: true,
+    ...(preferredVideoHeight ? { preferredVideoHeight } : {}),
     rebufferingGoal: 1.5,
     bufferingGoal: 60,
     bufferBehind: learningBufferBehindSeconds(),

@@ -184,6 +184,14 @@ export interface VideoStreamingConfiguration {
   /** How many segments past the one being appended are fetched at once. */
   segmentPrefetchLimit?: number;
   abrEnabled?: boolean;
+  /**
+   * A quality the viewer chose, by picture height: playback (and a preload
+   * of the source) starts at the highest variant not above it, or the
+   * lowest one when every variant is taller, and stays there (ABR off)
+   * until auto quality is enabled. Like `startTime` it only says where a
+   * load starts: a source differing in it alone is not loaded again.
+   */
+  preferredVideoHeight?: number;
   abrRestrictions?: AbrRestrictions;
   /**
    * Bits per second assumed before the first segment is measured. Left out,
