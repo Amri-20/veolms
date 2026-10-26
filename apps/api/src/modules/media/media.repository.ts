@@ -48,6 +48,8 @@ export async function findMediaAssetSummaryById(
       "width",
       "height",
       "duration_seconds",
+      "upload_id",
+      "upload_part_size",
     ])
     .where("id", "=", mediaId);
 
@@ -176,9 +178,28 @@ export async function insertMediaAsset(
     size_bytes: number;
     status: MediaAssetStatus;
     metadata?: Json;
+    upload_id?: string | null;
+    upload_part_size?: number | null;
   },
 ) {
   await database.insertInto("media_assets").values(values).execute();
+}
+
+/** Records (or clears) the resumable upload handle for a media asset. */
+export async function updateMediaAssetUploadSession(
+  database: Kysely<Database>,
+  mediaId: string,
+  session: { uploadId: string | null; partSize: number | null },
+) {
+  await database
+    .updateTable("media_assets")
+    .set({
+      upload_id: session.uploadId,
+      upload_part_size: session.partSize,
+      updated_at: new Date(),
+    })
+    .where("id", "=", mediaId)
+    .execute();
 }
 
 export async function updateMediaAssetStatus(

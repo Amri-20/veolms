@@ -7,6 +7,10 @@ import type { Database, MediaAssetStatus } from "@veolms/database";
 import type {
   LessonResourceDownloadResponse,
   MediaImageVariantManifest,
+  MultipartUploadPartUrlsRequest,
+  MultipartUploadPartUrlsResponse,
+  MultipartUploadStartResponse,
+  MultipartUploadStatusResponse,
   PresignMediaRequest,
   VideoPlaybackBootstrap,
   HeroVideoPlayback,
@@ -51,6 +55,11 @@ export interface MediaServiceOptions {
 }
 
 const VIDEO_QUALITIES: VideoQualityLevel[] = ["360p", "720p", "1080p"];
+// S3/R2 require at least 5 MiB per non-final part. 8 MiB keeps a 5 GiB video
+// under 10,000 parts while keeping each retry cheap.
+const MULTIPART_MIN_PART_SIZE = 8 * 1024 * 1024;
+const MULTIPART_MAX_PARTS = 10_000;
+const MULTIPART_PART_URL_TTL_SECONDS = 3_600;
 // Long enough to start a download after the click, short enough that a
 // copied link is of little use to anyone else.
 const LESSON_RESOURCE_DOWNLOAD_TTL_SECONDS = 300;
@@ -201,6 +210,54 @@ function baseMimeType(contentType: string): string {
   return contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
 }
 
+/** Storage answered that the multipart upload no longer exists. */
+function isNoSuchUploadError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "NoSuchUpload" || /NoSuchUpload/i.test(error.message))
+  );
+}
+
+/** The object key a newly presigned upload will be written to. */
+function resolveUploadStorageKey(
+  ownerId: string,
+  payload: PresignMediaRequest,
+  mediaId: string,
+): string {
+  const ext = payload.filename.includes(".")
+    ? payload.filename
+        .split(".")
+        .pop()
+        ?.replace(/[^a-z0-9]/giu, "")
+        .toLowerCase()
+    : "";
+  const isPublic = payload.visibility === "public";
+  const visibilityPrefix = isPublic ? "public" : "protected";
+  const imageExtension = isPublic
+    ? resolvePublicImageExtension(payload.filename, payload.contentType)
+    : resolveImageExtension(payload.filename, payload.contentType);
+  const fileExtension =
+    isPublic && !(ext && PUBLIC_VIDEO_EXTENSIONS.has(ext)) ? "" : ext;
+
+  return payload.type === "image"
+    ? `${visibilityPrefix}/thumbnails/${mediaId}/original.${imageExtension}`
+    : `${visibilityPrefix}/media/${ownerId}/${mediaId}${fileExtension ? `.${fileExtension}` : ""}`;
+}
+
+/**
+ * Picks a part size that covers the whole file within the object store's
+ * 10,000-part limit and is a whole number of MiB, so every resume computes
+ * byte ranges identically.
+ */
+function resolveMultipartPartSize(fileSize: number): number {
+  const minimumForPartLimit = Math.ceil(fileSize / MULTIPART_MAX_PARTS);
+  const mebibyte = 1024 * 1024;
+  return Math.max(
+    MULTIPART_MIN_PART_SIZE,
+    Math.ceil(minimumForPartLimit / mebibyte) * mebibyte,
+  );
+}
+
 function resolveImageThumbnailPrefix(
   storageKey: string,
   mediaId: string,
@@ -293,24 +350,8 @@ export function createMediaService({
     payload: PresignMediaRequest,
   ) {
     const mediaId = crypto.randomUUID();
-    const ext = payload.filename.includes(".")
-      ? payload.filename
-          .split(".")
-          .pop()
-          ?.replace(/[^a-z0-9]/giu, "")
-          .toLowerCase()
-      : "";
     const isPublic = payload.visibility === "public";
-    const visibilityPrefix = isPublic ? "public" : "protected";
-    const imageExtension = isPublic
-      ? resolvePublicImageExtension(payload.filename, payload.contentType)
-      : resolveImageExtension(payload.filename, payload.contentType);
-    const fileExtension =
-      isPublic && !(ext && PUBLIC_VIDEO_EXTENSIONS.has(ext)) ? "" : ext;
-    const storageKey =
-      payload.type === "image"
-        ? `${visibilityPrefix}/thumbnails/${mediaId}/original.${imageExtension}`
-        : `${visibilityPrefix}/media/${ownerId}/${mediaId}${fileExtension ? `.${fileExtension}` : ""}`;
+    const storageKey = resolveUploadStorageKey(ownerId, payload, mediaId);
 
     // The request was only allowed to declare a picture or a video for a
     // public upload. The type is signed into the URL as well: otherwise the
@@ -342,6 +383,302 @@ export function createMediaService({
       uploadUrl,
       mediaAssetId: mediaId,
     };
+  }
+
+  /**
+   * Starts a resumable multipart upload for a video. The returned media id is
+   * the anchor a client stores locally: after a reload it asks the API which
+   * parts storage already has and uploads only the rest.
+   */
+  async function startMultipartUpload(
+    ownerId: string,
+    payload: PresignMediaRequest,
+    logger?: FastifyBaseLogger,
+  ): Promise<MultipartUploadStartResponse> {
+    if (payload.type !== "video") {
+      throw new AppError(
+        400,
+        "MULTIPART_UNSUPPORTED",
+        "Only videos can be uploaded in resumable parts.",
+      );
+    }
+
+    const mediaId = crypto.randomUUID();
+    const storageKey = resolveUploadStorageKey(ownerId, payload, mediaId);
+    const partSize = resolveMultipartPartSize(payload.fileSize);
+    const totalParts = Math.ceil(payload.fileSize / partSize);
+
+    let uploadId: string;
+    try {
+      uploadId = await services.storage.createMultipartUpload(
+        storageKey,
+        payload.contentType,
+      );
+    } catch (error) {
+      logger?.error(
+        { err: error },
+        "Storage rejected the multipart upload start",
+      );
+      throw new AppError(
+        503,
+        "STORAGE_UNAVAILABLE",
+        "The storage service rejected the upload request. Check the storage configuration and try again.",
+      );
+    }
+
+    try {
+      await mediaRepo.insertMediaAsset(database, {
+        id: mediaId,
+        owner_id: ownerId,
+        type: payload.type,
+        storage_provider: "s3",
+        storage_key: storageKey,
+        original_filename: payload.filename,
+        mime_type: payload.contentType,
+        size_bytes: payload.fileSize,
+        status: "uploading",
+        upload_id: uploadId,
+        upload_part_size: partSize,
+      });
+    } catch (error) {
+      // Never leave an orphaned multipart upload behind when the asset row
+      // could not be written.
+      await services.storage
+        .abortMultipartUpload(storageKey, uploadId)
+        .catch(() => undefined);
+      throw error;
+    }
+
+    await services.storage.ensureBucketCors();
+
+    return { mediaAssetId: mediaId, partSize, totalParts };
+  }
+
+  /** The in-flight multipart asset, authorized for the caller. */
+  async function findMultipartUpload(
+    mediaId: string,
+    ownerId: string,
+    userRoles?: readonly string[],
+  ) {
+    const isAdmin = await reachesAllMedia(ownerId, userRoles, "manage");
+    const media = await mediaRepo.findMediaAssetSummaryById(
+      database,
+      mediaId,
+      isAdmin ? undefined : ownerId,
+    );
+
+    if (!media) {
+      throw new AppError(404, "MEDIA_NOT_FOUND", "Media asset not found.");
+    }
+    if (media.status !== "uploading") {
+      throw new AppError(
+        409,
+        "UPLOAD_ALREADY_COMPLETED",
+        "This upload has already been completed.",
+      );
+    }
+    if (!media.upload_id || !media.upload_part_size) {
+      throw new AppError(
+        409,
+        "MULTIPART_UPLOAD_NOT_ACTIVE",
+        "This media asset has no resumable upload in progress.",
+      );
+    }
+
+    return media;
+  }
+
+  function multipartGeometry(media: {
+    size_bytes: number | string;
+    upload_part_size: number | null;
+  }) {
+    const partSize = Number(media.upload_part_size);
+    return {
+      partSize,
+      totalParts: Math.max(1, Math.ceil(Number(media.size_bytes) / partSize)),
+    };
+  }
+
+  /** What storage already holds, so a client can resume from that point. */
+  async function getMultipartUploadStatus(
+    mediaId: string,
+    ownerId: string,
+    userRoles?: readonly string[],
+  ): Promise<MultipartUploadStatusResponse> {
+    const media = await findMultipartUpload(mediaId, ownerId, userRoles);
+    const { partSize, totalParts } = multipartGeometry(media);
+
+    try {
+      const parts = await services.storage.listMultipartUploadParts(
+        media.storage_key,
+        media.upload_id!,
+      );
+      return {
+        partSize,
+        totalParts,
+        uploadedParts: parts.filter(
+          (part) => part.partNumber >= 1 && part.partNumber <= totalParts,
+        ),
+      };
+    } catch (error) {
+      if (!isNoSuchUploadError(error)) throw error;
+      await mediaRepo.updateMediaAssetUploadSession(database, mediaId, {
+        uploadId: null,
+        partSize: null,
+      });
+      throw new AppError(
+        409,
+        "UPLOAD_SESSION_EXPIRED",
+        "This upload session has expired. Start the upload again.",
+      );
+    }
+  }
+
+  /** Fresh presigned URLs for the parts a client still has to send. */
+  async function presignMultipartUploadParts(
+    mediaId: string,
+    payload: MultipartUploadPartUrlsRequest,
+    ownerId: string,
+    userRoles?: readonly string[],
+  ): Promise<MultipartUploadPartUrlsResponse> {
+    const media = await findMultipartUpload(mediaId, ownerId, userRoles);
+    const { totalParts } = multipartGeometry(media);
+    const invalidPart = payload.partNumbers.find(
+      (partNumber) => partNumber > totalParts,
+    );
+    if (invalidPart !== undefined) {
+      throw new AppError(
+        400,
+        "INVALID_PART_NUMBER",
+        `Part ${invalidPart} is outside this upload's ${totalParts} parts.`,
+      );
+    }
+
+    const parts = await Promise.all(
+      payload.partNumbers.map(async (partNumber) => ({
+        partNumber,
+        url: await services.storage.getPresignedUploadPartUrl(
+          media.storage_key,
+          media.upload_id!,
+          partNumber,
+          MULTIPART_PART_URL_TTL_SECONDS,
+        ),
+      })),
+    );
+
+    return { parts };
+  }
+
+  /**
+   * Joins the uploaded parts and confirms the asset exactly like a
+   * single-request upload, so transcoding starts through the same path.
+   */
+  async function completeMultipartUpload(
+    mediaId: string,
+    ownerId: string,
+    logger?: FastifyBaseLogger,
+    userRoles?: readonly string[],
+  ): Promise<{ status: MediaAssetStatus }> {
+    const media = await findMultipartUpload(mediaId, ownerId, userRoles);
+    const { totalParts } = multipartGeometry(media);
+
+    // Storage is the authority on which parts exist and their ETags. Reading
+    // them here means completion does not depend on the browser being allowed
+    // to read ETag response headers through CORS.
+    let uploadedParts: Array<{ partNumber: number; etag: string }>;
+    try {
+      const listed = await services.storage.listMultipartUploadParts(
+        media.storage_key,
+        media.upload_id!,
+      );
+      uploadedParts = listed
+        .filter((part) => part.partNumber <= totalParts)
+        .map((part) => ({ partNumber: part.partNumber, etag: part.etag }))
+        .sort((left, right) => left.partNumber - right.partNumber);
+    } catch (error) {
+      if (!isNoSuchUploadError(error)) throw error;
+      await mediaRepo.updateMediaAssetUploadSession(database, mediaId, {
+        uploadId: null,
+        partSize: null,
+      });
+      throw new AppError(
+        409,
+        "UPLOAD_SESSION_EXPIRED",
+        "This upload session has expired. Start the upload again.",
+      );
+    }
+
+    if (uploadedParts.length !== totalParts) {
+      throw new AppError(
+        400,
+        "MULTIPART_PARTS_INCOMPLETE",
+        "Every part must be uploaded before the upload can be completed.",
+      );
+    }
+
+    try {
+      await services.storage.completeMultipartUpload(
+        media.storage_key,
+        media.upload_id!,
+        uploadedParts,
+      );
+    } catch (error) {
+      if (!isNoSuchUploadError(error)) throw error;
+      await mediaRepo.updateMediaAssetUploadSession(database, mediaId, {
+        uploadId: null,
+        partSize: null,
+      });
+      throw new AppError(
+        409,
+        "UPLOAD_SESSION_EXPIRED",
+        "This upload session has expired. Start the upload again.",
+      );
+    }
+
+    await mediaRepo.updateMediaAssetUploadSession(database, mediaId, {
+      uploadId: null,
+      partSize: null,
+    });
+
+    return await confirmUpload(mediaId, ownerId, logger, userRoles);
+  }
+
+  /**
+   * Abandons an interrupted upload: discards its parts and the unattached
+   * media row. Already-completed uploads are left untouched.
+   */
+  async function abortMultipartUpload(
+    mediaId: string,
+    ownerId: string,
+    userRoles?: readonly string[],
+  ): Promise<{ aborted: true }> {
+    const isAdmin = await reachesAllMedia(ownerId, userRoles, "manage");
+    const media = await mediaRepo.findMediaAssetSummaryById(
+      database,
+      mediaId,
+      isAdmin ? undefined : ownerId,
+    );
+
+    if (!media) {
+      throw new AppError(404, "MEDIA_NOT_FOUND", "Media asset not found.");
+    }
+
+    if (media.upload_id) {
+      await services.storage
+        .abortMultipartUpload(media.storage_key, media.upload_id)
+        .catch(() => undefined);
+    }
+
+    if (media.status === "uploading") {
+      await mediaRepo.deleteMediaAssets(database, [mediaId]);
+    } else {
+      await mediaRepo.updateMediaAssetUploadSession(database, mediaId, {
+        uploadId: null,
+        partSize: null,
+      });
+    }
+
+    return { aborted: true };
   }
 
   /**
@@ -2054,6 +2391,11 @@ export function createMediaService({
 
   return {
     presignMediaUpload,
+    startMultipartUpload,
+    getMultipartUploadStatus,
+    presignMultipartUploadParts,
+    completeMultipartUpload,
+    abortMultipartUpload,
     confirmUpload,
     queueTranscodeJob,
     retryTranscodeJob,

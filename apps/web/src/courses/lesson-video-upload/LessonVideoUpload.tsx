@@ -26,7 +26,11 @@ import {
   type VideoJobProgressResponse,
   type VideoJobStatus,
 } from "@veolms/contracts";
-import { mediaService } from "../../services/media";
+import {
+  mediaService,
+  readVideoUploadCheckpoint,
+  uploadVideoResumable,
+} from "../../services/media";
 import { useBeforeUnloadWarning } from "../../hooks/useBeforeUnloadWarning";
 import { LessonUploadDropzone } from "../LessonUploadDropzone";
 
@@ -117,6 +121,7 @@ export const LessonVideoUpload = forwardRef<
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
   const requestIdRef = useRef(0);
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
+  const discardUploadRef = useRef(false);
   const mountedRef = useRef(true);
   const uploadedThisSessionRef = useRef(false);
   const committedMediaIdRef = useRef<string | null>(null);
@@ -158,6 +163,7 @@ export const LessonVideoUpload = forwardRef<
   const [isOpen, setIsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [resumeAvailable, setResumeAvailable] = useState(false);
   const [activeMediaId, setActiveMediaId] = useState<string | null>(
     mediaAssetId ?? null,
   );
@@ -691,6 +697,9 @@ export const LessonVideoUpload = forwardRef<
       replacementForMediaIdRef.current = null;
       setCandidateMediaId(null);
       setActiveMediaId(mediaAssetId ?? null);
+      setResumeAvailable(
+        readVideoUploadCheckpoint(file, visibility ?? "protected") !== null,
+      );
       onPreviewFile?.(file);
       setSelectedFile(file);
       setErrorMessage(null);
@@ -706,7 +715,14 @@ export const LessonVideoUpload = forwardRef<
       setPhase("idle");
       setTrackProgress(false);
     },
-    [mediaAssetId, onPreviewFile, phase, resetReconnectBackoff, validateFile],
+    [
+      mediaAssetId,
+      onPreviewFile,
+      phase,
+      resetReconnectBackoff,
+      validateFile,
+      visibility,
+    ],
   );
 
   useImperativeHandle(
@@ -743,6 +759,7 @@ export const LessonVideoUpload = forwardRef<
       uploadAbortControllerRef.current?.abort();
       const uploadAbortController = new AbortController();
       uploadAbortControllerRef.current = uploadAbortController;
+      discardUploadRef.current = false;
       const requestId = ++requestIdRef.current;
       uploadedThisSessionRef.current = true;
       resetReconnectBackoff();
@@ -763,36 +780,36 @@ export const LessonVideoUpload = forwardRef<
       setTrackProgress(false);
 
       try {
-        const presigned = await mediaService.presignVideoUpload({
-          filename: file.name,
-          contentType: file.type,
-          fileSize: file.size,
-          visibility,
-        });
-
-        if (!mountedRef.current || requestId !== requestIdRef.current) return;
-
-        await mediaService.uploadFileToPresignedUrl(
-          presigned.uploadUrl,
+        const result = await uploadVideoResumable({
           file,
-          ({ loadedBytes, percent }) => {
+          visibility,
+          signal: uploadAbortController.signal,
+          discardOnAbort: () => discardUploadRef.current,
+          onResuming: ({ loadedBytes, percent }) => {
+            if (!mountedRef.current || requestId !== requestIdRef.current) {
+              return;
+            }
+            setUploadProgress(percent);
+            setUploadLoadedBytes(loadedBytes);
+          },
+          onProgress: ({ loadedBytes, percent }) => {
             if (mountedRef.current && requestId === requestIdRef.current) {
               setUploadProgress(percent);
               setUploadLoadedBytes(loadedBytes);
             }
           },
-          uploadAbortController.signal,
-        );
+          onCompleting: () => {
+            if (mountedRef.current && requestId === requestIdRef.current) {
+              setPhase("confirming");
+            }
+          },
+        });
 
         if (!mountedRef.current || requestId !== requestIdRef.current) return;
-        setPhase("confirming");
 
-        await mediaService.confirmUpload(presigned.mediaAssetId);
-
-        if (!mountedRef.current || requestId !== requestIdRef.current) return;
-
-        setActiveMediaId(presigned.mediaAssetId);
-        setCandidateMediaId(presigned.mediaAssetId);
+        setResumeAvailable(false);
+        setActiveMediaId(result.mediaAssetId);
+        setCandidateMediaId(result.mediaAssetId);
         uploadedThisSessionRef.current = true;
         setTranscodeStatus("queued");
         setPhase("transcoding");
@@ -810,6 +827,9 @@ export const LessonVideoUpload = forwardRef<
 
         setPhase("failed");
         setTrackProgress(false);
+        setResumeAvailable(
+          readVideoUploadCheckpoint(file, visibility ?? "protected") !== null,
+        );
         setErrorMessage(resolveUploadError(error));
       } finally {
         if (uploadAbortControllerRef.current === uploadAbortController) {
@@ -934,8 +954,10 @@ export const LessonVideoUpload = forwardRef<
 
   const cancelUpload = useCallback(() => {
     requestIdRef.current += 1;
+    discardUploadRef.current = true;
     uploadAbortControllerRef.current?.abort();
     uploadAbortControllerRef.current = null;
+    setResumeAvailable(false);
     uploadedThisSessionRef.current = false;
     resetReconnectBackoff();
     replacementForMediaIdRef.current = null;
@@ -965,6 +987,7 @@ export const LessonVideoUpload = forwardRef<
   const removeSelectedFile = useCallback(() => {
     onPreviewFile?.(null);
     setSelectedFile(null);
+    setResumeAvailable(false);
     setErrorMessage(null);
     setIsReplacingVideo(false);
     setPhase(mediaAssetId ? "attached" : "idle");
@@ -1029,6 +1052,7 @@ export const LessonVideoUpload = forwardRef<
         onRemoveFile={removeSelectedFile}
         selectedFile={selectedFile}
         isReplacement={true}
+        resumeAvailable={resumeAvailable}
       />
     </div>
   ) : uploadStage === "select" ? (
@@ -1047,6 +1071,7 @@ export const LessonVideoUpload = forwardRef<
       onRemoveFile={removeSelectedFile}
       selectedFile={selectedFile}
       isReplacement={false}
+      resumeAvailable={resumeAvailable}
     />
   ) : uploadStage === "uploading" ? (
     <UploadProgressStage
@@ -1375,7 +1400,11 @@ export const LessonVideoUpload = forwardRef<
                       onClick={() => void startUpload(selectedFile)}
                       className={`${PRIMARY_ACTION_CLASS} min-w-[120px] px-5`}
                     >
-                      {isReplacingVideo ? "Upload Replacement" : "Upload Video"}
+                      {resumeAvailable
+                        ? "Resume Upload"
+                        : isReplacingVideo
+                          ? "Upload Replacement"
+                          : "Upload Video"}
                     </button>
                   ) : uploadStage === "uploading" ? (
                     <button
@@ -1425,6 +1454,7 @@ interface SelectVideoStageProps {
   onDrop: (event: DragEvent<HTMLDivElement>) => void;
   onRemoveFile?: () => void;
   selectedFile: File | null;
+  resumeAvailable?: boolean;
 }
 
 function SelectVideoStage({
@@ -1440,6 +1470,7 @@ function SelectVideoStage({
   onDrop,
   onRemoveFile,
   selectedFile,
+  resumeAvailable = false,
 }: SelectVideoStageProps) {
   return (
     <div className="min-w-0 space-y-3.5 sm:space-y-4">
@@ -1532,12 +1563,23 @@ function SelectVideoStage({
           </div>
         ))}
 
+      {selectedFile && resumeAvailable && (
+        <p className="m-0 rounded-[10px] bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] px-3 py-2 text-[0.72rem] leading-relaxed text-(--text-secondary)">
+          An interrupted upload of{" "}
+          <span className="font-semibold text-(--text)">
+            {selectedFile.name}
+          </span>{" "}
+          was found. Uploading resumes from the parts already sent.
+        </p>
+      )}
+
       {selectedFile && (
         <VideoFileSummary
           file={selectedFile}
           embedded={minimal}
           onUpload={minimal ? onUploadFile : undefined}
           uploadTextOnly={minimal}
+          uploadLabel={resumeAvailable ? "Resume" : "Upload"}
           onRemove={onRemoveFile}
         />
       )}
@@ -1577,7 +1619,7 @@ function UploadProgressStage({
               Uploading video
             </h3>
             <p className="m-0 mt-0.5 sm:mt-1 text-[0.72rem] sm:text-[0.74rem] text-(--muted)">
-              Please keep this window open while uploading.
+              If this is interrupted, choose the same file again to resume.
             </p>
           </div>
           <span className="shrink-0 text-[0.88rem] sm:text-[0.92rem] font-bold text-(--text) tabular-nums">
@@ -1649,6 +1691,7 @@ interface VideoFileSummaryProps {
   onRemove?: () => void;
   onReplace?: () => void;
   processingProgress?: number | null;
+  uploadLabel?: string;
   uploadTextOnly?: boolean;
 }
 
@@ -1662,6 +1705,7 @@ function VideoFileSummary({
   onRemove,
   onReplace,
   processingProgress = null,
+  uploadLabel = "Upload",
   uploadTextOnly = false,
 }: VideoFileSummaryProps) {
   const processingTooltipId = useId();
@@ -1744,11 +1788,11 @@ function VideoFileSummary({
         <button
           type="button"
           onClick={onUpload}
-          aria-label="Upload video"
+          aria-label={`${uploadLabel} video`}
           className={`inline-flex h-8 shrink-0 cursor-pointer items-center justify-center rounded-[9px] border-none bg-(--accent) px-3.5 text-[0.76rem] font-semibold text-(--on-accent,#ffffff) shadow-[inset_0_1px_0_color-mix(in_srgb,white_25%,transparent),0_2px_6px_rgba(0,0,0,0.2)] transition-all hover:bg-(--accent-hover,var(--accent)) active:scale-95 ${uploadTextOnly ? "" : "gap-1.5"}`}
         >
           {!uploadTextOnly && <CloudArrowUp size={15} weight="bold" />}
-          <span>Upload</span>
+          <span>{uploadLabel}</span>
         </button>
       )}
       {badge === "Processing" ? (

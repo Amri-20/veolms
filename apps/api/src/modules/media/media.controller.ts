@@ -2,6 +2,11 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type {
   MediaDeliveryResponse,
   MediaUploadCompleteResponse,
+  MultipartUploadAbortResponse,
+  MultipartUploadPartUrlsRequest,
+  MultipartUploadPartUrlsResponse,
+  MultipartUploadStartResponse,
+  MultipartUploadStatusResponse,
   PresignMediaRequest,
   VideoTranscodeCancelResponse,
   VideoTranscodeRetryResponse,
@@ -20,6 +25,62 @@ export function createMediaController({ service }: { service: MediaService }) {
     const result = await service.presignMediaUpload(ownerId, request.body);
     reply.code(200);
     return result;
+  }
+
+  async function startMultipartUpload(
+    request: FastifyRequest<{ Body: PresignMediaRequest }>,
+  ): Promise<MultipartUploadStartResponse> {
+    const ownerId = request.user!.id;
+    return await service.startMultipartUpload(
+      ownerId,
+      request.body,
+      request.log,
+    );
+  }
+
+  async function getMultipartUploadStatus(
+    request: FastifyRequest<{ Params: { mediaId: string } }>,
+  ): Promise<MultipartUploadStatusResponse> {
+    return await service.getMultipartUploadStatus(
+      request.params.mediaId,
+      request.user!.id,
+      request.user?.roles,
+    );
+  }
+
+  async function presignMultipartUploadParts(
+    request: FastifyRequest<{
+      Params: { mediaId: string };
+      Body: MultipartUploadPartUrlsRequest;
+    }>,
+  ): Promise<MultipartUploadPartUrlsResponse> {
+    return await service.presignMultipartUploadParts(
+      request.params.mediaId,
+      request.body,
+      request.user!.id,
+      request.user?.roles,
+    );
+  }
+
+  async function completeMultipartUpload(
+    request: FastifyRequest<{ Params: { mediaId: string } }>,
+  ): Promise<MediaUploadCompleteResponse> {
+    return await service.completeMultipartUpload(
+      request.params.mediaId,
+      request.user!.id,
+      request.log,
+      request.user?.roles,
+    );
+  }
+
+  async function abortMultipartUpload(
+    request: FastifyRequest<{ Params: { mediaId: string } }>,
+  ): Promise<MultipartUploadAbortResponse> {
+    return await service.abortMultipartUpload(
+      request.params.mediaId,
+      request.user!.id,
+      request.user?.roles,
+    );
   }
 
   async function confirmMediaUpload(
@@ -332,6 +393,11 @@ export function createMediaController({ service }: { service: MediaService }) {
 
   return {
     presignMediaUpload,
+    startMultipartUpload,
+    getMultipartUploadStatus,
+    presignMultipartUploadParts,
+    completeMultipartUpload,
+    abortMultipartUpload,
     confirmMediaUpload,
     getVideoJobProgress,
     getPlaybackBootstrap,

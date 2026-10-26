@@ -1,6 +1,11 @@
 import type {
   MediaImageVariantManifest,
   MediaUploadCompleteResponse,
+  MultipartUploadAbortResponse,
+  MultipartUploadPartUrlsResponse,
+  MultipartUploadStartRequest,
+  MultipartUploadStartResponse,
+  MultipartUploadStatusResponse,
   VideoJobProgressResponse,
   PresignMediaRequest,
   PresignMediaResponse,
@@ -55,16 +60,51 @@ export const mediaService = {
     return requestPresignedMediaUpload(payload);
   },
 
-  presignVideoUpload(
-    payload: Omit<PresignMediaRequest, "type" | "visibility"> & {
-      visibility?: PresignMediaRequest["visibility"];
+  startMultipartVideoUpload(
+    payload: Omit<MultipartUploadStartRequest, "type" | "visibility"> & {
+      visibility?: MultipartUploadStartRequest["visibility"];
     },
-  ): Promise<PresignMediaResponse> {
-    return requestPresignedMediaUpload({
+  ): Promise<MultipartUploadStartResponse> {
+    return api.post<MultipartUploadStartResponse>("/media/multipart/start", {
       ...payload,
       type: "video",
       visibility: payload.visibility ?? "protected",
     });
+  },
+
+  getMultipartUploadStatus(
+    mediaAssetId: string,
+  ): Promise<MultipartUploadStatusResponse> {
+    return api.get<MultipartUploadStatusResponse>(
+      `/media/${mediaAssetId}/multipart`,
+    );
+  },
+
+  presignMultipartUploadParts(
+    mediaAssetId: string,
+    partNumbers: number[],
+  ): Promise<MultipartUploadPartUrlsResponse> {
+    return api.post<MultipartUploadPartUrlsResponse>(
+      `/media/${mediaAssetId}/multipart/parts`,
+      { partNumbers },
+    );
+  },
+
+  completeMultipartUpload(
+    mediaAssetId: string,
+  ): Promise<MediaUploadCompleteResponse> {
+    return api.post<MediaUploadCompleteResponse>(
+      `/media/${mediaAssetId}/multipart/complete`,
+      {},
+    );
+  },
+
+  abortMultipartUpload(
+    mediaAssetId: string,
+  ): Promise<MultipartUploadAbortResponse> {
+    return api.post<MultipartUploadAbortResponse>(
+      `/media/${mediaAssetId}/multipart/abort`,
+    );
   },
 
   uploadFileToPresignedUrl(
