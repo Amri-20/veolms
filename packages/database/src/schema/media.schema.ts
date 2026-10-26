@@ -39,6 +39,10 @@ export interface MediaAssetTable {
   duration_seconds: number | null;
   metadata: Json;
   status: MediaAssetStatus;
+  /** Multipart upload handle while a resumable upload is in flight. */
+  upload_id: string | null;
+  /** Exact part size chosen for the in-flight resumable upload. */
+  upload_part_size: number | null;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;
 }

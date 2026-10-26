@@ -198,6 +198,60 @@ export const presignMediaResponseSchema = z.object({
   mediaAssetId: z.uuid(),
 });
 
+/**
+ * Resumable video uploads are stored with S3/R2 multipart uploads. The part
+ * size is chosen by the API so a client can slice the file identically on
+ * every attempt, including after a reload.
+ */
+export const multipartUploadStartRequestSchema =
+  presignMediaRequestSchema.refine((data) => data.type === "video", {
+    message: "Multipart uploads are only available for videos",
+    path: ["type"],
+  });
+
+export const multipartUploadStartResponseSchema = z.strictObject({
+  mediaAssetId: z.uuid(),
+  partSize: z.number().int().positive(),
+  totalParts: z.number().int().positive(),
+});
+
+export const multipartUploadPartUrlsRequestSchema = z.strictObject({
+  partNumbers: z
+    .array(z.number().int().min(1).max(10_000))
+    .min(1)
+    .max(200)
+    .refine((numbers) => new Set(numbers).size === numbers.length, {
+      message: "Part numbers must be unique",
+    }),
+});
+
+export const multipartUploadPartUrlSchema = z.strictObject({
+  partNumber: z.number().int().positive(),
+  url: z.url(),
+});
+
+export const multipartUploadPartUrlsResponseSchema = z.strictObject({
+  parts: z.array(multipartUploadPartUrlSchema),
+});
+
+export const multipartUploadedPartSchema = z.strictObject({
+  partNumber: z.number().int().positive(),
+  etag: z.string().min(1),
+  size: z.number().int().nonnegative(),
+});
+
+export const multipartUploadStatusResponseSchema = z.strictObject({
+  partSize: z.number().int().positive(),
+  totalParts: z.number().int().positive(),
+  uploadedParts: z.array(multipartUploadedPartSchema),
+});
+
+export const multipartUploadCompleteRequestSchema = z.strictObject({});
+
+export const multipartUploadAbortResponseSchema = z.strictObject({
+  aborted: z.literal(true),
+});
+
 export const mediaUploadCompleteResponseSchema = z.strictObject({
   status: mediaAssetStatusSchema,
 });
@@ -316,6 +370,28 @@ export const lessonResourceDownloadResponseSchema = z.strictObject({
 });
 
 export type PresignMediaResponse = z.infer<typeof presignMediaResponseSchema>;
+export type MultipartUploadStartRequest = z.infer<
+  typeof multipartUploadStartRequestSchema
+>;
+export type MultipartUploadStartResponse = z.infer<
+  typeof multipartUploadStartResponseSchema
+>;
+export type MultipartUploadPartUrlsRequest = z.infer<
+  typeof multipartUploadPartUrlsRequestSchema
+>;
+export type MultipartUploadPartUrl = z.infer<
+  typeof multipartUploadPartUrlSchema
+>;
+export type MultipartUploadPartUrlsResponse = z.infer<
+  typeof multipartUploadPartUrlsResponseSchema
+>;
+export type MultipartUploadedPart = z.infer<typeof multipartUploadedPartSchema>;
+export type MultipartUploadStatusResponse = z.infer<
+  typeof multipartUploadStatusResponseSchema
+>;
+export type MultipartUploadAbortResponse = z.infer<
+  typeof multipartUploadAbortResponseSchema
+>;
 export type MediaUploadCompleteResponse = z.infer<
   typeof mediaUploadCompleteResponseSchema
 >;

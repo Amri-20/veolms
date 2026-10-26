@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import type { PresignMediaRequest } from "@veolms/contracts";
-import { mediaService, type UploadProgressHandler } from "./media.service";
+import { uploadVideoResumable } from "./resumable-upload";
+import { type UploadProgressHandler } from "./media.service";
 
 export interface VideoUploadInput {
   file: File;
@@ -10,27 +11,23 @@ export interface VideoUploadInput {
 }
 
 /**
- * Uploads a video straight to storage and confirms it, which queues its
+ * Uploads a video in resumable parts and confirms it, which queues its
  * processing (transcoding). Resolves with the new media asset's id; its
  * processing can then be followed with `useVideoJobProgress`.
+ *
+ * An interrupted upload leaves a local checkpoint behind, so choosing the
+ * same file again continues from the parts storage already accepted.
  */
 export function useUploadVideo() {
   return useMutation<string, Error, VideoUploadInput>({
     mutationFn: async ({ file, visibility, onProgress, signal }) => {
-      const presigned = await mediaService.presignVideoUpload({
-        filename: file.name,
-        contentType: file.type,
-        fileSize: file.size,
-        visibility,
-      });
-      await mediaService.uploadFileToPresignedUrl(
-        presigned.uploadUrl,
+      const result = await uploadVideoResumable({
         file,
+        visibility,
         onProgress,
         signal,
-      );
-      await mediaService.confirmUpload(presigned.mediaAssetId);
-      return presigned.mediaAssetId;
+      });
+      return result.mediaAssetId;
     },
   });
 }
