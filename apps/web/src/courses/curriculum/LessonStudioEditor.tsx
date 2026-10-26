@@ -28,6 +28,7 @@ import {
   LessonVideoUpload,
   type LessonVideoUploadHandle,
 } from "../lesson-video-upload/LessonVideoUpload";
+import type { YoutubeImportTarget } from "../lesson-video-upload/youtube-import-target";
 import {
   LessonContentTypeSelector,
   type StudioLessonContentType,
@@ -90,6 +91,8 @@ export interface LessonStudioEditorProps {
     mediaAssetId: string,
   ) => void | boolean | Promise<void | boolean>;
   onProcessingComplete?: () => void | Promise<void>;
+  /** Where "Import from YouTube" imports to; null hides the option. */
+  youtubeImport?: YoutubeImportTarget | null;
   onChangeVideoClick?: () => void;
   onUploadThumbnail?: (file: File) => void | Promise<void>;
   onAddResourceFile?: (file: File) => void | Promise<void>;
@@ -128,6 +131,7 @@ export const LessonStudioEditor = forwardRef<
     onUploadMedia,
     onMediaAttached,
     onProcessingComplete,
+    youtubeImport = null,
     onUploadThumbnail,
     onAddResourceFile,
     onDeleteResource,
@@ -549,6 +553,7 @@ export const LessonStudioEditor = forwardRef<
                   disabled={isSaving}
                   onPreviewFile={setPreviewFile}
                   onMediaAttached={onMediaAttached}
+                  youtubeImport={youtubeImport}
                   onThumbnailAvailable={setProcessingThumbnailMediaId}
                   onProcessingComplete={() => {
                     setPlaybackRevision((revision) => revision + 1);

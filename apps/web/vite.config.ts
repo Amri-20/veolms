@@ -1,4 +1,4 @@
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -567,6 +567,42 @@ function extraStyleSourcesPlugin(): Plugin {
 // Writes a module-to-chunk report for the client build when
 // VEO_BUNDLE_REPORT is set, so bundle composition can be audited offline.
 // No effect on normal builds.
+/**
+ * Loads the server bundle as soon as it is written, during a prerendering
+ * build. React Router's preview server otherwise imports it on the first
+ * prerender request (`/`), and that request has a fixed 10 second limit:
+ * the 11 MB bundle takes about 4 s to import even when the disk is warm,
+ * and right after it was written (cold cache, antivirus scanning the new
+ * file) the import alone could push `/` past the limit, failing the first
+ * build after a change while the next one passed. The preview server
+ * imports the same file URL, so Node's module cache answers it at once.
+ */
+function warmServerBuildPlugin(): Plugin {
+  return {
+    name: "veo-warm-server-build",
+    apply: "build",
+    async writeBundle(outputOptions, bundle) {
+      if (process.env.VEO_REACT_ROUTER_BUILD !== "true") return;
+      if (!this.environment?.config.build.ssr) return;
+      if (!outputOptions.dir || !("index.js" in bundle)) return;
+      const entry = path.resolve(outputOptions.dir, "index.js");
+      const started = Date.now();
+      try {
+        await import(pathToFileURL(entry).href);
+        this.environment.logger.info(
+          `Server bundle loaded for prerendering in ${Date.now() - started} ms`,
+        );
+      } catch (error) {
+        // Only a head start: the preview server imports it again and
+        // reports a real problem itself.
+        this.environment.logger.warn(
+          `Server bundle could not be preloaded: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    },
+  };
+}
+
 function bundleReportPlugin(): Plugin {
   return {
     name: "veo-bundle-report",
@@ -722,6 +758,7 @@ export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
       devAssetImportInlinePlugin(),
       devSocketKeepalivePlugin(),
       bundleReportPlugin(),
+      warmServerBuildPlugin(),
       extraStyleSourcesPlugin(),
       tailwindcss(),
       // Older Safari (iOS 15): see each plugin.

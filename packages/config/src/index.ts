@@ -464,6 +464,42 @@ const serverConfigSchema = z.object({
     ])
     .default("mediaconvert"),
 
+  /**
+   * "Import from YouTube" in the lesson editor. Off by default: the API
+   * then downloads with yt-dlp, runs ffmpeg (and, with the cloud DRM
+   * plugin, Shaka Packager) on this host, so an operator turns it on where
+   * there is disk and CPU for it.
+   */
+  YOUTUBE_IMPORT_ENABLED: booleanEnvironmentValueSchema.default(false),
+  /** Imports one API instance works on at once. */
+  YOUTUBE_IMPORT_CONCURRENCY: z.coerce.number().int().min(1).max(4).default(1),
+  /** Disk-backed scratch folder; defaults to the CLI's (VEOLMS_IMPORT_TMP, /var/lib/veolms/import, …). */
+  YOUTUBE_IMPORT_SCRATCH_DIR: z.string().optional(),
+  /** The most scratch space all imports on one instance may hold, in GiB. */
+  YOUTUBE_IMPORT_MAX_SCRATCH_GB: z.coerce.number().min(1).max(500).default(20),
+  /** An import does not start when less than this is free on the scratch disk, in GiB. */
+  YOUTUBE_IMPORT_MIN_FREE_DISK_GB: z.coerce.number().min(0).max(500).default(8),
+  /** Heights to keep from YouTube's ladder, highest first. */
+  YOUTUBE_IMPORT_QUALITIES: z
+    .string()
+    .default("1080,720,480,360")
+    .transform((value) =>
+      value
+        .split(",")
+        .map((item) => item.trim().replace(/p$/i, ""))
+        .filter((item) => /^\d{3,4}$/.test(item)),
+    ),
+  /** A yt-dlp binary to use instead of the managed ~/.veolms/bin copy. */
+  YTDLP_PATH: z.string().optional(),
+  /**
+   * Netscape-format cookies for yt-dlp, for hosts YouTube asks to "confirm
+   * you're not a bot". Keep it outside the repository, readable only by the
+   * API's user.
+   */
+  YTDLP_COOKIES_FILE: z.string().optional(),
+  /** An ffmpeg binary; otherwise ~/.veolms/bin, PATH, or a downloaded static build. */
+  FFMPEG_PATH: z.string().optional(),
+
   // AWS MediaConvert Configuration
   MEDIACONVERT_ENDPOINT: z.string().optional(),
   MEDIACONVERT_REGION: z.string().optional(),

@@ -175,8 +175,9 @@ const prerenderConfig = {
 
 export default {
   appDirectory: "src",
-  // React Router accepts timeout/retry options at build time even though the
-  // public Config type only documents paths and concurrency.
+  // React Router 8.3 passes only `concurrency` on to its prerender pass: the
+  // timeout/retry options above are ignored, and each prerender request has
+  // a fixed 10 second limit (see warmServerBuildPlugin in vite.config.ts).
   // Prerendering is a build-time feature. Enabling it in `react-router dev`
   // disables SPA mode and makes the first request build the full server route
   // graph before it can render. Keep dev on the configured SPA fallback.

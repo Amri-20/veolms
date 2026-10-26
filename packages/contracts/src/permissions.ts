@@ -100,6 +100,9 @@ export const permissions = [
   "platform.settings.update",
   "platform.branding.update",
   "platform.homepage.update",
+
+  // Appended last: the seed derives permission ids from list position.
+  "lesson.video.import_youtube",
 ] as const;
 
 export type Permission = (typeof permissions)[number];
