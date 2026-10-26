@@ -11,6 +11,7 @@ import {
   enqueueImageJob,
   grantPlatformRole,
 } from "@veolms/database";
+import { cacheTags, publishCacheInvalidation } from "@veolms/api-core";
 import { config } from "../config.ts";
 import { createServices } from "../services/index.ts";
 import { createMediaService } from "../modules/media/index.ts";
@@ -2478,6 +2479,12 @@ ${bold("Examples:")}
         await sleep(INTER_VIDEO_DELAY_MS);
       }
     }
+
+    // A running API drops what it cached about this course and the lists.
+    await publishCacheInvalidation(database, [
+      cacheTags.course(courseId),
+      cacheTags.catalog,
+    ]);
 
     // 8. Summary Output
     const courseUrl = `${config.WEB_URL}/courses/${slug}`;

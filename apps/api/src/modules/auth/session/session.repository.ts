@@ -1,6 +1,5 @@
 import type { Executor } from "../shared/repository.types.ts";
 import {
-  clearSessionAuthCache,
   evictCachedSession,
   evictCachedUserSessions,
 } from "../shared/session-auth-cache.ts";
@@ -196,7 +195,8 @@ export async function purgeOldSessions(
     )
     .executeTakeFirst();
 
-  clearSessionAuthCache();
+  // Only sessions revoked or expired long ago are deleted, and neither is
+  // ever served from the sign-in cache: nothing to clear.
   return Number(result.numDeletedRows);
 }
 

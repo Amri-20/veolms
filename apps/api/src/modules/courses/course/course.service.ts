@@ -19,6 +19,16 @@ import type {
 } from "@veolms/contracts";
 import { config } from "../../../config.ts";
 import {
+  courseMediaById,
+  getCourseContent,
+  catalogPages,
+  publishedAccessFacts,
+  publishedCourseOptions,
+  type CourseContentKey,
+  type CourseContentSources,
+} from "./course-content.ts";
+import { cacheTags } from "@veolms/api-core";
+import {
   getCachedPublicCourseContent,
   type PublicCourseContent,
 } from "../shared/course-content-cache.ts";
@@ -423,6 +433,15 @@ export function createCourseService({
   }),
   overviewLessonDescriptions = config.COURSE_OVERVIEW_LESSON_DESCRIPTIONS,
 }: CourseServiceOptions) {
+  const contentSources: CourseContentSources = {
+    categoryService,
+    curriculumService,
+    configurationService,
+    includesService,
+    mediaService,
+    authService,
+  };
+
   async function toPublicCourseSummary(row: PublicCourseSummaryRow) {
     const totalDurationSeconds = resolveTotalDurationSeconds(
       Number(row.lesson_duration_seconds ?? 0),
@@ -609,6 +628,27 @@ export function createCourseService({
     // unauthenticated endpoint. Default to the contract's maximum instead —
     // callers that want more pages follow nextCursor.
     const pageLimit = filters?.limit ?? 60;
+    if (filters?.search) {
+      return await buildCataloguePage(filters, sort, cursor, pageLimit);
+    }
+    return await catalogPages.fetch(
+      JSON.stringify([
+        sort,
+        pageLimit,
+        filters?.cursor ?? null,
+        filters?.creatorId ?? null,
+      ]),
+      () => buildCataloguePage(filters, sort, cursor, pageLimit),
+      { tags: [cacheTags.catalog, cacheTags.site] },
+    );
+  }
+
+  async function buildCataloguePage(
+    filters: CourseListQuery | undefined,
+    sort: "latest" | "title",
+    cursor: ReturnType<typeof decodePublishedCourseCursor> | undefined,
+    pageLimit: number,
+  ): Promise<CourseListResponse> {
     const rows = await courseRepo.listPublishedCourses(database, {
       creatorId: filters?.creatorId,
       limit: pageLimit,
@@ -630,7 +670,11 @@ export function createCourseService({
 
   async function listPublishedCourseOptions() {
     return {
-      courses: await courseRepo.listPublishedCourseOptions(database),
+      courses: await publishedCourseOptions.fetch(
+        "options",
+        () => courseRepo.listPublishedCourseOptions(database),
+        { tags: [cacheTags.catalog, cacheTags.site] },
+      ),
     };
   }
 
@@ -1326,28 +1370,8 @@ export function createCourseService({
     const courseId = course.id;
     const viewerManagesCourse = visibility.managesCourse;
 
-    const [
-      category,
-      allSections,
-      allLessons,
-      allResources,
-      accessRule,
-      pricing,
-      settings,
-      includes,
-      thumbnail,
-      banner,
-    ] = await Promise.all([
-      course.category_id
-        ? categoryService.findCategoryById(course.category_id)
-        : null,
-      curriculumService.findSectionsByCourseId(courseId),
-      curriculumService.findLessonsByCourseId(courseId),
-      curriculumService.listResourcesByCourseId(courseId),
-      configurationService.findAccessRuleByCourseId(courseId),
-      configurationService.findPricingByCourseId(courseId),
-      configurationService.findSettingsByCourseId(courseId),
-      includesService.listIncludesForAuthorizedCourse(courseId),
+    const [content, thumbnail, banner] = await Promise.all([
+      getCourseContent(contentSources, course),
       resolveCourseThumbnailUrls(
         course.thumbnail_media_id,
         course.creator_id ?? user?.id,
@@ -1359,6 +1383,16 @@ export function createCourseService({
         user?.roles,
       ),
     ]);
+    const {
+      category,
+      sections: allSections,
+      lessons: allLessons,
+      resources: allResources,
+      accessRule,
+      pricing,
+      settings,
+      includes,
+    } = content;
 
     // Learners get published lessons only, and only the sections that still
     // have one: an unpublished section's title is not theirs to see. Lesson
@@ -1428,15 +1462,10 @@ export function createCourseService({
       settings?.show_instructor_name === false && !viewerManagesCourse;
 
     // Learners who may download a resource see what it is first, so its file
-    // details go out with the overview. Media is read without an owner
-    // filter: the viewer is not the uploader.
-    const [mediaById, creatorRows] = await Promise.all([
-      loadCurriculumMedia(lessons, viewerMayDownloadResources ? resources : []),
-      course.creator_id && !instructorHidden
-        ? authService.listUserDisplayNamesByIds([course.creator_id])
-        : [],
-    ]);
-    const creatorRow = creatorRows[0];
+    // details go out with the overview (`omitResourceMedia` below holds them
+    // back from everyone else).
+    const mediaById = courseMediaById(content);
+    const creatorRow = instructorHidden ? undefined : content.creator;
 
     const totalDurationSeconds = resolveTotalDurationSeconds(
       lessons.reduce(
@@ -1540,7 +1569,6 @@ export function createCourseService({
   ): Promise<PublicCourseContent> {
     return await getCachedPublicCourseContent(
       courseIdOrSlug,
-      config.COURSE_CACHE_TTL_MS,
       async () => {
         const overview = await buildCourseOverviewData(
           courseIdOrSlug,
@@ -1580,7 +1608,14 @@ export function createCourseService({
   async function listCourseAccessFacts(
     filter: { courseIds: readonly string[] } | { published: true },
   ): Promise<CourseAccessFacts[]> {
-    const rows = await courseRepo.listCourseAccessFacts(database, filter);
+    const rows =
+      "published" in filter
+        ? await publishedAccessFacts.fetch(
+            "published",
+            () => courseRepo.listCourseAccessFacts(database, filter),
+            { tags: [cacheTags.catalog, cacheTags.site] },
+          )
+        : await courseRepo.listCourseAccessFacts(database, filter);
     return rows.map((row) => {
       const pricing = presentPricingSummary(row);
       return {
@@ -1955,6 +1990,12 @@ export function createCourseService({
     getCourseTrailerPlaybackToken,
     getPublicCurriculum,
     getPublicCurriculumVersion,
+    /**
+     * What is the same for every viewer of a course (see course-content.ts),
+     * for read paths only.
+     */
+    getCourseContent: (course: CourseContentKey) =>
+      getCourseContent(contentSources, course),
     listCourseAccessFacts,
     getLessonDescription,
     deleteCourse,

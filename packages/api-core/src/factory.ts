@@ -13,8 +13,14 @@ import { createCorsMatcher } from "./cors.ts";
 import { AppError, registerErrorHandler } from "./errors.ts";
 import { registerOpenApi } from "./openapi.ts";
 import {
+  configureCaches,
+  invalidateCache,
+  startCacheBus,
+  type CacheBus,
+} from "./cache/index.ts";
+import {
+  cacheTagsForSiteContentChange,
   detectSiteContentChange,
-  notifySiteContentChange,
 } from "./site-content-changes.ts";
 import type {
   CoreAppServices,
@@ -111,6 +117,8 @@ export async function createVeoLMSApi<
     plugins = [],
   } = options;
 
+  configureCaches({ enabled: config.CACHE_ENABLED });
+
   const app: FastifyInstance = Fastify({
     logger,
     trustProxy: config.TRUST_PROXY,
@@ -139,13 +147,27 @@ export async function createVeoLMSApi<
       userRoles: (request as { user?: { roles?: readonly string[] } }).user
         ?.roles,
     });
-    if (change) {
-      notifySiteContentChange(change, (error) =>
-        request.log.error({ err: error }, "Site content listener failed"),
-      );
-    }
+    if (change) invalidateCache(cacheTagsForSiteContentChange(change));
     return payload;
   });
+
+  // Other processes are told about changes only while this one serves
+  // requests: an app built for tests (`inject`) never listens, so it opens
+  // no connection of its own.
+  let cacheBus: CacheBus | null = null;
+  if (config.CACHE_ENABLED && config.CACHE_BUS_ENABLED) {
+    app.addHook("onListen", async () => {
+      cacheBus ??= startCacheBus({
+        connectionString: config.DATABASE_URL,
+        database,
+        logger: app.log,
+      });
+    });
+    app.addHook("onClose", async () => {
+      await cacheBus?.stop();
+      cacheBus = null;
+    });
+  }
 
   app.addHook("onSend", async (request, _reply, payload) => {
     const pending = getCourseMutation(request);

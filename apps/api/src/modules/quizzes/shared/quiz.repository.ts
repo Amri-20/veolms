@@ -612,7 +612,7 @@ export async function listAssignmentRefsForQuizzes(
   if (quizIds.length === 0) return [];
   return await database
     .selectFrom("quiz_assignments")
-    .select(["id", "quiz_id", "lesson_id"])
+    .select(["id", "quiz_id", "lesson_id", "course_id"])
     .where("quiz_id", "in", quizIds)
     .orderBy("created_at", "asc")
     .execute();

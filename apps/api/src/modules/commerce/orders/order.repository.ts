@@ -1041,15 +1041,3 @@ export async function listCouponCodesByIds(
     .where("id", "in", couponIds)
     .execute();
 }
-
-/**
- * Id of the academy this deployment serves. Admin-view requests resolve it on
- * every call, so it reads the one column they use.
- */
-export async function findAcademyId(database: Executor) {
-  const academy = await database
-    .selectFrom("academy")
-    .select("id")
-    .executeTakeFirst();
-  return academy?.id;
-}

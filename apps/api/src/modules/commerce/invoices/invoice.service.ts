@@ -6,7 +6,7 @@ import { AppError } from "../../../lib/errors.ts";
 import { CommerceErrors } from "../shared/commerce.errors.ts";
 import * as orderRepo from "../orders/order.repository.ts";
 import * as paymentRepo from "../payments/payment.repository.ts";
-import * as setupRepo from "../../auth/setup/setup.repository.ts";
+import { getAcademyRow } from "../../auth/index.ts";
 import {
   createPlatformSettingsService,
   type PlatformSettingsService,
@@ -149,7 +149,7 @@ export function createInvoiceService({
         orderRepo.listOrderItems(database, order.id),
         paymentRepo.findPaymentReferenceByOrderId(database, order.id),
         orderRepo.findInvoiceBuyer(database, order.user_id),
-        setupRepo.findAcademy(database),
+        getAcademyRow(database),
         platformSettings.getInvoiceSettings(),
         invoiceNumberFor(order),
       ]);

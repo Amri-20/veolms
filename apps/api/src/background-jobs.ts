@@ -24,6 +24,7 @@ import {
   invoiceStorage,
 } from "./modules/commerce/invoices/invoice.service.ts";
 import { createInvoiceAttachmentResolver } from "./modules/commerce/invoices/invoice-email-attachment.ts";
+import { getCacheStats } from "@veolms/api-core";
 import { getDatabasePoolMetrics } from "@veolms/database";
 import * as webhookRepo from "./modules/commerce/webhooks/webhook.repository.ts";
 import * as outboxRepo from "./events/outbox.repository.ts";
@@ -333,7 +334,7 @@ function startDiscussionUploadPurge(
 }
 
 /**
- * Periodic one-line ops gauge: pool saturation and queue depths.
+ * Periodic one-line ops gauge: pool saturation, queue depths and caches.
  *
  * The audit's biggest production unknowns were exactly these numbers —
  * pool starvation queued requests invisibly, and a growing webhook or
@@ -360,6 +361,7 @@ function startOpsHeartbeat(
         {
           job: "ops-heartbeat",
           pools: getDatabasePoolMetrics(),
+          caches: getCacheStats(),
           webhookQueue,
           outbox,
           emailBacklog,

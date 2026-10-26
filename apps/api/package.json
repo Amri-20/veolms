@@ -51,6 +51,8 @@
   "devDependencies": {
     "@types/nodemailer": "^8.0.1",
     "@types/pdfkit": "^0.17.6",
+    "@types/pg": "8.15.5",
+    "pg": "^8.23.1",
     "pino-pretty": "^13.1.3"
   }
 }

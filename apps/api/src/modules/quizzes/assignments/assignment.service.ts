@@ -4,6 +4,7 @@ import type {
   SetQuizCoursePricingRequest,
   UpdateQuizAssignmentRequest,
 } from "@veolms/contracts";
+import { cacheTags, invalidateCache } from "@veolms/api-core";
 import { AppError } from "../../../lib/errors.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
 import * as repo from "../shared/quiz.repository.ts";
@@ -416,6 +417,10 @@ export function createAssignmentService(options: QuizServiceOptions) {
       }
       await repo.deleteAssignment(trx, assignmentId);
     });
+    // The lesson's type changed: the course's cached content is cleared.
+    if (assignment.lesson_id) {
+      invalidateCache([cacheTags.course(assignment.course_id)]);
+    }
     return { success: true as const };
   }
 

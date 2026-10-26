@@ -14,6 +14,7 @@ import {
   type PublicPopularDiscussion,
   type VideoPlaybackToken,
 } from "@veolms/contracts";
+import { cacheTags, createCache } from "@veolms/api-core";
 import type { Database } from "@veolms/database";
 import type { Kysely } from "kysely";
 import { httpError } from "../../lib/errors.ts";
@@ -34,11 +35,17 @@ const HOME_DISCUSSION_QUERY = { limit: 40, onePerAuthor: true } as const;
 /** How many courses the settings editor offers to choose from. */
 const COURSE_OPTION_LIMIT = 200;
 /**
- * Every signed-out visit asks for the resolved page, so it is kept briefly
+ * Every signed-out visit asks for the resolved page, so one build is shared
  * instead of being rebuilt from several queries each time. Saving the
- * settings clears it, so an admin sees their own change at once.
+ * settings, or a course or site change, clears it in every process; the TTL
+ * covers what is not tracked (popular discussions, enrolment counts).
  */
-const GUEST_PAGE_CACHE_MS = 30_000;
+const guestPages = createCache<GuestHomePageResponse>({
+  name: "home.guest-page",
+  ttlMs: 30_000,
+  maxBytes: 4 * 1024 * 1024,
+});
+const GUEST_PAGE_KEY = "guest";
 /**
  * The hero's laptop screen is a small part of the picture: about 460 device
  * pixels of thumbnail on a phone, 910 on a high-density laptop, 790 on a
@@ -87,9 +94,6 @@ export function createHomePageService({
   threadsService: Pick<ThreadsService, "listPublicPopularDiscussions">;
   heroVideoService: HomeHeroVideoService;
 }): HomePageService {
-  let cachedGuestPage:
-    { expiresAt: number; page: Promise<GuestHomePageResponse> } | undefined;
-
   async function readSettings(): Promise<StoredSettings> {
     let row: Awaited<ReturnType<typeof findHomePageSettings>>;
     try {
@@ -297,7 +301,8 @@ export function createHomePageService({
           "Home page settings cannot be saved until the database migration that creates them has been run.",
         );
       }
-      cachedGuestPage = undefined;
+      // Other processes are cleared by the site change this save is.
+      guestPages.delete(GUEST_PAGE_KEY);
       return toResponse({ settings, updatedAt: row.updatedAt });
     },
 
@@ -349,22 +354,10 @@ export function createHomePageService({
     },
 
     async getGuestPage() {
-      const now = Date.now();
-      if (cachedGuestPage && cachedGuestPage.expiresAt > now) {
-        return await cachedGuestPage.page;
-      }
-      const entry = {
-        expiresAt: now + GUEST_PAGE_CACHE_MS,
-        page: buildGuestPage(),
-      };
-      cachedGuestPage = entry;
-      try {
-        return await entry.page;
-      } catch (error) {
-        // A failed build must not be served again from the cache.
-        if (cachedGuestPage === entry) cachedGuestPage = undefined;
-        throw error;
-      }
+      // A failed build is not kept.
+      return await guestPages.fetch(GUEST_PAGE_KEY, buildGuestPage, {
+        tags: [cacheTags.catalog, cacheTags.site],
+      });
     },
   };
 }
