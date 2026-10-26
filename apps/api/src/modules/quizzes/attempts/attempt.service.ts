@@ -7,6 +7,7 @@ import {
   hasUnsafeQuizAnswerContent,
   UNSAFE_QUIZ_ANSWER_MESSAGE,
 } from "@veolms/contracts";
+import { cacheTags, createCache } from "@veolms/api-core";
 import { AppError } from "../../../lib/errors.ts";
 import * as repo from "../shared/quiz.repository.ts";
 import * as pricingRepo from "../shared/quiz-pricing.repository.ts";
@@ -23,6 +24,16 @@ import {
   type GradedAttempt,
 } from "./attempt.closing.ts";
 import { presentAttemptResult, resultScope } from "./attempt.result.ts";
+
+/**
+ * Ids of the published free courses (every learner's quizzes include
+ * theirs). The same for everyone; any course change clears it (`catalog`).
+ */
+const publishedFreeCourseIds = createCache<string[]>({
+  name: "quizzes.published-free-course-ids",
+  ttlMs: 5 * 60_000,
+  maxBytes: 1024 * 1024,
+});
 
 type AttemptRow = NonNullable<Awaited<ReturnType<typeof repo.findAttempt>>>;
 
@@ -731,7 +742,11 @@ export function createAttemptService(options: QuizServiceOptions) {
     const courseIds = [
       ...new Set([
         ...accessibleCourseIds,
-        ...(await repo.listPublishedFreeCourseIds(database)),
+        ...(await publishedFreeCourseIds.fetch(
+          "all",
+          () => repo.listPublishedFreeCourseIds(database),
+          { tags: [cacheTags.catalog, cacheTags.site] },
+        )),
       ]),
     ];
     const assignments = await repo.listAssignmentsForCourses(

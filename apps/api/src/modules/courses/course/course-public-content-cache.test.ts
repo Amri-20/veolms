@@ -49,6 +49,32 @@ function fakeDatabase() {
   return { selectFrom: () => builder() } as unknown as Kysely<Database>;
 }
 
+const section = {
+  id: "00000000-0000-4000-8000-0000000000s1".replace("s1", "51"),
+  course_id: COURSE,
+  title: "Section",
+  description: null,
+  position: 1,
+  deleted_at: null,
+};
+
+function lesson(title: string, position: number, isPublished: boolean) {
+  return {
+    id: `00000000-0000-4000-8000-00000000010${position}`,
+    course_id: COURSE,
+    section_id: section.id,
+    title,
+    description: null,
+    content_type: "video",
+    content_media_id: null,
+    position,
+    is_published: isPublished,
+    is_preview: false,
+    duration_seconds: null,
+    deleted_at: null,
+  };
+}
+
 /** A course service that counts how often the curriculum is read. */
 function build() {
   const reads = { lessons: 0 };
@@ -58,10 +84,10 @@ function build() {
     authService: { listUserDisplayNamesByIds: async () => [] } as never,
     categoryService: { findCategoryById: async () => null } as never,
     curriculumService: {
-      findSectionsByCourseId: async () => [],
+      findSectionsByCourseId: async () => [section],
       findLessonsByCourseId: async () => {
         reads.lessons += 1;
-        return [];
+        return [lesson("published", 1, true), lesson("draft", 2, false)];
       },
       listResourcesByCourseId: async () => [],
     } as never,
@@ -109,12 +135,28 @@ await test("after the course changes, the next read builds it again", async () =
   assert.equal(reads.lessons, 2);
 });
 
-await test("a signed-in viewer's overview is never taken from the cache", async () => {
+await test("a signed-in overview is worked out for its viewer from the shared course content", async () => {
   clearAllCaches();
   const { service, reads } = build();
   const learner = { id: LEARNER, roles: ["student"] };
-  await service.getPublicCurriculum(COURSE);
-  await service.getCourseOverviewData(COURSE, learner);
-  await service.getCourseOverviewData(COURSE, learner);
-  assert.equal(reads.lessons, 3);
+  const owner = { id: OWNER, roles: ["instructor"] };
+  const lessonTitles = (overview: {
+    sections: Array<{ lessons?: Array<{ title: string }> }>;
+  }) =>
+    overview.sections.flatMap((entry) =>
+      (entry.lessons ?? []).map((item) => item.title),
+    );
+
+  const visitor = await service.getCourseOverviewData(COURSE);
+  const asLearner = await service.getCourseOverviewData(COURSE, learner);
+  const asOwner = await service.getCourseOverviewData(COURSE, owner);
+
+  assert.equal(reads.lessons, 1, "the course is read once for every viewer");
+  assert.deepEqual(lessonTitles(visitor), ["published"]);
+  assert.deepEqual(lessonTitles(asLearner), ["published"]);
+  assert.deepEqual(
+    lessonTitles(asOwner),
+    ["published", "draft"],
+    "its creator also sees the unpublished lesson",
+  );
 });

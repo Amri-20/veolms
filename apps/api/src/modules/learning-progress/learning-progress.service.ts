@@ -28,9 +28,8 @@ import { AppError } from "../../lib/errors.ts";
 import type { AppServices } from "../../services/index.ts";
 import {
   createCourseService,
-  createCurriculumService,
+  type CourseContentKey,
   type CourseService,
-  type CurriculumService,
 } from "../courses/index.ts";
 import { createOutboxService } from "../../events/outbox.service.ts";
 import {
@@ -365,15 +364,16 @@ export function createLearningProgressService({
   database,
   services,
   accessService = createAccessService(),
-  curriculumService = createCurriculumService({ database, services }),
   courseService = createCourseService({ database, services }),
   quizCompletionService = createQuizCompletionService({ database }),
 }: {
   database: Kysely<Database>;
   services: AppServices;
   accessService?: AccessService;
-  curriculumService?: CurriculumService;
-  courseService?: Pick<CourseService, "findCourseById" | "findCourseBySlug">;
+  courseService?: Pick<
+    CourseService,
+    "findCourseById" | "findCourseBySlug" | "getCourseContent"
+  >;
   quizCompletionService?: QuizCompletionService;
 }): LearningProgressService {
   const outbox = createOutboxService();
@@ -405,10 +405,10 @@ export function createLearningProgressService({
       throw new AppError(404, "COURSE_NOT_FOUND", "Course not published.");
     }
 
-    const [accessRule, pricing] = await Promise.all([
-      learningProgressRepository.findCourseAccessType(database, course.id),
-      learningProgressRepository.findCoursePricingType(database, course.id),
-    ]);
+    // From the course's shared content: every heartbeat of every learner
+    // asks this.
+    const { accessRule, pricing } =
+      await courseService.getCourseContent(course);
 
     // The rule playback and discussions apply: open without a grant only
     // when free and not restricted. Written out here it also opened a
@@ -432,13 +432,10 @@ export function createLearningProgressService({
   }
 
   async function listAvailableLessons(
-    courseId: string,
+    course: CourseContentKey,
     canManageCourse: boolean,
   ): Promise<ResumeCurriculumLesson[]> {
-    const [sections, lessons] = await Promise.all([
-      curriculumService.findSectionsByCourseId(courseId),
-      curriculumService.findLessonsByCourseId(courseId),
-    ]);
+    const { sections, lessons } = await courseService.getCourseContent(course);
     return orderAvailableLessons(sections, lessons, canManageCourse);
   }
 
@@ -500,7 +497,7 @@ export function createLearningProgressService({
     const course = await requireCourse(user, courseKey);
     const canManageCourse = seesUnpublishedLessons(user, course);
     const [lessons, rows] = await Promise.all([
-      listAvailableLessons(course.id, canManageCourse),
+      listAvailableLessons(course, canManageCourse),
       learningProgressRepository.listUserCourseProgress(
         database,
         user.id,
@@ -517,7 +514,7 @@ export function createLearningProgressService({
     const course = await requireCourse(user, courseKey);
     const canManageCourse = seesUnpublishedLessons(user, course);
     const [lessons, rows] = await Promise.all([
-      listAvailableLessons(course.id, canManageCourse),
+      listAvailableLessons(course, canManageCourse),
       learningProgressRepository.listUserCourseProgress(
         database,
         user.id,
@@ -535,7 +532,7 @@ export function createLearningProgressService({
   ): Promise<LearningProgressSyncResponse> {
     const course = await requireCourse(user, courseKey);
     const canManageCourse = seesUnpublishedLessons(user, course);
-    const lessons = await curriculumService.findLessonsByCourseId(course.id);
+    const { lessons } = await courseService.getCourseContent(course);
     const availableLessonIds = new Set(
       lessons
         .filter((lesson) => canManageCourse || lesson.is_published)
