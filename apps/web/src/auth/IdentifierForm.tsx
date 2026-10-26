@@ -19,6 +19,7 @@ import {
   toNationalNumber,
   validateEmail,
   validateMobile,
+  withDefaultEmailDomain,
 } from "./identifier";
 import type { CountryOption, IdentifierMethod } from "./identifier";
 import {
@@ -110,7 +111,9 @@ export function IdentifierForm({
   const error = invalidReason ?? errorMessage ?? null;
 
   const checkIdentifier = () =>
-    method === "email" ? validateEmail(email) : validateMobile(mobile, country);
+    method === "email"
+      ? validateEmail(withDefaultEmailDomain(email))
+      : validateMobile(mobile, country);
 
   // An address is only judged when the visitor presses Continue, and the
   // verdict goes as soon as they type again: an unfinished address is not
@@ -137,7 +140,10 @@ export function IdentifierForm({
 
     onSubmit(
       method === "email"
-        ? { method: "email", email: normalizeEmail(email) }
+        ? {
+            method: "email",
+            email: normalizeEmail(withDefaultEmailDomain(email)),
+          }
         : {
             method: "mobile",
             phoneNo: toInternationalPhoneNumber(mobile, country),
