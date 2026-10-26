@@ -54,6 +54,13 @@ const heroPictureSizes =
   "(min-width: 2200px) 600px, (min-width: 900px) 480px, 100vw";
 
 /**
+ * The banner is drawn at the hero's height in its own proportions: about
+ * three times that height wide for the recommended 3:1 (the hero is at most
+ * about 22rem tall).
+ */
+const heroBannerSizes = "(min-width: 2200px) 1100px, 900px";
+
+/**
  * The hero's picture layers, all made from the course thumbnail:
  *
  * 1. a blurred, enlarged copy of the thumbnail that tints the hero with its
@@ -75,9 +82,10 @@ const heroPictureSizes =
  *    layer of its own, over the shade, which is solid there and hides the
  *    first grid; the first one is what shows faintly on the picture.
  *
- * With a banner, once wide, 1. and 3. give way to the banner across the
- * whole hero (its right side kept when cropped); the shade (4.) and the dot
- * grids lie over it as they do over the thumbnail, so the text still reads.
+ * With a banner, once wide, 1. and 3. give way to the banner: as tall as the
+ * hero, whole from top to bottom, against its right edge and fading to the
+ * left; the shade (4.) and the dot grids lie over it as they do over the
+ * thumbnail, so the text still reads.
  *
  * The parent is the `@container/hero` these layers size themselves against.
  */
@@ -134,14 +142,18 @@ export function CourseHeroArtwork({
 
       {banner ? (
         // Loaded lazily: stacked (a phone) it is display:none and never
-        // fetched; wide it is the hero's picture.
+        // fetched; wide it is the hero's picture. It is always as tall as
+        // the hero and keeps its own proportions, against the right edge:
+        // never cut at the top or bottom. A hero narrower than it cuts its
+        // left side, which dissolves into the ground under the text; on a
+        // wider one that ground carries on to its left.
         <img
           src={banner}
           srcSet={getCourseThumbnailSrcSet({ thumbnailSrcSet: bannerSrcSet })}
-          sizes="100vw"
+          sizes={heroBannerSizes}
           alt=""
           aria-hidden="true"
-          className={`pointer-events-none absolute inset-0 hidden size-full object-cover object-right @3xl/hero:block ${
+          className={`pointer-events-none absolute top-0 right-0 hidden h-full w-auto max-w-none [mask-image:linear-gradient(to_right,transparent,rgb(0_0_0/0.35)_14%,black_32%)] @3xl/hero:block ${
             footRoom ? "@3xl/hero:h-[calc(100%_-_1rem)]" : ""
           }`}
           loading="lazy"
