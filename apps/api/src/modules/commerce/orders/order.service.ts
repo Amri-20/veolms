@@ -14,6 +14,7 @@ import {
   createStudentsService,
   type StudentsService,
 } from "../../students/index.ts";
+import { getAcademyId } from "../../auth/index.ts";
 import * as orderRepo from "./order.repository.ts";
 import { toAdminOrder, toLearnerOrder } from "./order.mapper.ts";
 
@@ -389,7 +390,7 @@ export function createOrderService({
   }
 
   async function getAcademyScope(): Promise<OrderScope> {
-    const academyId = await orderRepo.findAcademyId(database);
+    const academyId = await getAcademyId(database);
     if (!academyId) {
       throw new AppError(
         500,

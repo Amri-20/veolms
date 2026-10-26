@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { clearAllCaches } from "@veolms/api-core";
 import { DEFAULT_PLATFORM_INVOICE_SETTINGS } from "@veolms/contracts";
 import type { Database } from "@veolms/database";
 import type { Kysely, RawBuilder } from "kysely";
@@ -14,6 +15,8 @@ import { createPlatformSettingsService } from "./platform-settings.service.ts";
  * the parameter of the `::jsonb` cast the repository sends.
  */
 function fakeDatabase(stored?: unknown) {
+  // Settings are cached per process; each case starts from its own row.
+  clearAllCaches();
   let row: { settings: unknown; updated_at: Date } | null =
     stored === undefined
       ? null

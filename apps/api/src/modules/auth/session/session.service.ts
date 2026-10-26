@@ -32,8 +32,7 @@ import {
 } from "../shared/auth.utils.ts";
 import {
   clearSessionAuthCache,
-  getCachedAuthContext,
-  setCachedAuthContext,
+  getAuthContext,
 } from "../shared/session-auth-cache.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
 import type { Executor } from "../shared/repository.types.ts";
@@ -309,18 +308,14 @@ export function createSessionService({ database }: SessionServiceOptions) {
   ): Promise<AuthenticatedRequestContext | null> {
     const tokenHash = hashToken(token);
 
-    // Process-local short-TTL cache: this path runs 5 queries in 3 serial
-    // round trips on EVERY authenticated request. Coherence (including
-    // immediate in-process eviction on revocation/rotation/MFA changes) is
-    // documented in shared/session-auth-cache.ts.
-    const cached = getCachedAuthContext(
-      tokenHash,
-      config.SESSION_AUTH_CACHE_TTL_MS,
-    );
-    if (cached) {
-      return cached;
-    }
+    // Every authenticated request needs this; it is cached per token (see
+    // shared/session-auth-cache.ts for when it is cleared).
+    return await getAuthContext(tokenHash, () => loadAuthContext(tokenHash));
+  }
 
+  async function loadAuthContext(
+    tokenHash: string,
+  ): Promise<AuthenticatedRequestContext | null> {
     const session = await sessionRepository.findActiveSession(
       database,
       tokenHash,
@@ -374,7 +369,6 @@ export function createSessionService({ database }: SessionServiceOptions) {
       },
     };
 
-    setCachedAuthContext(tokenHash, context, config.SESSION_AUTH_CACHE_TTL_MS);
     return context;
   }
 

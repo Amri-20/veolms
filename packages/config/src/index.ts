@@ -167,18 +167,18 @@ const serverConfigSchema = z.object({
     .max(168)
     .default(0),
   /**
-   * TTL for the process-local per-request authentication cache (ms).
-   * Bounds how long a role/MFA-factor change made OUTSIDE the session
-   * repository — or on another instance — can be served stale. Session
-   * revocation/rotation/MFA verification evict immediately in-process.
-   * 0 disables the cache.
+   * TTL (ms) for what is cached per signed-in user: the sign-in itself, the
+   * roles behind permission checks, the side navigation. Revocation, role
+   * and MFA changes clear them in every process at once (the cache bus);
+   * this bounds only a change the bus did not carry (a lost message, a
+   * write outside the API that does not publish). 0 disables them.
    */
   SESSION_AUTH_CACHE_TTL_MS: z.coerce
     .number()
     .int()
     .min(0)
     .max(60_000)
-    .default(10_000),
+    .default(30_000),
   /**
    * TTL for the process-local cache of a course as every visitor sees it
    * (the signed-out overview, the public curriculum and its version), in

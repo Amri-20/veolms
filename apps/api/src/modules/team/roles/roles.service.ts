@@ -8,7 +8,7 @@ import {
 import type { Database } from "@veolms/database";
 import type { Kysely } from "kysely";
 import { AppError } from "../../../lib/errors.ts";
-import { clearSessionAuthCache } from "../../auth/index.ts";
+import { cacheTags, invalidateCache } from "@veolms/api-core";
 import { publishTeamEvent } from "../shared/team.events.ts";
 import * as teamRepository from "../shared/team.repository.ts";
 import {
@@ -94,6 +94,7 @@ export function createTeamRolesService({
       });
     });
 
+    invalidateCache([cacheTags.rbac]);
     return await getRole(roleId);
   }
 
@@ -131,9 +132,9 @@ export function createTeamRolesService({
       });
     });
 
-    // Permission checks read the database on every request, but the cached
-    // sign-in context carries role names; drop it so nothing stale lingers.
-    clearSessionAuthCache();
+    // Cached permission rules and sign-ins (which carry role names) are
+    // dropped in every process.
+    invalidateCache([cacheTags.rbac]);
     return await getRole(roleId);
   }
 
@@ -159,6 +160,7 @@ export function createTeamRolesService({
         name: role.name,
       });
     });
+    invalidateCache([cacheTags.rbac]);
   }
 
   return { listRoles, getRole, createRole, updateRole, deleteRole };

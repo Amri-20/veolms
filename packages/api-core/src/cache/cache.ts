@@ -36,6 +36,13 @@ export interface CacheEntryOptions<V> {
    * keeps its result out of the cache, as it may be what was invalidated.
    */
   tagsOf?: (value: V) => readonly string[];
+  /**
+   * Whether to keep a loaded value; when false it is returned to the
+   * callers but not stored. For "not found" answers (null), which would
+   * otherwise let made-up keys fill the cache, or hide a record created
+   * just after.
+   */
+  keepIf?: (value: V) => boolean;
 }
 
 export interface CacheStats {
@@ -177,7 +184,7 @@ export function createCache<V>(options: CacheOptions<V>): Cache<V> {
     }
     counters.misses += 1;
 
-    const { tags = [], tagsOf } = entryOptions;
+    const { tags = [], tagsOf, keepIf } = entryOptions;
     const current = {
       tags: tagsOf ? null : new Set(tags),
       stale: false,
@@ -188,7 +195,7 @@ export function createCache<V>(options: CacheOptions<V>): Cache<V> {
         const allTags = tagsOf ? [...tags, ...tagsOf(value)] : tags;
         counters.loads += 1;
         if (current.stale || !active()) counters.discardedLoads += 1;
-        else store(key, value, allTags);
+        else if (!keepIf || keepIf(value)) store(key, value, allTags);
         return value;
       } catch (error) {
         counters.loadFailures += 1;

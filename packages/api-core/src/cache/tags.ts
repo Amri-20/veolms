@@ -17,6 +17,8 @@ export const cacheTags = {
   site: "site",
   /** The academy row (one per installation). */
   academy: "academy",
+  /** The rules signing in follows (platform security settings). */
+  auth: "auth",
   /** Roles, their permissions, feature flags, menus. */
   rbac: "rbac",
   /** Lists of courses that are the same for everyone. */
