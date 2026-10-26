@@ -21,19 +21,37 @@ import {
   readLearningPreferences,
 } from "./settingsPreferences";
 import type { LearningPreferences } from "./settingsPreferences";
-import { VIDEO_QUALITY_LEVELS } from "@veolms/contracts";
+/**
+ * The heights lesson videos come in: uploads are encoded at 360p, 720p and
+ * 1080p (`VIDEO_QUALITIES` in the API's media service), YouTube imports
+ * also have 480p. Stored as the player stores a quality picked in its menu
+ * ("1080"): the two set the same preference. A video without the chosen
+ * height plays the tallest it has below it (the shortest it has when all
+ * are taller); see `variantForHeight` in the Shaka engine.
+ */
+const VIDEO_QUALITY_HEIGHTS = [1080, 720, 480, 360] as const;
 
 /**
- * Every height the pipeline encodes, stored as the player stores a quality
- * picked in its menu ("1080"): the two set the same preference.
+ * The options, with a height picked in the player that is not among them
+ * (a YouTube import's 1440p, say) kept in the list, so the setting shows it.
  */
-const VIDEO_QUALITY_OPTIONS: [string, string][] = [
-  ["auto", "Auto (Recommended)"],
-  ...VIDEO_QUALITY_LEVELS.map((level): [string, string] => [
-    level.replace(/p$/u, ""),
-    level,
-  ]),
-];
+function videoQualityOptions(saved: string): [string, string][] {
+  const heights: number[] = [...VIDEO_QUALITY_HEIGHTS];
+  const savedHeight = Number(saved);
+  if (
+    Number.isInteger(savedHeight) &&
+    savedHeight > 0 &&
+    !heights.includes(savedHeight)
+  ) {
+    heights.push(savedHeight);
+  }
+  return [
+    ["auto", "Auto (Recommended)"],
+    ...heights
+      .sort((left, right) => right - left)
+      .map((height): [string, string] => [String(height), `${height}p`]),
+  ];
+}
 
 export function LearningSettings({
   isAuthenticated = true,
@@ -156,7 +174,7 @@ export function LearningSettings({
               note="Every video starts at this quality. Picking one in the player changes it too."
               value={preferences.videoQuality}
               onChange={(videoQuality) => update({ videoQuality })}
-              options={VIDEO_QUALITY_OPTIONS}
+              options={videoQualityOptions(preferences.videoQuality)}
             />
             <LearningSelectRow
               id="learning-seek-interval"
