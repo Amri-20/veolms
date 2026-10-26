@@ -492,11 +492,26 @@ export function createMediaService({
     size_bytes: number | string;
     upload_part_size: number | null;
   }) {
+    const fileSize = Number(media.size_bytes);
     const partSize = Number(media.upload_part_size);
     return {
+      fileSize,
       partSize,
-      totalParts: Math.max(1, Math.ceil(Number(media.size_bytes) / partSize)),
+      totalParts: Math.max(1, Math.ceil(fileSize / partSize)),
     };
+  }
+
+  /**
+   * The size storage must report for a part. Every part is `partSize` bytes
+   * except the last, which carries the remainder. Checking this before joining
+   * stops a client from bypassing the declared file size through a part URL.
+   */
+  function expectedMultipartPartSize(
+    partNumber: number,
+    partSize: number,
+    fileSize: number,
+  ) {
+    return Math.min(partSize, fileSize - (partNumber - 1) * partSize);
   }
 
   /** What storage already holds, so a client can resume from that point. */
@@ -506,7 +521,7 @@ export function createMediaService({
     userRoles?: readonly string[],
   ): Promise<MultipartUploadStatusResponse> {
     const media = await findMultipartUpload(mediaId, ownerId, userRoles);
-    const { partSize, totalParts } = multipartGeometry(media);
+    const { fileSize, partSize, totalParts } = multipartGeometry(media);
 
     try {
       const parts = await services.storage.listMultipartUploadParts(
@@ -517,7 +532,11 @@ export function createMediaService({
         partSize,
         totalParts,
         uploadedParts: parts.filter(
-          (part) => part.partNumber >= 1 && part.partNumber <= totalParts,
+          (part) =>
+            part.partNumber >= 1 &&
+            part.partNumber <= totalParts &&
+            part.size ===
+              expectedMultipartPartSize(part.partNumber, partSize, fileSize),
         ),
       };
     } catch (error) {
@@ -580,11 +599,12 @@ export function createMediaService({
     userRoles?: readonly string[],
   ): Promise<{ status: MediaAssetStatus }> {
     const media = await findMultipartUpload(mediaId, ownerId, userRoles);
-    const { totalParts } = multipartGeometry(media);
+    const { fileSize, partSize, totalParts } = multipartGeometry(media);
 
     // Storage is the authority on which parts exist and their ETags. Reading
     // them here means completion does not depend on the browser being allowed
-    // to read ETag response headers through CORS.
+    // to read ETag response headers through CORS. Parts with the wrong size are
+    // treated as missing so a client cannot join a file larger than declared.
     let uploadedParts: Array<{ partNumber: number; etag: string }>;
     try {
       const listed = await services.storage.listMultipartUploadParts(
@@ -592,7 +612,13 @@ export function createMediaService({
         media.upload_id!,
       );
       uploadedParts = listed
-        .filter((part) => part.partNumber <= totalParts)
+        .filter(
+          (part) =>
+            part.partNumber >= 1 &&
+            part.partNumber <= totalParts &&
+            part.size ===
+              expectedMultipartPartSize(part.partNumber, partSize, fileSize),
+        )
         .map((part) => ({ partNumber: part.partNumber, etag: part.etag }))
         .sort((left, right) => left.partNumber - right.partNumber);
     } catch (error) {
@@ -651,6 +677,7 @@ export function createMediaService({
     mediaId: string,
     ownerId: string,
     userRoles?: readonly string[],
+    logger?: FastifyBaseLogger,
   ): Promise<{ aborted: true }> {
     const isAdmin = await reachesAllMedia(ownerId, userRoles, "manage");
     const media = await mediaRepo.findMediaAssetSummaryById(
@@ -664,9 +691,19 @@ export function createMediaService({
     }
 
     if (media.upload_id) {
-      await services.storage
-        .abortMultipartUpload(media.storage_key, media.upload_id)
-        .catch(() => undefined);
+      try {
+        await services.storage.abortMultipartUpload(
+          media.storage_key,
+          media.upload_id,
+        );
+      } catch (error) {
+        // The row (and its upload id) is about to go, so a bucket lifecycle
+        // rule is the last line of defence for the parts storage still holds.
+        logger?.warn(
+          { err: error, mediaId, storageKey: media.storage_key },
+          "Failed to abort multipart upload; storage may keep the parts",
+        );
+      }
     }
 
     if (media.status === "uploading") {

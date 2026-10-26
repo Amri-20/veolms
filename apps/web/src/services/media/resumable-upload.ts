@@ -272,6 +272,33 @@ export async function uploadVideoResumable(
           uploadedBytes: totalBytes,
         };
       }
+      if (apiError.code === "MULTIPART_UPLOAD_NOT_ACTIVE") {
+        // The parts were joined and the session was cleared, but confirmation
+        // failed before the asset became usable. Try confirmation again rather
+        // than starting a second upload and orphaning the joined object.
+        try {
+          await mediaService.confirmUpload(existing.mediaAssetId);
+          clearVideoUploadCheckpoint(file, visibility);
+          options.onProgress?.({
+            loadedBytes: totalBytes,
+            totalBytes,
+            percent: 100,
+          });
+          return {
+            mediaAssetId: existing.mediaAssetId,
+            resumed: true,
+            uploadedBytes: totalBytes,
+          };
+        } catch (confirmationError) {
+          const confirmationApiError = getApiError(confirmationError);
+          const canDiscard =
+            confirmationApiError.code === "FILE_NOT_FOUND" ||
+            confirmationApiError.code === "FILE_SIZE_MISMATCH" ||
+            confirmationApiError.code === "FILE_TYPE_MISMATCH" ||
+            confirmationApiError.code === "MEDIA_NOT_FOUND";
+          if (!canDiscard) throw confirmationError;
+        }
+      }
       if (apiError.status !== 404 && apiError.status !== 409) {
         // A transient failure must not throw away the checkpoint: retrying
         // should still resume the parts that are already in storage.

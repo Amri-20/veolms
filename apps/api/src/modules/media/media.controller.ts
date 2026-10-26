@@ -80,6 +80,7 @@ export function createMediaController({ service }: { service: MediaService }) {
       request.params.mediaId,
       request.user!.id,
       request.user?.roles,
+      request.log,
     );
   }
 
