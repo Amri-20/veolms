@@ -189,33 +189,58 @@ export function createHomePageService({
     return summary ? heroPosterUrl(summary) : null;
   }
 
+  /**
+   * The discussions an admin pinned, read by id: they may be on any
+   * published lesson, not only among the most active public ones.
+   */
+  async function readPinnedDiscussions(
+    section: HomePageSettings["discussions"],
+  ) {
+    if (section.pinnedThreadIds.length === 0) return [];
+    const { discussions } = await threadsService.listPublicPopularDiscussions(
+      database,
+      { threadIds: section.pinnedThreadIds },
+    );
+    return discussions;
+  }
+
   function resolveDiscussions(
     section: HomePageSettings["discussions"],
+    pinnedDiscussions: readonly PublicPopularDiscussion[],
     popular: readonly PublicPopularDiscussion[],
   ) {
     if (!section.visible) return [];
     const hidden = new Set(section.hiddenThreadIds);
-    const visible = popular.filter((discussion) => !hidden.has(discussion.id));
-    const byId = new Map(visible.map((item) => [item.id, item]));
-    const pinned = section.pinnedThreadIds.flatMap((id) => byId.get(id) ?? []);
+    const byId = new Map(pinnedDiscussions.map((item) => [item.id, item]));
+    const pinned = section.pinnedThreadIds.flatMap((id) =>
+      hidden.has(id) ? [] : (byId.get(id) ?? []),
+    );
     const pinnedIds = new Set(pinned.map((item) => item.id));
+    // Every pinned discussion shows; the most active ones fill the page up
+    // to its usual count when fewer are pinned.
     return [
       ...pinned,
-      ...visible.filter((item) => !pinnedIds.has(item.id)),
-    ].slice(0, HOME_PAGE_DISCUSSION_COUNT);
+      ...popular.filter(
+        (item) => !hidden.has(item.id) && !pinnedIds.has(item.id),
+      ),
+    ].slice(0, Math.max(HOME_PAGE_DISCUSSION_COUNT, pinned.length));
   }
 
   async function buildGuestPage(): Promise<GuestHomePageResponse> {
     const { settings, updatedAt } = await readSettings();
-    const [popularCourses, popularDiscussions] = await Promise.all([
-      resolvePopularCourses(settings.popularCourses),
-      settings.discussions.visible
-        ? threadsService.listPublicPopularDiscussions(
-            database,
-            HOME_DISCUSSION_QUERY,
-          )
-        : { discussions: [] },
-    ]);
+    const [popularCourses, pinnedDiscussions, popularDiscussions] =
+      await Promise.all([
+        resolvePopularCourses(settings.popularCourses),
+        settings.discussions.visible
+          ? readPinnedDiscussions(settings.discussions)
+          : [],
+        settings.discussions.visible
+          ? threadsService.listPublicPopularDiscussions(
+              database,
+              HOME_DISCUSSION_QUERY,
+            )
+          : { discussions: [] },
+      ]);
     const freeCourses = await resolveFreeCourses(
       settings.freeCourses,
       popularCourses,
@@ -247,6 +272,7 @@ export function createHomePageService({
         title: settings.discussions.title,
         items: resolveDiscussions(
           settings.discussions,
+          pinnedDiscussions,
           popularDiscussions.discussions,
         ),
       },
@@ -276,16 +302,24 @@ export function createHomePageService({
     },
 
     async getOptions() {
-      const [courses, popular] = await Promise.all([
+      const { settings } = await readSettings();
+      const [courses, pinned, popular] = await Promise.all([
         courseService.listPublicCourseSummaries({
           limit: COURSE_OPTION_LIMIT,
           order: "popular",
         }),
+        readPinnedDiscussions(settings.discussions),
         threadsService.listPublicPopularDiscussions(
           database,
           HOME_DISCUSSION_QUERY,
         ),
       ]);
+      // The editor lists the pinned discussions too, in their order, so each
+      // can be unpinned even when it is not among the most active.
+      const pinnedById = new Map(pinned.map((item) => [item.id, item]));
+      const pinnedInOrder = settings.discussions.pinnedThreadIds.flatMap(
+        (id) => pinnedById.get(id) ?? [],
+      );
       return {
         courses: courses.map((course) => ({
           id: course.id,
@@ -293,7 +327,10 @@ export function createHomePageService({
           thumbnailUrl: course.thumbnailUrl ?? null,
           isFree: course.pricing?.pricingType === "free",
         })),
-        discussions: popular.discussions,
+        discussions: [
+          ...pinnedInOrder,
+          ...popular.discussions.filter((item) => !pinnedById.has(item.id)),
+        ],
       };
     },
 

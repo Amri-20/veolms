@@ -151,6 +151,8 @@ export interface ThreadsService {
       limit?: number;
       /** Keep only each author's most popular discussion. */
       onePerAuthor?: boolean;
+      /** Read only these discussions (see the repository), in any order. */
+      threadIds?: readonly string[];
     },
   ): Promise<PublicPopularDiscussionsResponse>;
 }
@@ -706,6 +708,7 @@ export function createThreadsService(
           academyId,
           limit: options?.limit ?? 20,
           onePerAuthor: options?.onePerAuthor,
+          threadIds: options?.threadIds,
         });
 
       return {
