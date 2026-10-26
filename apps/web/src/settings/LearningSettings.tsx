@@ -45,8 +45,7 @@ export function LearningSettings({
   });
   // Shown to admins alone (see `useAdminOnlySettings`): the player theme,
   // which learners are not offered yet (see `useLearningPlayerTheme`), and
-  // the default quality (also set by picking one in the player), and the
-  // settings below that nothing reads yet, so changing them did nothing:
+  // the settings below that nothing reads yet, so changing them did nothing:
   // default speed (the player keeps its own), theatre mode on
   // opening, captions by default and their language, the transcript (there
   // is none), four course navigation choices, and the two scrollbars (with
@@ -136,14 +135,6 @@ export function LearningSettings({
                   onChange={(videoPlayerTheme) => update({ videoPlayerTheme })}
                 />
                 <LearningSelectRow
-                  id="learning-video-quality"
-                  label="Default video quality"
-                  note="Select quality for all videos."
-                  value={preferences.videoQuality}
-                  onChange={(videoQuality) => update({ videoQuality })}
-                  options={VIDEO_QUALITY_OPTIONS}
-                />
-                <LearningSelectRow
                   id="learning-playback-speed"
                   label="Default playback speed"
                   note="Select the default speed for videos."
@@ -159,6 +150,14 @@ export function LearningSettings({
                 />
               </>
             ) : null}
+            <LearningSelectRow
+              id="learning-video-quality"
+              label="Default video quality"
+              note="Every video starts at this quality. Picking one in the player changes it too."
+              value={preferences.videoQuality}
+              onChange={(videoQuality) => update({ videoQuality })}
+              options={VIDEO_QUALITY_OPTIONS}
+            />
             <LearningSelectRow
               id="learning-seek-interval"
               label="Skip interval"
