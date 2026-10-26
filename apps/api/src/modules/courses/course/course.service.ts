@@ -21,7 +21,9 @@ import { config } from "../../../config.ts";
 import {
   courseMediaById,
   getCourseContent,
+  catalogPages,
   publishedAccessFacts,
+  publishedCourseOptions,
   type CourseContentKey,
   type CourseContentSources,
 } from "./course-content.ts";
@@ -626,6 +628,27 @@ export function createCourseService({
     // unauthenticated endpoint. Default to the contract's maximum instead —
     // callers that want more pages follow nextCursor.
     const pageLimit = filters?.limit ?? 60;
+    if (filters?.search) {
+      return await buildCataloguePage(filters, sort, cursor, pageLimit);
+    }
+    return await catalogPages.fetch(
+      JSON.stringify([
+        sort,
+        pageLimit,
+        filters?.cursor ?? null,
+        filters?.creatorId ?? null,
+      ]),
+      () => buildCataloguePage(filters, sort, cursor, pageLimit),
+      { tags: [cacheTags.catalog, cacheTags.site] },
+    );
+  }
+
+  async function buildCataloguePage(
+    filters: CourseListQuery | undefined,
+    sort: "latest" | "title",
+    cursor: ReturnType<typeof decodePublishedCourseCursor> | undefined,
+    pageLimit: number,
+  ): Promise<CourseListResponse> {
     const rows = await courseRepo.listPublishedCourses(database, {
       creatorId: filters?.creatorId,
       limit: pageLimit,
@@ -647,7 +670,11 @@ export function createCourseService({
 
   async function listPublishedCourseOptions() {
     return {
-      courses: await courseRepo.listPublishedCourseOptions(database),
+      courses: await publishedCourseOptions.fetch(
+        "options",
+        () => courseRepo.listPublishedCourseOptions(database),
+        { tags: [cacheTags.catalog, cacheTags.site] },
+      ),
     };
   }
 

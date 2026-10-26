@@ -6,7 +6,11 @@ import type { CategoryService } from "../category/category.service.ts";
 import type { ConfigurationService } from "../configuration/configuration.service.ts";
 import type { CurriculumService } from "../curriculum/curriculum.service.ts";
 import type { IncludesService } from "../includes/includes.service.ts";
-import type { listCourseAccessFacts } from "./course.repository.ts";
+import type { CourseListResponse } from "@veolms/contracts";
+import type {
+  listCourseAccessFacts,
+  listPublishedCourseOptions,
+} from "./course.repository.ts";
 
 /**
  * Everything about a course that is the same for whoever looks at it: its
@@ -170,6 +174,27 @@ export const publishedAccessFacts = createCache<
   name: "courses.published-access-facts",
   ttlMs: COURSE_CONTENT_TTL_MS,
   maxBytes: 8 * 1024 * 1024,
+});
+
+/**
+ * Catalogue pages: the same for every visitor, cleared by any course change
+ * (`catalog`) or site change. Searches are not cached (every query would be
+ * its own entry).
+ */
+export const catalogPages = createCache<CourseListResponse>({
+  name: "courses.catalog-pages",
+  ttlMs: COURSE_CONTENT_TTL_MS,
+  maxEntries: 2_000,
+  maxBytes: 16 * 1024 * 1024,
+});
+
+/** Ids and titles of the published courses, for filter controls. */
+export const publishedCourseOptions = createCache<
+  Awaited<ReturnType<typeof listPublishedCourseOptions>>
+>({
+  name: "courses.published-options",
+  ttlMs: COURSE_CONTENT_TTL_MS,
+  maxBytes: 2 * 1024 * 1024,
 });
 
 const mediaMaps = new WeakMap<

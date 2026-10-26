@@ -1,3 +1,4 @@
+import { cacheTags, createCache } from "@veolms/api-core";
 import type { Kysely } from "kysely";
 import type { Database } from "@veolms/database";
 import type {
@@ -182,6 +183,19 @@ function normalizeRevenueTrend(
 
   return trend;
 }
+
+/**
+ * Analytics answers: aggregate snapshots, served up to 30 s old. Without
+ * this every dashboard poll re-ran ~15 full-table aggregates, and one admin
+ * tab was measured slowing all other traffic ~10x. Concurrent identical
+ * requests share one computation; failures are not kept.
+ */
+const analyticsResponses = createCache<unknown>({
+  name: "analytics.responses",
+  ttlMs: 30_000,
+  maxEntries: 100,
+  maxBytes: 8 * 1024 * 1024,
+});
 
 export function createAnalyticsService(options: AnalyticsServiceOptions) {
   const {
@@ -1055,45 +1069,17 @@ export function createAnalyticsService(options: AnalyticsServiceOptions) {
   }
 
   /**
-   * Short-TTL response cache (same pattern as order.service's stats cache,
-   * including in-flight promise dedupe so concurrent identical requests
-   * share one computation). Analytics responses are aggregate snapshots;
-   * serving one up to 30s old is an accepted tradeoff — without it, every
-   * dashboard poll re-runs ~15 full-table aggregates, and a single admin
-   * tab was measured degrading all other traffic ~10x. Keys include the
-   * actor's id and sorted roles, so a permission change can widen/narrow
-   * the scope at most one TTL late.
+   * Answers are aggregate snapshots (see `analyticsResponses`), each for one
+   * actor: a change to the actor's roles clears theirs (`user:<id>`).
    */
-  const RESPONSE_CACHE_TTL_MS = 30_000;
-  const RESPONSE_CACHE_MAX_ENTRIES = 100;
-  const responseCache = new Map<
-    string,
-    { expiresAt: number; promise: Promise<unknown> }
-  >();
-
-  function cachedResponse<T>(key: string, build: () => Promise<T>): Promise<T> {
-    const now = Date.now();
-    const hit = responseCache.get(key);
-    if (hit && hit.expiresAt > now) {
-      return hit.promise as Promise<T>;
-    }
-    if (
-      responseCache.size >= RESPONSE_CACHE_MAX_ENTRIES &&
-      !responseCache.has(key)
-    ) {
-      const oldest = responseCache.keys().next().value;
-      if (oldest !== undefined) responseCache.delete(oldest);
-    }
-    const promise = build().catch((error: unknown) => {
-      // Never cache a failure.
-      responseCache.delete(key);
-      throw error;
-    });
-    responseCache.set(key, {
-      expiresAt: now + RESPONSE_CACHE_TTL_MS,
-      promise,
-    });
-    return promise;
+  async function cachedResponse<T>(
+    actor: AnalyticsActor,
+    key: string,
+    build: () => Promise<T>,
+  ): Promise<T> {
+    return (await analyticsResponses.fetch(key, build, {
+      tags: [cacheTags.user(actor.id), cacheTags.rbac],
+    })) as T;
   }
 
   function actorKey(actor: AnalyticsActor): string {
@@ -1116,20 +1102,22 @@ export function createAnalyticsService(options: AnalyticsServiceOptions) {
 
   return {
     overview: (actor: AnalyticsActor, query: AnalyticsFilterQuery) =>
-      cachedResponse(tabKey("overview", actor, query), () =>
+      cachedResponse(actor, tabKey("overview", actor, query), () =>
         buildOverview(actor, query),
       ),
     revenue: (actor: AnalyticsActor, query: AnalyticsFilterQuery) =>
-      cachedResponse(tabKey("revenue", actor, query), () =>
+      cachedResponse(actor, tabKey("revenue", actor, query), () =>
         buildRevenue(actor, query),
       ),
     courses: (actor: AnalyticsActor, query: AnalyticsFilterQuery) =>
-      cachedResponse(tabKey("courses", actor, query), () =>
+      cachedResponse(actor, tabKey("courses", actor, query), () =>
         buildCourses(actor, query),
       ),
     dashboard: (actor: AnalyticsActor, range: DashboardRange = "30d") =>
-      cachedResponse(["dashboard", actorKey(actor), range].join("|"), () =>
-        buildDashboard(actor, range),
+      cachedResponse(
+        actor,
+        ["dashboard", actorKey(actor), range].join("|"),
+        () => buildDashboard(actor, range),
       ),
   };
 }

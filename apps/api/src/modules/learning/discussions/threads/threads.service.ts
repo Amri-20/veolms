@@ -1,3 +1,4 @@
+import { cacheTags, createCache } from "@veolms/api-core";
 import type { DatabaseExecutor } from "@veolms/database";
 import type {
   CreateLearningThreadRequest,
@@ -68,6 +69,18 @@ import type {
 import type { S3StorageService } from "@veolms/storage";
 
 const MENTIONS_WORKSPACE_SORT = "mentions";
+
+/**
+ * The public popular discussions (the home page, the discussions page): the
+ * same for every visitor. Activity is not tracked here, so the list follows
+ * it within this time, as the guest home page that shows it always has.
+ */
+const popularDiscussions = createCache<PublicPopularDiscussionsResponse>({
+  name: "discussions.public-popular",
+  ttlMs: 30_000,
+  maxEntries: 100,
+  maxBytes: 4 * 1024 * 1024,
+});
 
 export type ThreadsListQuery = ListLearningThreadsQuery & {
   currentUserId?: string;
@@ -702,42 +715,52 @@ export function createThreadsService(
     },
 
     async listPublicPopularDiscussions(db, options) {
-      const academyId = await resolveAcademyId(db);
-      const rows: PublicPopularThreadRow[] =
-        await threadsRepo.listPublicPopularThreads(db, {
-          academyId,
-          limit: options?.limit ?? 20,
-          onePerAuthor: options?.onePerAuthor,
-          threadIds: options?.threadIds,
-        });
+      // A chosen set of discussions (pinned ones) is read live.
+      if (options?.threadIds) return await read();
+      return await popularDiscussions.fetch(
+        JSON.stringify([options?.limit ?? 20, options?.onePerAuthor ?? false]),
+        read,
+        { tags: [cacheTags.site] },
+      );
 
-      return {
-        discussions: rows.map((row) => ({
-          id: row.id,
-          kind: row.kind,
-          // SQL left(…, 500) counts code points; the schema counts UTF-16
-          // units, so one emoji in a long post made this public endpoint
-          // return 500 for everyone.
-          title: row.title === null ? null : clampText(row.title, 255),
-          snippet: clampText(row.snippet ?? "", 500),
-          author: {
-            displayName: clampText(
-              row.authorName?.trim() || "Anonymous Learner",
-              100,
-            ),
-            username: row.authorUsername,
-            avatarUrl: row.authorAvatarUrl,
-            avatarSrcSet: avatarSrcSetFromUrl(row.authorAvatarUrl),
-          },
-          courseId: row.courseId,
-          lessonId: row.lessonId,
-          courseTitle: row.courseTitle,
-          lessonTitle: row.lessonTitle,
-          replyCount: row.replyCount,
-          likeCount: row.likeCount,
-          updatedAt: toIsoString(row.updatedAt),
-        })),
-      };
+      async function read() {
+        const academyId = await resolveAcademyId(db);
+        const rows: PublicPopularThreadRow[] =
+          await threadsRepo.listPublicPopularThreads(db, {
+            academyId,
+            limit: options?.limit ?? 20,
+            onePerAuthor: options?.onePerAuthor,
+            threadIds: options?.threadIds,
+          });
+
+        return {
+          discussions: rows.map((row) => ({
+            id: row.id,
+            kind: row.kind,
+            // SQL left(…, 500) counts code points; the schema counts UTF-16
+            // units, so one emoji in a long post made this public endpoint
+            // return 500 for everyone.
+            title: row.title === null ? null : clampText(row.title, 255),
+            snippet: clampText(row.snippet ?? "", 500),
+            author: {
+              displayName: clampText(
+                row.authorName?.trim() || "Anonymous Learner",
+                100,
+              ),
+              username: row.authorUsername,
+              avatarUrl: row.authorAvatarUrl,
+              avatarSrcSet: avatarSrcSetFromUrl(row.authorAvatarUrl),
+            },
+            courseId: row.courseId,
+            lessonId: row.lessonId,
+            courseTitle: row.courseTitle,
+            lessonTitle: row.lessonTitle,
+            replyCount: row.replyCount,
+            likeCount: row.likeCount,
+            updatedAt: toIsoString(row.updatedAt),
+          })),
+        };
+      }
     },
 
     async getDiscussionsWorkspace(db, query) {
