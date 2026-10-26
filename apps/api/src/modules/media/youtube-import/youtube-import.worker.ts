@@ -1,3 +1,4 @@
+import { cacheTags, invalidateCache } from "@veolms/api-core";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -511,6 +512,8 @@ export function startYoutubeImportWorker({
         { manifestKey, qualities: packaged.qualities },
         "YouTube import completed",
       );
+      // The video now has a length, which the course's cached content shows.
+      if (job.course_id) invalidateCache([cacheTags.course(job.course_id)]);
 
       if (job.course_id && job.lesson_id) {
         try {

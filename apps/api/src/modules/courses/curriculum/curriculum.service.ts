@@ -1,3 +1,4 @@
+import { cacheTags, invalidateCache } from "@veolms/api-core";
 import type { Permission } from "@veolms/contracts";
 import crypto from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
@@ -701,7 +702,7 @@ export function createCurriculumService({
     expectedMediaId: string | null;
     mediaId: string;
   }): Promise<boolean> {
-    return await database.transaction().execute(async (trx) => {
+    const attached = await database.transaction().execute(async (trx) => {
       // The editor may have attached it already (it attaches a lesson's
       // first video when it is closed during processing).
       const current = await curriculumRepo.findLessonById(
@@ -729,6 +730,10 @@ export function createCurriculumService({
       }
       return attached;
     });
+    // The lesson's video changed outside a request to the course: its
+    // cached content is cleared in every process.
+    if (attached) invalidateCache([cacheTags.course(input.courseId)]);
+    return attached;
   }
 
   /**
