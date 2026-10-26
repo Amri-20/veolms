@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import type { VideoQuality } from "../core/types";
 import { formatPlaybackRate } from "../playback/playbackRates";
 import { usePlayerController } from "../react/context";
 import { usePlayerState } from "../react/usePlayerState";
@@ -27,6 +28,8 @@ export interface SettingsMenuProps {
   extraMainItems?: ReactNode;
   triggerClassName?: string;
   side?: PopoverMenuSide;
+  /** Called with the quality the viewer picks, or null for Auto. */
+  onQualityChange?: (quality: VideoQuality | null) => void;
 }
 
 export function SettingsMenu({
@@ -39,6 +42,7 @@ export function SettingsMenu({
   mobileSheetStyle,
   triggerClassName,
   side = "top",
+  onQualityChange,
 }: SettingsMenuProps = {}) {
   const controller = usePlayerController();
   const mobileInteraction = usePlayerMobileInteraction();
@@ -241,6 +245,7 @@ export function SettingsMenu({
                 selected={media.autoQuality}
                 onClick={() => {
                   controller.selectQuality(null);
+                  onQualityChange?.(null);
                 }}
               />
               {media.qualities
@@ -262,6 +267,7 @@ export function SettingsMenu({
                     }
                     onClick={() => {
                       controller.selectQuality(quality.id);
+                      onQualityChange?.(quality);
                     }}
                   />
                 ))}

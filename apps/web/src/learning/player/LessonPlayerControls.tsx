@@ -17,6 +17,7 @@ import {
   usePlayerMobileInteraction,
   usePlayerState,
   usePlayerTheme,
+  type VideoQuality,
 } from "@veolms/video-player";
 import { CaretDownIcon as CaretDown } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon as CaretRight } from "@phosphor-icons/react/CaretRight";
@@ -52,6 +53,17 @@ import {
   LessonChaptersToggleButton,
 } from "./chapters/LessonChaptersControl";
 import { LessonChaptersPanel } from "./chapters/LessonChaptersPanel";
+import { updateLearningPreferences } from "../../settings/settingsPreferences";
+
+/**
+ * The quality picked in the player is where every video starts from now on
+ * (and what a lesson is preloaded at): see `learningHlsStreaming`.
+ */
+function rememberQualityChoice(quality: VideoQuality | null): void {
+  updateLearningPreferences({
+    videoQuality: quality?.height ? String(quality.height) : "auto",
+  });
+}
 
 export const PLAYER_SURFACE_CLASS =
   "bg-(--video-player-control-surface) text-(--video-player-control-text) shadow-(--video-player-control-shadow)";
@@ -1312,6 +1324,7 @@ export function LessonPlayerControls({
           />
         }
         side={actionsInBottomRow ? "top" : "bottom"}
+        onQualityChange={rememberQualityChoice}
       />
       {fullscreenInActionsPill ? (
         <FullscreenButton

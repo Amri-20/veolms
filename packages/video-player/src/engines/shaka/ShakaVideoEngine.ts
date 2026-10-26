@@ -25,6 +25,8 @@ import {
   createShakaConfiguration,
   createShakaNetworkingFilters,
   defaultShakaRuntimeLoader,
+  getShakaStartupBandwidthEstimate,
+  isShakaAutoQuality,
   normalizeShakaAudioTrack,
   normalizeShakaQuality,
   normalizeShakaTextTrack,
@@ -33,7 +35,9 @@ import {
   resolveShakaLoadMimeType,
   resolveShakaRuntime,
   shakaDrmServers,
+  shakaPreferredVideoHeight,
   unregisterShakaNetworkingFilters,
+  withoutPreferredVideoHeight,
 } from "./shaka-internal";
 import type {
   ShakaAudioTrackLike,
@@ -54,7 +58,27 @@ export interface ShakaVideoEngineOptions {
 type ShakaListener = (event: ShakaEventLike) => void;
 
 const PRELOAD_START_TOLERANCE_SECONDS = 2;
-const MANUAL_QUALITY_SWITCH_SAFE_MARGIN_SECONDS = 2;
+/**
+ * A quality switch keeps what is buffered up to a point ahead of the
+ * playhead and fetches the new quality from there, so the picture changes
+ * over without a stall. The point is this far ahead: time for the request,
+ * an init segment and a licence, and the 0.5s left when Shaka declares
+ * buffering...
+ */
+const QUALITY_SWITCH_BASE_MARGIN_SECONDS = 3;
+/** ...plus the new quality's first segment downloading, with room to spare. */
+const QUALITY_SWITCH_DOWNLOAD_SAFETY = 1.5;
+/** The segment length assumed when Shaka cannot say (they run 2-6s). */
+const QUALITY_SWITCH_FALLBACK_SEGMENT_SECONDS = 6;
+/**
+ * The most the change waits for. Shaka's estimate runs far below the link
+ * with short segments (the request's latency counts as transfer time): a
+ * lesson whose 1.3 MB 1080p segments arrived in 0.9s was estimated to need
+ * a 57s margin, so the chosen quality appeared a minute later. A link that
+ * really cannot fetch a segment in this long cannot play that quality
+ * without stalls anyway.
+ */
+const QUALITY_SWITCH_MAX_MARGIN_SECONDS = 8;
 /**
  * A standby (the next video, prepared out of sight) keeps only its start:
  * enough to begin on at once, little to download for a hover that may not
@@ -91,6 +115,20 @@ function waitForFirstFrame(
     media.addEventListener("canplay", onData);
     media.addEventListener("emptied", onEmptied);
   });
+}
+
+/** Seconds buffered without a gap from the playhead on. */
+function bufferedAheadSeconds(media: HTMLMediaElement): number {
+  const { buffered, currentTime } = media;
+  for (let index = 0; index < buffered.length; index += 1) {
+    if (
+      buffered.start(index) <= currentTime + 0.1 &&
+      currentTime < buffered.end(index)
+    ) {
+      return buffered.end(index) - currentTime;
+    }
+  }
+  return 0;
 }
 
 function delay(ms: number): Promise<void> {
@@ -197,6 +235,43 @@ function variantsForSelectedAudio(
   return [...byVisualQuality.values()];
 }
 
+/**
+ * The variant to play for a chosen height: the tallest not above it, or the
+ * shortest when every variant is taller. Among variants of one height the
+ * playing one, else the one with the most bandwidth (the best encode).
+ */
+function variantForHeight(
+  variants: readonly ShakaVariantTrackLike[],
+  height: number,
+): ShakaVariantTrackLike | null {
+  let best: ShakaVariantTrackLike | null = null;
+  let shortest: ShakaVariantTrackLike | null = null;
+  for (const variant of variants) {
+    const variantHeight = variant.height ?? 0;
+    if (!variantHeight) continue;
+    if (
+      !shortest ||
+      variantHeight < (shortest.height ?? 0) ||
+      (variantHeight === shortest.height &&
+        (variant.bandwidth ?? 0) < (shortest.bandwidth ?? 0))
+    ) {
+      shortest = variant;
+    }
+    if (variantHeight > height) continue;
+    const bestHeight = best?.height ?? 0;
+    if (
+      !best ||
+      variantHeight > bestHeight ||
+      (variantHeight === bestHeight &&
+        !best.active &&
+        (variant.active || (variant.bandwidth ?? 0) > (best.bandwidth ?? 0)))
+    ) {
+      best = variant;
+    }
+  }
+  return best ?? shortest;
+}
+
 export class ShakaVideoEngine extends MediaElementEngineBase {
   readonly name = "shaka";
 
@@ -222,6 +297,8 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
   /** Drops a source's streaming settings still waiting for its first frame. */
   #cancelDeferredStreaming: (() => void) | null = null;
   #autoQuality = true;
+  /** The quality the viewer picked since the current load, if any. */
+  #qualityChoice: "auto" | "manual" | null = null;
   #selectedTextTrackId: string | null = null;
   #browserSupported: boolean | null = null;
 
@@ -267,7 +344,8 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     const generation = this.beginOperation();
     this.startLoading(source);
     this.#selectedTextTrackId = null;
-    this.#autoQuality = source.streaming?.abrEnabled ?? true;
+    this.#autoQuality = isShakaAutoQuality(source);
+    this.#qualityChoice = null;
     this.#cancelDeferredStreaming?.();
     // What the previous video measured sets where this one starts.
     rememberShakaBandwidthEstimate(player);
@@ -363,13 +441,17 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
         if (keepPreloadStreaming) {
           // The preload was dropped after all (made for another position):
           // this source's buffering and quality apply from the start.
-          const configuration = createShakaConfiguration(source, runtime);
           player.configure({
-            streaming: configuration.streaming,
-            abr: configuration.abr,
+            streaming: createShakaConfiguration(source, runtime).streaming,
+            abr: this.abrConfiguration(source, runtime),
           });
         }
-        await player.load(asset, startTime, mimeType);
+        const stopPreferring = this.startAtPreferredQuality(player, source);
+        try {
+          await player.load(asset, startTime, mimeType);
+        } finally {
+          stopPreferring();
+        }
       }
 
       if (!this.isCurrentOperation(generation)) {
@@ -439,14 +521,8 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     }
 
     player.configure({ abr: { enabled: false } });
-    // With a 60s buffer, keeping it would show the old quality for up to a
-    // minute; drop what is buffered ahead except a short margin, so the
-    // chosen quality appears within seconds without the picture freezing.
-    player.selectVariantTrack(
-      track,
-      true,
-      MANUAL_QUALITY_SWITCH_SAFE_MARGIN_SECONDS,
-    );
+    this.#qualityChoice = "manual";
+    this.switchQualitySmoothly(player, track);
     this.#autoQuality = false;
     this.refreshTracks(false);
     const quality = this.getQualities().find((item) => item.id === id) ?? null;
@@ -469,7 +545,15 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
 
   override enableAutoQuality(): void {
     const player = this.requirePlayer();
-    player.configure({ abr: { enabled: true } });
+    const runtime = this.#runtime;
+    const source = this.getSnapshot().source;
+    this.#qualityChoice = "auto";
+    player.configure({
+      abr:
+        runtime && source
+          ? this.abrConfiguration(source, runtime)
+          : { enabled: true },
+    });
     this.#autoQuality = true;
     this.refreshTracks(false);
     const active =
@@ -640,11 +724,11 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     const apply = (): void => {
       cancel();
       if (this.#player !== player) return;
-      const configuration = createShakaConfiguration(source, runtime);
       player.configure({
-        streaming: configuration.streaming,
-        abr: configuration.abr,
+        streaming: createShakaConfiguration(source, runtime).streaming,
+        abr: this.abrConfiguration(source, runtime),
       });
+      this.keepPreferredQuality(player, source);
     };
     const cancel = (): void => {
       media?.removeEventListener("playing", apply);
@@ -658,6 +742,143 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     }
     media.addEventListener("playing", apply);
     this.#cancelDeferredStreaming = cancel;
+  }
+
+  /**
+   * The ABR settings for `source` as the viewer has it now: auto quality
+   * when they picked it since the load (or the source has no chosen
+   * quality), the chosen quality's otherwise.
+   */
+  private abrConfiguration(
+    source: VideoSource,
+    runtime: ShakaRuntimeLike,
+  ): Record<string, unknown> {
+    const auto =
+      this.#qualityChoice === null
+        ? isShakaAutoQuality(source)
+        : this.#qualityChoice === "auto";
+    const abr = createShakaConfiguration(
+      auto ? withoutPreferredVideoHeight(source) : source,
+      runtime,
+    ).abr as Record<string, unknown>;
+    return { ...abr, enabled: auto };
+  }
+
+  /** The variant to play for the height chosen for `source`, if any. */
+  private preferredVariant(
+    player: ShakaPlayerLike,
+    source: VideoSource,
+  ): ShakaVariantTrackLike | null {
+    const height = shakaPreferredVideoHeight(source);
+    if (height === null) return null;
+    return variantForHeight(
+      variantsForSelectedAudio(
+        player.getVariantTracks(),
+        player.getAudioTracks(),
+      ),
+      height,
+    );
+  }
+
+  /**
+   * A player that has measured the connection (the one that played the
+   * previous video) would let that measurement pick the first variant; with
+   * a chosen quality the load starts at it instead. Shaka's `streaming`
+   * event comes once the manifest is in, before the first variant is
+   * picked. Returns the function that stops listening.
+   */
+  private startAtPreferredQuality(
+    player: ShakaPlayerLike,
+    source: VideoSource,
+  ): () => void {
+    if (shakaPreferredVideoHeight(source) === null) return () => undefined;
+    const onStreaming = (): void => {
+      const variant = this.preferredVariant(player, source);
+      if (variant) player.selectVariantTrack(variant);
+    };
+    player.addEventListener("streaming", onStreaming);
+    return () => player.removeEventListener("streaming", onStreaming);
+  }
+
+  /**
+   * A preload plays the quality it was made at; one made before the viewer
+   * chose another moves to the chosen one (smoothly) once it plays.
+   */
+  private keepPreferredQuality(
+    player: ShakaPlayerLike,
+    source: VideoSource,
+  ): void {
+    if (this.#qualityChoice !== null || this.#player !== player) return;
+    const variant = this.preferredVariant(player, source);
+    if (!variant || variant.active) return;
+    this.switchQualitySmoothly(player, variant);
+    this.refreshTracks(false);
+  }
+
+  /**
+   * Switches to `track`, up or down, without a stall: what is buffered
+   * keeps playing up to `qualitySwitchMargin` ahead, and the new quality's
+   * segments are fetched from that point while it plays. A shorter margin
+   * (2s) dropped the segments the playhead was about to reach and left it
+   * waiting for the new quality's first one: a buffering spinner on every
+   * switch.
+   */
+  private switchQualitySmoothly(
+    player: ShakaPlayerLike,
+    track: ShakaVariantTrackLike,
+  ): void {
+    const margin = this.qualitySwitchMargin(player, track);
+    if (margin === null) {
+      player.selectVariantTrack(track, false);
+    } else {
+      player.selectVariantTrack(track, true, margin);
+    }
+  }
+
+  /**
+   * How far past the playhead a switch to `track` keeps the buffer: long
+   * enough for the new quality's first segment to arrive, at the measured
+   * bandwidth, before playback gets there. Null when less than that is
+   * buffered: the new quality then follows on from the end of it.
+   */
+  private qualitySwitchMargin(
+    player: ShakaPlayerLike,
+    track: ShakaVariantTrackLike,
+  ): number | null {
+    const media = this.mediaElement;
+    if (!media) return null;
+    let stats: ReturnType<NonNullable<ShakaPlayerLike["getStats"]>> | undefined;
+    try {
+      stats = player.getStats?.();
+    } catch {
+      stats = undefined;
+    }
+    const measured = stats?.estimatedBandwidth;
+    const bandwidth =
+      typeof measured === "number" && Number.isFinite(measured) && measured > 0
+        ? measured
+        : getShakaStartupBandwidthEstimate();
+    const longest = stats?.maxSegmentDuration;
+    const segmentSeconds =
+      typeof longest === "number" && Number.isFinite(longest) && longest > 0
+        ? longest
+        : QUALITY_SWITCH_FALLBACK_SEGMENT_SECONDS;
+    const downloadSeconds =
+      ((track.bandwidth ?? 0) * segmentSeconds) / bandwidth;
+    const margin = Math.min(
+      QUALITY_SWITCH_MAX_MARGIN_SECONDS,
+      QUALITY_SWITCH_BASE_MARGIN_SECONDS +
+        downloadSeconds * QUALITY_SWITCH_DOWNLOAD_SAFETY,
+    );
+    const ahead = bufferedAheadSeconds(media);
+    markPlayback("quality-switch", {
+      height: track.height ?? null,
+      bandwidth,
+      segmentSeconds,
+      margin,
+      ahead,
+    });
+    return margin < ahead ? margin : null;
   }
 
   private requirePlayer(): ShakaPlayerLike {
@@ -899,6 +1120,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     player.configure({
       streaming: createShakaConfiguration(source, runtime).streaming,
     });
+    this.keepPreferredQuality(player, source);
 
     // The learner's place moved since the standby was made: go there.
     const startTime = options.startTime ?? source.startTime;

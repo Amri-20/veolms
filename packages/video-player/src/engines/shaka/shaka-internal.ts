@@ -139,7 +139,7 @@ export interface ShakaPlayerLike {
   resetConfiguration?(): void;
   getConfiguration?(): { drm?: { servers?: Record<string, string> } };
   getNetworkingEngine(): ShakaNetworkingEngineLike | null;
-  getStats?(): { estimatedBandwidth?: number };
+  getStats?(): { estimatedBandwidth?: number; maxSegmentDuration?: number };
   getVariantTracks(): ShakaVariantTrackLike[];
   selectVariantTrack(
     track: ShakaVariantTrackLike,
@@ -345,6 +345,38 @@ export function getShakaStartupBandwidthEstimate(): number {
 
 export function resetShakaBandwidthEstimateForTests(): void {
   lastEstimatedBandwidth = null;
+}
+
+/**
+ * Bits per second assumed for the first choice of a source with a chosen
+ * quality: above every variant, so the height restriction alone decides. A
+ * fresh player (every preload) has measured nothing and uses it; one that
+ * has measured is pointed at the chosen variant as its load starts (see
+ * `ShakaVideoEngine.startAtPreferredQuality`).
+ */
+const PREFERRED_QUALITY_START_BANDWIDTH = 1_000_000_000;
+
+/** The picture height the viewer chose for `source`, or null for auto. */
+export function shakaPreferredVideoHeight(source: VideoSource): number | null {
+  const height = source.streaming?.preferredVideoHeight;
+  return typeof height === "number" && Number.isFinite(height) && height > 0
+    ? height
+    : null;
+}
+
+/** Whether ABR chooses the quality of `source` (no quality was chosen). */
+export function isShakaAutoQuality(source: VideoSource): boolean {
+  return (
+    shakaPreferredVideoHeight(source) === null &&
+    (source.streaming?.abrEnabled ?? true)
+  );
+}
+
+/** `source` as played on auto quality: any chosen quality left out. */
+export function withoutPreferredVideoHeight(source: VideoSource): VideoSource {
+  if (!source.streaming) return source;
+  const { preferredVideoHeight: _preferred, ...streaming } = source.streaming;
+  return { ...source, streaming: { ...streaming, abrEnabled: true } };
 }
 
 export async function defaultShakaRuntimeLoader(): Promise<unknown> {
@@ -591,12 +623,27 @@ export function createShakaConfiguration(
       : {}),
   };
 
+  const preferredHeight = shakaPreferredVideoHeight(source);
+  // A chosen quality: the first variant is the highest not above it (every
+  // variant looks affordable at this estimate, so ABR takes the top one the
+  // restriction leaves), and ABR stays off so playback stays there. The
+  // height limit is always given, so going back to auto (a `configure`,
+  // which merges) lifts the one a chosen quality set.
+  const restrictions = {
+    ...streaming?.abrRestrictions,
+    maxHeight: Math.min(
+      streaming?.abrRestrictions?.maxHeight ?? Infinity,
+      preferredHeight ?? Infinity,
+    ),
+  };
   result.abr = {
-    enabled: streaming?.abrEnabled ?? true,
+    enabled: isShakaAutoQuality(source),
     useNetworkInformation: SHAKA_ABR_DEFAULTS.useNetworkInformation,
     defaultBandwidthEstimate:
-      streaming?.abrDefaultBandwidthEstimate ??
-      getShakaStartupBandwidthEstimate(),
+      preferredHeight === null
+        ? (streaming?.abrDefaultBandwidthEstimate ??
+          getShakaStartupBandwidthEstimate())
+        : PREFERRED_QUALITY_START_BANDWIDTH,
     switchInterval:
       streaming?.abrSwitchInterval ?? SHAKA_ABR_DEFAULTS.switchInterval,
     bandwidthUpgradeTarget:
@@ -605,9 +652,7 @@ export function createShakaConfiguration(
     bandwidthDowngradeTarget:
       streaming?.abrBandwidthDowngradeTarget ??
       SHAKA_ABR_DEFAULTS.bandwidthDowngradeTarget,
-    ...(streaming?.abrRestrictions
-      ? { restrictions: { ...streaming.abrRestrictions } }
-      : {}),
+    restrictions,
   };
 
   if (networking?.manifestRetry) {
