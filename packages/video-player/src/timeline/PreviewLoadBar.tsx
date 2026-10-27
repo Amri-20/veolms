@@ -73,8 +73,9 @@ function useTimelineSpan(
 
 /**
  * Which parts of the lesson have their seek-preview pictures downloaded,
- * as a thin bar along the top edge of the video, over the same span as the
- * timeline: green where they are here, a fainter green where they are on
+ * as a 2px bar along the top edge of the video (a phone's timeline at
+ * rest), over the same span as the timeline, on a faint dark backing:
+ * green where they are here, a fainter green where they are on
  * their way. Shown while the timeline is hovered or dragged, fading out a
  * moment after. A small triangle under the bar points up at where the
  * pointer is: green once that moment's picture is here, a pulsing white
@@ -130,10 +131,10 @@ export function PreviewLoadBar() {
       data-video-player-preview-bar=""
       data-shown={shown && span ? "true" : "false"}
       data-fullscreen={fullscreen ? "true" : "false"}
-      className="pointer-events-none absolute top-0 z-2 h-1 bg-black/40 opacity-0 transition-opacity delay-500 duration-300 data-[fullscreen=true]:top-[env(safe-area-inset-top,0px)] data-[shown=true]:opacity-100 data-[shown=true]:delay-0 data-[shown=true]:duration-150"
+      className="pointer-events-none absolute top-0 z-2 h-0.5 bg-black/40 opacity-0 transition-opacity delay-500 duration-300 data-[fullscreen=true]:top-[env(safe-area-inset-top,0px)] data-[shown=true]:opacity-100 data-[shown=true]:delay-0 data-[shown=true]:duration-150"
       style={{ left: span?.left ?? 0, right: span?.right ?? 0 }}
     >
-      <div className="absolute inset-x-0 top-0 h-0.75 bg-white/25">
+      <div className="absolute inset-0 bg-white/25">
         {availability.loading.map(([start, end]) => (
           <span
             key={`loading-${start}`}
@@ -160,7 +161,7 @@ export function PreviewLoadBar() {
         <svg
           data-loaded={pointerLoaded ? "true" : "false"}
           viewBox="0 0 12 8"
-          className="absolute top-0.75 h-2 w-3 -translate-x-1/2 animate-[video-player-preview-marker-wait_0.9s_ease-in-out_infinite] overflow-visible fill-current stroke-current text-white drop-shadow-[0_1px_2px_rgb(0_0_0/0.6)] motion-reduce:animate-none data-[loaded=true]:animate-none data-[loaded=true]:text-green-300 data-[loaded=true]:drop-shadow-[0_0_4px_rgb(74_222_128/0.9)]"
+          className="absolute top-0.5 h-2 w-3 -translate-x-1/2 animate-[video-player-preview-marker-wait_0.9s_ease-in-out_infinite] overflow-visible fill-current stroke-current text-white drop-shadow-[0_1px_2px_rgb(0_0_0/0.6)] motion-reduce:animate-none data-[loaded=true]:animate-none data-[loaded=true]:text-green-300 data-[loaded=true]:drop-shadow-[0_0_4px_rgb(74_222_128/0.9)]"
           style={{ left: `${percent(previewTime)}%` }}
         >
           <path d="M6 1 11 7H1Z" strokeWidth={1.5} strokeLinejoin="round" />
