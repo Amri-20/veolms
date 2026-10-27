@@ -82,6 +82,12 @@ const QUALITY_SWITCH_FALLBACK_SEGMENT_SECONDS = 8;
 /** Room for segment times that are not exactly what the manifest says. */
 const QUALITY_SWITCH_SEGMENT_SLACK_SECONDS = 1;
 /**
+ * How much of the better picture already buffered a switch down plays
+ * before the lower quality takes over (it changes at the segment holding
+ * this point, so a few seconds sooner). All of it when less is buffered.
+ */
+const QUALITY_DOWN_SWITCH_KEEP_SECONDS = 20;
+/**
  * A standby (the next video, prepared out of sight) keeps only its start:
  * enough to begin on at once, little to download for a hover that may not
  * turn into a click. The full buffer applies once it is switched to.
@@ -272,6 +278,17 @@ function variantForHeight(
     }
   }
   return best ?? shortest;
+}
+
+/** Whether `track` is a lower quality than `than`: shorter, or leaner. */
+function isLowerQuality(
+  track: ShakaVariantTrackLike,
+  than: ShakaVariantTrackLike,
+): boolean {
+  if (track.height && than.height && track.height !== than.height) {
+    return track.height < than.height;
+  }
+  return (track.bandwidth ?? 0) < (than.bandwidth ?? 0);
 }
 
 export class ShakaVideoEngine extends MediaElementEngineBase {
@@ -818,18 +835,27 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
   }
 
   /**
-   * Switches to `track`, up or down, without a stall: what is buffered
-   * keeps playing up to `qualitySwitchMargin` ahead, and the new quality's
-   * segments are fetched from there while it plays and replace what lies
-   * beyond. A 2s margin dropped the segments the playhead was about to
-   * reach and left it waiting for the new quality's first one: a buffering
-   * spinner on every switch.
+   * Switches to `track` without a stall: what is buffered keeps playing up
+   * to `qualitySwitchMargin` ahead, and the new quality's segments are
+   * fetched from there while it plays and replace what lies beyond. Up, that
+   * is as soon as they can arrive, so the better picture comes within
+   * seconds. Down, the better picture already buffered plays on for up to
+   * `QUALITY_DOWN_SWITCH_KEEP_SECONDS` (all of it when there is less) while
+   * the lower quality is fetched to follow. A 2s margin dropped the segments
+   * the playhead was about to reach and left it waiting for the new
+   * quality's first one: a buffering spinner on every switch.
    */
   private switchQualitySmoothly(
     player: ShakaPlayerLike,
     track: ShakaVariantTrackLike,
   ): void {
-    const margin = this.qualitySwitchMargin(player, track);
+    const active = player.getVariantTracks().find((variant) => variant.active);
+    const down = Boolean(active && isLowerQuality(track, active));
+    const margin = this.qualitySwitchMargin(
+      player,
+      track,
+      down ? QUALITY_DOWN_SWITCH_KEEP_SECONDS : 0,
+    );
     if (margin === null) {
       player.selectVariantTrack(track, false);
     } else {
@@ -847,12 +873,13 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
    * only the lead (about 3s on a fast link, against 8s DASH segments) it
    * mostly started behind the playhead, the frames being decoded were
    * replaced mid-group, and the player waited (a spinner) as the switch
-   * began. Null when less than the margin is buffered: the new quality then
-   * follows on from the end of it.
+   * began. `atLeast` keeps more (a switch down). Null when less than the
+   * margin is buffered: the new quality then follows on from the end of it.
    */
   private qualitySwitchMargin(
     player: ShakaPlayerLike,
     track: ShakaVariantTrackLike,
+    atLeast: number,
   ): number | null {
     const media = this.mediaElement;
     if (!media) return null;
@@ -879,7 +906,10 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
       QUALITY_SWITCH_BASE_LEAD_SECONDS +
         downloadSeconds * QUALITY_SWITCH_DOWNLOAD_SAFETY,
     );
-    const margin = lead + segmentSeconds + QUALITY_SWITCH_SEGMENT_SLACK_SECONDS;
+    const margin = Math.max(
+      atLeast,
+      lead + segmentSeconds + QUALITY_SWITCH_SEGMENT_SLACK_SECONDS,
+    );
     const ahead = bufferedAheadSeconds(media);
     markPlayback("quality-switch", {
       height: track.height ?? null,
