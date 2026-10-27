@@ -76,9 +76,9 @@ function useTimelineSpan(
  * as a thin bar along the top edge of the video, over the same span as the
  * timeline: green where they are here, a fainter green where they are on
  * their way. Shown while the timeline is hovered or dragged, fading out a
- * moment after. A small hanging marker shows where the pointer is: green
- * once that moment's picture is here, a pulsing white while it is still
- * coming, so the green can be seen catching up with it.
+ * moment after. A small triangle under the bar points up at where the
+ * pointer is: green once that moment's picture is here, a pulsing white
+ * while it is still coming, so the green can be seen catching up with it.
  *
  * Only for a preview video (fetched part by part where the timeline is
  * used); sheet storyboards have nothing to show here. Not in the mini
@@ -156,11 +156,15 @@ export function PreviewLoadBar() {
         ))}
       </div>
       {previewTime !== null ? (
-        <span
+        // Its tip touches the bar's underside; the stroke rounds the corners.
+        <svg
           data-loaded={pointerLoaded ? "true" : "false"}
-          className="absolute top-0 h-2.5 w-1 -translate-x-1/2 animate-[video-player-preview-marker-wait_0.9s_ease-in-out_infinite] rounded-b-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.5)] motion-reduce:animate-none data-[loaded=true]:animate-none data-[loaded=true]:bg-green-300 data-[loaded=true]:shadow-[0_0_6px_rgb(74_222_128/0.9)]"
+          viewBox="0 0 12 8"
+          className="absolute top-0.75 h-2 w-3 -translate-x-1/2 animate-[video-player-preview-marker-wait_0.9s_ease-in-out_infinite] overflow-visible fill-current stroke-current text-white drop-shadow-[0_1px_2px_rgb(0_0_0/0.6)] motion-reduce:animate-none data-[loaded=true]:animate-none data-[loaded=true]:text-green-300 data-[loaded=true]:drop-shadow-[0_0_4px_rgb(74_222_128/0.9)]"
           style={{ left: `${percent(previewTime)}%` }}
-        />
+        >
+          <path d="M6 1 11 7H1Z" strokeWidth={1.5} strokeLinejoin="round" />
+        </svg>
       ) : null}
     </div>
   );
