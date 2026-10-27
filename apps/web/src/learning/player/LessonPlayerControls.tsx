@@ -915,6 +915,12 @@ function MenuToggle({ checked }: { checked: boolean }) {
   );
 }
 
+/** See `wideLessonsBeside` in `LessonPlayerControls`. */
+function markWideLessonsBeside(shell: HTMLElement, wide: boolean) {
+  if (wide) shell.setAttribute("data-fullscreen-lessons-beside", "wide");
+  else shell.removeAttribute("data-fullscreen-lessons-beside");
+}
+
 export function LessonPlayerControls({
   shortPlayer = false,
   seekTimeOnly = false,
@@ -1089,12 +1095,8 @@ export function LessonPlayerControls({
   const wideLessonsBeside = fullscreenCoursePanelVisible && !mobileInteraction;
   useLayoutEffect(() => {
     if (!timelineHost) return undefined;
-    if (wideLessonsBeside)
-      timelineHost.dataset.fullscreenLessonsBeside = "wide";
-    else delete timelineHost.dataset.fullscreenLessonsBeside;
-    return () => {
-      delete timelineHost.dataset.fullscreenLessonsBeside;
-    };
+    markWideLessonsBeside(timelineHost, wideLessonsBeside);
+    return () => markWideLessonsBeside(timelineHost, false);
   }, [timelineHost, wideLessonsBeside]);
 
   // In fullscreen on a touch device at landscape widths, the timeline sits
