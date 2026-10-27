@@ -28,6 +28,7 @@ import {
   getShakaStartupBandwidthEstimate,
   isShakaAutoQuality,
   normalizeShakaAudioTrack,
+  PREFERRED_QUALITY_START_BANDWIDTH,
   normalizeShakaQuality,
   normalizeShakaTextTrack,
   registerShakaNetworkingFilters,
@@ -62,21 +63,21 @@ const PRELOAD_START_TOLERANCE_SECONDS = 2;
  * A quality switch keeps what is buffered up to a point ahead of the
  * playhead and fetches the new quality from there, so the picture changes
  * over without a stall. The new quality must start far enough ahead to
- * arrive in time: room for the request, an init segment and a licence, and
- * the 0.5s left when Shaka declares buffering...
+ * arrive in time: room for the request, an init segment and a licence...
  */
-const QUALITY_SWITCH_BASE_LEAD_SECONDS = 3;
+const QUALITY_SWITCH_BASE_LEAD_SECONDS = 1.5;
 /** ...plus the new quality's first segment downloading, with room to spare. */
-const QUALITY_SWITCH_DOWNLOAD_SAFETY = 1.5;
+const QUALITY_SWITCH_DOWNLOAD_SAFETY = 1.25;
 /**
- * The most that lead allows for. Shaka's estimate runs far below the link
- * with short segments (the request's latency counts as transfer time): a
- * lesson whose 1.3 MB 1080p segments arrived in 0.9s was estimated to need
- * 57s, so the chosen quality appeared a minute later. A link that really
- * cannot fetch a segment in this long cannot play that quality without
- * stalls anyway.
+ * The most that lead allows for. A link that really cannot fetch a segment
+ * in this long cannot play that quality without stalls anyway.
  */
-const QUALITY_SWITCH_MAX_LEAD_SECONDS = 8;
+const QUALITY_SWITCH_MAX_LEAD_SECONDS = 6;
+/**
+ * A switch up cuts this far past the segment start it changes at, so the
+ * segment Shaka fetches first (the one holding the cut) starts right there.
+ */
+const QUALITY_SWITCH_PAST_SEGMENT_START_SECONDS = 0.1;
 /** The segment length assumed when Shaka cannot say (DASH lessons: ~8s). */
 const QUALITY_SWITCH_FALLBACK_SEGMENT_SECONDS = 8;
 /** Room for segment times that are not exactly what the manifest says. */
@@ -289,6 +290,65 @@ function isLowerQuality(
     return track.height < than.height;
   }
   return (track.bandwidth ?? 0) < (than.bandwidth ?? 0);
+}
+
+/**
+ * The start of the first segment of the playing video at or after `time`
+ * (seconds), from the manifest; null when Shaka cannot say. A new picture
+ * can only begin at a segment start, where its keyframe is.
+ */
+function nextSegmentStart(
+  player: ShakaPlayerLike,
+  active: ShakaVariantTrackLike | undefined,
+  time: number,
+): number | null {
+  if (!active) return null;
+  try {
+    const variant = player
+      .getManifest?.()
+      ?.variants.find(
+        (candidate) => String(candidate.id) === String(active.id),
+      );
+    const index = variant?.video?.segmentIndex;
+    if (!index) return null;
+    const position = index.find(time);
+    if (position === null) return null;
+    const segment = index.get(position);
+    if (!segment) return null;
+    if (segment.startTime >= time) return segment.startTime;
+    return index.get(position + 1)?.startTime ?? segment.endTime;
+  } catch {
+    return null;
+  }
+}
+
+/** A response this big is a video segment, not a manifest or a key. */
+const MEASURED_SEGMENT_MIN_BYTES = 100_000;
+
+/**
+ * The speed recent segment downloads showed (bits per second, latency
+ * included), from the browser's own timing of them; null with too few.
+ * Shaka's estimate runs far below the link: a lesson whose 1.3 MB 1080p
+ * segments arrived in 0.9s was estimated at under 1 Mbps.
+ */
+function measuredSegmentBandwidth(): number | null {
+  if (typeof performance === "undefined") return null;
+  const speeds: number[] = [];
+  const entries = performance.getEntriesByType(
+    "resource",
+  ) as PerformanceResourceTiming[];
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index]!;
+    if (!/\.(?:m4s|ts|mp4)(?:[?#]|$)/u.test(entry.name)) continue;
+    if (entry.encodedBodySize < MEASURED_SEGMENT_MIN_BYTES) continue;
+    const seconds =
+      (entry.responseEnd - (entry.requestStart || entry.startTime)) / 1000;
+    if (seconds > 0) speeds.push((entry.encodedBodySize * 8) / seconds);
+    if (speeds.length === 6) break;
+  }
+  if (speeds.length < 2) return null;
+  speeds.sort((left, right) => left - right);
+  return speeds[Math.floor(speeds.length / 2)]!;
 }
 
 export class ShakaVideoEngine extends MediaElementEngineBase {
@@ -547,7 +607,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
 
     player.configure({ abr: { enabled: false } });
     this.#qualityChoice = "manual";
-    this.switchQualitySmoothly(player, track);
+    this.switchQualitySmoothly(player, track, { upAtOnce: true });
     this.#autoQuality = false;
     this.refreshTracks(false);
     const quality = this.getQualities().find((item) => item.id === id) ?? null;
@@ -845,24 +905,35 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
    * Switches to `track` without a stall: what is buffered keeps playing up
    * to `qualitySwitchMargin` ahead, and the new quality's segments are
    * fetched from there while it plays and replace what lies beyond. Up, that
-   * is as soon as they can arrive, so the better picture comes within
-   * seconds. Down, the better picture already buffered plays on for up to
+   * is the first segment start the new quality can reach in time. Down, the
+   * better picture already buffered plays on for up to
    * `QUALITY_DOWN_SWITCH_KEEP_SECONDS` (all of it when there is less) while
    * the lower quality is fetched to follow. A 2s margin dropped the segments
    * the playhead was about to reach and left it waiting for the new
    * quality's first one: a buffering spinner on every switch.
+   *
+   * `upAtOnce` (a quality the viewer picked): a better quality replaces the
+   * picture from where it is, the buffer dropped and its segment fetched
+   * there, with the loader up for the moment that takes. Waiting for the
+   * next segment start (6.3s apart on DASH lessons) kept the worse picture
+   * for 3-7s, too long after asking for a better one.
    */
   private switchQualitySmoothly(
     player: ShakaPlayerLike,
     track: ShakaVariantTrackLike,
+    options: { upAtOnce?: boolean } = {},
   ): void {
     const active = player.getVariantTracks().find((variant) => variant.active);
     const down = Boolean(active && isLowerQuality(track, active));
-    const margin = this.qualitySwitchMargin(
-      player,
-      track,
-      down ? QUALITY_DOWN_SWITCH_KEEP_SECONDS : 0,
-    );
+    if (options.upAtOnce && !down) {
+      player.selectVariantTrack(track, true, 0);
+      markPlayback("quality-switch", {
+        height: track.height ?? null,
+        atOnce: true,
+      });
+      return;
+    }
+    const margin = this.qualitySwitchMargin(player, track, active, down);
     if (margin === null) {
       player.selectVariantTrack(track, false);
     } else {
@@ -873,20 +944,20 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
   /**
    * How far past the playhead a switch to `track` keeps the buffer. Shaka
    * cuts the buffer there but fetches the new quality from the start of the
-   * segment holding the cut, up to a whole segment before it, and appends
-   * it over what is there. So the cut lies a whole segment beyond the lead
-   * (the new quality's first segment arriving, at the measured bandwidth):
-   * the replaced segment then always starts ahead of the playhead. With
-   * only the lead (about 3s on a fast link, against 8s DASH segments) it
-   * mostly started behind the playhead, the frames being decoded were
-   * replaced mid-group, and the player waited (a spinner) as the switch
-   * began. `atLeast` keeps more (a switch down). Null when less than the
+   * segment holding the cut and appends it over what is there; the picture
+   * changes at that segment's start. That start must lie at least the lead
+   * ahead (the new quality's first segment arriving), or the frames being
+   * decoded are replaced mid-group and the player waits (a spinner). Up,
+   * the cut lies just past the first segment start beyond the lead, read
+   * from the manifest; without one, a whole segment beyond the lead. Down,
+   * at least `QUALITY_DOWN_SWITCH_KEEP_SECONDS`. Null when less than the
    * margin is buffered: the new quality then follows on from the end of it.
    */
   private qualitySwitchMargin(
     player: ShakaPlayerLike,
     track: ShakaVariantTrackLike,
-    atLeast: number,
+    active: ShakaVariantTrackLike | undefined,
+    down: boolean,
   ): number | null {
     const media = this.mediaElement;
     if (!media) return null;
@@ -896,11 +967,18 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     } catch {
       stats = undefined;
     }
-    const measured = stats?.estimatedBandwidth;
+    // What the downloads showed first; Shaka's estimate runs low, and with a
+    // chosen quality it can still be the start value set to pick that
+    // quality (above every link), which says nothing about this one.
+    const estimate = stats?.estimatedBandwidth;
     const bandwidth =
-      typeof measured === "number" && Number.isFinite(measured) && measured > 0
-        ? measured
-        : getShakaStartupBandwidthEstimate();
+      measuredSegmentBandwidth() ??
+      (typeof estimate === "number" &&
+      Number.isFinite(estimate) &&
+      estimate > 0 &&
+      estimate < PREFERRED_QUALITY_START_BANDWIDTH
+        ? estimate
+        : getShakaStartupBandwidthEstimate());
     const longest = stats?.maxSegmentDuration;
     const segmentSeconds =
       typeof longest === "number" && Number.isFinite(longest) && longest > 0
@@ -913,16 +991,24 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
       QUALITY_SWITCH_BASE_LEAD_SECONDS +
         downloadSeconds * QUALITY_SWITCH_DOWNLOAD_SAFETY,
     );
-    const margin = Math.max(
-      atLeast,
-      lead + segmentSeconds + QUALITY_SWITCH_SEGMENT_SLACK_SECONDS,
-    );
+    const safeMargin =
+      lead + segmentSeconds + QUALITY_SWITCH_SEGMENT_SLACK_SECONDS;
+    const now = media.currentTime;
+    const segmentStart = down
+      ? null
+      : nextSegmentStart(player, active, now + lead);
+    const margin = down
+      ? Math.max(QUALITY_DOWN_SWITCH_KEEP_SECONDS, safeMargin)
+      : segmentStart === null
+        ? safeMargin
+        : segmentStart - now + QUALITY_SWITCH_PAST_SEGMENT_START_SECONDS;
     const ahead = bufferedAheadSeconds(media);
     markPlayback("quality-switch", {
       height: track.height ?? null,
       bandwidth,
       segmentSeconds,
       lead,
+      segmentStart,
       margin,
       ahead,
     });

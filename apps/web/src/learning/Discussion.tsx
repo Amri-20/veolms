@@ -18,6 +18,7 @@ import {
   useRouteLoaderData,
   useSearchParams,
 } from "react-router";
+import { useDebounce } from "../hooks";
 import type { AcademyStaticPageData } from "../routes/academyStaticPageData";
 import type { LessonPageSeed } from "./staticLessonPage";
 import { ThreadSurface } from "./discussion/ThreadSurface";
@@ -290,6 +291,10 @@ function DiscussionInner({
     chosenFeedView === "mine" && !currentUser ? "top" : chosenFeedView;
   const feedSort: DiscussionFeedSort = getDiscussionFeedSort(feedView);
   const feedMine = feedView === "mine";
+  // The search is asked of the server once typing pauses, within the kind
+  // and the order chosen; the server takes up to 200 characters.
+  const [discussionSearch, setDiscussionSearch] = useState("");
+  const feedSearch = useDebounce(discussionSearch.trim().slice(0, 200));
 
   const { data: interactionCounts } = useLessonInteractionCounts(
     courseId,
@@ -371,8 +376,9 @@ function DiscussionInner({
           : ("all" as const),
       sort: feedSort,
       ...(feedMine ? { mine: true } : {}),
+      ...(feedSearch ? { search: feedSearch } : {}),
     }),
-    [entryFilter, feedMine, feedSort],
+    [entryFilter, feedMine, feedSearch, feedSort],
   );
   // A lesson page is built with the first of its discussions in the order
   // they open with, so they are there at once; they are asked for again
@@ -383,7 +389,8 @@ function DiscussionInner({
     builtLessonPage.lessonId === lessonId &&
     builtLessonPage.discussions.kind === unifiedDiscussionQuery.kind &&
     unifiedDiscussionQuery.sort === "top" &&
-    !feedMine
+    !feedMine &&
+    !feedSearch
       ? {
           page: builtLessonPage.discussions.page,
           updatedAt: builtLessonPage.builtAt,
@@ -395,6 +402,9 @@ function DiscussionInner({
     unifiedDiscussionQuery,
     {
       initialPage: builtDiscussions,
+      // A search refined as it is typed keeps the list it narrows on screen
+      // until its own results come, instead of a loading state each pause.
+      keepPreviousData: Boolean(feedSearch),
       enabled: Boolean(
         courseId &&
         lessonId &&
@@ -2484,6 +2494,10 @@ function DiscussionInner({
         entryFilter={entryFilter}
         feedView={feedView}
         canFilterMine={Boolean(currentUser)}
+        search={discussionSearch}
+        isSearchActive={Boolean(feedSearch)}
+        isSearchPending={unifiedDiscussions.isPlaceholderData}
+        onSearchChange={setDiscussionSearch}
         entries={displayEntries}
         noteDeepLinkTargetId={noteDeepLinkReadyForFocus ? noteDeepLinkId : null}
         onNoteDeepLinkHandled={consumeNoteDeepLink}

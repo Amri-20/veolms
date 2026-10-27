@@ -38,6 +38,8 @@ type DiscussionVirtualFeedProps = {
   protectedEntryIndices: ReadonlySet<number>;
   renderEntry: (entry: Comment) => React.ReactNode;
   layoutKey?: string;
+  /** The entries are the last list's, kept while a new one loads. */
+  stale?: boolean;
 };
 
 function useDiscussionRangeExtractor(
@@ -62,6 +64,7 @@ function DiscussionVirtualFeedRows({
   renderEntry,
   virtualizer,
   scrollMargin = 0,
+  stale = false,
 }: DiscussionVirtualFeedProps & {
   feedRef?: React.Ref<HTMLDivElement>;
   virtualizer: DiscussionVirtualizer;
@@ -75,7 +78,8 @@ function DiscussionVirtualFeedRows({
       data-entry-count={entries.length}
       ref={feedRef}
       style={{ height: `${virtualizer.getTotalSize()}px` }}
-      className="relative w-full shrink-0"
+      aria-busy={stale || undefined}
+      className={`relative w-full shrink-0 transition-opacity duration-150 motion-reduce:transition-none ${stale ? "opacity-50" : ""}`}
     >
       {virtualItems.map((virtualItem) => {
         const entry = entries[virtualItem.index];
