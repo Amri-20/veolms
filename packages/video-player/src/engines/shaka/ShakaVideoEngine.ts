@@ -61,24 +61,26 @@ const PRELOAD_START_TOLERANCE_SECONDS = 2;
 /**
  * A quality switch keeps what is buffered up to a point ahead of the
  * playhead and fetches the new quality from there, so the picture changes
- * over without a stall. The point is this far ahead: time for the request,
- * an init segment and a licence, and the 0.5s left when Shaka declares
- * buffering...
+ * over without a stall. The new quality must start far enough ahead to
+ * arrive in time: room for the request, an init segment and a licence, and
+ * the 0.5s left when Shaka declares buffering...
  */
-const QUALITY_SWITCH_BASE_MARGIN_SECONDS = 3;
+const QUALITY_SWITCH_BASE_LEAD_SECONDS = 3;
 /** ...plus the new quality's first segment downloading, with room to spare. */
 const QUALITY_SWITCH_DOWNLOAD_SAFETY = 1.5;
-/** The segment length assumed when Shaka cannot say (they run 2-6s). */
-const QUALITY_SWITCH_FALLBACK_SEGMENT_SECONDS = 6;
 /**
- * The most the change waits for. Shaka's estimate runs far below the link
+ * The most that lead allows for. Shaka's estimate runs far below the link
  * with short segments (the request's latency counts as transfer time): a
  * lesson whose 1.3 MB 1080p segments arrived in 0.9s was estimated to need
- * a 57s margin, so the chosen quality appeared a minute later. A link that
- * really cannot fetch a segment in this long cannot play that quality
- * without stalls anyway.
+ * 57s, so the chosen quality appeared a minute later. A link that really
+ * cannot fetch a segment in this long cannot play that quality without
+ * stalls anyway.
  */
-const QUALITY_SWITCH_MAX_MARGIN_SECONDS = 8;
+const QUALITY_SWITCH_MAX_LEAD_SECONDS = 8;
+/** The segment length assumed when Shaka cannot say (DASH lessons: ~8s). */
+const QUALITY_SWITCH_FALLBACK_SEGMENT_SECONDS = 8;
+/** Room for segment times that are not exactly what the manifest says. */
+const QUALITY_SWITCH_SEGMENT_SLACK_SECONDS = 1;
 /**
  * A standby (the next video, prepared out of sight) keeps only its start:
  * enough to begin on at once, little to download for a hover that may not
@@ -818,10 +820,10 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
   /**
    * Switches to `track`, up or down, without a stall: what is buffered
    * keeps playing up to `qualitySwitchMargin` ahead, and the new quality's
-   * segments are fetched from that point while it plays. A shorter margin
-   * (2s) dropped the segments the playhead was about to reach and left it
-   * waiting for the new quality's first one: a buffering spinner on every
-   * switch.
+   * segments are fetched from there while it plays and replace what lies
+   * beyond. A 2s margin dropped the segments the playhead was about to
+   * reach and left it waiting for the new quality's first one: a buffering
+   * spinner on every switch.
    */
   private switchQualitySmoothly(
     player: ShakaPlayerLike,
@@ -836,10 +838,17 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
   }
 
   /**
-   * How far past the playhead a switch to `track` keeps the buffer: long
-   * enough for the new quality's first segment to arrive, at the measured
-   * bandwidth, before playback gets there. Null when less than that is
-   * buffered: the new quality then follows on from the end of it.
+   * How far past the playhead a switch to `track` keeps the buffer. Shaka
+   * cuts the buffer there but fetches the new quality from the start of the
+   * segment holding the cut, up to a whole segment before it, and appends
+   * it over what is there. So the cut lies a whole segment beyond the lead
+   * (the new quality's first segment arriving, at the measured bandwidth):
+   * the replaced segment then always starts ahead of the playhead. With
+   * only the lead (about 3s on a fast link, against 8s DASH segments) it
+   * mostly started behind the playhead, the frames being decoded were
+   * replaced mid-group, and the player waited (a spinner) as the switch
+   * began. Null when less than the margin is buffered: the new quality then
+   * follows on from the end of it.
    */
   private qualitySwitchMargin(
     player: ShakaPlayerLike,
@@ -865,16 +874,18 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
         : QUALITY_SWITCH_FALLBACK_SEGMENT_SECONDS;
     const downloadSeconds =
       ((track.bandwidth ?? 0) * segmentSeconds) / bandwidth;
-    const margin = Math.min(
-      QUALITY_SWITCH_MAX_MARGIN_SECONDS,
-      QUALITY_SWITCH_BASE_MARGIN_SECONDS +
+    const lead = Math.min(
+      QUALITY_SWITCH_MAX_LEAD_SECONDS,
+      QUALITY_SWITCH_BASE_LEAD_SECONDS +
         downloadSeconds * QUALITY_SWITCH_DOWNLOAD_SAFETY,
     );
+    const margin = lead + segmentSeconds + QUALITY_SWITCH_SEGMENT_SLACK_SECONDS;
     const ahead = bufferedAheadSeconds(media);
     markPlayback("quality-switch", {
       height: track.height ?? null,
       bandwidth,
       segmentSeconds,
+      lead,
       margin,
       ahead,
     });
