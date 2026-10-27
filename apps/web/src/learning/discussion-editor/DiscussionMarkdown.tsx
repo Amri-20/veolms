@@ -657,7 +657,9 @@ const MARKDOWN_COMPONENTS: Components = {
   pre: ({ children }) => <>{children}</>,
   table: ({ children }) => (
     <div className="my-3 max-w-full overflow-x-auto rounded-lg shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--text)_12%,transparent)]">
-      <table className="w-full border-collapse text-left text-sm">
+      {/* Words keep whole in a cell: the text around it may break anywhere,
+          which let columns shrink to a letter instead of the box scrolling. */}
+      <table className="w-full border-collapse text-left text-sm wrap-normal">
         {children}
       </table>
     </div>
