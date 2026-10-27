@@ -89,7 +89,7 @@ export function PlatformSecurityTab({
             className={ROW_CLASS}
             icon={DeviceMobile}
             label="Verified mobile number"
-            note="Students confirm their mobile number with a text message code before they enrol in any course, free or paid."
+            note="New students confirm their mobile number with a text message code before they enrol in any course, free or paid. Students who already had an account are not asked."
           >
             <SettingsToggle
               checked={requireVerifiedPhoneForEnrollment}

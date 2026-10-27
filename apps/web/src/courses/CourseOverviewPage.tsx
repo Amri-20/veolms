@@ -76,7 +76,7 @@ import {
   useReleaseCheckoutOrder,
   useVerifyPayment,
 } from "../services/payments";
-import { useAuthConfig, useCurrentUser } from "../services/auth";
+import { useCurrentUser } from "../services/auth";
 import { DiscussionMarkdown } from "../learning/discussion-editor/DiscussionMarkdown";
 import { createDiscussionDraft } from "../learning/discussion-editor/types";
 import { formatDuration, resolveCourseDurationSeconds } from "./courseAdapter";
@@ -388,10 +388,10 @@ function CoursePurchaseSection({
 
   const [isPaymentBusy, setIsPaymentBusy] = useState(false);
   // A verified mobile number before the first enrolment, where the academy
-  // asks for one (REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT): the enrolment
-  // waits behind the number's pop-up and carries on once it is verified.
-  const requiresVerifiedPhone =
-    useAuthConfig().data?.requireVerifiedPhoneForEnrollment === true;
+  // asks for one (REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT) of a new account:
+  // the server says so when the order is asked for (only new accounts are
+  // asked), and the enrolment waits behind the number's pop-up and carries
+  // on once it is verified.
   const currentUser = useCurrentUser();
   const [phoneGate, setPhoneGate] = useState<{
     amount: number | undefined;
@@ -794,21 +794,6 @@ function CoursePurchaseSection({
       else setPaymentError("Please log in before enrolling.");
       return;
     }
-    if (
-      !phoneChecked &&
-      requiresVerifiedPhone &&
-      currentUser.data &&
-      !currentUser.data.mobileVerified
-    ) {
-      setPaymentError(null);
-      setPhoneGate({ amount: voluntaryContributionAmount });
-      trackAnalyticsEvent("checkout_step", {
-        courseId: course.id,
-        step: "phone_verification",
-      });
-      return;
-    }
-
     setIsPaymentBusy(true);
     setPaymentError(null);
 
@@ -983,8 +968,7 @@ function CoursePurchaseSection({
       });
       watchForUnansweredClose(order.order.id, () => checkoutAnswered);
     } catch (error) {
-      // The server asks for the number when this page could not tell
-      // (the account had not loaded yet, or the setting was just turned on).
+      // The server asks for the number of a new account that has none.
       if (
         (error as { code?: string } | null)?.code ===
         "PHONE_VERIFICATION_REQUIRED"
