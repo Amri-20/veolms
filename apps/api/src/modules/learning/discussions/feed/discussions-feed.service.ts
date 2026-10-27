@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { DatabaseExecutor } from "@veolms/database";
 import type { S3StorageService } from "@veolms/storage";
 import type {
@@ -55,6 +56,11 @@ interface FeedContext {
   kind: LessonDiscussionKind;
   sort: LessonDiscussionSort;
   mine: boolean;
+  /**
+   * A hash of the search, which keeps the cursor short whatever was typed.
+   * Absent from cursors written before the feed could be searched.
+   */
+  searchKey?: string | null;
   publicOnly: boolean;
   capabilities: FeedCapabilities;
 }
@@ -73,6 +79,13 @@ function invalidCursor(): never {
   throw httpError(400, "INVALID_CURSOR", "The pagination cursor is invalid.");
 }
 
+function searchKey(search: string): string {
+  return createHash("sha256")
+    .update(search.toLowerCase())
+    .digest("base64url")
+    .slice(0, 22);
+}
+
 function sameContext(left: FeedContext, right: FeedContext): boolean {
   return (
     left.courseId === right.courseId &&
@@ -81,6 +94,7 @@ function sameContext(left: FeedContext, right: FeedContext): boolean {
     left.kind === right.kind &&
     left.sort === right.sort &&
     left.mine === right.mine &&
+    (left.searchKey ?? null) === (right.searchKey ?? null) &&
     left.publicOnly === right.publicOnly &&
     left.capabilities.allowComments === right.capabilities.allowComments &&
     left.capabilities.allowQa === right.capabilities.allowQa &&
@@ -113,6 +127,9 @@ function isFeedContext(value: unknown): value is FeedContext {
       candidate.sort === "oldest" ||
       candidate.sort === "top") &&
     typeof candidate.mine === "boolean" &&
+    (candidate.searchKey === undefined ||
+      candidate.searchKey === null ||
+      typeof candidate.searchKey === "string") &&
     typeof candidate.publicOnly === "boolean" &&
     Boolean(capabilities) &&
     typeof capabilities?.allowComments === "boolean" &&
@@ -184,6 +201,7 @@ async function listCandidates(
   actor: DiscussionActor | null,
   academyId: string,
   context: FeedContext,
+  search: string | undefined,
   cursor: ReturnType<typeof decodeFeedCursor>,
   limit: number,
 ): Promise<FeedCandidate[]> {
@@ -198,6 +216,7 @@ async function listCandidates(
       context.capabilities.allowNotes,
     viewerUserId: context.publicOnly ? null : actor?.userId,
     mine: context.mine,
+    search,
     sort: context.sort,
     cursor,
     limit,
@@ -259,6 +278,7 @@ export function createLearningDiscussionsFeedService(options?: {
         kind: query.kind,
         sort: query.sort,
         mine: Boolean(query.mine && actor && readAccess.canReadPrivateState),
+        searchKey: query.search ? searchKey(query.search) : null,
         publicOnly: !readAccess.canReadPrivateState,
         capabilities,
       };
@@ -270,6 +290,7 @@ export function createLearningDiscussionsFeedService(options?: {
         actor,
         academyId,
         context,
+        query.search || undefined,
         cursor,
         query.limit,
       );
