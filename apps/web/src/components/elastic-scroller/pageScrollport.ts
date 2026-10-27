@@ -14,6 +14,20 @@ export function scrollEventTarget(scrollport: HTMLElement): EventTarget {
 }
 
 /**
+ * Moves a scrollport to `top` at once. The page asks for smooth scrolling
+ * (`scroll-behavior: smooth` on the root, foundation.css), and the
+ * document's scroller follows it: each frame's small step of the control
+ * then began a new glide from where the page was, so on a phone (where the
+ * page is the document) the control crawled however far it was pulled.
+ */
+export function setScrollTopAtOnce(scrollport: HTMLElement, top: number) {
+  const behavior = scrollport.style.scrollBehavior;
+  scrollport.style.scrollBehavior = "auto";
+  scrollport.scrollTop = top;
+  scrollport.style.scrollBehavior = behavior;
+}
+
+/**
  * The element a page actually scrolls in. On a phone the shell lets its main
  * box grow with the page and scrolls the document instead, so the main box
  * never scrolls and a control watching it never saw a long page. Read when
