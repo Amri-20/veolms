@@ -607,7 +607,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
 
     player.configure({ abr: { enabled: false } });
     this.#qualityChoice = "manual";
-    this.switchQualitySmoothly(player, track);
+    this.switchQualitySmoothly(player, track, { upAtOnce: true });
     this.#autoQuality = false;
     this.refreshTracks(false);
     const quality = this.getQualities().find((item) => item.id === id) ?? null;
@@ -905,20 +905,34 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
    * Switches to `track` without a stall: what is buffered keeps playing up
    * to `qualitySwitchMargin` ahead, and the new quality's segments are
    * fetched from there while it plays and replace what lies beyond. Up, that
-   * is the first segment start the new quality can reach in time, so the
-   * better picture comes within seconds. Down, the better picture already
-   * buffered plays on for up to `QUALITY_DOWN_SWITCH_KEEP_SECONDS` (all of
-   * it when there is less) while the lower quality is fetched to follow. A
-   * 2s margin dropped the segments the playhead was about to reach and left
-   * it waiting for the new quality's first one: a buffering spinner on
-   * every switch.
+   * is the first segment start the new quality can reach in time. Down, the
+   * better picture already buffered plays on for up to
+   * `QUALITY_DOWN_SWITCH_KEEP_SECONDS` (all of it when there is less) while
+   * the lower quality is fetched to follow. A 2s margin dropped the segments
+   * the playhead was about to reach and left it waiting for the new
+   * quality's first one: a buffering spinner on every switch.
+   *
+   * `upAtOnce` (a quality the viewer picked): a better quality replaces the
+   * picture from where it is, the buffer dropped and its segment fetched
+   * there, with the loader up for the moment that takes. Waiting for the
+   * next segment start (6.3s apart on DASH lessons) kept the worse picture
+   * for 3-7s, too long after asking for a better one.
    */
   private switchQualitySmoothly(
     player: ShakaPlayerLike,
     track: ShakaVariantTrackLike,
+    options: { upAtOnce?: boolean } = {},
   ): void {
     const active = player.getVariantTracks().find((variant) => variant.active);
     const down = Boolean(active && isLowerQuality(track, active));
+    if (options.upAtOnce && !down) {
+      player.selectVariantTrack(track, true, 0);
+      markPlayback("quality-switch", {
+        height: track.height ?? null,
+        atOnce: true,
+      });
+      return;
+    }
     const margin = this.qualitySwitchMargin(player, track, active, down);
     if (margin === null) {
       player.selectVariantTrack(track, false);
