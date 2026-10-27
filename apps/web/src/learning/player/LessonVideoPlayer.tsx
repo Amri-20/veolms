@@ -104,6 +104,11 @@ import { createPlaybackTelemetry } from "./playbackTelemetry";
 import { trackAnalyticsEvent } from "../../lib/analytics-track";
 
 const RESUME_PERSIST_INTERVAL_MS = 5_000;
+/**
+ * How long a swiped-away mini player's sound takes to fade: within the
+ * swipe's own animation (200ms, `useLearningMiniPlayerGestures`).
+ */
+const MINI_DISMISS_FADE_MS = 180;
 // A lesson left this close to its end counts as finished when it is reopened.
 const FINISHED_LESSON_RESUME_TAIL_SECONDS = 3;
 // From here on the next lesson is preloaded, whatever the video's length: a
@@ -190,6 +195,11 @@ export interface LessonVideoPlayerProps {
   onMiniPlayerRestoreReady?: () => void;
   onMiniClose?: () => void;
   onMiniRestore?: () => void;
+  /**
+   * The mini player is being swiped away: a playing video's sound fades out
+   * with it instead of stopping at once when it is gone.
+   */
+  fadeOutAudio?: boolean;
   onMobileLandscapeFullscreenChange?: (active: boolean) => void;
   onProgressChange?: (progress: number) => void;
   /**
@@ -425,6 +435,7 @@ export function LessonVideoPlayer({
   onMiniPlayerRestoreReady,
   onMiniClose,
   onMiniRestore,
+  fadeOutAudio = false,
   onMobileLandscapeFullscreenChange,
   onTheaterToggle,
   onSeekToTimestampReady,
@@ -453,6 +464,9 @@ export function LessonVideoPlayer({
   const playerPrefsRef = useRef({ ...initialPlayerPreferences });
   const playbackPrefsAppliedRef = useRef(false);
   const applyingPlaybackPrefsRef = useRef(false);
+  // Set once the sound fades out for a swiped-away mini player: the fade's
+  // volumes are not the learner's, and are never saved.
+  const fadingOutRef = useRef(false);
   // Volumes taken from another tab (a `storage` event) in the last moments.
   // The volume change each causes here is that tab's, not this one's, and
   // is not saved again: saved, it reached the other tab as a new change,
@@ -920,6 +934,7 @@ export function LessonVideoPlayer({
         }
       } else if (event.type === "volumechange") {
         if (
+          fadingOutRef.current ||
           restoreAutoplayRef.current !== null ||
           handoffMutingRef.current ||
           applyingPlaybackPrefsRef.current
@@ -1175,6 +1190,26 @@ export function LessonVideoPlayer({
     },
     [onTheaterToggle, theaterMode],
   );
+
+  // A playing mini player swiped away: its sound fades to nothing over the
+  // swipe's animation (see `fadeOutAudio`).
+  useEffect(() => {
+    if (!fadeOutAudio) return undefined;
+    const player = playerRef.current;
+    const media = player?.getSnapshot().media;
+    if (!player || !media?.playing || media.muted || media.volume <= 0) {
+      return undefined;
+    }
+    fadingOutRef.current = true;
+    const startVolume = media.volume;
+    const startedAt = performance.now();
+    let frame = window.requestAnimationFrame(function fade(now) {
+      const progress = Math.min(1, (now - startedAt) / MINI_DISMISS_FADE_MS);
+      player.setVolume(startVolume * (1 - progress));
+      if (progress < 1) frame = window.requestAnimationFrame(fade);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [fadeOutAudio]);
 
   useLayoutEffect(() => {
     const prefs = getInitialLearningPlayerPreferences();
