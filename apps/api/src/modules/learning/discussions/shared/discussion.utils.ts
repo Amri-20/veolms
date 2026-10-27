@@ -4,6 +4,10 @@ import { httpError } from "../../../../lib/errors.ts";
 import { exactCursorTimestamp } from "../../../../lib/keyset.ts";
 import { getAcademyId } from "../../../auth/index.ts";
 import { createDiscussionRepository } from "./discussion.repository.ts";
+import {
+  fuzzyMatchesAny,
+  termFromContainsPattern,
+} from "../../../../lib/fuzzy-search.ts";
 
 const discussionRepo = createDiscussionRepository();
 
@@ -233,6 +237,10 @@ export function authorMatchesSql(userIdColumn: string, pattern: string) {
         lower(su.display_name) like ${pattern}
         or lower(su.username) like ${pattern}
         or lower(coalesce(su.email, '')) like ${pattern}
+        or ${fuzzyMatchesAny(termFromContainsPattern(pattern), [
+          sql.ref("su.display_name"),
+          sql.ref("su.username"),
+        ])}
       )
   )`;
 }
