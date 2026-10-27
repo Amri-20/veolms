@@ -2,7 +2,15 @@ import { OctopusIllustration } from "../components/OctopusIllustration";
 import { CaretDownIcon as CaretDown } from "@phosphor-icons/react/CaretDown";
 import { CheckCircleIcon as CheckCircle } from "@phosphor-icons/react/CheckCircle";
 import { ImageIcon as Image } from "@phosphor-icons/react/Image";
-import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode, RefObject } from "react";
 import type { LessonResource } from "@veolms/contracts";
 import { DEFAULT_DEBOUNCE_DELAY_MS, useDebounce } from "../hooks/useDebounce";
@@ -390,20 +398,9 @@ export const Curriculum = memo(function Curriculum({
     continuousLessonNumbering ? 0 : (section.lessons[0]?.[0] ?? 1) - 1;
   const selectedLessonDisplayNumber =
     selectedLesson - getLessonNumberBase(currentSection);
-  useEffect(() => {
-    if (expandAllSections || isExpandedControlled) return;
-    // The section of the lesson being played is opened; the ones the
-    // learner has opened themselves stay as they are.
-    if (expandedRef.current.includes(currentSection.id)) return;
-    setExpanded((current) => [...current, currentSection.id]);
-  }, [
-    currentSection.id,
-    expandAllSections,
-    hideHero,
-    isExpandedControlled,
-    selectedLesson,
-    setExpanded,
-  ]);
+  // The section last opened for the lesson being played, to tell a lesson
+  // in another section from one in the same.
+  const openedForSectionRef = useRef<number | null>(null);
 
   const setCurriculumScrollport = useCallback(
     (node: HTMLElement | null) => {
@@ -564,26 +561,29 @@ export const Curriculum = memo(function Curriculum({
     [measureItemTop],
   );
 
-  const revealAndScrollTo = (
-    target: "section" | "chapter",
-    sectionId: number,
-  ) => {
-    setSearchOpen(false);
-    setExpanded((current) =>
-      current.includes(sectionId) ? current : [...current, sectionId],
-    );
-
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        const targetElement =
-          target === "section"
-            ? currentSectionRef.current
-            : activeLessonRef.current;
+  /**
+   * Scrolls the list so the item stands at its top, two frames on (once
+   * what was just opened is laid out). Near the end of the list there is
+   * not enough below the item for that, so room is added under the list
+   * first (`--curriculum-reveal-space`).
+   */
+  const revealAtTop = useCallback(
+    (getTarget: () => HTMLElement | null) => {
+      // On a page just opened the lessons may not be drawn yet (a section
+      // has its lessons once the course's file is in), so the item is
+      // looked for again each frame, for half a second at most.
+      let tries = 0;
+      const attempt = () => {
+        const targetElement = getTarget();
         const curriculum = targetElement?.closest<HTMLElement>(
           ".learning-curriculum",
         );
         const lessonList = lessonListRef.current;
-        if (!targetElement || !curriculum || !lessonList) return;
+        if (!targetElement || !curriculum || !lessonList) {
+          tries += 1;
+          if (tries < 30) window.requestAnimationFrame(attempt);
+          return;
+        }
 
         const targetTop = measureItemTop(targetElement, curriculum);
         const currentRevealSpace = Number.parseFloat(
@@ -612,9 +612,55 @@ export const Curriculum = memo(function Curriculum({
         }
 
         scrollItemToTop(targetElement);
-      });
-    });
+      };
+      window.requestAnimationFrame(() => window.requestAnimationFrame(attempt));
+    },
+    [measureItemTop, scrollItemToTop],
+  );
+
+  const revealAndScrollTo = (
+    target: "section" | "chapter",
+    sectionId: number,
+  ) => {
+    setSearchOpen(false);
+    setExpanded((current) =>
+      current.includes(sectionId) ? current : [...current, sectionId],
+    );
+    revealAtTop(() =>
+      target === "section"
+        ? currentSectionRef.current
+        : activeLessonRef.current,
+    );
   };
+
+  // A lesson is opened: its section is opened, and only it when the lesson
+  // is in another section than the last one (a learner moving through the
+  // course would otherwise be left with every section above open); the
+  // sections the learner opens themselves stay while they stay in it. The
+  // list then scrolls so the lesson being played stands at its top, unless
+  // the learner is searching it.
+  // Read when a lesson opens, not followed: opening the search must not
+  // scroll the list again.
+  const revealOpenedLesson = useEffectEvent(() => {
+    if (hideHero || searchOpen) return;
+    revealAtTop(() => activeLessonRef.current);
+  });
+  useEffect(() => {
+    if (expandAllSections || isExpandedControlled) return;
+    const sectionChanged = openedForSectionRef.current !== currentSection.id;
+    openedForSectionRef.current = currentSection.id;
+    if (sectionChanged) setExpanded([currentSection.id]);
+    else if (!expandedRef.current.includes(currentSection.id)) {
+      setExpanded((current) => [...current, currentSection.id]);
+    }
+    revealOpenedLesson();
+  }, [
+    currentSection.id,
+    expandAllSections,
+    isExpandedControlled,
+    selectedLesson,
+    setExpanded,
+  ]);
 
   const openLessonSearch = useCallback(() => {
     onLessonSearchOpen?.();
