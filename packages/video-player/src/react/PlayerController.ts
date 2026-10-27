@@ -239,11 +239,18 @@ export class PlayerController {
     this.#activated = true;
 
     this.#engineUnsubscribers.push(
-      this.engine.on("snapshotchange", (media) => {
+      this.engine.on("snapshotchange", (engineMedia) => {
         const activeChapter = getActiveChapter(
           this.#snapshot.chapters,
-          media.currentTime,
+          engineMedia.currentTime,
         );
+        // A speed chosen before the media could take it is shown as chosen
+        // until it is applied (see setPlaybackRate).
+        const pendingRate = this.#pendingMediaProperties.playbackRate;
+        const media =
+          pendingRate === undefined
+            ? engineMedia
+            : { ...engineMedia, playbackRate: pendingRate };
         this.#snapshot = {
           ...this.#snapshot,
           media,
@@ -814,7 +821,18 @@ export class PlayerController {
       });
     }
     if (!this.isMediaReady()) {
+      // Kept until the media is ready, and shown and reported as the speed
+      // now: left at the old one, the speed menu snapped back and the
+      // choice looked refused while a video loaded.
       this.#pendingMediaProperties.playbackRate = rate;
+      if (this.#snapshot.media.playbackRate !== rate) {
+        this.#snapshot = {
+          ...this.#snapshot,
+          media: { ...this.#snapshot.media, playbackRate: rate },
+        };
+        this.notify();
+        this.emit({ type: "ratechange", detail: { playbackRate: rate } });
+      }
       return;
     }
     this.engine.setPlaybackRate(rate);
