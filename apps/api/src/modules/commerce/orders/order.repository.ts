@@ -10,6 +10,7 @@ import { CHECKOUT_HAND_OUT_ATTEMPT_STATUS } from "../shared/open-orders.ts";
 import { escapeLikePattern } from "../../../lib/like-pattern.ts";
 import { SURPLUS_CAPTURE_ERROR_CODE } from "../payments/surplus-payment.ts";
 import { assignInvoiceNumber } from "../invoices/invoice.repository.ts";
+import { fuzzyMatchesAny } from "../../../lib/fuzzy-search.ts";
 
 /**
  * Leaves out refunds of an extra payment (payments/extra-payment.ts) where
@@ -283,7 +284,10 @@ export async function listOrders(
           OR EXISTS (
             SELECT 1 FROM order_items oi
             WHERE oi.order_id = o.id
-              AND oi.title_snapshot ILIKE ${term}
+              AND (
+                oi.title_snapshot ILIKE ${term}
+                OR ${fuzzyMatchesAny(search, [sql.ref("oi.title_snapshot")])}
+              )
           )
         )`,
       );
@@ -299,6 +303,10 @@ export async function listOrders(
                 u.display_name ILIKE ${term}
                 OR u.username ILIKE ${term}
                 OR u.email ILIKE ${term}
+                OR ${fuzzyMatchesAny(search, [
+                  sql.ref("u.display_name"),
+                  sql.ref("u.username"),
+                ])}
               )
           )
         )`,
