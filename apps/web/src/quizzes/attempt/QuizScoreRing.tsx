@@ -21,6 +21,8 @@ export function QuizScoreRing({
   tone?: QuizTone;
   caption?: string;
 }) {
+  // A score above 100% (an attempt imported with the score another platform
+  // recorded) fills the ring; the figure in the centre stays the real one.
   const share =
     percentage === null ? 0 : Math.max(0, Math.min(100, percentage)) / 100;
 
