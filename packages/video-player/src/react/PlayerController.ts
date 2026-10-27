@@ -73,6 +73,13 @@ const SCRUB_REST_TOLERANCE_SHARE = 0.006;
  * the two.
  */
 const SCRUB_LESSON_FALL_BEHIND_TOLERANCES = 2;
+/**
+ * The lesson's frame stands in for the pointer's moment only this close to
+ * it, however long the video: the rest tolerance alone let a 4 h lesson
+ * show a frame some 3 minutes from the pointer through a slow drag, where
+ * the preview picture is the exact one.
+ */
+const SCRUB_LESSON_MAX_LAG_SECONDS = 1;
 
 function isTimeBuffered(ranges: TimeRanges, time: number): boolean {
   for (let index = 0; index < ranges.length; index += 1) {
@@ -555,17 +562,18 @@ export class PlayerController {
     this.#scrubTarget = null;
     this.#scrubRestTime = time;
     const tolerance = this.#scrubRestTolerance();
+    const lessonTolerance = this.#scrubLessonTolerance();
     if (this.#scrubLessonTime === null && !media.seeking) {
       this.#scrubLessonTime = media.currentTime;
     }
     const lessonTime = this.#scrubLessonTime;
     const lag = lessonTime === null ? Infinity : Math.abs(time - lessonTime);
-    if (!this.#scrubShowsLesson && lag <= tolerance) {
+    if (!this.#scrubShowsLesson && lag <= lessonTolerance) {
       this.#scrubShowsLesson = true;
       this.#clearScrubFrame();
     } else if (
       this.#scrubShowsLesson &&
-      lag > tolerance * SCRUB_LESSON_FALL_BEHIND_TOLERANCES
+      lag > lessonTolerance * SCRUB_LESSON_FALL_BEHIND_TOLERANCES
     ) {
       this.#scrubShowsLesson = false;
     }
@@ -599,7 +607,7 @@ export class PlayerController {
     if (
       time === null ||
       this.#scrubShowsLesson ||
-      Math.abs(time - media.currentTime) > this.#scrubRestTolerance()
+      Math.abs(time - media.currentTime) > this.#scrubLessonTolerance()
     ) {
       return;
     }
@@ -618,6 +626,10 @@ export class PlayerController {
     return Number.isFinite(duration) && duration > 0
       ? duration * SCRUB_REST_TOLERANCE_SHARE
       : 0;
+  }
+
+  #scrubLessonTolerance(): number {
+    return Math.min(this.#scrubRestTolerance(), SCRUB_LESSON_MAX_LAG_SECONDS);
   }
 
   #scheduleScrubRestSeek(delay: number): void {
