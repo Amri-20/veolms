@@ -28,6 +28,7 @@ import {
   getShakaStartupBandwidthEstimate,
   isShakaAutoQuality,
   normalizeShakaAudioTrack,
+  PREFERRED_QUALITY_START_BANDWIDTH,
   normalizeShakaQuality,
   normalizeShakaTextTrack,
   registerShakaNetworkingFilters,
@@ -952,13 +953,18 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     } catch {
       stats = undefined;
     }
-    const measured = stats?.estimatedBandwidth;
-    const bandwidth = Math.max(
-      typeof measured === "number" && Number.isFinite(measured) && measured > 0
-        ? measured
-        : getShakaStartupBandwidthEstimate(),
-      measuredSegmentBandwidth() ?? 0,
-    );
+    // What the downloads showed first; Shaka's estimate runs low, and with a
+    // chosen quality it can still be the start value set to pick that
+    // quality (above every link), which says nothing about this one.
+    const estimate = stats?.estimatedBandwidth;
+    const bandwidth =
+      measuredSegmentBandwidth() ??
+      (typeof estimate === "number" &&
+      Number.isFinite(estimate) &&
+      estimate > 0 &&
+      estimate < PREFERRED_QUALITY_START_BANDWIDTH
+        ? estimate
+        : getShakaStartupBandwidthEstimate());
     const longest = stats?.maxSegmentDuration;
     const segmentSeconds =
       typeof longest === "number" && Number.isFinite(longest) && longest > 0

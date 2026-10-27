@@ -328,6 +328,8 @@ export function rememberShakaBandwidthEstimate(
   }
   if (typeof estimate !== "number" || !Number.isFinite(estimate)) return;
   if (estimate <= 0) return;
+  // The start value a chosen quality sets (nothing measured yet).
+  if (estimate >= PREFERRED_QUALITY_START_BANDWIDTH) return;
   lastEstimatedBandwidth = Math.min(
     MAX_REMEMBERED_BANDWIDTH,
     Math.max(MIN_REMEMBERED_BANDWIDTH, estimate),
@@ -369,7 +371,7 @@ export function resetShakaBandwidthEstimateForTests(): void {
  * has measured is pointed at the chosen variant as its load starts (see
  * `ShakaVideoEngine.startAtPreferredQuality`).
  */
-const PREFERRED_QUALITY_START_BANDWIDTH = 1_000_000_000;
+export const PREFERRED_QUALITY_START_BANDWIDTH = 1_000_000_000;
 
 /** The picture height the viewer chose for `source`, or null for auto. */
 export function shakaPreferredVideoHeight(source: VideoSource): number | null {
