@@ -41,6 +41,7 @@ import {
 } from "../services/quizzes";
 import { SelectCourseForQuizModal } from "./SelectCourseForQuizModal";
 import { ElevatedCard, elevatedCardClasses } from "../components/ElevatedCard";
+import { fuzzyMatches } from "../lib/fuzzySearch";
 
 interface Props {
   role: "student" | "creator";
@@ -709,7 +710,7 @@ function QuizLibrary({
   const visible = quizzes.filter(
     (quiz) =>
       (status === "all" || quiz.status === status) &&
-      quiz.title.toLowerCase().includes(debouncedSearch.trim().toLowerCase()),
+      fuzzyMatches(debouncedSearch, quiz.title),
   );
   const {
     displayedItems: displayedLibraryQuizzes,

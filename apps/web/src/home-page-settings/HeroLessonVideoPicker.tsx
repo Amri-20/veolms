@@ -7,6 +7,7 @@ import { Button } from "../components/Button";
 import { useHomePageLessonVideoOptions } from "../services/home";
 import { fieldClass, insetRowClass } from "./homePageSettingsControls";
 import { formatVideoLength } from "./heroVideoFormat";
+import { fuzzyMatches } from "../lib/fuzzySearch";
 
 // One column the list's own width (`grid-cols-1`), so a long title truncates
 // in its row instead of widening every row past the list.
@@ -44,7 +45,7 @@ function CourseList({
   const [search, setSearch] = useState("");
   const query = search.trim().toLowerCase();
   const shown = query
-    ? courses.filter((course) => course.title.toLowerCase().includes(query))
+    ? courses.filter((course) => fuzzyMatches(query, course.title))
     : courses;
 
   return (
