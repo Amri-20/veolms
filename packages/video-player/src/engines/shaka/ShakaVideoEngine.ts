@@ -318,6 +318,8 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
   #autoQuality = true;
   /** The quality the viewer picked since the current load, if any. */
   #qualityChoice: "auto" | "manual" | null = null;
+  /** The element whose picture `hideOutgoingVideo` hid, until revealed. */
+  #hiddenMedia: HTMLMediaElement | null = null;
   #selectedTextTrackId: string | null = null;
   #browserSupported: boolean | null = null;
 
@@ -361,6 +363,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     let player = this.requirePlayer();
     const runtime = this.requireRuntime();
     const generation = this.beginOperation();
+    this.hideOutgoingVideo(media);
     this.startLoading(source);
     this.#selectedTextTrackId = null;
     this.#autoQuality = isShakaAutoQuality(source);
@@ -477,12 +480,14 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
         return;
       }
 
+      this.revealVideo();
       await this.finishLoad(player, source, generation);
     } catch (error) {
       if (!this.isCurrentOperation(generation)) {
         return;
       }
 
+      this.revealVideo();
       const existing = this.getSnapshot().error;
       const normalized =
         existing ??
@@ -507,6 +512,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
       if (!this.isCurrentOperation(generation)) {
         return;
       }
+      this.revealVideo();
       this.clearTrackMaps();
       this.finishUnloading();
     } catch (error) {
@@ -678,6 +684,7 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
   ): Promise<void> {
     this.#selectedTextTrackId = null;
     this.#cancelDeferredStreaming?.();
+    this.revealVideo();
     rememberShakaBandwidthEstimate(this.#player);
     this.clearNetworkingFilters();
     this.clearTrackMaps();
@@ -922,6 +929,31 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     return margin < ahead ? margin : null;
   }
 
+  /**
+   * A load into an element still holding another video (the lesson being
+   * left, playing or paused) stops it at once and hides its picture until
+   * the new video is in. Left alone it played on under the loader, or a
+   * play asked for meanwhile started it again, until the new video had
+   * loaded (up to seconds, waiting for a standby or a preload). A load
+   * that switches to a ready standby swaps the elements in the same moment,
+   * so nothing is seen of this.
+   */
+  private hideOutgoingVideo(media: HTMLMediaElement): void {
+    if (media.readyState === 0 && !media.currentSrc) return;
+    media.pause();
+    if (this.#hiddenMedia !== media) this.revealVideo();
+    this.#hiddenMedia = media;
+    media.style.visibility = "hidden";
+  }
+
+  /** Shows the element `hideOutgoingVideo` hid, if any. */
+  private revealVideo(): void {
+    const media = this.#hiddenMedia;
+    if (!media) return;
+    this.#hiddenMedia = null;
+    media.style.visibility = "";
+  }
+
   private requirePlayer(): ShakaPlayerLike {
     this.assertNotDestroyed();
     if (!this.#player) {
@@ -1135,6 +1167,8 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     previousMedia.pause();
     this.assignStandbyMedia(previousMedia);
     this.replaceMediaElement(standby, previousMedia);
+    // The element that was playing is the hidden standby now.
+    this.revealVideo();
     this.#standbyReleased = previous
       ? previous.destroy().catch(() => undefined)
       : Promise.resolve();

@@ -457,6 +457,10 @@ export class PlayerController {
       await this.waitForMedia();
     }
     this.assertActive();
+    // The next video is still loading into the element: played now, the one
+    // it replaces (paused, or playing on) would start under the loader.
+    await this.waitForSourceLoaded();
+    this.assertActive();
     if (generation !== this.#playRequestGeneration) return;
     await this.engine.play();
   }
@@ -1390,6 +1394,20 @@ export class PlayerController {
     if (this.isMediaReady()) return Promise.resolve();
     return new Promise((resolve, reject) => {
       this.#mediaWaiters.push({ resolve, reject });
+    });
+  }
+
+  /** Settles once no source is loading (it loaded, or failed). */
+  private waitForSourceLoaded(): Promise<void> {
+    if (this.engine.getSnapshot().lifecycle !== "loading") {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      const stop = this.engine.on("snapshotchange", (media) => {
+        if (media.lifecycle === "loading") return;
+        stop();
+        resolve();
+      });
     });
   }
 
