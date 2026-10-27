@@ -271,7 +271,11 @@ export const quizResultSchema = z.strictObject({
   attemptNumber: z.number().int().positive(),
   score: nonNegativeNumber,
   maxScore: nonNegativeNumber,
-  percentage: z.number().min(0).max(100),
+  /**
+   * Not capped at 100: attempts imported from another platform keep the
+   * score it recorded, which can be above the quiz's current total.
+   */
+  percentage: nonNegativeNumber,
   passed: z.boolean(),
   status: quizAttemptStatusSchema,
   feedbackMode: quizFeedbackModeSchema,
