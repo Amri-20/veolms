@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 import type { ReactNode, Ref } from "react";
 import { deepGroundClasses } from "../components/ElevatedCard";
 import { LongScrollElasticScroller } from "../components/elastic-scroller";
+import { usePageScrollportRef } from "../components/elastic-scroller/pageScrollport";
 import type { CourseRole } from "../courses/catalogue";
 import { AcademyRouteSkeleton } from "../routing/AcademyRouteSkeleton";
 import { FrameEdge } from "./FrameEdge";
@@ -78,6 +79,9 @@ export function ShellMainFrame({
   compactNavigation,
   mobileBottomNavHidden,
 }: ShellMainFrameProps) {
+  // On a phone the document scrolls, not the main box (see
+  // `usePageScrollportRef`); the control is set up again when that changes.
+  const pageScrollportRef = usePageScrollportRef(mainScrollportRef);
   // prettier-ignore
   return (
     <div className="courses-main-frame">
@@ -141,7 +145,8 @@ export function ShellMainFrame({
               A lesson's page counts as long sooner, since its video stays
               in view and leaves less room to read in. */}
         <LongScrollElasticScroller
-          scrollportRef={mainScrollportRef}
+          key={compactNavigation ? "page" : "main"}
+          scrollportRef={pageScrollportRef}
           ariaControls="courses-main-scrollport"
           scrollAreaLabel="Page"
           contentRevision={`${page}:${cataloguePathname}`}
