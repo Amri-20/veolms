@@ -60,6 +60,32 @@
   }
 }
 
+/* Keyframes cannot be written as Tailwind utilities. The light passing over
+   a seek-preview picture not downloaded yet (SpriteFrameCanvas), from just
+   off its left edge to past its right; and the pulse of the marker on the
+   preview bar while the moment under the pointer is still on its way
+   (PreviewLoadBar). */
+@keyframes video-player-preview-pending {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(300%);
+  }
+}
+
+@keyframes video-player-preview-marker-wait {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
+  }
+}
+
 @keyframes video-player-buffering-rotate {
   from {
     transform: translateZ(0) rotate(0deg);

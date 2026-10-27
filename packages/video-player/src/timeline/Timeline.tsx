@@ -333,6 +333,7 @@ export function Timeline({
         aria-valuenow={Math.round(currentTime)}
         aria-valuetext={`${formatMediaTime(currentTime)} of ${formatMediaTime(duration)}`}
         data-player-control=""
+        data-video-player-timeline=""
         data-scrubbing={scrubbing ? "true" : "false"}
         className="relative flex h-5 cursor-pointer items-center focus-visible:outline-none focus-visible:after:absolute focus-visible:after:inset-x-0 focus-visible:after:top-1/2 focus-visible:after:h-2.5 focus-visible:after:-translate-y-1/2 focus-visible:after:rounded-full focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[var(--video-player-accent,#ff7a1a)] aria-disabled:cursor-not-allowed aria-disabled:opacity-55"
         onKeyDown={handleKeyDown}

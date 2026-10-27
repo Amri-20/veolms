@@ -370,7 +370,7 @@ export function TimelinePreview({
       data-video-player-preview-mode={hasRichPreview ? "rich" : "time"}
     >
       {frame ? (
-        <div className="overflow-hidden bg-black">
+        <div className="relative overflow-hidden bg-black">
           <StoryboardImage frame={frame} />
         </div>
       ) : null}
