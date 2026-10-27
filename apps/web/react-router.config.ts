@@ -28,6 +28,11 @@ const staticApplicationPages = [
   "/settings/learning",
   "/settings/security",
   "/settings/account",
+  "/terms",
+  "/privacy",
+  "/refund-policy",
+  "/contact",
+  "/about",
 ];
 
 const requestedLearningPrerenderScope =

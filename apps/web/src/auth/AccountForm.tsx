@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { Link } from "react-router";
 import {
   buildDicebearSvgUrl,
   DEFAULT_AVATAR_STYLE,
@@ -232,13 +233,13 @@ export function AccountForm({
 
           <p className="auth-account-form__legal">
             By creating an account, you agree to our{" "}
-            <button className="auth-account-form__legal-action" type="button">
+            <Link className="auth-account-form__legal-action" to="/terms">
               Terms of Service
-            </button>{" "}
+            </Link>{" "}
             and{" "}
-            <button className="auth-account-form__legal-action" type="button">
+            <Link className="auth-account-form__legal-action" to="/privacy">
               Privacy Policy
-            </button>
+            </Link>
             .
           </p>
         </form>
