@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useQueries } from "@tanstack/react-query";
 import { DEFAULT_DEBOUNCE_DELAY_MS, useDebounce } from "../hooks/useDebounce";
 import { ArrowRightIcon as ArrowRight } from "@phosphor-icons/react/ArrowRight";
@@ -41,6 +49,17 @@ import {
 } from "../services/quizzes";
 import { SelectCourseForQuizModal } from "./SelectCourseForQuizModal";
 import { ElevatedCard, elevatedCardClasses } from "../components/ElevatedCard";
+
+// A submission is opened on demand, and it brings the Markdown renderer for
+// question text, so it stays out of the page's own code. It is fetched when
+// the pointer or focus reaches the student list, ahead of the click.
+const loadSubmissionPanel = () => import("./submission/QuizSubmissionPanel");
+const QuizSubmissionPanel = lazy(() =>
+  loadSubmissionPanel().then((module) => ({
+    default: module.QuizSubmissionPanel,
+  })),
+);
+const preloadSubmissionPanel = () => void loadSubmissionPanel();
 
 interface Props {
   role: "student" | "creator";
@@ -831,6 +850,58 @@ function InstructorAnalytics() {
   );
   const studentReport = useStudentQuizReport(readsResults ? studentId : null);
   const studentsContainerRef = useRef<HTMLDivElement>(null);
+  // The submission open in the side panel. It belongs to the assessment it
+  // was opened from, so choosing another assessment or course closes it.
+  const [submission, setSubmission] = useState<{
+    assignmentId: string;
+    studentId: string;
+  } | null>(null);
+  const openSubmission = useCallback(
+    (forAssignmentId: string, forStudentId: string) => {
+      setStudentId(forStudentId);
+      setSubmission({
+        assignmentId: forAssignmentId,
+        studentId: forStudentId,
+      });
+    },
+    [],
+  );
+  const closeSubmission = useCallback(() => setSubmission(null), []);
+  useEffect(() => {
+    if (submission && submission.assignmentId !== assignmentId)
+      setSubmission(null);
+  }, [assignmentId, submission]);
+  // Students with an attempt on this assessment, in the list's order: the
+  // ones whose submission can be opened, and stepped through in the panel.
+  const submittedStudents = useMemo(
+    () =>
+      (assignmentAnalytics.data?.students ?? []).filter(
+        (student) => student.attemptCount > 0,
+      ),
+    [assignmentAnalytics.data?.students],
+  );
+  const openSubmissionIndex =
+    submission && submission.assignmentId === assignmentId
+      ? submittedStudents.findIndex(
+          (student) => student.studentId === submission.studentId,
+        )
+      : -1;
+  const openSubmissionStudent = submittedStudents[openSubmissionIndex];
+  const submissionStep = useMemo(() => {
+    const stepTo = (index: number) => {
+      const target = submittedStudents[index];
+      if (target && assignmentId)
+        openSubmission(assignmentId, target.studentId);
+    };
+    return {
+      hasPrev: openSubmissionIndex > 0,
+      hasNext:
+        openSubmissionIndex >= 0 &&
+        openSubmissionIndex < submittedStudents.length - 1,
+      onPrev: () => stepTo(openSubmissionIndex - 1),
+      onNext: () => stepTo(openSubmissionIndex + 1),
+    };
+  }, [assignmentId, openSubmission, openSubmissionIndex, submittedStudents]);
 
   useEffect(() => {
     if (!courseId && courses.data?.courses[0]) {
@@ -1095,17 +1166,24 @@ function InstructorAnalytics() {
         >
           <SectionHeading
             title="Student outcomes"
-            description="Choose a learner to open their quiz report."
+            description="Choose a learner to review their submission and quiz report."
           />
           <div
             ref={studentsContainerRef}
+            onPointerEnter={preloadSubmissionPanel}
+            onFocus={preloadSubmissionPanel}
             className="divide-y divide-(--border) max-h-[580px] overflow-y-auto"
           >
             {displayedStudents.map((student) => (
               <button
                 key={student.studentId}
                 type="button"
-                onClick={() => setStudentId(student.studentId)}
+                onClick={() =>
+                  assignmentId && student.attemptCount > 0
+                    ? openSubmission(assignmentId, student.studentId)
+                    : setStudentId(student.studentId)
+                }
+                aria-haspopup={student.attemptCount > 0 ? "dialog" : undefined}
                 className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 sm:px-5 sm:py-4 text-left transition-colors hover:bg-(--hover) ${studentId === student.studentId ? "bg-(--accent)/5" : ""}`}
               >
                 <span className="min-w-0">
@@ -1155,6 +1233,20 @@ function InstructorAnalytics() {
           report={studentReport.data}
           onClose={() => setStudentId(null)}
         />
+      ) : null}
+      {assignmentId && openSubmissionStudent ? (
+        <Suspense fallback={null}>
+          <QuizSubmissionPanel
+            // A fresh panel per student: the attempt picked for one student
+            // never carries over to the next.
+            key={`${assignmentId}:${openSubmissionStudent.studentId}`}
+            assignmentId={assignmentId}
+            studentId={openSubmissionStudent.studentId}
+            studentName={openSubmissionStudent.studentName}
+            step={submissionStep}
+            onClose={closeSubmission}
+          />
+        </Suspense>
       ) : null}
     </div>
   );

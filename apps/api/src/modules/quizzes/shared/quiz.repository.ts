@@ -752,6 +752,37 @@ export async function listAttemptsForAssignments(
     .execute();
 }
 
+/**
+ * One user's attempts on one assignment, newest first, with everything a
+ * submission review shows of each. Ordered like `listAnalyticsAttempts`, so
+ * the first row is the attempt the analytics list reports as the latest.
+ */
+export async function listSubmissionAttempts(
+  database: DatabaseExecutor,
+  assignmentId: string,
+  userId: string,
+) {
+  return await database
+    .selectFrom("quiz_attempts")
+    .select([
+      "id",
+      "quiz_version_id",
+      "attempt_number",
+      "status",
+      "started_at",
+      "submitted_at",
+      "score_obtained",
+      "max_score",
+      "score_percentage",
+      "is_passed",
+    ])
+    .where("assignment_id", "=", assignmentId)
+    .where("user_id", "=", userId)
+    .orderBy("created_at", "desc")
+    .orderBy("attempt_number", "desc")
+    .execute();
+}
+
 export async function findAttempt(
   database: DatabaseExecutor,
   attemptId: string,
