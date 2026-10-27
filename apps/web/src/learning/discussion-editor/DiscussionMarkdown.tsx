@@ -24,6 +24,7 @@ import { normalizePreviewUrl } from "@veolms/contracts";
 
 import { renderContentWithMentions } from "./MentionLink";
 import { tabSeparatedTablesToMarkdown } from "./tabSeparatedTables";
+import { textDiagramsToCodeBlocks } from "./textDiagrams";
 
 export { renderContentWithMentions };
 
@@ -717,8 +718,10 @@ export function DiscussionMarkdown({
   preserveSoftBreaks = false,
   className = "",
 }: DiscussionMarkdownProps) {
-  const markdown = tabSeparatedTablesToMarkdown(
-    typeof content === "string" ? content : content.markdown || "",
+  const markdown = textDiagramsToCodeBlocks(
+    tabSeparatedTablesToMarkdown(
+      typeof content === "string" ? content : content.markdown || "",
+    ),
   );
   const chapterMarkdown = chapterDeclarations
     ? preparePlainChapterMarkdown(markdown, chapterDeclarations)
