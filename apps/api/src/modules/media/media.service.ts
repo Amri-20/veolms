@@ -24,6 +24,7 @@ import { createAccessService, isOpenFreeCourse } from "../access/index.ts";
 import type { LessonPositionReader } from "../learning-progress/index.ts";
 import { listLessonChaptersForPlayback } from "../courses/chapters/chapters.playback.service.ts";
 import { createChapterSyncService } from "../courses/chapters/chapters.service.ts";
+import { listLessonSubtitlesForPlayback } from "../courses/subtitles/subtitles.playback.service.ts";
 import { findLessonResourceForDownload } from "../courses/curriculum/lesson-resource.download.service.ts";
 import * as mediaRepo from "./media.repository.ts";
 import { findYoutubeImportProgress } from "./youtube-import/youtube-import.progress.ts";
@@ -1865,6 +1866,8 @@ export function createMediaService({
       storyboard?: boolean;
       /** Include where this learner last was in the video. */
       resume?: boolean;
+      /** Include the video's subtitle tracks. */
+      subtitles?: boolean;
       logger?: FastifyBaseLogger;
     } = {},
   ): Promise<VideoPlaybackBootstrap> {
@@ -1881,6 +1884,17 @@ export function createMediaService({
       database,
       context.lesson_id,
     ).catch(() => []);
+    // Subtitles are optional too: a failed read plays without them.
+    const subtitleRowsPromise = options.subtitles
+      ? listLessonSubtitlesForPlayback(
+          database,
+          context.lesson_id,
+          context.content_media_id!,
+        ).catch((error: unknown) => {
+          options.logger?.warn({ err: error }, "Subtitle lookup failed.");
+          return [];
+        })
+      : Promise.resolve([]);
 
     // The transcode worker only marks a job completed after publishing its
     // output. Avoid an extra storage HEAD round-trip on every first play;
@@ -1914,13 +1928,36 @@ export function createMediaService({
             .findLessonPosition(user.id, context.course_id, context.lesson_id)
             .catch(() => null)
         : Promise.resolve(null);
-    const [chapterRows, inlinedMasterManifest, storyboardUrl, resumePosition] =
-      await Promise.all([
-        chapterRowsPromise,
-        inlinedMasterManifestPromise,
-        storyboardUrlPromise,
-        resumePositionPromise,
-      ]);
+    const [
+      chapterRows,
+      inlinedMasterManifest,
+      storyboardUrl,
+      resumePosition,
+      subtitleRows,
+    ] = await Promise.all([
+      chapterRowsPromise,
+      inlinedMasterManifestPromise,
+      storyboardUrlPromise,
+      resumePositionPromise,
+      subtitleRowsPromise,
+    ]);
+    // The playback token covers the video's folder only, so a track kept
+    // anywhere else could not be loaded and is left out.
+    const outputFolder = manifestKey.replace(/[^/]+$/u, "");
+    const subtitles = subtitleRows.flatMap((track) => {
+      if (!track.storage_key.startsWith(outputFolder)) return [];
+      const url = services.storage.getCdnObjectUrl(track.storage_key);
+      return url
+        ? [
+            {
+              url,
+              language: track.language,
+              label: track.label,
+              kind: track.kind,
+            },
+          ]
+        : [];
+    });
     const chapters = chapterRows.map((chapter) => {
       let thumbnailUrl: string | undefined;
       if (chapter.thumbnail_key) {
@@ -1965,6 +2002,7 @@ export function createMediaService({
             },
           }
         : {}),
+      ...(subtitles.length > 0 ? { subtitles } : {}),
     };
   }
 

@@ -1054,12 +1054,31 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     source: VideoSource,
     generation: number,
   ): Promise<void> {
-    for (const track of source.textTracks ?? []) {
-      await addExternalTextTrack(player, track);
-      if (!this.isCurrentOperation(generation)) return;
-    }
     this.refreshTracks(true);
     this.finishLoading(source);
+    void this.addSourceTextTracks(player, source, generation);
+  }
+
+  /**
+   * Subtitle files are fetched once the video is ready, so a slow or
+   * missing file never holds back or fails playback; the captions menu
+   * gains each track as it arrives.
+   */
+  private async addSourceTextTracks(
+    player: ShakaPlayerLike,
+    source: VideoSource,
+    generation: number,
+  ): Promise<void> {
+    for (const track of source.textTracks ?? []) {
+      if (!this.isCurrentOperation(generation)) return;
+      try {
+        await addExternalTextTrack(player, track);
+      } catch {
+        continue;
+      }
+      if (!this.isCurrentOperation(generation)) return;
+      this.refreshTracks(true);
+    }
   }
 
   /**

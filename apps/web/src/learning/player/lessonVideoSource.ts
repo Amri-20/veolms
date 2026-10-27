@@ -1,3 +1,4 @@
+import type { VideoPlaybackSubtitle } from "@veolms/contracts";
 import type { ExternalTextTrack, VideoSource } from "@veolms/video-player";
 import type { CourseVideo } from "../courseContent";
 import {
@@ -44,6 +45,8 @@ export function createLearningLessonVideoSource(options: {
   segmentTokenExpiresAt?: number;
   /** The master playlist from the bootstrap, served in place of fetching it. */
   inlinedMasterManifest?: string;
+  /** The video's subtitle tracks from the bootstrap (WebVTT). */
+  subtitles?: readonly VideoPlaybackSubtitle[];
   refreshSegmentToken?: () => Promise<{
     token: string;
     expiresAt?: number;
@@ -83,6 +86,14 @@ export function createLearningLessonVideoSource(options: {
           }),
         }
       : undefined,
-    textTracks: undefined,
+    textTracks: options.subtitles?.length
+      ? options.subtitles.map((track): ExternalTextTrack => ({
+          src: track.url,
+          language: track.language,
+          label: track.label,
+          kind: track.kind,
+          mimeType: "text/vtt",
+        }))
+      : undefined,
   };
 }
