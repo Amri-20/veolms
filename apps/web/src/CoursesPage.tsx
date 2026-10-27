@@ -1562,6 +1562,7 @@ export function CoursesPage({
                   cancelAppearanceSwipe={cancelAppearanceSwipe}
                   displayedAcademyTheme={displayedAcademyTheme}
                   readingModeEnabled={readingModeEnabled}
+                  updateReadingMode={updateReadingMode}
                   readingModeMenu={readingModeMenu}
                   showReadingModeMenu={showReadingModeMenu}
                   openReadingModeMenu={openReadingModeMenu}

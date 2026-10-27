@@ -13,6 +13,7 @@ import { getNavigationIconColor } from "./navigation";
 import { themeRevealOriginFromClick } from "./themeViewTransition";
 import type { ThemeRevealOrigin } from "./themeViewTransition";
 import { academyThemes } from "../themes";
+import type { ReadingModePreferences } from "../reading-mode/readingModePreferences";
 import { MOBILE_SHEET_DOCK_CLASS } from "./academyShellClasses";
 import type {
   SidebarDockItem,
@@ -65,6 +66,7 @@ export interface MobileSheetAppearanceProps {
   cancelAppearanceSwipe: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   displayedAcademyTheme: string;
   readingModeEnabled: boolean;
+  updateReadingMode: (preferences: Partial<ReadingModePreferences>) => void;
   readingModeMenu: "desktop" | "mobile" | null;
   showReadingModeMenu: (mobile?: boolean) => void;
   openReadingModeMenu: (
@@ -109,6 +111,7 @@ export function MobileSheetAppearance({
   cancelAppearanceSwipe,
   displayedAcademyTheme,
   readingModeEnabled,
+  updateReadingMode,
   readingModeMenu,
   showReadingModeMenu,
   openReadingModeMenu,
@@ -260,16 +263,16 @@ export function MobileSheetAppearance({
               data-reading-mode-trigger
               type="button"
               className={`sidebar-appearance__reading-mode${readingModeEnabled ? " is-active" : ""}`}
-              aria-label={`Reading mode settings. Reading mode is ${readingModeEnabled ? "on" : "off"}`}
-              title={`Reading mode - ${readingModeEnabled ? "on" : "off"}`}
-              aria-haspopup="dialog"
-              aria-expanded={readingModeMenu === "mobile"}
+              aria-label={`Reading mode. Hold for its settings`}
+              aria-pressed={readingModeEnabled}
+              title={`Reading mode - ${readingModeEnabled ? "on" : "off"} (hold for settings)`}
               aria-controls="mobile-reading-mode-quick-settings"
+              // A tap turns reading mode on and off. Its menu opens on a long
+              // press (the tap that ends a long press is swallowed, so it
+              // does not also switch it).
               onClick={(event) => {
                 if (consumeAppearanceGestureClick(event)) return;
-                if (readingModeMenu === "mobile")
-                  setReadingModeMenu(null);
-                else showReadingModeMenu(true);
+                updateReadingMode({ enabled: !readingModeEnabled });
               }}
               onContextMenu={(event) =>
                 openReadingModeMenu(event, true)
