@@ -23,6 +23,7 @@ import type { DiscussionAttachmentItem } from "../discussion-attachments";
 import { normalizePreviewUrl } from "@veolms/contracts";
 
 import { renderContentWithMentions } from "./MentionLink";
+import { tabSeparatedTablesToMarkdown } from "./tabSeparatedTables";
 
 export { renderContentWithMentions };
 
@@ -716,8 +717,9 @@ export function DiscussionMarkdown({
   preserveSoftBreaks = false,
   className = "",
 }: DiscussionMarkdownProps) {
-  const markdown =
-    typeof content === "string" ? content : content.markdown || "";
+  const markdown = tabSeparatedTablesToMarkdown(
+    typeof content === "string" ? content : content.markdown || "",
+  );
   const chapterMarkdown = chapterDeclarations
     ? preparePlainChapterMarkdown(markdown, chapterDeclarations)
     : markdown;
