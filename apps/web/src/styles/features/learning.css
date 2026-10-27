@@ -876,28 +876,6 @@ html[data-app-hydrated="false"] .learning-workspace__main {
   justify-content: center;
 }
 
-.learning-curriculum__lesson-progress svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  transform: rotate(-90deg);
-}
-
-.learning-curriculum__lesson-progress circle {
-  fill: none;
-  stroke-width: 2.25;
-}
-
-.learning-curriculum__lesson-progress-track {
-  stroke: color-mix(in srgb, var(--accent) 26%, transparent);
-}
-
-.learning-curriculum__lesson-progress-value {
-  stroke: var(--accent);
-  stroke-linecap: round;
-}
-
 .learning-curriculum__lesson-number {
   width: 16px;
   flex: 0 0 auto;
