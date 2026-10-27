@@ -1,8 +1,10 @@
 import {
+  DEFAULT_MAX_DEVICES_PER_STUDENT,
   DEFAULT_PLATFORM_APPEARANCE_SETTINGS,
   DEFAULT_PLATFORM_INVOICE_SETTINGS,
   platformAppearanceSettingsSchema,
   platformInvoiceSettingsSchema,
+  platformSecuritySettingsSchema,
   type PlatformInvoiceSettings,
   type PlatformSettings,
   type PlatformSettingsResponse,
@@ -113,6 +115,14 @@ function resolveSettings(document: StoredDocument): PlatformSettings {
         typeof security.requireVerifiedPhoneForEnrollment === "boolean"
           ? security.requireVerifiedPhoneForEnrollment
           : config.REQUIRE_VERIFIED_PHONE_FOR_ENROLLMENT,
+      // Null is "no limit", saved by an admin; anything else that does not
+      // read as a limit is the default.
+      maxDevicesPerStudent:
+        security.maxDevicesPerStudent === null
+          ? null
+          : (platformSecuritySettingsSchema.shape.maxDevicesPerStudent.safeParse(
+              security.maxDevicesPerStudent,
+            ).data ?? DEFAULT_MAX_DEVICES_PER_STUDENT),
     },
     invoice: resolveInvoiceSettings(document.invoice ?? {}),
   };
@@ -146,6 +156,8 @@ export interface PlatformSettingsService {
    * `PHONE_VERIFICATION_NEW_ACCOUNTS_FROM`).
    */
   requiresVerifiedPhoneForEnrollment(userId?: string): Promise<boolean>;
+  /** How many devices a student may be signed in on at once; null for any. */
+  maxDevicesPerStudent(): Promise<number | null>;
 }
 
 export function createPlatformSettingsService({
@@ -251,6 +263,8 @@ export function createPlatformSettingsService({
       toPublicSettings((await readSettings()).settings),
     getInvoiceSettings: async () => (await readSettings()).settings.invoice,
     updateSettings,
+    maxDevicesPerStudent: async () =>
+      (await readSettings()).settings.security.maxDevicesPerStudent,
     requiresVerifiedPhoneForEnrollment: async (userId?: string) => {
       const required = (await readSettings()).settings.security
         .requireVerifiedPhoneForEnrollment;
