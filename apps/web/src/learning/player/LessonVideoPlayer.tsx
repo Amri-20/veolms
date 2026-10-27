@@ -849,16 +849,22 @@ export function LessonVideoPlayer({
         latestPositionRef.current = event.detail.currentTime;
         persistResumePosition();
         tryFinishPlayingMiniPlayerRestore();
+        // Not while the timeline is dragged: every step of the drag seeks,
+        // and each reported a new progress that re-rendered the whole lesson
+        // list. The seek where it is let go reports where it ended.
+        const scrubbing = playerRef.current?.getSnapshot().ui.scrubbing;
         if (event.detail.duration > 0) {
-          onProgressChange?.(
-            Math.max(
-              0,
-              Math.min(
-                100,
-                (event.detail.currentTime / event.detail.duration) * 100,
+          if (!scrubbing) {
+            onProgressChange?.(
+              Math.max(
+                0,
+                Math.min(
+                  100,
+                  (event.detail.currentTime / event.detail.duration) * 100,
+                ),
               ),
-            ),
-          );
+            );
+          }
           if (
             event.detail.duration - event.detail.currentTime <=
             NEAR_LESSON_END_SECONDS
@@ -881,6 +887,13 @@ export function LessonVideoPlayer({
         const currentTime = snapshot?.media.currentTime ?? 0;
         if (showEndScreen && duration > 0 && currentTime < duration - 1) {
           setShowEndScreen(false);
+        }
+        // Where a drag of the timeline ended (its own steps report nothing,
+        // see `timeupdate`), also for a paused video.
+        if (duration > 0 && !snapshot?.ui.scrubbing) {
+          onProgressChange?.(
+            Math.max(0, Math.min(100, (currentTime / duration) * 100)),
+          );
         }
       } else if (event.type === "pause") {
         const snapshot = playerRef.current?.getSnapshot();
@@ -1817,7 +1830,7 @@ export function LessonVideoPlayer({
         presentation === "mini"
           ? `${MINI_PLAYER_VIDEO_CORNERS_CLASS} !shadow-none`
           : fullscreenCoursePanelActive
-            ? "border-0 !h-auto !max-h-full !w-(--learning-fullscreen-video-width) !max-w-none !translate-x-(--learning-fullscreen-video-offset-x) !shrink-0 !rounded-none !shadow-none"
+            ? "border-0 !h-auto !max-h-full !w-(--learning-fullscreen-video-width) !max-w-none !translate-x-(--learning-fullscreen-video-offset-x) !shrink-0 !rounded-none !shadow-none [[data-fullscreen-lessons-beside=wide]_&]:!h-full [[data-fullscreen-lessons-beside=wide]_&]:!aspect-auto"
             : "border-0 !rounded-none"
       }
       mediaClassName={
