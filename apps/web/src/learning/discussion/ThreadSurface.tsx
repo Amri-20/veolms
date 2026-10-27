@@ -13,6 +13,7 @@ import {
   DrawerDescription,
   DrawerTitle,
 } from "../../components/ui/drawer";
+import { ExpandableSearch } from "../../ExpandableSearch";
 import { ThemedSelect } from "../../ThemedSelect";
 import { CommentCard } from "../CommentCard";
 import type { Comment } from "../CommentCard";
@@ -76,6 +77,13 @@ interface ThreadSurfaceProps {
   feedView: DiscussionFeedView;
   /** The learner is signed in, so the feed can be narrowed to their own. */
   canFilterMine: boolean;
+  /** What is typed into the discussion search, as typed. */
+  search: string;
+  /** The list being shown is the search's results. */
+  isSearchActive: boolean;
+  /** The list is still the last one, kept while the search's loads. */
+  isSearchPending?: boolean;
+  onSearchChange: (value: string) => void;
   entries: Comment[];
   noteDeepLinkTargetId?: string | null;
   onNoteDeepLinkHandled?: (noteId: string) => void;
@@ -261,6 +269,10 @@ export function ThreadSurface({
   entryFilter,
   feedView,
   canFilterMine,
+  search,
+  isSearchActive,
+  isSearchPending = false,
+  onSearchChange,
   entries,
   noteDeepLinkTargetId = null,
   onNoteDeepLinkHandled,
@@ -330,6 +342,8 @@ export function ThreadSurface({
   courseId,
 }: ThreadSurfaceProps) {
   const isPhone = usePhoneComposerLayout();
+  // On a phone the search is a button until it is pressed.
+  const [searchOpen, setSearchOpen] = useState(false);
   const deletionRevision = useOptimisticDeletionRevision();
   const composerHostRef = useRef<HTMLDivElement>(null);
   const feedSentinelRef = useRef<HTMLDivElement>(null);
@@ -864,24 +878,49 @@ export function ThreadSurface({
     );
   }
 
+  // The kinds to show, and beside them the search: a field at the row's end
+  // on a wider screen, a button on a phone that opens the field over the
+  // kinds. A page built ahead of time is drawn in the wider arrangement, so
+  // at phone width its field is hidden until the phone's button takes over.
   const discussionFilters =
     availableFilters.length > 0 ? (
-      <div
-        role="group"
-        aria-label="Filter discussion entries"
-        className="learning-discussion__filter-group mt-3 flex w-full min-w-0 gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] sm:mt-5 [&::-webkit-scrollbar]:hidden"
-      >
-        {availableFilters.map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={entryFilter === value}
-            onClick={() => onEntryFilterChange(value)}
-            className={`learning-discussion__filter-button h-8 shrink-0 rounded-lg px-2.5 font-semibold transition-[background-color,color,box-shadow] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) sm:px-3 ${entryFilter === value ? "bg-(--text) text-(--canvas) shadow-[0_6px_18px_color-mix(in_srgb,var(--canvas)_28%,transparent)]" : "bg-[color-mix(in_srgb,var(--surface)_54%,transparent)] text-(--text-secondary) shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--text)_12%,transparent)] hover:bg-(--hover) hover:text-(--text)"}`}
+      <div className="mt-3 flex w-full min-w-0 items-start gap-2 sm:mt-5">
+        <ExpandableSearch
+          inputId="discussion-search-input"
+          label="Search discussions"
+          placeholder="Search discussions..."
+          value={search}
+          onValueChange={onSearchChange}
+          open={searchOpen}
+          onOpenChange={setSearchOpen}
+          persistentDesktop={!isPhone}
+          forcePersistentDesktop
+          size="compact"
+          shortcut={false}
+          clearOnBack
+          closeOnEmptyBlur
+          backLabel="Back from discussion search"
+          shellClassName={isPhone ? "" : "max-[640px]:hidden"}
+          triggerIconSize={19}
+        >
+          <div
+            role="group"
+            aria-label="Filter discussion entries"
+            className="learning-discussion__filter-group flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            {label}
-          </button>
-        ))}
+            {availableFilters.map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={entryFilter === value}
+                onClick={() => onEntryFilterChange(value)}
+                className={`learning-discussion__filter-button h-8 shrink-0 rounded-lg px-2.5 font-semibold transition-[background-color,color,box-shadow] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent) sm:px-3 ${entryFilter === value ? "bg-(--text) text-(--canvas) shadow-[0_6px_18px_color-mix(in_srgb,var(--canvas)_28%,transparent)]" : "bg-[color-mix(in_srgb,var(--surface)_54%,transparent)] text-(--text-secondary) shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--text)_12%,transparent)] hover:bg-(--hover) hover:text-(--text)"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </ExpandableSearch>
       </div>
     ) : null;
   const discussionToolbar = (
@@ -892,8 +931,11 @@ export function ThreadSurface({
       <p className="min-w-0 truncate text-lg leading-none font-semibold tracking-[-0.02em] text-(--text)">
         {/* The count is of everyone's; it is not said beside only the
             learner's own (the menu beside it then says "My Comments" and
-            so on). */}
-        {feedView === "mine" ? (
+            so on). Nor is it said over a search's results, which it does
+            not count. */}
+        {isSearchActive ? (
+          "Results"
+        ) : feedView === "mine" ? (
           "Discussions"
         ) : (
           <>
@@ -1007,6 +1049,7 @@ export function ThreadSurface({
         layoutKey={`${composerMode}:${entryFilter}:${isLessonDescriptionLoading}:${descriptionLayoutRevision}`}
         viewportRef={discussionViewportRef}
         isPhone={isPhone}
+        stale={isSearchPending}
       />
       {isBackendMode && hasNextPage && (
         <div ref={feedSentinelRef} className="h-1" aria-hidden="true" />
@@ -1061,6 +1104,7 @@ export function ThreadSurface({
         <DiscussionEmptyState
           filter={entryFilter}
           mine={feedView === "mine"}
+          searching={isSearchActive}
           canReturnToAll={
             entryFilter !== "all" &&
             availableFilters.some(([val]) => val === "all")

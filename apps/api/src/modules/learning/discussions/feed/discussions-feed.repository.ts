@@ -2,6 +2,7 @@ import type { DatabaseExecutor } from "@veolms/database";
 import type { LessonDiscussionSort } from "@veolms/contracts";
 import { sql } from "kysely";
 import { exactCursorTimestamp } from "../../../../lib/keyset.ts";
+import { containsPattern } from "../../../../lib/like-pattern.ts";
 import { toDate } from "../shared/discussion.utils.ts";
 import { discussionVisibilityPredicate } from "../shared/discussion.visibility.ts";
 
@@ -30,6 +31,8 @@ export interface FeedCandidateOptions {
   /** Whose private and unlisted posts are visible; nobody's when absent. */
   viewerUserId: string | null | undefined;
   mine: boolean;
+  /** Text to find, as typed; none lists everything. */
+  search?: string;
   sort: LessonDiscussionSort;
   cursor?: {
     entityId: string;
@@ -51,11 +54,57 @@ export interface DiscussionsFeedRepository {
   ): Promise<FeedCandidate[]>;
 }
 
+/**
+ * The member in `userIdColumn` is named (display name or username) like the
+ * pattern. Unlike the hub's search, an email is never matched: guests read
+ * this feed, and a search must not tell them whose address posted here.
+ */
+function authorNamedSql(userIdColumn: string, pattern: string) {
+  return sql<boolean>`exists (
+    select 1 from users su
+    where su.id = ${sql.ref(userIdColumn)}
+      and su.is_deleted = false
+      and (
+        lower(su.display_name) like ${pattern}
+        or lower(su.username) like ${pattern}
+      )
+  )`;
+}
+
+/** The thread's own words, its replies' words, or any of their authors. */
+function threadSearchSql(pattern: string) {
+  return sql<boolean>`(
+    lower(coalesce(t.title, '')) like ${pattern}
+    or lower(t.plain_text) like ${pattern}
+    or ${authorNamedSql("t.user_id", pattern)}
+    or exists (
+      select 1 from learning_replies sr
+      where sr.thread_id = t.id
+        and sr.status = 'active'
+        and (
+          lower(sr.plain_text) like ${pattern}
+          or ${authorNamedSql("sr.user_id", pattern)}
+        )
+    )
+  )`;
+}
+
+function noteSearchSql(pattern: string) {
+  return sql<boolean>`(
+    lower(coalesce(n.title, '')) like ${pattern}
+    or lower(n.plain_text) like ${pattern}
+    or ${authorNamedSql("n.user_id", pattern)}
+  )`;
+}
+
 export function createDiscussionsFeedRepository(): DiscussionsFeedRepository {
   return {
     async listCandidates(db, options) {
       const sources = [];
       const kinds = options.threadKinds;
+      const searchPattern = options.search
+        ? containsPattern(options.search)
+        : null;
 
       if (kinds.length > 0) {
         const kindPredicate = sql` t.kind in (${sql.join(
@@ -80,6 +129,7 @@ export function createDiscussionsFeedRepository(): DiscussionsFeedRepository {
           options.viewerUserId,
           options.mine,
         )}
+        ${searchPattern ? sql`and ${threadSearchSql(searchPattern)}` : sql``}
     `);
       }
 
@@ -100,6 +150,7 @@ export function createDiscussionsFeedRepository(): DiscussionsFeedRepository {
           options.viewerUserId,
           options.mine,
         )}
+        ${searchPattern ? sql`and ${noteSearchSql(searchPattern)}` : sql``}
     `);
       }
 

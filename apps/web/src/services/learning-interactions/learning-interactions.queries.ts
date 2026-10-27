@@ -1,4 +1,5 @@
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useQuery,
   useQueryClient,
@@ -667,6 +668,8 @@ export function useLessonDiscussions(
      * and, being as old as the build, asked for again straight away.
      */
     initialPage?: { page: LessonDiscussionsListResponse; updatedAt: number };
+    /** Show the last query's pages while this one's first page loads. */
+    keepPreviousData?: boolean;
   },
 ) {
   const queryKey = learningInteractionKeys.lessonDiscussions(
@@ -695,6 +698,7 @@ export function useLessonDiscussions(
       ? { pages: [options.initialPage.page], pageParams: [null] }
       : undefined,
     initialDataUpdatedAt: options?.initialPage?.updatedAt,
+    placeholderData: options?.keepPreviousData ? keepPreviousData : undefined,
     retry: false,
     staleTime: 30 * 1000,
   });
