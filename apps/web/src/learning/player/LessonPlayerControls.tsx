@@ -1049,12 +1049,14 @@ export function LessonPlayerControls({
       : "[&_[data-timeline-track]]:!h-0.5"
     : "";
 
+  // On a phone a drag hides the buttons along the top (PersistentLearningPlayerHost),
+  // and the top vignette goes with them: the seek-preview bar runs along that edge.
   const mobileVignettes = (
     <>
       <div
         aria-hidden="true"
         data-mobile-player-vignette="top"
-        className={`absolute inset-x-0 top-0 h-16 bg-[linear-gradient(180deg,color-mix(in_srgb,#05070b_50%,var(--accent)_4%)_0%,color-mix(in_srgb,#05070b_20%,var(--accent)_2%)_58%,transparent_100%)] sm:hidden ${mobileInteraction ? "sm:!block" : ""}`}
+        className={`absolute inset-x-0 top-0 h-16 bg-[linear-gradient(180deg,color-mix(in_srgb,#05070b_50%,var(--accent)_4%)_0%,color-mix(in_srgb,#05070b_20%,var(--accent)_2%)_58%,transparent_100%)] transition-opacity duration-150 motion-reduce:transition-none sm:hidden ${mobileInteraction ? "sm:!block" : ""} ${scrubbing ? "max-[640px]:opacity-0" : ""}`}
       />
       <div
         aria-hidden="true"
