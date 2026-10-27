@@ -1036,10 +1036,14 @@ export function LessonPlayerControls({
   const timelineDisplayed = visible || persistentProgressVisible;
   const landscapeOrientation = useLandscapeOrientation();
   const mobileLandscapeFullscreen = mobileFullscreen && landscapeOrientation;
+  // Full screen shows the video shell alone, so the page's own lesson list
+  // (beside the video on a wide screen) is out of sight: the lessons open
+  // beside the video inside full screen instead, on a wide screen as on a
+  // phone turned sideways.
+  const fullscreenLessonsBeside =
+    mobileLandscapeFullscreen || (fullscreen && desktopLayout);
   const fullscreenCoursePanelVisible =
-    mobileLandscapeFullscreen &&
-    courseLessonsOpen &&
-    Boolean(courseLessonsPanel);
+    fullscreenLessonsBeside && courseLessonsOpen && Boolean(courseLessonsPanel);
   const mobileTimelineGeometry = scrubbing
     ? "max-sm:[&_[data-timeline-track]]:!h-0.75"
     : "max-sm:[&_[data-timeline-track]]:!h-0.5";
@@ -1076,8 +1080,22 @@ export function LessonPlayerControls({
   }, []);
 
   useEffect(() => {
-    onMobileLandscapeFullscreenChange?.(mobileLandscapeFullscreen);
-  }, [mobileLandscapeFullscreen, onMobileLandscapeFullscreenChange]);
+    onMobileLandscapeFullscreenChange?.(fullscreenLessonsBeside);
+  }, [fullscreenLessonsBeside, onMobileLandscapeFullscreenChange]);
+  // Marks a wide screen's full screen with the lessons beside the video,
+  // for the player sized by the page (LessonVideoPlayer): there it keeps the
+  // screen's height, with the picture letterboxed in its narrower pane, so
+  // its control bar stays at the foot of the screen.
+  const wideLessonsBeside = fullscreenCoursePanelVisible && !mobileInteraction;
+  useLayoutEffect(() => {
+    if (!timelineHost) return undefined;
+    if (wideLessonsBeside)
+      timelineHost.dataset.fullscreenLessonsBeside = "wide";
+    else delete timelineHost.dataset.fullscreenLessonsBeside;
+    return () => {
+      delete timelineHost.dataset.fullscreenLessonsBeside;
+    };
+  }, [timelineHost, wideLessonsBeside]);
 
   // In fullscreen on a touch device at landscape widths, the timeline sits
   // 44px up and the corner controls 64px up, which leaves 12px between the
@@ -1086,7 +1104,7 @@ export function LessonPlayerControls({
     <div
       data-player-timeline-wrap=""
       data-player-timeline-layer=""
-      className={`pointer-events-none absolute inset-x-0 bottom-0 translate-y-1/2 z-80 overflow-visible max-sm:z-170 transition-opacity duration-200 motion-reduce:transition-none sm:inset-x-3 sm:bottom-16 sm:translate-y-0 ${EXPAND_MOTION_HIDDEN_CLASS} ${timelineDisplayed ? "visible opacity-100" : "invisible opacity-0"} ${visible ? "" : "[&_*]:!pointer-events-none"} ${mobileInteraction ? (mobileFullscreen ? (fullscreenCoursePanelVisible ? `!left-(--learning-fullscreen-video-offset-x) !right-auto !bottom-0 !z-170 !w-(--learning-fullscreen-video-width) !max-w-full !translate-x-0 !translate-y-1/2 !px-3 sm:!left-(--learning-fullscreen-video-offset-x) sm:!right-auto sm:!bottom-11 sm:!w-(--learning-fullscreen-video-width) sm:!translate-x-0 sm:!translate-y-0 sm:!px-3 ${QUARTER_TURN_TIMELINE_CLASS}` : `!left-1/2 !right-auto !bottom-0 !z-170 !w-[min(100%,calc(var(--player-screen-height,100dvh)*16/9))] !max-w-full !-translate-x-1/2 !translate-y-1/2 !px-3 sm:!left-1/2 sm:!right-auto sm:!bottom-11 sm:!w-[min(100%,calc(var(--player-screen-height,100dvh)*16/9))] sm:!-translate-x-1/2 sm:!translate-y-0 sm:!px-3 ${QUARTER_TURN_TIMELINE_CLASS}`) : "!z-170 sm:!inset-x-0 sm:!bottom-2 sm:!translate-y-0") : ""}`}
+      className={`pointer-events-none absolute inset-x-0 bottom-0 translate-y-1/2 z-80 overflow-visible max-sm:z-170 transition-opacity duration-200 motion-reduce:transition-none sm:inset-x-3 sm:bottom-16 sm:translate-y-0 ${EXPAND_MOTION_HIDDEN_CLASS} ${wideLessonsBeside ? "sm:!right-[calc(100%-var(--learning-fullscreen-video-width)+0.75rem)]" : ""} ${timelineDisplayed ? "visible opacity-100" : "invisible opacity-0"} ${visible ? "" : "[&_*]:!pointer-events-none"} ${mobileInteraction ? (mobileFullscreen ? (fullscreenCoursePanelVisible ? `!left-(--learning-fullscreen-video-offset-x) !right-auto !bottom-0 !z-170 !w-(--learning-fullscreen-video-width) !max-w-full !translate-x-0 !translate-y-1/2 !px-3 sm:!left-(--learning-fullscreen-video-offset-x) sm:!right-auto sm:!bottom-11 sm:!w-(--learning-fullscreen-video-width) sm:!translate-x-0 sm:!translate-y-0 sm:!px-3 ${QUARTER_TURN_TIMELINE_CLASS}` : `!left-1/2 !right-auto !bottom-0 !z-170 !w-[min(100%,calc(var(--player-screen-height,100dvh)*16/9))] !max-w-full !-translate-x-1/2 !translate-y-1/2 !px-3 sm:!left-1/2 sm:!right-auto sm:!bottom-11 sm:!w-[min(100%,calc(var(--player-screen-height,100dvh)*16/9))] sm:!-translate-x-1/2 sm:!translate-y-0 sm:!px-3 ${QUARTER_TURN_TIMELINE_CLASS}`) : "!z-170 sm:!inset-x-0 sm:!bottom-2 sm:!translate-y-0") : ""}`}
       aria-hidden={visible ? undefined : true}
       inert={visible ? undefined : true}
     >
@@ -1146,7 +1164,9 @@ export function LessonPlayerControls({
       data-mobile-player-corner="time"
       data-preview-obscured={previewTime !== null ? "true" : "false"}
       className={`pointer-events-none absolute bottom-2.5 left-2 flex h-11 w-fit items-center transition-opacity duration-150 ease-out motion-reduce:transition-none sm:bottom-2.5 sm:left-3 sm:right-auto sm:h-auto ${mobileInteraction ? `sm:!h-11 ${mobileFullscreen ? `!bottom-15 !left-3 sm:!bottom-16 sm:!left-3 ${QUARTER_TURN_CORNER_CLASS}` : "sm:!left-2"}` : ""} ${
-        fullscreenCoursePanelVisible ? "!static sm:!static" : ""
+        fullscreenCoursePanelVisible && mobileInteraction
+          ? "!static sm:!static"
+          : ""
       } ${
         previewTime !== null
           ? `max-sm:pointer-events-none max-sm:opacity-0 ${mobileInteraction ? "sm:!pointer-events-none sm:!opacity-0" : ""}`
@@ -1200,7 +1220,9 @@ export function LessonPlayerControls({
       data-mobile-player-corner="fullscreen"
       data-preview-obscured={previewTime !== null ? "true" : "false"}
       className={`pointer-events-auto absolute bottom-2.5 right-2 z-60 transition-opacity duration-150 ease-out motion-reduce:transition-none sm:hidden ${mobileInteraction ? `sm:!block ${mobileFullscreen ? `!bottom-15 !right-3 sm:!bottom-16 sm:!right-3 ${QUARTER_TURN_CORNER_CLASS}` : ""}` : ""} ${
-        fullscreenCoursePanelVisible ? "!static sm:!static" : ""
+        fullscreenCoursePanelVisible && mobileInteraction
+          ? "!static sm:!static"
+          : ""
       } ${
         previewTime !== null
           ? `max-sm:pointer-events-none max-sm:opacity-0 ${mobileInteraction ? "sm:!pointer-events-none sm:!opacity-0" : ""}`
@@ -1359,7 +1381,11 @@ export function LessonPlayerControls({
         onToggle={() =>
           onCourseLessonsToggle(courseLessonsSidePanel ? "side" : "drawer")
         }
-        secondPressHold={courseLessonsSecondPressHold}
+        // The page's lesson column answers the second press and hold; in
+        // full screen the lessons open beside the video instead, by a press.
+        secondPressHold={
+          fullscreenLessonsBeside ? undefined : courseLessonsSecondPressHold
+        }
         shortcutLabel={courseLessonsShortcutLabel}
         sidePanel={courseLessonsSidePanel}
         opensFromBottom={!courseLessonsSidePanel && courseLessonsBottomSheet}
@@ -1467,10 +1493,13 @@ export function LessonPlayerControls({
       {timelineHost && fullscreenCoursePanelVisible
         ? createPortal(courseLessonsPanel, timelineHost)
         : null}
-      {timelineHost && fullscreenCoursePanelVisible
+      {/* A phone beside its lessons gets a bottom row of its own; a wide
+          screen keeps the player's control bar, which shrinks with the
+          video. */}
+      {timelineHost && fullscreenCoursePanelVisible && mobileInteraction
         ? createPortal(fullscreenBottomControlsLayer, timelineHost)
         : null}
-      {timelineHost && !fullscreenCoursePanelVisible
+      {timelineHost && !(fullscreenCoursePanelVisible && mobileInteraction)
         ? createPortal(bottomCornerControlsLayer, timelineHost)
         : null}
       {chaptersPanel && (chaptersSideHost ?? timelineHost)
