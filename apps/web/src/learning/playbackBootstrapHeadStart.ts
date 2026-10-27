@@ -256,7 +256,7 @@ function startFromHead(config: {
             encodeURIComponent(courseSlug) +
             "/lessons/" +
             lessonNumber +
-            "/playback-bootstrap?inlineManifest=1&storyboard=1&resume=1",
+            "/playback-bootstrap?inlineManifest=1&storyboard=1&resume=1&subtitles=1",
           {
             credentials: "include",
             headers: learnerView

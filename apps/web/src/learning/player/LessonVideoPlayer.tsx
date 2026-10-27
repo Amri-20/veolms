@@ -562,6 +562,7 @@ export function LessonVideoPlayer({
       segmentToken: playbackBootstrap?.segmentToken,
       segmentTokenExpiresAt: playbackBootstrap?.segmentTokenExpiresAt,
       inlinedMasterManifest: playbackBootstrap?.inlinedMasterManifest,
+      subtitles: playbackBootstrap?.subtitles,
       refreshSegmentToken:
         playbackBootstrap?.segmentToken && refreshPlaybackToken
           ? refreshPlaybackToken

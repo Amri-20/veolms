@@ -302,9 +302,9 @@ async function answerBootstrap(
   const early = await takeEarlyAnswer(options);
   if (early) return early;
   // Asks for the master playlist inline, saving the player that request,
-  // for the seek-preview storyboard when the video has one, and for where
-  // the learner left the lesson.
-  const path = `${playbackPath(options, "playback-bootstrap")}?inlineManifest=1&storyboard=1&resume=1`;
+  // for the seek-preview storyboard when the video has one, for where the
+  // learner left the lesson, and for the video's subtitle tracks.
+  const path = `${playbackPath(options, "playback-bootstrap")}?inlineManifest=1&storyboard=1&resume=1&subtitles=1`;
   let response: Response;
   try {
     response = await fetch(resolveVideoPlaybackApiUrl(path), {

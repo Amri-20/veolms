@@ -117,6 +117,7 @@ export function createMediaController({ service }: { service: MediaService }) {
         inlineManifest?: "0" | "1";
         storyboard?: "0" | "1";
         resume?: "0" | "1";
+        subtitles?: "0" | "1";
       };
     }>,
   ) {
@@ -135,6 +136,7 @@ export function createMediaController({ service }: { service: MediaService }) {
         inlineManifest: request.query?.inlineManifest === "1",
         storyboard: request.query?.storyboard === "1",
         resume: request.query?.resume === "1",
+        subtitles: request.query?.subtitles === "1",
         logger: request.log,
       },
     );
