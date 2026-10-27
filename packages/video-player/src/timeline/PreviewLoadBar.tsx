@@ -17,6 +17,21 @@ function isLoadedAt(availability: PreviewAvailability, time: number): boolean {
 }
 
 /**
+ * The timeline of the player the bar is in: the closest one found going up
+ * from the bar. Not looked for inside the player's root only: the lesson
+ * page puts its controls in a layer beside the player, not inside it.
+ */
+function closestTimeline(bar: HTMLElement): HTMLElement | null {
+  for (let scope = bar.parentElement; scope; scope = scope.parentElement) {
+    const timeline = scope.querySelector<HTMLElement>(
+      "[data-video-player-timeline]",
+    );
+    if (timeline) return timeline;
+  }
+  return null;
+}
+
+/**
  * Lines the bar up with the timeline: the same left and right edges, in
  * the player's own axes (a page full screen can turn the player a quarter).
  * The timeline sits some 12px in from the player's sides on larger screens
@@ -31,9 +46,7 @@ function useTimelineSpan(
   );
   useLayoutEffect(() => {
     const frame = bar?.parentElement;
-    const timeline = bar
-      ?.closest("[data-video-player-root]")
-      ?.querySelector<HTMLElement>("[data-video-player-timeline]");
+    const timeline = bar && active ? closestTimeline(bar) : null;
     if (!active || !frame || !timeline) return undefined;
     const measure = () => {
       const outer = playerRectOf(frame);
