@@ -29,6 +29,108 @@ const PIN_TOUCH_HOLD_MS = 400;
 /** A finger that moves further before that is scrolling the page. */
 const PIN_TOUCH_SLOP_PX = 8;
 
+/**
+ * Near the top or bottom edge of the screen, a carried card scrolls the page
+ * under it, faster the closer it gets, so the hero can be reached from a
+ * card far down the page without letting go first.
+ */
+const AUTO_SCROLL_EDGE_PX = 80;
+/** The most it scrolls in one frame, right at the edge. */
+const AUTO_SCROLL_MAX_STEP_PX = 18;
+
+interface AutoScroll {
+  scroller: HTMLElement;
+  y: number;
+  frame: number;
+  /** After each step that moved the page (a touch drag re-aims its card). */
+  onScroll?: () => void;
+  stop: () => void;
+}
+
+let autoScroll: AutoScroll | null = null;
+
+/** What the page scrolls in around `element`: a scrolling box, or the page. */
+function scrollerOf(element: Element): HTMLElement {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node);
+    if (
+      /(auto|scroll)/.test(overflowY) &&
+      node.scrollHeight > node.clientHeight
+    ) {
+      return node;
+    }
+  }
+  return (document.scrollingElement as HTMLElement | null) ?? document.body;
+}
+
+function stepAutoScroll() {
+  const scroll = autoScroll;
+  if (!scroll) return;
+  const { scroller, y } = scroll;
+  const page = scroller === document.scrollingElement;
+  const box = scroller.getBoundingClientRect();
+  const top = page ? 0 : Math.max(0, box.top);
+  const bottom = page
+    ? window.innerHeight
+    : Math.min(window.innerHeight, box.bottom);
+  let step = 0;
+  if (y < top + AUTO_SCROLL_EDGE_PX) {
+    step =
+      -AUTO_SCROLL_MAX_STEP_PX *
+      (1 - Math.max(0, y - top) / AUTO_SCROLL_EDGE_PX);
+  } else if (y > bottom - AUTO_SCROLL_EDGE_PX) {
+    step =
+      AUTO_SCROLL_MAX_STEP_PX *
+      (1 - Math.max(0, bottom - y) / AUTO_SCROLL_EDGE_PX);
+  }
+  if (step !== 0) {
+    const before = scroller.scrollTop;
+    scroller.scrollTop = before + step;
+    if (scroller.scrollTop !== before) scroll.onScroll?.();
+  }
+  scroll.frame = window.requestAnimationFrame(stepAutoScroll);
+}
+
+function startAutoScroll(
+  from: Element,
+  y: number,
+  options: { mouse?: boolean; onScroll?: () => void } = {},
+) {
+  stopAutoScroll();
+  // A mouse drag tells where it is only through drag events, which keep
+  // coming while it is held still.
+  const follow = (event: globalThis.DragEvent) =>
+    updateAutoScroll(event.clientY);
+  if (options.mouse) {
+    document.addEventListener("dragover", follow);
+    document.addEventListener("dragend", stopAutoScroll);
+    document.addEventListener("drop", stopAutoScroll);
+  }
+  autoScroll = {
+    scroller: scrollerOf(from),
+    y,
+    frame: window.requestAnimationFrame(stepAutoScroll),
+    onScroll: options.onScroll,
+    stop: () => {
+      document.removeEventListener("dragover", follow);
+      document.removeEventListener("dragend", stopAutoScroll);
+      document.removeEventListener("drop", stopAutoScroll);
+    },
+  };
+}
+
+function updateAutoScroll(y: number) {
+  if (autoScroll) autoScroll.y = y;
+}
+
+function stopAutoScroll() {
+  const scroll = autoScroll;
+  if (!scroll) return;
+  autoScroll = null;
+  window.cancelAnimationFrame(scroll.frame);
+  scroll.stop();
+}
+
 interface TouchPress {
   pointerId: number;
   card: HTMLElement;
@@ -40,6 +142,9 @@ interface TouchPress {
   ghost: HTMLElement | null;
   offsetX: number;
   offsetY: number;
+  /** Where the finger is now. */
+  x: number;
+  y: number;
   zone: Element | null;
   stop: () => void;
 }
@@ -64,6 +169,9 @@ function setDropZoneOver(press: TouchPress, zone: Element | null) {
 }
 
 function moveGhost(press: TouchPress, x: number, y: number) {
+  press.x = x;
+  press.y = y;
+  updateAutoScroll(y);
   if (!press.ghost) return;
   press.ghost.style.transform = `translate(${x - press.offsetX}px, ${
     y - press.offsetY
@@ -105,6 +213,10 @@ function pickUp(press: TouchPress) {
   document.body.append(ghost);
   press.ghost = ghost;
   moveGhost(press, press.startX, press.startY);
+  // The page under the card moves: what lies under the finger is found again.
+  startAutoScroll(press.card, press.startY, {
+    onScroll: () => moveGhost(press, press.x, press.y),
+  });
   window.dispatchEvent(
     new CustomEvent(PIN_TOUCH_DRAG_EVENT, {
       detail: { courseId: press.courseId },
@@ -119,6 +231,7 @@ function endTouchPress(drop: boolean) {
   window.clearTimeout(press.timer);
   press.stop();
   if (!press.dragging) return;
+  stopAutoScroll();
   document.removeEventListener("touchmove", preventTouchScroll);
   const zone = press.zone;
   setDropZoneOver(press, null);
@@ -175,6 +288,8 @@ function startTouchPress(event: PointerEvent<HTMLElement>, courseId: string) {
     ghost: null,
     offsetX: 0,
     offsetY: 0,
+    x: event.clientX,
+    y: event.clientY,
     zone: null,
     stop: () => {
       document.removeEventListener("pointermove", move);
@@ -233,6 +348,7 @@ export function getPinCourseDragProps(courseId: string) {
         event.clientX - box.left,
         event.clientY - box.top,
       );
+      startAutoScroll(card, event.clientY, { mouse: true });
     },
   };
 }
