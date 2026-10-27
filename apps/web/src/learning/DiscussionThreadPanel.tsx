@@ -3,7 +3,6 @@ import { ArrowBendUpLeftIcon as ArrowBendUpLeft } from "@phosphor-icons/react/Ar
 import { BellSimpleIcon as BellSimple } from "@phosphor-icons/react/BellSimple";
 import { BookmarkSimpleIcon as BookmarkSimple } from "@phosphor-icons/react/BookmarkSimple";
 import { ChatCenteredDotsIcon as ChatCenteredDots } from "@phosphor-icons/react/ChatCenteredDots";
-import { CheckCircleIcon as CheckCircle } from "@phosphor-icons/react/CheckCircle";
 import { ArrowsInIcon as ArrowsIn } from "@phosphor-icons/react/ArrowsIn";
 import { ArrowsOutIcon as ArrowsOut } from "@phosphor-icons/react/ArrowsOut";
 import { FileTextIcon as FileText } from "@phosphor-icons/react/FileText";
@@ -1367,15 +1366,6 @@ function ThreadRootEntry({
                   Instructor
                 </span>
               )}
-              {entry.isQuestion && Boolean(entry.acceptedAnswerId) && (
-                <span
-                  data-testid="qa-solved-badge"
-                  className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400"
-                >
-                  <CheckCircle size={14} weight="fill" />
-                  Solved
-                </span>
-              )}
               {entry.isLocked && (
                 <span
                   data-testid="thread-locked-badge"
@@ -1589,8 +1579,6 @@ function ThreadReplyEntry({
   onCopyTextNotice?: (message: string) => void;
   courseId?: string;
 }) {
-  const canAcceptReply =
-    Boolean(getServerEntityId(reply)) && reply.creationStatus !== "pending";
   const [editing, setEditing] = useState(false);
   const [editDraft, setEditDraft] = useState(
     reply.content ?? createDiscussionDraft(reply.text),
@@ -1680,20 +1668,6 @@ function ThreadReplyEntry({
                   canDelete={
                     canParticipate &&
                     (!isBackendMode || (Boolean(replyServerId) && !isEditing))
-                  }
-                  canAcceptAnswer={
-                    isQuestion && canAcceptAnswer && canAcceptReply
-                  }
-                  isAccepted={Boolean(reply.isAccepted)}
-                  onToggleAccept={
-                    isQuestion && canAcceptAnswer && onToggleAcceptReply
-                      ? () =>
-                          onToggleAcceptReply(
-                            reply.id,
-                            !reply.isAccepted,
-                            getServerEntityId(reply),
-                          )
-                      : undefined
                   }
                   onEdit={() => {
                     setEditDraft(
@@ -1785,38 +1759,6 @@ function ThreadReplyEntry({
                       />
                     </span>
                     <span>{reply.likes}</span>
-                  </button>
-                )}
-                {isQuestion && canAcceptAnswer && onToggleAcceptReply && (
-                  <button
-                    type="button"
-                    data-testid={`accept-reply-btn-${reply.id}`}
-                    disabled={!canAcceptReply}
-                    aria-label={
-                      reply.isAccepted ? "Unaccept answer" : "Accept answer"
-                    }
-                    title={
-                      reply.isAccepted ? "Unaccept answer" : "Accept answer"
-                    }
-                    onClick={() => {
-                      if (!canAcceptReply) return;
-                      onToggleAcceptReply(
-                        reply.id,
-                        !reply.isAccepted,
-                        getServerEntityId(reply),
-                      );
-                    }}
-                    className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-(--accent) ${
-                      reply.isAccepted
-                        ? "bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400"
-                        : "text-(--muted) hover:bg-(--hover) hover:text-(--text)"
-                    }`}
-                  >
-                    <CheckCircle
-                      size={16}
-                      weight={reply.isAccepted ? "fill" : "bold"}
-                    />
-                    <span>{reply.isAccepted ? "Accepted" : "Accept"}</span>
                   </button>
                 )}
                 {canParticipate && (
