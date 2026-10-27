@@ -14,6 +14,7 @@ import { forgetAcademy, getAcademyRow } from "./academy-cache.ts";
 import type { AuthService } from "../authentication/authentication.service.ts";
 import type { SessionService } from "../session/session.service.ts";
 import { normalizePhoneIdentifier } from "../shared/auth.utils.ts";
+import type { SessionLocation } from "../shared/request-location.ts";
 
 const setupSessionSchema = z.object({ exp: z.number() });
 
@@ -111,7 +112,11 @@ export function createSetupService({
 
   async function registerCreator(
     input: CreatorRegisterRequest,
-    request: { ip: string; userAgent: string | null },
+    request: {
+      ip: string;
+      userAgent: string | null;
+      location?: SessionLocation | null;
+    },
   ) {
     await assertSetupOpen();
 

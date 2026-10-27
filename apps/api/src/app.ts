@@ -9,7 +9,10 @@ import type { ApiPlugin } from "@veolms/api-core";
 
 import { config } from "./config.ts";
 import { registerBackgroundJobs } from "./background-jobs.ts";
-import { checkSessionBeforeValidation } from "./middlewares/auth.middleware.ts";
+import {
+  checkSessionBeforeValidation,
+  rememberDeviceLimitedSignIns,
+} from "./middlewares/auth.middleware.ts";
 import { createServices, type AppServices } from "./services/index.ts";
 import type { RoutePluginOptions } from "./lib/route-plugin.ts";
 
@@ -49,6 +52,7 @@ export async function createApp({
       // The factory calls this before it registers any route, which is when
       // a hook that applies to every route has to be added.
       checkSessionBeforeValidation(app);
+      rememberDeviceLimitedSignIns(app);
       return services ?? createServices({ config, logger: app.log });
     },
     config,

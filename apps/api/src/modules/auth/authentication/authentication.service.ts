@@ -47,6 +47,7 @@ import {
   storeAvatarFromUrl,
 } from "../../avatars/index.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
+import { type SessionLocation } from "../shared/request-location.ts";
 
 const AVATAR_VALIDATION_RANGE = "bytes=0-31";
 const USER_AVATAR_RETENTION_LIMIT = 2;
@@ -917,6 +918,7 @@ export function createAuthService({
       ip: string;
       userAgent: string | null;
       existingSessionToken?: string | null;
+      location?: SessionLocation | null;
     };
   }) {
     if (!otpService || !sessionService) {
@@ -1030,6 +1032,7 @@ export function createAuthService({
       ip: string;
       userAgent: string | null;
       existingSessionToken?: string | null;
+      location?: SessionLocation | null;
     };
   }) {
     const hasBothChannels = Boolean(input.email && input.phoneNo);
