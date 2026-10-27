@@ -21,16 +21,24 @@ const MAX_WAITING_DECODES = 1;
 const NEAREST_PICTURE_RANGE = 40;
 /** Chunk downloads asked for by the pointer, at once. */
 const MAX_ON_DEMAND_FETCHES = 4;
-/**
- * Requests for another chunk this soon after the last are a fast sweep:
- * only the chunk's first picture is decoded for them (one picture comes
- * through at once; the exact one follows when the pointer slows down).
- */
-const FAST_SWEEP_CHUNK_MS = 120;
+/** Pointer downloads waiting for one of those; older ones are let go. */
+const MAX_WAITING_FETCHES = 4;
 /** A pointer resting this close to a chunk's edge readies the next one. */
 const NEIGHBOUR_PREPARE_SECONDS = 3;
 /** Bytes per background request (several chunks at once). */
 const BACKGROUND_BATCH_BYTES = 768 * 1024;
+/**
+ * Background requests at once. One at a time spent about half of each
+ * request waiting for its first byte (130 ms of 220 ms from the CDN), so a
+ * 4 h lesson's 54 MB took some 25 s to arrive.
+ */
+const BACKGROUND_LANES = 3;
+/** Bytes a pointer's request may fetch beyond the chunk it needs. */
+const ON_DEMAND_RUN_BYTES = 256 * 1024;
+/** How long decoding one moving pointer's picture may take. */
+const PICTURE_DECODE_BUDGET_MS = 24;
+/** Weight of the earlier decodes in the cost per picture, each decode. */
+const DECODE_COST_DECAY = 0.9;
 
 let instances = 0;
 
@@ -78,26 +86,34 @@ export class PreviewVideoFrames implements FrameProvider {
   readonly #chunks = new Map<number, Uint8Array>();
   readonly #chunkLoads = new Map<number, Promise<Uint8Array>>();
   readonly #pictures = new Map<number, ImageBitmap>();
-  // Decodes running or waiting, by chunk, with the last picture each goes to.
+  // Decodes running or waiting, by chunk, with the last picture each goes to
+  // and when it was last asked for (`#requests` at the time).
   readonly #chunkDecodes = new Map<
     number,
-    { upTo: number; job: Promise<void> }
+    { upTo: number; job: Promise<void>; order: { at: number } }
   >();
+  #requests = 0;
   // Callers waiting for one picture, told as soon as it is decoded rather
   // than when its whole chunk is.
   readonly #pictureWaiters = new Map<number, Array<() => void>>();
   #waitingDecodes: Array<{
     chunk: number;
+    order: { at: number };
     run: () => Promise<void>;
     drop: () => void;
   }> = [];
   #decoding = false;
   #onDemandFetches = 0;
-  #waitingFetches: Array<() => void> = [];
+  #waitingFetches: Array<{
+    resume: () => void;
+    cancel: (reason: Error) => void;
+  }> = [];
   #decoder: VideoDecoder | null = null;
   #decoderOutput: ((frame: VideoFrame) => void) | null = null;
   #backgroundStarted = false;
-  #lastRequest: { chunk: number; at: number } | null = null;
+  #lastPointerChunk: number | null = null;
+  // Time spent decoding and pictures decoded, recent decodes counting most.
+  readonly #decodeCost = { ms: 0, pictures: 0 };
   #destroyed = false;
 
   readonly #acceleration: HardwareAcceleration;
@@ -175,7 +191,7 @@ export class PreviewVideoFrames implements FrameProvider {
     this.#pictures.clear();
     this.#chunks.clear();
     this.#waitingDecodes.splice(0).forEach((waiting) => waiting.drop());
-    this.#waitingFetches.splice(0).forEach((resume) => resume());
+    this.#waitingFetches.splice(0).forEach(({ resume }) => resume());
     if (this.#decoder && this.#decoder.state !== "closed")
       this.#decoder.close();
     this.#decoder = null;
@@ -238,20 +254,22 @@ export class PreviewVideoFrames implements FrameProvider {
       // Whichever comes first: the picture, or the end of its chunk (which
       // may not have produced it, if the chunk gave way to a newer one).
       const chunk = Math.floor(picture / this.#info.gopFrames);
-      const now = performance.now();
-      const fastSweep =
-        this.#lastRequest !== null &&
-        this.#lastRequest.chunk !== chunk &&
-        now - this.#lastRequest.at < FAST_SWEEP_CHUNK_MS;
-      this.#lastRequest = { chunk, at: now };
       await Promise.race([
         decoded,
-        // Only as far as this picture (the first one, in a fast sweep):
-        // the rest of the chunk is decoded when the pointer rests there
-        // (`prepareAt`).
+        // As far as this picture, when this device decodes that many in
+        // `PICTURE_DECODE_BUDGET_MS`; else as far as it does, the closest
+        // picture before it standing in. Decoding only a chunk's first
+        // picture showed a long video in 10 s steps, 5 s behind on average
+        // (on a long video every pointer move lands in another chunk);
+        // decoding to the picture takes 3-16 ms on desktop Chrome, but
+        // some 15 ms per picture on a CPU four times slower. The rest of
+        // the chunk is decoded when the pointer rests there (`prepareAt`).
         this.prepareChunk(
           chunk,
-          fastSweep ? 0 : picture - chunk * this.#info.gopFrames,
+          Math.min(
+            picture - chunk * this.#info.gopFrames,
+            this.#picturesWithinBudget() - 1,
+          ),
         ),
       ]);
       const left = this.#pictureWaiters
@@ -275,11 +293,20 @@ export class PreviewVideoFrames implements FrameProvider {
       Math.max(0, Math.floor(time / interval)),
     );
     const chunk = Math.floor(picture / gopFrames);
-    void this.prepareChunk(chunk);
     const intoChunk = picture - chunk * gopFrames;
     const edge = Math.max(1, Math.round(NEIGHBOUR_PREPARE_SECONDS / interval));
-    if (intoChunk >= gopFrames - edge) void this.prepareChunk(chunk + 1);
-    else if (intoChunk < edge) void this.prepareChunk(chunk - 1);
+    const neighbour =
+      intoChunk >= gopFrames - edge
+        ? chunk + 1
+        : intoChunk < edge
+          ? chunk - 1
+          : null;
+    // The neighbour only after this chunk: queued at once, it took this
+    // chunk's place in the decode queue, and a pointer resting there never
+    // got its own picture.
+    void this.prepareChunk(chunk).then(() => {
+      if (neighbour !== null) void this.prepareChunk(neighbour);
+    });
   }
 
   /**
@@ -297,16 +324,21 @@ export class PreviewVideoFrames implements FrameProvider {
       return Promise.resolve();
     }
     const existing = this.#chunkDecodes.get(chunk);
-    if (existing && existing.upTo >= upTo) return existing.job;
+    if (existing && existing.upTo >= upTo) {
+      // Asked for again: as new as this request.
+      existing.order.at = ++this.#requests;
+      return existing.job;
+    }
+    const order = { at: ++this.#requests };
     const job = this.#loadChunk(chunk, "high")
-      .then((data) => this.#queueDecode(chunk, data, upTo))
+      .then((data) => this.#queueDecode(chunk, data, upTo, order))
       .catch(() => undefined)
       .finally(() => {
         if (this.#chunkDecodes.get(chunk)?.job === job) {
           this.#chunkDecodes.delete(chunk);
         }
       });
-    this.#chunkDecodes.set(chunk, { upTo, job });
+    this.#chunkDecodes.set(chunk, { upTo, job, order });
     return job;
   }
 
@@ -328,9 +360,12 @@ export class PreviewVideoFrames implements FrameProvider {
       ...Array.from({ length: this.chunkCount - first }, (_, i) => first + i),
       ...Array.from({ length: first }, (_, i) => i),
     ];
-    void (async () => {
-      let index = 0;
-      while (index < order.length && !this.#destroyed) {
+    // Shared by the lanes; a run is marked as loading when it is asked for,
+    // so no two lanes fetch the same chunk.
+    let index = 0;
+    let failed = false;
+    const lane = async () => {
+      while (index < order.length && !this.#destroyed && !failed) {
         const chunk = order[index]!;
         if (this.#chunks.has(chunk) || this.#chunkLoads.has(chunk)) {
           index += 1;
@@ -348,15 +383,27 @@ export class PreviewVideoFrames implements FrameProvider {
         ) {
           last += 1;
         }
+        index += last - chunk + 1;
         try {
           await this.#loadChunks(chunk, last, "low");
         } catch {
           // The pointer fetches what it needs; leave the rest.
-          return;
+          failed = true;
         }
-        index += last - chunk + 1;
       }
-    })();
+    };
+    for (let count = 0; count < BACKGROUND_LANES; count += 1) void lane();
+  }
+
+  /** Pictures this device decodes within `PICTURE_DECODE_BUDGET_MS`. */
+  #picturesWithinBudget(): number {
+    const perPicture =
+      this.#decodeCost.pictures > 0
+        ? this.#decodeCost.ms / this.#decodeCost.pictures
+        : 0;
+    return perPicture > 0
+      ? Math.max(1, Math.floor(PICTURE_DECODE_BUDGET_MS / perPicture))
+      : this.#info.gopFrames;
   }
 
   #pictureOf(key: string): number {
@@ -376,9 +423,30 @@ export class PreviewVideoFrames implements FrameProvider {
     if (kept) return Promise.resolve(kept);
     const loading = this.#chunkLoads.get(chunk);
     if (loading) return loading;
-    return this.#loadChunks(chunk, chunk, priority).then(() =>
-      this.#chunks.get(chunk)!,
-    );
+    // The chunks the pointer is moving into come with it (one request costs
+    // about its round trip, a few more chunks barely add to it): a sweep
+    // over a long lesson asks for another chunk on nearly every move.
+    const direction = chunk >= (this.#lastPointerChunk ?? chunk) ? 1 : -1;
+    this.#lastPointerChunk = chunk;
+    let far = chunk;
+    while (
+      far + direction >= 0 &&
+      far + direction < this.chunkCount &&
+      !this.#chunks.has(far + direction) &&
+      !this.#chunkLoads.has(far + direction) &&
+      Math.abs(
+        direction > 0
+          ? this.#chunkEnd(far + direction) - this.#chunkStart(chunk)
+          : this.#chunkEnd(chunk) - this.#chunkStart(far + direction),
+      ) <= ON_DEMAND_RUN_BYTES
+    ) {
+      far += direction;
+    }
+    return this.#loadChunks(
+      Math.min(chunk, far),
+      Math.max(chunk, far),
+      priority,
+    ).then(() => this.#chunks.get(chunk)!);
   }
 
   /** Fetches chunks `first..last` in one request and keeps each. */
@@ -424,25 +492,44 @@ export class PreviewVideoFrames implements FrameProvider {
       this.#onDemandFetches += 1;
       return;
     }
-    // The newest waits least: it is where the pointer is now.
-    await new Promise<void>((resume) => this.#waitingFetches.unshift(resume));
+    // The newest waits least: it is where the pointer is now. The oldest
+    // give up: by the time a slot is free the pointer has long left them.
+    await new Promise<void>((resume, cancel) => {
+      this.#waitingFetches.unshift({ resume, cancel });
+      while (this.#waitingFetches.length > MAX_WAITING_FETCHES) {
+        this.#waitingFetches
+          .pop()!
+          .cancel(new Error("The pointer has moved on."));
+      }
+    });
     this.#onDemandFetches += 1;
   }
 
   #releaseFetchSlot(): void {
     this.#onDemandFetches -= 1;
-    this.#waitingFetches.shift()?.();
+    this.#waitingFetches.shift()?.resume();
   }
 
-  #queueDecode(chunk: number, data: Uint8Array, upTo: number): Promise<void> {
+  #queueDecode(
+    chunk: number,
+    data: Uint8Array,
+    upTo: number,
+    order: { at: number },
+  ): Promise<void> {
     return new Promise<void>((resolve) => {
       this.#waitingDecodes.push({
         chunk,
+        order,
         run: () => this.#decodeChunk(chunk, data, upTo).finally(resolve),
         drop: resolve,
       });
-      // Older requests give way; their pictures are decoded when asked for
-      // again.
+      // Requests asked for earlier give way, whenever their chunk arrived:
+      // a sweep's older fetches still finishing after the pointer stopped
+      // otherwise pushed out the picture where it stopped. Their pictures
+      // are decoded when asked for again.
+      this.#waitingDecodes.sort(
+        (left, right) => left.order.at - right.order.at,
+      );
       while (this.#waitingDecodes.length > MAX_WAITING_DECODES) {
         this.#waitingDecodes.shift()!.drop();
       }
@@ -455,6 +542,9 @@ export class PreviewVideoFrames implements FrameProvider {
     this.#decoding = true;
     try {
       while (this.#waitingDecodes.length > 0 && !this.#destroyed) {
+        this.#waitingDecodes.sort(
+          (left, right) => left.order.at - right.order.at,
+        );
         const next = this.#waitingDecodes.pop()!;
         await next.run();
       }
@@ -500,9 +590,17 @@ export class PreviewVideoFrames implements FrameProvider {
     const { gopFrames, interval, frameCount } = this.#info;
     const first = chunk * gopFrames;
     const count = Math.min(gopFrames, frameCount - first, upTo + 1);
+    const last = first + count - 1;
+    // A whole chunk (the pointer rests there) keeps all its pictures; a
+    // decode up to one picture keeps only that one and any a caller waits
+    // for. Making a picture drawable runs on the page: keeping every one on
+    // the way cost a fast sweep over a 4 h lesson half its frame rate.
+    const keepAll = count === Math.min(gopFrames, frameCount - first);
+    const wanted = (picture: number) =>
+      keepAll || picture === last || this.#pictureWaiters.has(picture);
     let allKept = true;
-    for (let picture = first; picture < first + count; picture += 1) {
-      if (!this.#pictures.has(picture)) allKept = false;
+    for (let picture = first; picture <= last; picture += 1) {
+      if (wanted(picture) && !this.#pictures.has(picture)) allKept = false;
     }
     if (allKept || this.#destroyed) return;
 
@@ -511,6 +609,10 @@ export class PreviewVideoFrames implements FrameProvider {
     const step = interval * 1_000_000;
     this.#decoderOutput = (frame) => {
       const picture = Math.round(frame.timestamp / step);
+      if (!wanted(picture) || this.#pictures.has(picture)) {
+        frame.close();
+        return;
+      }
       conversions.push(
         toBitmap(frame)
           .then((bitmap) => {
@@ -529,6 +631,7 @@ export class PreviewVideoFrames implements FrameProvider {
     };
     try {
       const decoder = this.#ensureDecoder();
+      const started = performance.now();
       pictures.forEach((bytes, index) => {
         decoder.decode(
           new EncodedVideoChunk({
@@ -539,6 +642,9 @@ export class PreviewVideoFrames implements FrameProvider {
         );
       });
       await decoder.flush();
+      const cost = this.#decodeCost;
+      cost.ms = cost.ms * DECODE_COST_DECAY + (performance.now() - started);
+      cost.pictures = cost.pictures * DECODE_COST_DECAY + pictures.length;
     } catch {
       // A failed chunk leaves its pictures undecoded; the next request
       // tries again with a new decoder.
