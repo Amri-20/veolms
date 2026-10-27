@@ -6,6 +6,7 @@ import {
 } from "../shared/quiz.types.ts";
 import { AppError } from "../../../lib/errors.ts";
 import * as repo from "../shared/quiz.repository.ts";
+import { presentQuizSubmission } from "./submission.presenter.ts";
 
 type AnalyticsRow = Awaited<
   ReturnType<typeof repo.listAnalyticsAttempts>
@@ -275,6 +276,57 @@ export function createAnalyticsService(options: QuizServiceOptions) {
       quizzes: items,
     };
   }
-  return { assignment, course, student };
+  /**
+   * One student's attempt on an assignment, answer by answer: the newest
+   * attempt unless `attemptId` names another of theirs. Only someone who
+   * manages the course (and, below academy-wide reach, owns the quiz) may
+   * read it, the same as the assignment's analytics.
+   */
+  async function submission(
+    actor: QuizActor,
+    assignmentId: string,
+    studentId: string,
+    attemptId?: string,
+  ) {
+    const row = await assertOwned(actor, assignmentId);
+    const attempts = await repo.listSubmissionAttempts(
+      database,
+      row.id,
+      studentId,
+    );
+    const attempt = attemptId
+      ? attempts.find((item) => item.id === attemptId)
+      : attempts[0];
+    if (!attempt)
+      throw new AppError(404, "ATTEMPT_NOT_FOUND", "Quiz attempt not found.");
+
+    const [questions, answers, quiz, lessons, names] = await Promise.all([
+      repo.listGradingQuestions(database, attempt.quiz_version_id, {
+        prompt: true,
+        explanation: true,
+      }),
+      repo.listAnswers(database, attempt.id),
+      repo.findQuiz(database, row.quiz_id),
+      repo.listLessonsByIds(database, [row.lesson_id]),
+      options.authService.listUserDisplayNamesByIds([studentId]),
+    ]);
+    const keyOptions = await repo.listKeyOptions(
+      database,
+      questions.map((question) => question.id),
+    );
+    return presentQuizSubmission({
+      assignment: row,
+      quizTitle: quiz?.title ?? "Quiz",
+      lessonTitle: lessons[0]?.title ?? null,
+      student: { id: studentId, name: names[0]?.display_name ?? studentId },
+      attempts,
+      attempt,
+      questions,
+      options: keyOptions,
+      answers,
+    });
+  }
+
+  return { assignment, course, student, submission };
 }
 export type AnalyticsService = ReturnType<typeof createAnalyticsService>;
