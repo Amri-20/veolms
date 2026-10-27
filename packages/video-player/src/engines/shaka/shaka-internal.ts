@@ -109,6 +109,19 @@ export interface ShakaPreloadManagerLike {
   destroy(): Promise<unknown>;
 }
 
+/** The parts of a Shaka manifest read for segment times. */
+export interface ShakaManifestLike {
+  variants: ReadonlyArray<{
+    id: number | string;
+    video?: {
+      segmentIndex?: {
+        find(time: number): number | null;
+        get(position: number): { startTime: number; endTime: number } | null;
+      } | null;
+    } | null;
+  }>;
+}
+
 export interface ShakaPlayerLike {
   addEventListener(
     type: string,
@@ -140,6 +153,8 @@ export interface ShakaPlayerLike {
   getConfiguration?(): { drm?: { servers?: Record<string, string> } };
   getNetworkingEngine(): ShakaNetworkingEngineLike | null;
   getStats?(): { estimatedBandwidth?: number; maxSegmentDuration?: number };
+  /** Deprecated in Shaka 5 but still exported; read only for segment times. */
+  getManifest?(): ShakaManifestLike | null;
   getVariantTracks(): ShakaVariantTrackLike[];
   selectVariantTrack(
     track: ShakaVariantTrackLike,
