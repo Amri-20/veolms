@@ -83,6 +83,7 @@ import { formatDuration, resolveCourseDurationSeconds } from "./courseAdapter";
 import { CourseLearnerProgressBar } from "./overview/CourseLearnerProgressBar";
 import { CourseLearnerProgressBarEarly } from "./overview/CourseLearnerProgressBarEarly";
 import { CourseOverviewCurriculum } from "./overview/CourseOverviewCurriculum";
+import { courseValidityLabel } from "./overview/courseValidity";
 import {
   CourseOverviewHero,
   overviewColumnClasses,
@@ -1555,6 +1556,8 @@ export interface AdaptedOverviewData {
    * is built from the course's saved settings rather than from an overview.
    */
   canSelfEnroll?: boolean;
+  /** The overview's `accessValidity`: how long the course stays with a learner. */
+  accessValidity?: CourseOverviewResponse["accessValidity"];
 }
 
 export function adaptCourseOverviewResponse(
@@ -1664,6 +1667,7 @@ export function adaptCourseOverviewResponse(
     instructorName: resolvedInstructorName,
     trailerMediaId: c.trailerMediaId ?? null,
     canSelfEnroll: overview.canSelfEnroll,
+    accessValidity: overview.accessValidity,
   };
 }
 
@@ -1942,6 +1946,11 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
         sectionsComplete={sectionsComplete}
         onRequestAllSections={requestAllSections}
         resume={access?.resume}
+        enrolmentAccess={
+          access?.enrolled
+            ? { accessExpiresAt: access.accessExpiresAt ?? null }
+            : null
+        }
       />
     </CurriculumIntentContext.Provider>
   );
@@ -1960,6 +1969,8 @@ type CourseOverviewContentProps = CourseOverviewPageProps & {
   onRequestAllSections?: () => void;
   /** Where an enrolled learner carries on, from the access answer. */
   resume?: CourseAccessResume | null;
+  /** An enrolled learner's end of access, from the access answer. */
+  enrolmentAccess?: { accessExpiresAt: string | null } | null;
 };
 
 function CourseOverviewContent({
@@ -1986,6 +1997,7 @@ function CourseOverviewContent({
   sectionsComplete = true,
   onRequestAllSections,
   resume,
+  enrolmentAccess,
 }: CourseOverviewContentProps) {
   const user = useAuthStore((state) => state.user);
   // A lesson in the curriculum is readied while the pointer rests on it,
@@ -2449,6 +2461,10 @@ function CourseOverviewContent({
           lessonIntentFor={lessonIntentFor}
           isReadOnlyPreview={isReadOnlyPreview}
           isPaidCourse={isPaidCourse}
+          validityLabel={courseValidityLabel(
+            adaptedFromPreview?.accessValidity,
+            enrolmentAccess,
+          )}
           totalSections={totalSections}
           sectionsComplete={sectionsComplete}
           onRequestAllSections={onRequestAllSections}

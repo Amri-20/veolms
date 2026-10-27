@@ -40,6 +40,8 @@ export interface EnrollmentService {
       courseId: string;
       progress: number;
       lastAccessedAt: Date | null;
+      /** When the learner's access ends; null for access that does not. */
+      accessExpiresAt: Date | null;
     }>
   >;
   /**
@@ -192,6 +194,9 @@ export function createEnrollmentService({
         courseId,
         progress: progress ?? 0,
         lastAccessedAt: lastAccessedAt ? new Date(lastAccessedAt) : null,
+        accessExpiresAt: row.access_expires_at
+          ? new Date(row.access_expires_at)
+          : null,
       };
     });
   }
