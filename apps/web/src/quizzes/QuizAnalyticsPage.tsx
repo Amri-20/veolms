@@ -48,6 +48,7 @@ import {
   useMyQuizzes,
 } from "../services/quizzes";
 import { SelectCourseForQuizModal } from "./SelectCourseForQuizModal";
+import { useCoursesWithQuizzes } from "./useCoursesWithQuizzes";
 import { ElevatedCard, elevatedCardClasses } from "../components/ElevatedCard";
 
 // A submission is opened on demand, and it brings the Markdown renderer for
@@ -351,15 +352,13 @@ function InstructorOverview({
       enabled: readsResults,
     })),
   });
+  const quizCourses = useCoursesWithQuizzes(courses.data?.courses);
 
   useEffect(() => {
-    if (courseId && courses.data?.courses) {
-      const exists = courses.data.courses.some((c) => c.id === courseId);
-      if (!exists) {
-        setCourseId(null);
-      }
+    if (courseId && !quizCourses.some((c) => c.id === courseId)) {
+      setCourseId(null);
     }
-  }, [courseId, courses.data?.courses]);
+  }, [courseId, quizCourses]);
 
   const analytics = courseAnalytics.data;
   const published = quizzes.filter(
@@ -432,24 +431,11 @@ function InstructorOverview({
 
   const courseOptions: readonly ThemedSelectOption[] = useMemo(() => {
     const list: ThemedSelectOption[] = [["", "All courses"]];
-    const sorted = [...(courses.data?.courses ?? [])].sort((a, b) => {
-      const dateA = a.updatedAt
-        ? Date.parse(a.updatedAt)
-        : a.createdAt
-          ? Date.parse(a.createdAt)
-          : 0;
-      const dateB = b.updatedAt
-        ? Date.parse(b.updatedAt)
-        : b.createdAt
-          ? Date.parse(b.createdAt)
-          : 0;
-      return dateB - dateA;
-    });
-    for (const course of sorted) {
+    for (const course of quizCourses) {
       list.push([course.id, course.title]);
     }
     return list;
-  }, [courses.data?.courses]);
+  }, [quizCourses]);
 
   const {
     displayedItems: recentQuizzes,
@@ -903,11 +889,15 @@ function InstructorAnalytics() {
     };
   }, [assignmentId, openSubmission, openSubmissionIndex, submittedStudents]);
 
+  const quizCourses = useCoursesWithQuizzes(courses.data?.courses);
+  // Opens on the newest course with quizzes, and leaves one found to have
+  // none once the counts arrive.
   useEffect(() => {
-    if (!courseId && courses.data?.courses[0]) {
-      setCourseId(courses.data.courses[0].id);
+    const first = quizCourses[0];
+    if (first && !quizCourses.some((c) => c.id === courseId)) {
+      setCourseId(first.id);
     }
-  }, [courseId, courses.data?.courses]);
+  }, [courseId, quizCourses]);
   useEffect(() => {
     const first = assignments.data?.[0];
     if (
@@ -920,22 +910,10 @@ function InstructorAnalytics() {
 
   const analytics = courseAnalytics.data;
 
-  const courseOptions: readonly ThemedSelectOption[] = useMemo(() => {
-    const sorted = [...(courses.data?.courses ?? [])].sort((a, b) => {
-      const dateA = a.updatedAt
-        ? Date.parse(a.updatedAt)
-        : a.createdAt
-          ? Date.parse(a.createdAt)
-          : 0;
-      const dateB = b.updatedAt
-        ? Date.parse(b.updatedAt)
-        : b.createdAt
-          ? Date.parse(b.createdAt)
-          : 0;
-      return dateB - dateA;
-    });
-    return sorted.map((course) => [course.id, course.title] as const);
-  }, [courses.data?.courses]);
+  const courseOptions: readonly ThemedSelectOption[] = useMemo(
+    () => quizCourses.map((course) => [course.id, course.title] as const),
+    [quizCourses],
+  );
 
   const assignmentOptions: readonly ThemedSelectOption[] = useMemo(() => {
     const list: ThemedSelectOption[] = [["", "Select assessment"]];
