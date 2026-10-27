@@ -78,6 +78,7 @@ export async function listEnrolledCoursesForUser(
       "c.title as course_title",
       "c.thumbnail_media_id as course_thumbnail_media_id",
       "e.created_at as enrolled_at",
+      "e.access_expires_at as access_expires_at",
     ])
     // Aggregate durable learner progress for the published lessons in this
     // course. The old learning_space_sessions table was removed when

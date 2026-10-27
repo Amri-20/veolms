@@ -93,6 +93,12 @@ export const courseAccessResponseSchema = courseAccessSummarySchema.extend({
    */
   resume: courseAccessResumeSchema.nullable(),
   /**
+   * When the signed-in learner's enrolment ends; null for one that does
+   * not end, or for a viewer who is not enrolled. Absent from a response
+   * built before the field existed.
+   */
+  accessExpiresAt: z.string().nullable().optional(),
+  /**
    * The version of the course's public curriculum now. A page built from an
    * older copy (`version` of `GET /courses/:idOrSlug/curriculum`) knows the
    * course changed after it was built and asks for the curriculum again.

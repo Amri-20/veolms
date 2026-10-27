@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { scrollEventTarget } from "./pageScrollport";
 import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
@@ -286,7 +287,8 @@ export function useElasticScroller({
       }
     };
 
-    scrollport.addEventListener("scroll", updateControl, { passive: true });
+    const scrollEvents = scrollEventTarget(scrollport);
+    scrollEvents.addEventListener("scroll", updateControl, { passive: true });
     scrollport.addEventListener("wheel", interruptAutomatedScroll, {
       passive: true,
     });
@@ -296,7 +298,7 @@ export function useElasticScroller({
     scrollport.addEventListener("pointerdown", beginScrollbarScroll);
     scrollport.addEventListener("keydown", interruptFromKeyboard);
     return () => {
-      scrollport.removeEventListener("scroll", updateControl);
+      scrollEvents.removeEventListener("scroll", updateControl);
       scrollport.removeEventListener("wheel", interruptAutomatedScroll);
       scrollport.removeEventListener("touchmove", interruptAutomatedScroll);
       scrollport.removeEventListener("pointerdown", beginScrollbarScroll);

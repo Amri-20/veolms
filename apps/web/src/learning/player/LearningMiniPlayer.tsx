@@ -76,6 +76,12 @@ const EMPTY_CURRICULUM_SECTIONS: CourseSection[] = [];
 
 const MAX_HANDOFF_DRIFT_SECONDS = 0.35;
 const RESUME_PERSIST_INTERVAL_MS = 5_000;
+/**
+ * How long the sound takes to fade when the player is swiped away: within
+ * the swipe's own animation (`DISMISS_DURATION`, 200ms), so it is silent
+ * just before the player is closed.
+ */
+const DISMISS_FADE_MS = 180;
 
 export interface LearningMiniPlayerProps {
   session: LearningMiniPlayerSession;
@@ -183,6 +189,26 @@ export function LearningMiniPlayer({
     handleRestore,
     isExpanded,
   );
+
+  // Swiped away while it plays, the sound fades out with the player instead
+  // of stopping at once when it is gone.
+  const dismissing = miniPlayerGestures.mode === "dismissing";
+  useEffect(() => {
+    if (!dismissing) return undefined;
+    const player = playerRef.current;
+    const media = player?.getSnapshot().media;
+    if (!player || !media?.playing || media.muted || media.volume <= 0) {
+      return undefined;
+    }
+    const startVolume = media.volume;
+    const startedAt = performance.now();
+    let frame = window.requestAnimationFrame(function fade(now) {
+      const progress = Math.min(1, (now - startedAt) / DISMISS_FADE_MS);
+      player.setVolume(startVolume * (1 - progress));
+      if (progress < 1) frame = window.requestAnimationFrame(fade);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [dismissing]);
 
   const selectedLesson = session.selectedLesson ?? 1;
   const { data: courseOverview } = useLearningCourse(session.courseSlug, {

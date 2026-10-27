@@ -26,6 +26,7 @@ import type { NavigateTo } from "./routing/navigation";
 import { useGuestHomePage } from "./services/home";
 import { useViewerCourseState } from "./courses/viewerCourseState";
 import "./home/guest/guest-home-shell.css";
+import { LegalLinks } from "./legal/LegalLinks";
 
 const FREE_COURSES_SECTION_ID = "guest-home-free-courses";
 
@@ -210,6 +211,7 @@ export function GuestHome({
           ) : null}
         </div>
       ) : null}
+      <LegalLinks className="mt-10 pb-6" />
     </div>
   );
 }

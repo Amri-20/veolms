@@ -83,7 +83,6 @@ export interface SidebarAppearanceDockProps {
     mobile?: boolean,
   ) => void;
   page: string;
-  learningOriginPage: string | null;
   settingsControlTitle: string;
   primaryShortcutModifier: "Meta" | "Control";
   settingsQuickMenu: "desktop" | "mobile" | null;
@@ -143,7 +142,6 @@ export function SidebarAppearanceDock({
   showReadingModeMenu,
   openReadingModeMenu,
   page,
-  learningOriginPage,
   settingsControlTitle,
   primaryShortcutModifier,
   settingsQuickMenu,
@@ -340,8 +338,7 @@ export function SidebarAppearanceDock({
         }
 
         if (item === "settings") {
-          const settingsActive =
-            page === "settings" || learningOriginPage === "settings";
+          const settingsActive = page === "settings";
           return (
             <button
               key={item}

@@ -1539,6 +1539,12 @@ export function createCourseService({
         pricing_type: resolveCoursePricing(pricing).pricingType,
         access_type: accessRule?.access_type,
       }),
+      accessValidity: accessRule
+        ? {
+            durationType: accessRule.duration_type,
+            durationDays: accessRule.duration_days ?? null,
+          }
+        : null,
       stats: {
         totalSections: sections.length,
         totalLessons: lessons.length,

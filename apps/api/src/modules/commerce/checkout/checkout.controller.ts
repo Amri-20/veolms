@@ -28,11 +28,14 @@ export function createCheckoutController({
     request: FastifyRequest<{ Body: CreateCheckoutOrderRequest }>,
   ) {
     // Paid or free, an enrolment needs a verified mobile number when the
-    // academy asks for one (Platform > Security). The course page asks for
-    // it before it gets here; this holds for any other way in.
+    // academy asks for one (Platform > Security), from accounts opened since
+    // it does. The course page asks for the number when this answers that it
+    // is needed.
     if (
       !request.user!.mobileVerified &&
-      (await platformSettings.requiresVerifiedPhoneForEnrollment())
+      (await platformSettings.requiresVerifiedPhoneForEnrollment(
+        request.user!.id,
+      ))
     ) {
       throw new AppError(
         403,

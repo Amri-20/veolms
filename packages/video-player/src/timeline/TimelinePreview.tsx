@@ -143,13 +143,16 @@ const SCRUB_PILL_OVERHANG_PX = 6;
  * same height (astride where the card's bottom edge would be), the picture
  * being shown over the whole video instead. It stays centred over the
  * thumb right to either end, only stopping where it would run off the
- * player.
+ * player. Over a video with chapters, the name of the chapter at that
+ * moment stands above it, in the middle of the player.
  */
 function ScrubTimePill({
+  chapterTitle,
   position,
   previewTime,
   touch,
 }: {
+  chapterTitle: string | null;
   position: number;
   previewTime: number;
   /** A finger drag: the pill rises clear of the thumb on the timeline. */
@@ -172,6 +175,14 @@ function ScrubTimePill({
       >
         {formatMediaTime(previewTime)}
       </span>
+      {chapterTitle ? (
+        <p
+          data-video-player-preview-chapter=""
+          className="absolute bottom-7 left-1/2 max-w-[calc(100%-2rem)] -translate-x-1/2 truncate text-center text-sm font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]"
+        >
+          {chapterTitle}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -295,6 +306,10 @@ export function TimelinePreview({
   if (scrubbing && (layout === "centered-pill" || layout === "follow-pill")) {
     return (
       <ScrubTimePill
+        // On the phone layout only: a desktop drag keeps to the time.
+        chapterTitle={
+          layout === "centered-pill" ? controllerData.chapterTitle : null
+        }
         previewTime={previewTime}
         position={timeToPositionPercent(previewTime, duration)}
         touch={scrubPointerType === "touch"}

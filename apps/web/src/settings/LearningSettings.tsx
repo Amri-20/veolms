@@ -362,14 +362,6 @@ export function LearningSettings({
               </>
             ) : null}
             <LearningToggleRow
-              label="Number lessons across the whole course"
-              note="Keep counting from one section into the next instead of starting every section at 1."
-              checked={preferences.continuousLessonNumbering}
-              onChange={(continuousLessonNumbering) =>
-                update({ continuousLessonNumbering })
-              }
-            />
-            <LearningToggleRow
               label="Keep the open section's heading in view"
               note="The heading of an open section stays at the top of the course outline while its lessons scroll."
               checked={preferences.stickOpenSection}

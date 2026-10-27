@@ -653,15 +653,6 @@ export const CommentCard = React.memo(function CommentCard({
                       />
                     )}
                   </span>
-                  {isQuestion && Boolean(comment.isSolved) && (
-                    <span
-                      data-testid="qa-solved-badge"
-                      className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400"
-                    >
-                      <CheckCircle size={13} weight="bold" aria-hidden="true" />
-                      <span>Solved</span>
-                    </span>
-                  )}
                   {Boolean(comment.isLocked) && (
                     <span
                       data-testid="thread-locked-badge"
@@ -1111,8 +1102,6 @@ function ReplyCard({
   const replyLikesCount = isBackendMode
     ? reply.likes
     : reply.likes + (localLiked ? 1 : 0);
-  const canAcceptReply =
-    Boolean(getServerEntityId(reply)) && reply.creationStatus !== "pending";
   const replyClientId = getClientEntityId(reply);
   const replyServerId = getServerEntityId(reply);
   const deletion = useOptimisticDeletion("reply", replyClientId, replyServerId);
@@ -1208,26 +1197,6 @@ function ReplyCard({
                     canParticipate &&
                     (!isBackendMode || Boolean(getServerEntityId(reply)))
                   }
-                  canAcceptAnswer={
-                    canParticipate &&
-                    isQuestion &&
-                    canAcceptAnswer &&
-                    canAcceptReply
-                  }
-                  isAccepted={Boolean(reply.isAccepted)}
-                  onToggleAccept={
-                    canParticipate &&
-                    isQuestion &&
-                    canAcceptAnswer &&
-                    onToggleAccept
-                      ? () =>
-                          onToggleAccept(
-                            reply.id,
-                            !reply.isAccepted,
-                            getServerEntityId(reply),
-                          )
-                      : undefined
-                  }
                   onEdit={() => {
                     setEditDraft(
                       reply.content ?? createDiscussionDraft(reply.text),
@@ -1321,49 +1290,6 @@ function ReplyCard({
                     <span>{replyLikesCount}</span>
                   </button>
                 )}
-                {canParticipate &&
-                  isQuestion &&
-                  canAcceptAnswer &&
-                  onToggleAccept && (
-                    <button
-                      type="button"
-                      data-testid={`accept-reply-btn-${reply.id}`}
-                      disabled={
-                        reply.creationStatus === "pending" ||
-                        !getServerEntityId(reply)
-                      }
-                      aria-label={
-                        reply.isAccepted ? "Unaccept answer" : "Accept answer"
-                      }
-                      title={
-                        reply.isAccepted ? "Unaccept answer" : "Accept answer"
-                      }
-                      onClick={() => {
-                        if (
-                          reply.creationStatus === "pending" ||
-                          !getServerEntityId(reply)
-                        ) {
-                          return;
-                        }
-                        onToggleAccept(
-                          reply.id,
-                          !reply.isAccepted,
-                          getServerEntityId(reply),
-                        );
-                      }}
-                      className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-(--accent) ${
-                        reply.isAccepted
-                          ? "bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400"
-                          : "text-(--muted) hover:bg-(--hover) hover:text-(--text)"
-                      }`}
-                    >
-                      <CheckCircle
-                        size={16}
-                        weight={reply.isAccepted ? "fill" : "bold"}
-                      />
-                      <span>{reply.isAccepted ? "Accepted" : "Accept"}</span>
-                    </button>
-                  )}
                 {canParticipate && (
                   <button
                     type="button"

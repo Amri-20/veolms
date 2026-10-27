@@ -802,6 +802,21 @@ export const courseOverviewSchema = z.object({
    * built before the field existed; read that as true.
    */
   canSelfEnroll: z.boolean().optional(),
+  /**
+   * How long a learner keeps the course once they have it: for life, for a
+   * number of days from enrolling, or until a date set for each learner.
+   * Like `canSelfEnroll` it describes the course, not the viewer (see
+   * `courseAccessResponseSchema.accessExpiresAt` for a learner's own end
+   * date). Null for a course with no access rule; absent from a response
+   * built before the field existed.
+   */
+  accessValidity: z
+    .object({
+      durationType: accessDurationTypeSchema,
+      durationDays: z.number().int().positive().nullable(),
+    })
+    .nullable()
+    .optional(),
   stats: z.object({
     totalSections: z.number().int().nonnegative(),
     totalLessons: z.number().int().nonnegative(),

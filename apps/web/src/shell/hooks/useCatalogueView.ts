@@ -364,8 +364,7 @@ export function useCatalogueView({
       // See visibleCourses below: the student "All" list arrives already
       // searched, so the count must not narrow it a second time.
       search:
-        !needsCompleteCourseList &&
-        (effectiveRole === "student" || pagedCourseQuery.isPlaceholderData)
+        !needsCompleteCourseList && effectiveRole === "student"
           ? ""
           : debouncedSearch,
     });
@@ -382,7 +381,6 @@ export function useCatalogueView({
     deletedCoursesData?.courses?.length,
     effectiveRole,
     needsCompleteCourseList,
-    pagedCourseQuery.isPlaceholderData,
     statusFilter,
     wishlisted,
   ]);
@@ -412,10 +410,13 @@ export function useCatalogueView({
         // The student "All" list is searched by the server, which also
         // matches the full description. Filtering it again here on title
         // and short description hid a course found only by its long
-        // description. Lists the server does not search keep this filter.
+        // description. Lists the server does not search keep this filter:
+        // a creator's own courses are one. (Whether the student list is
+        // showing its previous page meanwhile says nothing about them: the
+        // creator's search changed its key too, and left it showing a
+        // placeholder, which had turned their search off.)
         search:
-          !needsCompleteCourseList &&
-          (effectiveRole === "student" || pagedCourseQuery.isPlaceholderData)
+          !needsCompleteCourseList && effectiveRole === "student"
             ? ""
             : debouncedSearch,
         sort,
@@ -428,7 +429,6 @@ export function useCatalogueView({
       enrollmentPromotionAllowed,
       debouncedSearch,
       needsCompleteCourseList,
-      pagedCourseQuery.isPlaceholderData,
       sort,
       statusFilter,
       wishlisted,

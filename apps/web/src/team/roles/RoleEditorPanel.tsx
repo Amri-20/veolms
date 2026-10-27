@@ -28,6 +28,7 @@ import { inputClassName, secondaryButtonClassName } from "../TeamBits";
 import { useTeamAccess } from "../useTeamAccess";
 import { PermissionGroup } from "./PermissionGroup";
 import { isRequiredByOther, tick, untick } from "./permissionSelection";
+import { fuzzyMatches } from "../../lib/fuzzySearch";
 
 export type RoleEditorTarget =
   { mode: "create"; from?: TeamRole } | { mode: "edit"; role: TeamRole };
@@ -136,7 +137,7 @@ export function RoleEditorPanel({
           group,
           entries: term
             ? group.entries.filter((entry) =>
-                `${entry.label} ${entry.help}`.toLowerCase().includes(term),
+                fuzzyMatches(term, entry.label, entry.help),
               )
             : group.entries,
         }))

@@ -28,6 +28,14 @@ import {
  */
 const SETTINGS_CACHE_MS = 5 * 60_000;
 const SETTINGS_KEY = "settings";
+/**
+ * Accounts opened before this are not asked to verify a mobile number to
+ * enrol (Platform > Security): the requirement is for new learners, and
+ * learners who were already here keep enrolling as they did.
+ */
+export const PHONE_VERIFICATION_NEW_ACCOUNTS_FROM = new Date(
+  "2026-10-28T00:00:00Z",
+);
 
 type StoredDocument = Record<string, Record<string, unknown>>;
 
@@ -132,7 +140,12 @@ export interface PlatformSettingsService {
     changes: UpdatePlatformSettingsRequest,
     updatedBy: string | null,
   ): Promise<PlatformSettingsResponse>;
-  requiresVerifiedPhoneForEnrollment(): Promise<boolean>;
+  /**
+   * Whether enrolling needs a verified mobile number: the academy's
+   * setting, and, for a given learner, only when their account is new (see
+   * `PHONE_VERIFICATION_NEW_ACCOUNTS_FROM`).
+   */
+  requiresVerifiedPhoneForEnrollment(userId?: string): Promise<boolean>;
 }
 
 export function createPlatformSettingsService({
@@ -238,8 +251,18 @@ export function createPlatformSettingsService({
       toPublicSettings((await readSettings()).settings),
     getInvoiceSettings: async () => (await readSettings()).settings.invoice,
     updateSettings,
-    requiresVerifiedPhoneForEnrollment: async () =>
-      (await readSettings()).settings.security
-        .requireVerifiedPhoneForEnrollment,
+    requiresVerifiedPhoneForEnrollment: async (userId?: string) => {
+      const required = (await readSettings()).settings.security
+        .requireVerifiedPhoneForEnrollment;
+      if (!required || !userId) return required;
+      const account = await database
+        .selectFrom("users")
+        .select("created_at")
+        .where("id", "=", userId)
+        .executeTakeFirst();
+      return (
+        !account || account.created_at >= PHONE_VERIFICATION_NEW_ACCOUNTS_FROM
+      );
+    },
   };
 }

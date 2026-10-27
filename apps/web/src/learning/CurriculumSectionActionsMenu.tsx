@@ -1,7 +1,6 @@
 import { ArrowsInLineVerticalIcon as ArrowsInLineVertical } from "@phosphor-icons/react/ArrowsInLineVertical";
 import { ArrowsOutLineVerticalIcon as ArrowsOutLineVertical } from "@phosphor-icons/react/ArrowsOutLineVertical";
 import { DotsThreeVerticalIcon as DotsThreeVertical } from "@phosphor-icons/react/DotsThreeVertical";
-import { ListNumbersIcon as ListNumbers } from "@phosphor-icons/react/ListNumbers";
 import { PushPinSimpleIcon as PushPinSimple } from "@phosphor-icons/react/PushPinSimple";
 import { TargetIcon as Target } from "@phosphor-icons/react/Target";
 import type { ReactNode, RefObject } from "react";
@@ -62,22 +61,15 @@ interface CurriculumSetting {
 }
 
 /**
- * The settings the menus switch, in order: whether an open section's
- * heading holds to the top of the panel, and whether lessons are numbered
- * 1 to the last through the course (or from 1 again in every section).
- * Each is the learning setting itself, so the settings page and every list
- * follow.
+ * The settings the menus switch: whether an open section's heading holds to
+ * the top of the panel. Each is the learning setting itself, so the settings
+ * page and every list follow.
  */
 const CURRICULUM_SETTINGS: readonly CurriculumSetting[] = [
   {
     key: "stickOpenSection",
     icon: <PushPinSimple aria-hidden="true" />,
     label: "Stick open section",
-  },
-  {
-    key: "continuousLessonNumbering",
-    icon: <ListNumbers aria-hidden="true" />,
-    label: "Continuous numbering",
   },
 ];
 
