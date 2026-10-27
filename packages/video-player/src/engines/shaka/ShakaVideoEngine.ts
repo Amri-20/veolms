@@ -700,6 +700,16 @@ export class ShakaVideoEngine extends MediaElementEngineBase {
     this.emit("texttrackchange", { track: selected });
   }
 
+  /**
+   * Shaka shows captions through <track> elements of its own, which mirror
+   * its text tracks under other ids and stay hidden until one is picked. The
+   * list stays Shaka's, so a caption picked in the menu is one this engine
+   * can select (from the browser's list it was "not available").
+   */
+  protected override refreshNativeTextTracks(): void {
+    this.refreshTracks(true);
+  }
+
   protected override async onAttached(media: HTMLMediaElement): Promise<void> {
     const preloadSession = await waitForEarlyShakaPreloadSession();
     const runtime =
