@@ -986,7 +986,7 @@ export function LessonPlayerControls({
     error,
     fullscreen,
     lifecycle,
-    previewTime,
+    previewing,
     scrubbing,
     settingsOpen,
   } = usePlayerState(
@@ -996,7 +996,9 @@ export function LessonPlayerControls({
       error: media.error,
       fullscreen: ui.fullscreen,
       lifecycle: media.lifecycle,
-      previewTime: ui.previewTime,
+      // Whether a moment is previewed, not which: the time changes on every
+      // move over the timeline, and this whole bar re-rendered for each.
+      previewing: ui.previewTime !== null,
       scrubbing: ui.scrubbing,
       settingsOpen: ui.settingsView !== "closed",
     }),
@@ -1006,7 +1008,7 @@ export function LessonPlayerControls({
       left.error === right.error &&
       left.fullscreen === right.fullscreen &&
       left.lifecycle === right.lifecycle &&
-      left.previewTime === right.previewTime &&
+      left.previewing === right.previewing &&
       left.scrubbing === right.scrubbing &&
       left.settingsOpen === right.settingsOpen,
   );
@@ -1063,7 +1065,7 @@ export function LessonPlayerControls({
   // full screen vignette layer), so the top vignette fades out while the timeline
   // is hovered or dragged, at any width. On a phone a drag also hides the buttons
   // along the top (PersistentLearningPlayerHost).
-  const previewBarShown = scrubbing || previewTime !== null;
+  const previewBarShown = scrubbing || previewing;
   const mobileVignettes = (
     <>
       <div
@@ -1164,13 +1166,13 @@ export function LessonPlayerControls({
   const mobileTimeCorner = (
     <div
       data-mobile-player-corner="time"
-      data-preview-obscured={previewTime !== null ? "true" : "false"}
+      data-preview-obscured={previewing ? "true" : "false"}
       className={`pointer-events-none absolute bottom-2.5 left-2 flex h-11 w-fit items-center transition-opacity duration-150 ease-out motion-reduce:transition-none sm:bottom-2.5 sm:left-3 sm:right-auto sm:h-auto ${mobileInteraction ? `sm:!h-11 ${mobileFullscreen ? `!bottom-15 !left-3 sm:!bottom-16 sm:!left-3 ${QUARTER_TURN_CORNER_CLASS}` : "sm:!left-2"}` : ""} ${
         fullscreenCoursePanelVisible && mobileInteraction
           ? "!static sm:!static"
           : ""
       } ${
-        previewTime !== null
+        previewing
           ? `max-sm:pointer-events-none max-sm:opacity-0 ${mobileInteraction ? "sm:!pointer-events-none sm:!opacity-0" : ""}`
           : "max-sm:opacity-100"
       }`}
@@ -1220,13 +1222,13 @@ export function LessonPlayerControls({
   const mobileFullscreenCorner = (
     <div
       data-mobile-player-corner="fullscreen"
-      data-preview-obscured={previewTime !== null ? "true" : "false"}
+      data-preview-obscured={previewing ? "true" : "false"}
       className={`pointer-events-auto absolute bottom-2.5 right-2 z-60 transition-opacity duration-150 ease-out motion-reduce:transition-none sm:hidden ${mobileInteraction ? `sm:!block ${mobileFullscreen ? `!bottom-15 !right-3 sm:!bottom-16 sm:!right-3 ${QUARTER_TURN_CORNER_CLASS}` : ""}` : ""} ${
         fullscreenCoursePanelVisible && mobileInteraction
           ? "!static sm:!static"
           : ""
       } ${
-        previewTime !== null
+        previewing
           ? `max-sm:pointer-events-none max-sm:opacity-0 ${mobileInteraction ? "sm:!pointer-events-none sm:!opacity-0" : ""}`
           : "max-sm:opacity-100"
       }`}
