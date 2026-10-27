@@ -72,7 +72,6 @@ export interface MobileSheetAppearanceProps {
     mobile?: boolean,
   ) => void;
   page: string;
-  learningOriginPage: string | null;
   sidebarPreferences: SidebarPreferences;
   settingsControlTitle: string;
   primaryShortcutModifier: "Meta" | "Control";
@@ -114,7 +113,6 @@ export function MobileSheetAppearance({
   showReadingModeMenu,
   openReadingModeMenu,
   page,
-  learningOriginPage,
   sidebarPreferences,
   settingsControlTitle,
   primaryShortcutModifier,
@@ -302,9 +300,7 @@ export function MobileSheetAppearance({
         }
 
         if (item === "settings") {
-          const settingsActive =
-            page === "settings" ||
-            learningOriginPage === "settings";
+          const settingsActive = page === "settings";
           return (
             <button
               key={item}

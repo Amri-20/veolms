@@ -126,7 +126,6 @@ interface CoursesPageProps {
    * While a lesson fills the screen: the page and navigation section the
    * player was opened from, which the shell keeps highlighted.
    */
-  learningOriginPage?: string | null;
   learningOriginSection?: string | null;
   learningMotionStageRef?: Ref<HTMLDivElement>;
   renderMain?: ((context: CoursesPageRenderContext) => ReactNode) | null;
@@ -159,7 +158,6 @@ export function CoursesPage({
   couponId,
   miniPlayerCourseId = null,
   learningBackground = null,
-  learningOriginPage = null,
   learningOriginSection = null,
   learningMotionStageRef,
   renderMain = null,
@@ -1289,7 +1287,6 @@ export function CoursesPage({
                 showReadingModeMenu={showReadingModeMenu}
                 openReadingModeMenu={openReadingModeMenu}
                 page={page}
-                learningOriginPage={learningOriginPage}
                 settingsControlTitle={settingsControlTitle}
                 primaryShortcutModifier={primaryShortcutModifier}
                 settingsQuickMenu={settingsQuickMenu}
@@ -1569,7 +1566,6 @@ export function CoursesPage({
                   showReadingModeMenu={showReadingModeMenu}
                   openReadingModeMenu={openReadingModeMenu}
                   page={page}
-                  learningOriginPage={learningOriginPage}
                   sidebarPreferences={sidebarPreferences}
                   settingsControlTitle={settingsControlTitle}
                   primaryShortcutModifier={primaryShortcutModifier}
