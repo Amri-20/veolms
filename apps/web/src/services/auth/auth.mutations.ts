@@ -32,6 +32,7 @@ import type {
 import type { ApiError } from "../../lib/api-error";
 import { autosyncManager } from "../../lib/autosync/manager";
 import { authStore } from "../../store/auth.store";
+import { askToSignOutADevice } from "../../store/deviceLimitPrompt";
 import { writeSessionPresence } from "../../store/sessionPresence";
 import {
   endPendingMfaLogin,
@@ -49,6 +50,25 @@ import { courseKeys } from "../courses/courses.keys";
 import { learningInteractionKeys } from "../learning-interactions/learning-interactions.keys";
 import { resetRegisteredInteractionState } from "../learning-interactions/interaction-reset-registry";
 import { trackAnalyticsEvent } from "../../lib/analytics-track";
+
+/**
+ * A student at the academy's device limit is asked to sign a device out;
+ * once they do, the sign-in finishes as if it had gone through at once, so
+ * whatever was waiting on it (the login card, the OAuth callback, One Tap)
+ * carries on as usual.
+ */
+async function signInMakingRoom(
+  signIn: () => Promise<LoginResponse>,
+): Promise<LoginResponse> {
+  try {
+    return await signIn();
+  } catch (error) {
+    if ((error as Partial<ApiError> | null)?.code !== "DEVICE_LIMIT_REACHED") {
+      throw error;
+    }
+    return askToSignOutADevice(error);
+  }
+}
 
 function persistAuthenticatedSession(
   queryClient: QueryClient,
@@ -233,7 +253,7 @@ export function useLogin() {
   const queryClient = useQueryClient();
 
   return useMutation<LoginResponse, ApiError, LoginRequest>({
-    mutationFn: (payload) => authService.login(payload),
+    mutationFn: (payload) => signInMakingRoom(() => authService.login(payload)),
     onSuccess: (data) => {
       persistAuthenticatedSession(queryClient, data, "otp");
     },
@@ -300,7 +320,8 @@ export function useOauthLogin() {
   const queryClient = useQueryClient();
 
   return useMutation<LoginResponse, ApiError, OauthLoginRequest>({
-    mutationFn: (payload) => authService.oauthLogin(payload),
+    mutationFn: (payload) =>
+      signInMakingRoom(() => authService.oauthLogin(payload)),
     onSuccess: (data) => {
       persistAuthenticatedSession(queryClient, data, "oauth");
     },
@@ -311,7 +332,8 @@ export function useGoogleOneTapLogin() {
   const queryClient = useQueryClient();
 
   return useMutation<LoginResponse, ApiError, GoogleOneTapLoginRequest>({
-    mutationFn: (payload) => authService.googleOneTapLogin(payload),
+    mutationFn: (payload) =>
+      signInMakingRoom(() => authService.googleOneTapLogin(payload)),
     onSuccess: (data) => {
       persistAuthenticatedSession(queryClient, data, "google");
     },
