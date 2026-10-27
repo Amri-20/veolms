@@ -28,6 +28,7 @@ import type {
 import type { CourseVideo } from "../courseContent";
 import { readLearningPreferences } from "../../settings/settingsPreferences";
 import { LessonAmbientProjection } from "./LessonAmbientProjection";
+import { MiniPlayerReadingModeEffects } from "./MiniPlayerReadingModeEffects";
 import { LessonTroubleIllustration } from "./LessonTroubleIllustration";
 import {
   OctopusIllustration,
@@ -1886,43 +1887,53 @@ export function LessonVideoPlayer({
         )
       }
       overlays={
-        holdingPreviousLesson ? (
-          // The same waiting surface the player used to be replaced with:
-          // black over the held lesson, with the loader, above the controls.
-          // In full screen the controls stay above it, so the learner can
-          // still leave full screen or pick another lesson.
-          <div
-            className={cn(
-              "absolute inset-0 grid place-items-center bg-black",
-              playerFullscreen ? "pointer-events-none z-20" : "z-50",
-            )}
-            role="status"
-            aria-label="Loading video"
-            data-learning-playback-gate="pending"
-          >
-            <VideoLoadingSpinner />
-          </div>
-        ) : presentation === "full" && !minimizeGesture.controlsSuppressed ? (
-          <>
-            <LessonAmbientProjection enabled={ambientEnabled} />
-            {endScreenVisible ? (
-              <LessonEndScreenOverlay
-                nextLesson={
-                  canGoNext
-                    ? (nextLessonInfo ?? { id: 0, title: "Next lesson" })
-                    : undefined
-                }
-                autoplayEnabled={autoplayEnabled && !autoplayCancelled}
-                courseComplete={courseComplete}
-                onGoNext={handleGoNextFromEndScreen}
-                onRestart={handleRestart}
-                onCancelAutoplay={cancelEndScreenAutoplay}
-                onClose={dismissEndScreen}
-                controlsInset
-              />
-            ) : null}
-          </>
-        ) : undefined
+        <>
+          {holdingPreviousLesson ? (
+            // The same waiting surface the player used to be replaced with:
+            // black over the held lesson, with the loader, above the controls.
+            // In full screen the controls stay above it, so the learner can
+            // still leave full screen or pick another lesson.
+            <div
+              className={cn(
+                "absolute inset-0 grid place-items-center bg-black",
+                playerFullscreen ? "pointer-events-none z-20" : "z-50",
+              )}
+              role="status"
+              aria-label="Loading video"
+              data-learning-playback-gate="pending"
+            >
+              <VideoLoadingSpinner />
+            </div>
+          ) : presentation === "full" && !minimizeGesture.controlsSuppressed ? (
+            <>
+              <LessonAmbientProjection enabled={ambientEnabled} />
+              {endScreenVisible ? (
+                <LessonEndScreenOverlay
+                  nextLesson={
+                    canGoNext
+                      ? (nextLessonInfo ?? { id: 0, title: "Next lesson" })
+                      : undefined
+                  }
+                  autoplayEnabled={autoplayEnabled && !autoplayCancelled}
+                  courseComplete={courseComplete}
+                  onGoNext={handleGoNextFromEndScreen}
+                  onRestart={handleRestart}
+                  onCancelAutoplay={cancelEndScreenAutoplay}
+                  onClose={dismissEndScreen}
+                  controlsInset
+                />
+              ) : null}
+            </>
+          ) : undefined}
+          {/* Reading mode is drawn over the page, which a full screen leaves
+              behind (only the full-screen element is painted): the same
+              layers are repeated over the player while it is full screen. */}
+          {playerFullscreen ? (
+            <div className="pointer-events-none absolute inset-0 z-100">
+              <MiniPlayerReadingModeEffects />
+            </div>
+          ) : null}
+        </>
       }
       playbackFeedback={
         presentation === "mini" || minimizeGesture.controlsSuppressed
