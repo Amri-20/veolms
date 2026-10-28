@@ -10,11 +10,17 @@
  * or two letters swapped. Words under 4 letters must be found as typed.
  */
 
-/** Lower case, accents dropped, runs of spaces made one. */
+/**
+ * Lower case, accents dropped, dots left out, runs of spaces made one.
+ * Without its dots "Node.js" is "nodejs", so "nodejs" finds it (as do
+ * "nextjs", "reactjs", "vuejs"…), and "node.js" finds "NodeJS". The server's
+ * search leaves dots out the same way (apps/api/src/lib/fuzzy-search.ts).
+ */
 export function normalizeSearchText(text: string): string {
   return text
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
+    .replace(/\./g, "")
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
