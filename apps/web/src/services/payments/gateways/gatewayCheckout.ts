@@ -51,7 +51,9 @@ export async function openGatewayCheckout(
   request: GatewayCheckoutRequest,
   callbacks: GatewayCheckoutCallbacks,
 ): Promise<StopGatewayCheckout> {
-  switch (request.gateway.provider) {
+  // An API from before gateways were chosen by country names none, and
+  // all its checkouts were Razorpay's (this page can be served first).
+  switch ((request.gateway.provider as string | undefined) ?? "razorpay") {
     case "dodo": {
       const { openDodoCheckout } = await import("./dodoCheckout");
       return await openDodoCheckout(request, callbacks);
