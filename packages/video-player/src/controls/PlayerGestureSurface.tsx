@@ -46,6 +46,12 @@ export interface PlayerGestureSurfaceProps {
    * mouse double click still means fullscreen. "always": for a mouse too.
    */
   doubleTapSeek?: "always" | "responsive";
+  /**
+   * What a single tap on the picture does. "responsive": shows or hides the
+   * controls in the phone layout and for any tap made with a finger or pen
+   * (a tablet or a touch screen laptop too), and plays or pauses for a
+   * mouse. A touch never pauses: that is left to the pause button.
+   */
   emptyTapBehavior?: "responsive" | "toggle-controls" | "toggle-playback";
   /** Replaces what a single tap does; told which kind of pointer made it. */
   onEmptyTap?: (pointerType: string) => void;
@@ -58,10 +64,12 @@ const isDirectPointer = (pointerType: string) =>
 function shouldToggleControls(
   emptyTapBehavior: PlayerGestureSurfaceProps["emptyTapBehavior"],
   mobileInteraction: boolean,
+  pointerType: string,
 ): boolean {
   return (
     emptyTapBehavior === "toggle-controls" ||
-    (emptyTapBehavior === "responsive" && mobileInteraction)
+    (emptyTapBehavior === "responsive" &&
+      (mobileInteraction || isDirectPointer(pointerType)))
   );
 }
 
@@ -312,7 +320,9 @@ export function PlayerGestureSurface({
           onEmptyTap(pointerType);
           return;
         }
-        if (shouldToggleControls(emptyTapBehavior, mobileInteraction)) {
+        if (
+          shouldToggleControls(emptyTapBehavior, mobileInteraction, pointerType)
+        ) {
           const shouldShowControls = !controlsVisibleBeforePressRef.current;
           if (!shouldShowControls) controller.setSettingsView("closed");
           controller.setControlsVisible(shouldShowControls);
@@ -389,7 +399,7 @@ export function PlayerGestureSurface({
       clearSingleTapTimer();
       if (
         !onEmptyTap &&
-        !shouldToggleControls(emptyTapBehavior, mobileInteraction)
+        !shouldToggleControls(emptyTapBehavior, mobileInteraction, pointerType)
       ) {
         void controller.togglePlayback().catch(() => undefined);
       }

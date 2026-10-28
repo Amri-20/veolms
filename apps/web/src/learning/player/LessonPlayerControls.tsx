@@ -1685,9 +1685,12 @@ export function LessonCentralControls({
   const visible =
     !controlsSuppressed && !loading && controlsVisible && !scrubbing;
 
+  // Shown in the phone layout and on any device with a touch screen (a
+  // tablet, a touch screen laptop), where a tap on the picture only brings
+  // the controls up: the play button in the middle is the one in reach.
   return (
     <div
-      className={`pointer-events-none absolute inset-0 z-20 hidden place-items-center transition-opacity duration-200 max-sm:grid ${EXPAND_MOTION_HIDDEN_CLASS} ${mobileInteraction ? "sm:!grid" : ""} ${
+      className={`pointer-events-none absolute inset-0 z-20 hidden place-items-center transition-opacity duration-200 max-sm:grid [@media(any-pointer:coarse)]:grid ${EXPAND_MOTION_HIDDEN_CLASS} ${mobileInteraction ? "sm:!grid" : ""} ${
         visible
           ? "visible opacity-100"
           : `invisible opacity-0 [&_*]:!pointer-events-none ${
