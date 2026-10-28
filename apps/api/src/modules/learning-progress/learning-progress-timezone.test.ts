@@ -56,7 +56,6 @@ function buildService(supportedZones: string[]) {
     database: createMockDatabase(supportedZones),
     services: {} as AppServices,
     courseService: {} as never,
-    curriculumService: {} as never,
     quizCompletionService: {} as never,
   });
 }
