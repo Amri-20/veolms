@@ -57,6 +57,13 @@ export const SYSTEM_ROLES = {
     description: "Read-only analytics across courses and revenue",
     is_system: true,
   },
+  veolms_team: {
+    id: "00000000-0000-4000-8000-00000000000a",
+    name: "VeoLMS Team",
+    description:
+      "The in-house team: sees everything read-only, except revenue and orders",
+    is_system: true,
+  },
 } as const;
 
 export const ROLES = {
@@ -167,6 +174,8 @@ export const ROLE_CAPABILITY_MAPPINGS: Record<
     "lesson.video.update",
     "lesson.thumbnail.update",
     "lesson.reorder",
+    // Publishing a lesson used to come with editing its details.
+    "lesson.publish",
     "quiz.read",
     "quiz.create",
     "quiz.settings.update",
@@ -202,6 +211,7 @@ export const ROLE_CAPABILITY_MAPPINGS: Record<
     "lesson.video.update",
     "lesson.thumbnail.update",
     "lesson.reorder",
+    "lesson.publish",
     "lesson.delete",
     "quiz.read",
     "quiz.create",
@@ -246,6 +256,23 @@ export const ROLE_CAPABILITY_MAPPINGS: Record<
     "analytics.course.read",
     "analytics.revenue.read",
     "course.read",
+  ],
+  // Every read-only key but money: no revenue analytics, no orders. Kept
+  // equal to migration 20261028160000 by hand.
+  veolms_team: [
+    "course.read",
+    "course.preview",
+    "lesson.read",
+    "quiz.read",
+    "submission.read",
+    "student.read",
+    "enrollment.read",
+    "discussion.read",
+    "analytics.course.read",
+    "coupon.read",
+    "platform.settings.read",
+    "team.read",
+    "role.read",
   ],
   student: [], // Student content access is governed by active course enrollments, not administrative roles
 };
@@ -674,6 +701,8 @@ export const ROLE_MENU_PERMISSIONS: Record<
       canDelete: false,
     },
   ],
+  // The web builds its sidebar from permissions; these menus are legacy.
+  veolms_team: [],
 };
 
 export async function seedRolesAndPermissions(

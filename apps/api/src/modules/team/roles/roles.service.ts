@@ -13,7 +13,9 @@ import { publishTeamEvent } from "../shared/team.events.ts";
 import * as teamRepository from "../shared/team.repository.ts";
 import {
   assertCanGrantPermissions,
+  assertDeletableRole,
   assertEditableRole,
+  assertNoSelfLockout,
   assertRoleUnused,
   isReservedRoleName,
 } from "../shared/team.rules.ts";
@@ -110,23 +112,43 @@ export function createTeamRolesService({
       if (!role || role.name === "student") {
         throw new AppError(404, "ROLE_NOT_FOUND", "Role not found.");
       }
-      assertEditableRole(role);
-
       const actor = await teamRepository.loadActor(trx, actorUserId);
+      assertEditableRole(actor, role);
+
       // Both what the role grants now and what it will grant: changing a
       // role is giving out (or taking back) everything in it.
       assertCanGrantPermissions(actor, [...role.permissions, ...permissions]);
-      await assertNameAvailable(trx, input.name, roleId);
+      // A built-in role keeps its name: code and other roles refer to it.
+      const name = role.isSystem ? role.name : input.name.trim();
+      if (!role.isSystem) await assertNameAvailable(trx, name, roleId);
+
+      const actorRoleIds = await teamRepository.listTeamRoleIds(
+        trx,
+        actorUserId,
+      );
+      if (actorRoleIds.includes(roleId)) {
+        const otherRoles = await teamRepository.findRolesByIds(
+          trx,
+          actorRoleIds.filter((id) => id !== roleId),
+        );
+        assertNoSelfLockout(
+          actor.permissions,
+          new Set([
+            ...otherRoles.flatMap((other) => other.permissions),
+            ...permissions,
+          ]),
+        );
+      }
 
       await repository.updateRole(trx, roleId, {
-        name: input.name.trim(),
+        name,
         description: input.description?.trim() || null,
       });
       await repository.replaceRolePermissions(trx, roleId, permissions);
       await publishTeamEvent(trx, "team.role.updated", {
         actorUserId,
         roleId,
-        name: input.name.trim(),
+        name,
         permissionsBefore: [...role.permissions],
         permissionsAfter: permissions,
       });
@@ -147,7 +169,7 @@ export function createTeamRolesService({
       if (!role || role.name === "student") {
         throw new AppError(404, "ROLE_NOT_FOUND", "Role not found.");
       }
-      assertEditableRole(role);
+      assertDeletableRole(role);
 
       const actor = await teamRepository.loadActor(trx, actorUserId);
       assertCanGrantPermissions(actor, role.permissions);
