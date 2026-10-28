@@ -21,6 +21,7 @@ import type { CourseService } from "../courses/course/course.service.ts";
 import type { LearningProgressService } from "../learning-progress/learning-progress.service.ts";
 import type { AnalyticsActor } from "./analytics.types.ts";
 import { hasAcademyPermission } from "../authorization/index.ts";
+import { AppError } from "../../lib/errors.ts";
 import * as analyticsRepo from "./analytics.repository.ts";
 
 export interface AnalyticsServiceOptions {
@@ -223,6 +224,42 @@ export function createAnalyticsService(options: AnalyticsServiceOptions) {
       hasAcademyPermission(database, actor.id, "analytics.revenue.read"),
     ]);
     return course || revenue;
+  }
+
+  /**
+   * Money reaches the holders of the revenue permission, and an instructor
+   * looking at their own courses. Course analytics held for every course
+   * (a team role) stop short of it.
+   */
+  async function seesRevenue(actor: AnalyticsActor): Promise<boolean> {
+    const [course, revenue] = await Promise.all([
+      hasAcademyPermission(database, actor.id, "analytics.course.read"),
+      hasAcademyPermission(database, actor.id, "analytics.revenue.read"),
+    ]);
+    return revenue || !course;
+  }
+
+  /** The overview with every money figure taken out. */
+  function withoutRevenue(
+    response: AnalyticsOverviewResponse,
+  ): AnalyticsOverviewResponse {
+    const emptyKpi = kpi(0, 0);
+    return {
+      ...response,
+      includesRevenue: false,
+      overview: {
+        ...response.overview,
+        netRevenue: emptyKpi,
+        orders: emptyKpi,
+        refundRate: emptyKpi,
+        dailyOrders: [],
+        coursePerformance: response.overview.coursePerformance.map((row) => ({
+          ...row,
+          orders: 0,
+          netRevenue: 0,
+        })),
+      },
+    };
   }
 
   async function resolveCoursesInScope(
@@ -576,6 +613,13 @@ export function createAnalyticsService(options: AnalyticsServiceOptions) {
     actor: AnalyticsActor,
     query: AnalyticsFilterQuery,
   ): Promise<AnalyticsRevenueResponse> {
+    if (!(await seesRevenue(actor))) {
+      throw new AppError(
+        403,
+        "FORBIDDEN",
+        "Revenue analytics need the analytics.revenue.read permission.",
+      );
+    }
     const context = await resolveTabContext(actor, query);
     if (context.isEmpty) return buildEmptyRevenue();
     const { courseIdFilter, from, to, prevFrom, prevTo, scope } = context;
@@ -1102,9 +1146,13 @@ export function createAnalyticsService(options: AnalyticsServiceOptions) {
 
   return {
     overview: (actor: AnalyticsActor, query: AnalyticsFilterQuery) =>
-      cachedResponse(actor, tabKey("overview", actor, query), () =>
-        buildOverview(actor, query),
-      ),
+      cachedResponse(actor, tabKey("overview", actor, query), async () => {
+        const [response, revenue] = await Promise.all([
+          buildOverview(actor, query),
+          seesRevenue(actor),
+        ]);
+        return revenue ? response : withoutRevenue(response);
+      }),
     revenue: (actor: AnalyticsActor, query: AnalyticsFilterQuery) =>
       cachedResponse(actor, tabKey("revenue", actor, query), () =>
         buildRevenue(actor, query),

@@ -41,6 +41,7 @@ import type {
   CreateCourseSectionRequest,
   ReorderLessonsRequest,
   CreateCourseLessonRequest,
+  Permission,
 } from "@veolms/contracts";
 import { mediaService } from "../../services/media";
 import {
@@ -60,6 +61,8 @@ import { CurriculumItemStatusIndicator } from "./statusIndicators";
 import type { ApiError } from "../../lib/api-error";
 import type { PersistLessonOptions } from "./editorLocalTypes";
 import { getYoutubeImportTarget } from "../lesson-video-upload/youtube-import-target";
+import { useCapabilities } from "../../services/authorization";
+import { useAuthStore } from "../../store/auth.store";
 
 export interface CurriculumStepPanelProps {
   editingLessonTarget: { sectionId: string; lessonId: string } | null;
@@ -439,6 +442,30 @@ export function CurriculumStepPanel({
   createLessonMutation,
   handleAddLesson,
 }: CurriculumStepPanelProps) {
+  // Each action shows only to whoever may take it on this course (a new
+  // course is the user's own); the API checks the same key on its route,
+  // and on a lesson's PATCH one key per field it changes.
+  const capabilities = useCapabilities();
+  const currentUserId = useAuthStore((state) => state.user?.id);
+  const editedCourse = editorData?.course ?? {
+    creatorId: currentUserId ?? null,
+  };
+  const may = (permission: Permission) =>
+    capabilities.canOnCourse(permission, editedCourse);
+  // Sections and lesson resources.
+  const editsSections = may("course.curriculum.update");
+  const addsLessons = may("lesson.create");
+  const editsLessonDetails = may("lesson.details.update");
+  const editsLessonContent = may("lesson.content.update");
+  const publishesLessons = may("lesson.publish");
+  const reordersLessons = may("lesson.reorder");
+  const deletesLessons = may("lesson.delete");
+  // An uploaded or imported video is attached as the lesson's content.
+  const uploadsLessonMedia = editsLessonContent && may("lesson.video.update");
+  const importsFromYoutube =
+    uploadsLessonMedia && may("lesson.video.import_youtube");
+  const opensQuizzes = capabilities.can("quiz.read");
+
   // prettier-ignore
   return (
     editingLessonTarget &&
@@ -491,6 +518,9 @@ export function CurriculumStepPanel({
                 mediaAssetId: r.mediaAssetId,
               }))}
               isSaving={savingLessonId === activeLesson.id}
+              canEditDetails={editsLessonDetails}
+              canEditContent={editsLessonContent}
+              canPublish={publishesLessons}
               onBack={() => setEditingLessonTarget(null)}
               onCancel={(draft) =>
                 handleCancelLessonDraft(
@@ -531,13 +561,13 @@ export function CurriculumStepPanel({
                   },
                 );
               }}
-              onDeleteLesson={() => {
+              onDeleteLesson={deletesLessons ? () => {
                 handleDeleteLesson(
                   activeSection.id,
                   activeLesson.id,
                 );
                 setEditingLessonTarget(null);
-              }}
+              } : undefined}
               onPreviewLesson={() => {
                 if (currentCourseId) {
                   window.open(
@@ -546,22 +576,22 @@ export function CurriculumStepPanel({
                   );
                 }
               }}
-              onMediaAttached={(mediaAssetId) =>
+              onMediaAttached={uploadsLessonMedia ? (mediaAssetId) =>
                 handleLessonMediaAttached(
                   activeSection.id,
                   activeLesson.id,
                   mediaAssetId,
-                )
+                ) : undefined
               }
-              youtubeImport={getYoutubeImportTarget(
+              youtubeImport={importsFromYoutube ? getYoutubeImportTarget(
                 currentCourseId,
                 activeLesson.id,
                 activeLesson.isPendingCreation,
-              )}
+              ) : null}
               onProcessingComplete={() =>
                 handleLessonProcessingComplete()
               }
-              onUploadMedia={async (file) => {
+              onUploadMedia={uploadsLessonMedia ? async (file) => {
                 try {
                   const presigned =
                     await mediaService.presignMediaUpload({
@@ -601,8 +631,8 @@ export function CurriculumStepPanel({
                       : "Media upload failed.",
                   );
                 }
-              }}
-              onAddResourceFile={async (file) => {
+              } : undefined}
+              onAddResourceFile={editsSections ? async (file) => {
                 try {
                   const presigned =
                     await mediaService.presignMediaUpload({
@@ -648,8 +678,8 @@ export function CurriculumStepPanel({
                       : "Resource upload failed.",
                   );
                 }
-              }}
-              onDeleteResource={async (resId) => {
+              } : undefined}
+              onDeleteResource={editsSections ? async (resId) => {
                 try {
                   await handleDeleteLessonResource(resId);
                   const resItem = activeLesson.resources.find(
@@ -670,12 +700,13 @@ export function CurriculumStepPanel({
                       : "Could not remove resource.",
                   );
                 }
-              }}
+              } : undefined}
               descriptionSection={
                 <div className="flex flex-col gap-2">
                   <LessonDescriptionEditor
                     id={`lesson-description-${activeLesson.id}`}
                     disabled={
+                      !editsLessonDetails ||
                       activeLesson.isPendingCreation ||
                       savingLessonId === activeLesson.id
                     }
@@ -693,7 +724,7 @@ export function CurriculumStepPanel({
                 </div>
               }
               quizSection={
-                currentCourseId &&
+                !opensQuizzes ? undefined : currentCourseId &&
                 /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
                   activeLesson.id,
                 ) ? (
@@ -740,6 +771,7 @@ export function CurriculumStepPanel({
             )}
             <button
               type="button"
+              hidden={!editsSections}
               disabled={
                 isCreatingSection ||
                 createSectionMutation.isPending ||
@@ -791,6 +823,7 @@ export function CurriculumStepPanel({
             </p>
             <button
               type="button"
+              hidden={!editsSections}
               disabled={
                 isCreatingSection ||
                 createSectionMutation.isPending ||
@@ -838,6 +871,7 @@ export function CurriculumStepPanel({
                     : "border-[color-mix(in_srgb,var(--text)_8%,transparent)]"
               }`}
               draggable={
+                editsSections &&
                 dragEnabledSectionId === sec.id &&
                 !sec.isPendingCreation &&
                 !updatingSectionId &&
@@ -869,6 +903,7 @@ export function CurriculumStepPanel({
               >
                 <div className="flex items-center gap-3 max-[768px]:flex-1 max-[768px]:w-full max-[768px]:min-w-0 max-[768px]:gap-2">
                   <span
+                    hidden={!editsSections}
                     className={`flex items-center justify-center text-(--muted) transition-opacity duration-150 ${
                       sec.isPendingCreation ||
                       isReorderingSections ||
@@ -955,7 +990,7 @@ export function CurriculumStepPanel({
                             ? "opacity-60 pointer-events-none"
                             : ""
                         }`}
-                        onClick={(e) => {
+                        onClick={editsSections ? (e) => {
                           e.stopPropagation();
                           if (
                             sec.isPendingCreation ||
@@ -964,11 +999,13 @@ export function CurriculumStepPanel({
                           )
                             return;
                           handleStartEditSectionTitle(sec.id);
-                        }}
+                        } : undefined}
                         title={
                           sec.isPendingCreation
                             ? "Creating section..."
-                            : "Click to edit section title"
+                            : editsSections
+                              ? "Click to edit section title"
+                              : undefined
                         }
                       >
                         {sec.title}
@@ -1017,6 +1054,7 @@ export function CurriculumStepPanel({
                   )}
                   <button
                     type="button"
+                    hidden={!editsSections}
                     disabled={
                       sec.isPendingCreation ||
                       updatingSectionId === sec.id ||
@@ -1041,6 +1079,7 @@ export function CurriculumStepPanel({
                   </button>
                   <button
                     type="button"
+                    hidden={!editsSections}
                     disabled={
                       sec.isPendingCreation ||
                       deletingSectionId === sec.id ||
@@ -1213,6 +1252,7 @@ export function CurriculumStepPanel({
                                         : "border-[color-mix(in_srgb,var(--text)_10%,transparent)]"
                                     }`}
                                     draggable={
+                                      reordersLessons &&
                                       dragEnabledLessonId ===
                                         les.id &&
                                       !les.isPendingCreation &&
@@ -1252,6 +1292,7 @@ export function CurriculumStepPanel({
                                       >
                                         <div className="flex min-w-0 flex-1 items-center gap-2.5 max-[768px]:w-full max-[768px]:gap-2">
                                           <span
+                                            hidden={!reordersLessons}
                                             className={`flex items-center justify-center text-(--muted) transition-opacity duration-150 ${
                                               les.isPendingCreation ||
                                               reorderingLessonsSectionId ||
@@ -1419,6 +1460,7 @@ export function CurriculumStepPanel({
                                               </span>
                                               <button
                                                 type="button"
+                                                hidden={!editsLessonDetails}
                                                 aria-label="Edit lesson title"
                                                 title="Edit lesson title"
                                                 disabled={
@@ -1522,6 +1564,7 @@ export function CurriculumStepPanel({
                                           )}
                                           <button
                                             type="button"
+                                            hidden={!deletesLessons}
                                             disabled={
                                               les.isPendingCreation ||
                                               deletingLessonId ===
@@ -1656,6 +1699,9 @@ export function CurriculumStepPanel({
                                                   savingLessonId ===
                                                   les.id
                                                 }
+                                                canEditDetails={editsLessonDetails}
+                                                canEditContent={editsLessonContent}
+                                                canPublish={publishesLessons}
                                                 onBack={() => {
                                                   setExpanded(
                                                     false,
@@ -1719,24 +1765,24 @@ export function CurriculumStepPanel({
                                                     },
                                                   );
                                                 }}
-                                                onMediaAttached={(
+                                                onMediaAttached={uploadsLessonMedia ? (
                                                   mediaAssetId,
                                                 ) =>
                                                   handleLessonMediaAttached(
                                                     sec.id,
                                                     les.id,
                                                     mediaAssetId,
-                                                  )
+                                                  ) : undefined
                                                 }
-                                                youtubeImport={getYoutubeImportTarget(
+                                                youtubeImport={importsFromYoutube ? getYoutubeImportTarget(
                                                   currentCourseId,
                                                   les.id,
                                                   les.isPendingCreation,
-                                                )}
+                                                ) : null}
                                                 onProcessingComplete={() =>
                                                   handleLessonProcessingComplete()
                                                 }
-                                                onUploadMedia={async (
+                                                onUploadMedia={uploadsLessonMedia ? async (
                                                   file,
                                                 ) => {
                                                   try {
@@ -1789,11 +1835,12 @@ export function CurriculumStepPanel({
                                                         : "Media upload failed.",
                                                     );
                                                   }
-                                                }}
+                                                } : undefined}
                                                 descriptionSection={
                                                   <LessonDescriptionEditor
                                                     id={`lesson-description-${les.id}`}
                                                     disabled={
+                                                      !editsLessonDetails ||
                                                       les.isPendingCreation ||
                                                       savingLessonId ===
                                                         les.id
@@ -1831,6 +1878,7 @@ export function CurriculumStepPanel({
                                                       les.resources
                                                     }
                                                     disabled={
+                                                      !editsSections ||
                                                       les.isPendingCreation ||
                                                       createLessonResourceMutation.isPending ||
                                                       deleteLessonResourceMutation.isPending
@@ -1871,7 +1919,7 @@ export function CurriculumStepPanel({
                                                   />
                                                 }
                                                 quizSection={
-                                                  currentCourseId &&
+                                                  !opensQuizzes ? undefined : currentCourseId &&
                                                   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
                                                     les.id,
                                                   ) ? (
@@ -2024,7 +2072,10 @@ export function CurriculumStepPanel({
                                                   {/* Right column */}
                                                   <div className="order-1 flex min-w-0 flex-col gap-4.5">
                                                     {/* Content Type Selector */}
-                                                    <div className="flex flex-col gap-2 mb-4">
+                                                    <div
+                                                      inert={!editsLessonContent}
+                                                      className="flex flex-col gap-2 mb-4"
+                                                    >
                                                       <label className="text-(--text-secondary) text-[0.84rem] font-semibold">
                                                         Content Type
                                                         {""}
@@ -2160,6 +2211,7 @@ export function CurriculumStepPanel({
                                                               les.contentMediaId
                                                             }
                                                             disabled={
+                                                              !uploadsLessonMedia ||
                                                               les.isPendingCreation
                                                             }
                                                             onMediaAttached={(
@@ -2171,11 +2223,11 @@ export function CurriculumStepPanel({
                                                                 mediaAssetId,
                                                               )
                                                             }
-                                                            youtubeImport={getYoutubeImportTarget(
+                                                            youtubeImport={importsFromYoutube ? getYoutubeImportTarget(
                                                               currentCourseId,
                                                               les.id,
                                                               les.isPendingCreation,
-                                                            )}
+                                                            ) : null}
                                                             onProcessingComplete={() =>
                                                               handleLessonProcessingComplete()
                                                             }
@@ -2286,6 +2338,7 @@ export function CurriculumStepPanel({
                                                             ],
                                                           ]}
                                                           disabled={
+                                                            !publishesLessons ||
                                                             les.isPendingCreation
                                                           }
                                                           ariaLabel="Publishing status"
@@ -2338,6 +2391,9 @@ export function CurriculumStepPanel({
                                                           );
                                                         }}
                                                         label="Toggle Free Preview"
+                                                        disabled={
+                                                          !editsLessonDetails
+                                                        }
                                                       />
                                                     </div>
 
@@ -2353,6 +2409,7 @@ export function CurriculumStepPanel({
                                                         les.resources
                                                       }
                                                       disabled={
+                                                        !editsSections ||
                                                         les.isPendingCreation ||
                                                         createLessonResourceMutation.isPending ||
                                                         deleteLessonResourceMutation.isPending
@@ -2458,6 +2515,7 @@ export function CurriculumStepPanel({
                                                   ) : (
                                                     <button
                                                       type="button"
+                                                      hidden={!opensQuizzes}
                                                       disabled={
                                                         les.isPendingCreation
                                                       }
@@ -2494,7 +2552,7 @@ export function CurriculumStepPanel({
                   )}
 
                   {/* Add Lesson Action */}
-                  <div className="mt-3.5">
+                  <div hidden={!addsLessons} className="mt-3.5">
                     <button
                       type="button"
                       disabled={

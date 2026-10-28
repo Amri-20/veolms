@@ -27,7 +27,6 @@ import {
   getCourseAndVerifyOwner as verifyCourseOwner,
 } from "../shared/courses.utils.ts";
 import { createOutboxService } from "../../../events/outbox.service.ts";
-import { ADMIN_ROLE } from "../../auth/index.ts";
 import { lessonMediaPublishIssue } from "./lesson-media-publish-issue.ts";
 
 export interface LifecycleServiceOptions {
@@ -68,7 +67,14 @@ export function createLifecycleService({
     creatorId: string,
     userRoles?: readonly string[],
   ): Promise<CourseValidationResponse> {
-    const isAdmin = userRoles?.includes(ADMIN_ROLE);
+    // Admin, or a team role that edits every course's content: they attach
+    // media that is not the creator's (their own uploads), as the media
+    // service lets them.
+    const isAdmin = await mediaService.reachesAllMedia(
+      creatorId,
+      userRoles,
+      "manage",
+    );
     const errors: CourseValidationIssue[] = [];
     // Records one problem under its wizard step and in the overall list, in
     // the order found (the editor shows the first as the headline).

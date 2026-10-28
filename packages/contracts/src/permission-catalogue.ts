@@ -187,51 +187,10 @@ export const permissionCatalogue: readonly PermissionCatalogueGroup[] = [
         ["quiz.read"],
       ),
       entry("quiz.delete", "Delete quizzes", "Remove quizzes.", ["quiz.read"]),
-    ],
-  },
-  {
-    area: "assignments",
-    label: "Assignments and grading",
-    entries: [
-      entry(
-        "assignment.read",
-        "View assignments",
-        "See assignments and their instructions.",
-      ),
-      entry("assignment.create", "Create assignments", "Add new assignments.", [
-        "assignment.read",
-      ]),
-      entry(
-        "assignment.update",
-        "Edit assignments",
-        "Change an assignment's instructions and settings.",
-        ["assignment.read"],
-      ),
-      entry(
-        "assignment.publish",
-        "Publish assignments",
-        "Make an assignment available to learners.",
-        ["assignment.read"],
-      ),
-      entry("assignment.delete", "Delete assignments", "Remove assignments.", [
-        "assignment.read",
-      ]),
       entry(
         "submission.read",
-        "View submissions",
-        "See learners' quiz attempts and assignment work.",
-      ),
-      entry(
-        "submission.grade",
-        "Grade submissions",
-        "Score and give feedback on submissions.",
-        ["submission.read"],
-      ),
-      entry(
-        "submission.grade.override",
-        "Override grades",
-        "Change a grade someone else gave.",
-        ["submission.grade"],
+        "View quiz results",
+        "See learners' quiz attempts, answers and quiz analytics.",
       ),
     ],
   },
@@ -261,18 +220,6 @@ export const permissionCatalogue: readonly PermissionCatalogueGroup[] = [
         "View enrollments",
         "See who is enrolled in which course.",
       ),
-      entry(
-        "enrollment.create",
-        "Enroll students",
-        "Add a student to a course.",
-        ["enrollment.read"],
-      ),
-      entry(
-        "enrollment.cancel",
-        "Cancel enrollments",
-        "Remove a student from a course.",
-        ["enrollment.read"],
-      ),
     ],
   },
   {
@@ -289,22 +236,6 @@ export const permissionCatalogue: readonly PermissionCatalogueGroup[] = [
         "Moderate discussions",
         "Hide, restore and delete posts, and handle reports.",
         ["discussion.read"],
-      ),
-    ],
-  },
-  {
-    area: "certificates",
-    label: "Certificates",
-    entries: [
-      entry(
-        "certificate.issue",
-        "Issue certificates",
-        "Award a certificate to a learner.",
-      ),
-      entry(
-        "certificate.revoke",
-        "Revoke certificates",
-        "Withdraw a certificate already issued.",
       ),
     ],
   },
@@ -422,9 +353,6 @@ export const permissionCatalogue: readonly PermissionCatalogueGroup[] = [
         "Invite or add people to the team by email.",
         ["team.read", "role.read"],
       ),
-      entry("team.update", "Edit team members", "Change a member's details.", [
-        "team.read",
-      ]),
       entry(
         "team.remove",
         "Remove team members",
@@ -459,6 +387,31 @@ export const permissionCatalogue: readonly PermissionCatalogueGroup[] = [
     ],
   },
 ];
+
+/**
+ * Keys kept for features not built yet (assignments, grading, certificates,
+ * enrolling by hand, editing a member's details). Nothing checks them, so
+ * the role editor leaves them out rather than offer a tick that does
+ * nothing. They stay in `permissions`: the seed derives ids from position.
+ */
+export const reservedPermissions: readonly Permission[] = [
+  "assignment.read",
+  "assignment.create",
+  "assignment.update",
+  "assignment.publish",
+  "assignment.delete",
+  "submission.grade",
+  "submission.grade.override",
+  "enrollment.create",
+  "enrollment.cancel",
+  "certificate.issue",
+  "certificate.revoke",
+  "team.update",
+];
+
+/** Every key the role editor offers, in catalogue order. */
+export const cataloguePermissions: readonly Permission[] =
+  permissionCatalogue.flatMap((group) => group.entries.map((item) => item.key));
 
 const entriesByKey = new Map<Permission, PermissionCatalogueEntry>(
   permissionCatalogue.flatMap((group) =>

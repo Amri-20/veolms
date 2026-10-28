@@ -52,6 +52,7 @@ import { raisedCourseCardClasses } from "../components/cardElevation";
 import type { Permission } from "@veolms/contracts";
 import { useCapabilities } from "../services/authorization/authorization.queries";
 import { canOpenNavigationPath } from "../shell/navigationPermissions";
+import { CURRICULUM_PERMISSIONS } from "./course-editor/curriculumPermissions";
 export {
   courseThumbnailSizes,
   getCourseThumbnailSrcSet,
@@ -170,15 +171,17 @@ export function CourseCard({
   const capabilities = useCapabilities({ enabled: role === "creator" });
   const mayOnCourse = (permission: Permission) =>
     isAdmin || capabilities.canOnCourse(permission, course);
-  const canEdit = (
-    [
-      "course.details.update",
-      "course.curriculum.update",
-      "course.thumbnail.update",
-      "course.pricing.update",
-    ] as const
-  ).some(mayOnCourse);
-  const canManageCurriculum = mayOnCourse("course.curriculum.update");
+  // The curriculum opens for its sections or for any lesson action.
+  const canManageCurriculum = CURRICULUM_PERMISSIONS.some(mayOnCourse);
+  const canEdit =
+    canManageCurriculum ||
+    (
+      [
+        "course.details.update",
+        "course.thumbnail.update",
+        "course.pricing.update",
+      ] as const
+    ).some(mayOnCourse);
   const canChangePublication = mayOnCourse(
     course.lifecycleStatus === "published"
       ? "course.unpublish"

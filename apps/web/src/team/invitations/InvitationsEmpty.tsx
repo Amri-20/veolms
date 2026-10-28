@@ -35,7 +35,7 @@ export function InvitationsEmpty({
         {STEPS.map((step, index) => (
           <li
             key={step.title}
-            className="rounded-xl border border-[color-mix(in_srgb,var(--text)_9%,transparent)] bg-[color-mix(in_srgb,var(--text)_3%,transparent)] p-4 text-left"
+            className="rounded-xl border border-(--border) bg-(--card-surface) p-4 text-left"
           >
             <span className="font-mono text-xs font-semibold text-(--accent)">
               {String(index + 1).padStart(2, "0")}

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "../services/auth";
+import { useCapabilities } from "../services/authorization";
 import {
   desiredStateCoordinator,
   learningInteractionKeys,
@@ -39,15 +40,16 @@ export function useDiscussionWorkspaceCardActions({
   const bookmarkLabel = card.isBookmarked ? "Remove bookmark" : "Bookmark";
   const followLabel = card.isFollowing ? "Unfollow" : "Follow";
   const copyTextValue = card.content || card.plainText;
-  // Authors may delete their own posts; admins may delete anyone's.
+  // Authors may delete their own posts; moderators of every course
+  // (discussion.moderate through an academy-wide role) anyone's.
   const { data: currentUser } = useCurrentUser();
-  const isAdmin = Boolean(
-    currentUser?.roles?.some((role) => role.toLowerCase() === "admin"),
-  );
+  const moderatesEveryCourse = useCapabilities({
+    enabled: Boolean(currentUser),
+  }).canOnCourse("discussion.moderate", null);
   const canDelete =
     Boolean(card.id) &&
     !card.id.startsWith("client-") &&
-    (Boolean(card.isOwn) || isAdmin);
+    (Boolean(card.isOwn) || moderatesEveryCourse);
   const deleteNoun = isNote
     ? "note"
     : isReply
@@ -219,9 +221,9 @@ export function useDiscussionWorkspaceCardActions({
   const canEdit = isSaved && Boolean(card.isOwn);
   const canReport = isSaved && !card.isOwn && !isNote;
 
-  // Admins can take a comment, Q&A or reply out of view (it can be shown
-  // again from moderation, so this asks for no confirmation).
-  const canHide = isAdmin && !isNote && canDelete;
+  // Moderators of every course can take a comment, Q&A or reply out of view
+  // (it can be shown again from moderation, so this asks for no confirmation).
+  const canHide = moderatesEveryCourse && !isNote && canDelete;
   const isHidden = useDiscussionPostHidden(card.id);
   const capitalNoun =
     deleteNoun === "Q&A"

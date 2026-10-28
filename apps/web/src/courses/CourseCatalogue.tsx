@@ -142,9 +142,11 @@ export function CourseCatalogue({
   onRestoreCourse,
   deletingCourseIds,
 }: CourseCatalogueProps) {
-  const canCreateCourse = useCapabilities({
-    enabled: role === "creator",
-  }).can("course.create");
+  const capabilities = useCapabilities({ enabled: role === "creator" });
+  const canCreateCourse = capabilities.can("course.create");
+  // The bin lists every deleted course, so it takes the academy-wide key.
+  const canOpenBin =
+    isAdmin || capabilities.canOnCourse("course.restore", null);
   useCatalogSearchTracking(
     search,
     isLoading,
@@ -186,7 +188,7 @@ export function CourseCatalogue({
           ["all", "All"],
           ["published", "Published"],
           ["draft", "Draft"],
-          ...(isAdmin ? [["bin", "Bin"] as const] : []),
+          ...(canOpenBin ? [["bin", "Bin"] as const] : []),
         ]
       : [
           ["all", "All"],

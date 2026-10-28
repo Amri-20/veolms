@@ -30,6 +30,7 @@ import { WarningCircleIcon as WarningCircle } from "@phosphor-icons/react/Warnin
 import { getApplicationScrollElement } from "../shell/applicationScroll";
 import type { NavigateTo } from "../routing/navigation";
 import { ordersService } from "../services/orders";
+import { useCapabilities } from "../services/authorization";
 import {
   formatCurrency,
   formatOrderDate,
@@ -145,7 +146,8 @@ interface OrderRowProps {
   measureElement: (element: Element | null) => void;
   transform: string;
   onSelectOrder: (orderId: string) => void;
-  onRequestRefund: (order: AdminOrder) => void;
+  /** Left out for a viewer without billing.manage: no "Issue refund". */
+  onRequestRefund?: (order: AdminOrder) => void;
   onNavigatePage?: NavigateTo;
   setNotice?: (message: string) => void;
 }
@@ -402,12 +404,14 @@ const OrderRow = memo(function OrderRow({
           />
 
           {/* 5. Issue refund */}
-          <MenuAction
-            Icon={ArrowCounterClockwise}
-            label="Issue refund"
-            destructive
-            onClick={() => onRequestRefund(order)}
-          />
+          {onRequestRefund && (
+            <MenuAction
+              Icon={ArrowCounterClockwise}
+              label="Issue refund"
+              destructive
+              onClick={() => onRequestRefund(order)}
+            />
+          )}
 
           <MenuDivider />
 
@@ -480,6 +484,8 @@ export const OrdersTable = memo(function OrdersTable({
   layoutRevision = 0,
 }: OrdersTableProps) {
   const [openMenuOrderId, setOpenMenuOrderId] = useState<string | null>(null);
+  // Refunds take billing.manage; reading the orders only billing.read.
+  const issuesRefunds = useCapabilities().can("billing.manage");
   const feedRef = useRef<HTMLDivElement>(null);
   const useWindowScroll = useOrderScrollMode();
   const scrollMargin = useOrderScrollMargin(
@@ -703,7 +709,9 @@ export const OrdersTable = memo(function OrdersTable({
                     measureElement={virtualizer.measureElement}
                     transform={`translateY(${virtualItem.start - scrollMargin}px)`}
                     onSelectOrder={onSelectOrder}
-                    onRequestRefund={onRequestRefund}
+                    onRequestRefund={
+                      issuesRefunds ? onRequestRefund : undefined
+                    }
                     onNavigatePage={onNavigatePage}
                     setNotice={setNotice}
                   />
