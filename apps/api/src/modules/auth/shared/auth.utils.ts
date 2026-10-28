@@ -13,6 +13,16 @@ export function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
+/**
+ * Whether the address belongs to a shared test account (TEST_LOGIN_ACCOUNTS).
+ * Several testers use such an account at once, so it is spared the limits
+ * meant for one real student: the device limit, and leaving only free
+ * courses.
+ */
+export function isTestLoginAccount(email: string | null | undefined): boolean {
+  return Boolean(email && config.TEST_LOGIN_ACCOUNTS.has(email.toLowerCase()));
+}
+
 export function generateRandomToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }

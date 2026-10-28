@@ -28,6 +28,7 @@ import * as userRepository from "../authentication/authentication.repository.ts"
 import {
   generateRandomToken,
   hashToken,
+  isTestLoginAccount,
   toUserProfileFields,
 } from "../shared/auth.utils.ts";
 import {
@@ -61,14 +62,6 @@ export class DeviceLimitReachedError extends AppError {
     this.name = "DeviceLimitReachedError";
     this.signInToken = signInToken;
   }
-}
-
-/** Whether the account is a shared test account listed in TEST_LOGIN_ACCOUNTS. */
-function isSharedTestAccount(user: SessionUser): boolean {
-  return (
-    user.email !== null &&
-    config.TEST_LOGIN_ACCOUNTS.has(user.email.toLowerCase())
-  );
 }
 
 export interface SessionServiceOptions {
@@ -280,7 +273,7 @@ export function createSessionService({ database }: SessionServiceOptions) {
     const limit =
       options?.skipDeviceLimit ||
       isStaffAccount(roles) ||
-      isSharedTestAccount(user)
+      isTestLoginAccount(user.email)
         ? null
         : await platformSettings.maxDevicesPerStudent();
     if (limit === null) {
