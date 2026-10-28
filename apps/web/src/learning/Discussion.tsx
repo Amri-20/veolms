@@ -108,6 +108,7 @@ import {
   useSessionStorageState,
 } from "./useSessionStorageState";
 import { useCurrentUser } from "../services/auth";
+import { useCapabilities } from "../services/authorization";
 import {
   useCreateLessonThread,
   useCreateNote,
@@ -183,6 +184,7 @@ function DiscussionInner({
   persistenceKey,
   courseSlug,
   courseId,
+  courseCreatorId,
   lessonId,
   mobileLessonHeader,
   mobileBottomNavigation = false,
@@ -477,19 +479,12 @@ function DiscussionInner({
   const deleteThreadMutation = useDeleteThread(courseId, lessonId);
   const createReportMutation = useCreateReport();
 
-  const currentUserRole = useMemo(() => {
-    if (!currentUser?.roles) return "Student";
-    const lowerRoles = currentUser.roles.map((r) => r.toLowerCase());
-    if (lowerRoles.includes("admin")) return "Admin";
-    if (
-      lowerRoles.includes("instructor") ||
-      lowerRoles.includes("creator") ||
-      lowerRoles.includes("teacher")
-    ) {
-      return "Instructor";
-    }
-    return "Student";
-  }, [currentUser?.roles]);
+  // Who may lock any thread here and accept any answer, as the API decides
+  // it: the course's creator, or a role that moderates every course.
+  const { canOnCourse } = useCapabilities({ enabled: Boolean(currentUser) });
+  const canModerate =
+    Boolean(currentUser?.id && courseCreatorId === currentUser.id) ||
+    canOnCourse("discussion.moderate", null);
 
   const legacyNotes = useMemo<LearningNoteCacheItem[]>(() => {
     const legacyNotesData = notesData as unknown as
@@ -2618,7 +2613,7 @@ function DiscussionInner({
         }}
         isBackendMode={isBackendMode}
         currentUserId={currentUser?.id}
-        userRole={currentUserRole}
+        canModerate={canModerate}
         onToggleAcceptReply={handleToggleAcceptReply}
         onToggleLockThread={handleToggleLockThread}
         onToggleBookmark={handleToggleBookmark}
@@ -2640,7 +2635,7 @@ function DiscussionInner({
             entries={threadEntries}
             isBackendMode={isBackendMode}
             currentUserId={currentUser?.id}
-            userRole={currentUserRole}
+            canModerate={canModerate}
             currentUser={{ name: authorName, avatar: authorAvatar }}
             canParticipate={canParticipate}
             participationState={participationState}
