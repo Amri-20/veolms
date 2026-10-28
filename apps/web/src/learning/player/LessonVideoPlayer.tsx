@@ -28,7 +28,6 @@ import type {
 import type { CourseVideo } from "../courseContent";
 import { readLearningPreferences } from "../../settings/settingsPreferences";
 import { LessonAmbientProjection } from "./LessonAmbientProjection";
-import { MiniPlayerReadingModeEffects } from "./MiniPlayerReadingModeEffects";
 import { LessonTroubleIllustration } from "./LessonTroubleIllustration";
 import {
   OctopusIllustration,
@@ -1973,14 +1972,6 @@ export function LessonVideoPlayer({
               ) : null}
             </>
           ) : undefined}
-          {/* Reading mode is drawn over the page, which a full screen leaves
-              behind (only the full-screen element is painted): the same
-              layers are repeated over the player while it is full screen. */}
-          {playerFullscreen ? (
-            <div className="pointer-events-none absolute inset-0 z-100">
-              <MiniPlayerReadingModeEffects />
-            </div>
-          ) : null}
         </>
       }
       playbackFeedback={
