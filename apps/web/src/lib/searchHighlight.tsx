@@ -15,11 +15,12 @@ export function useSearchHighlight(): string {
 }
 
 /**
- * A found word: the theme's accent, see-through, behind the text, so it
- * suits whichever theme is on.
+ * A found word: drawn as selected text is (foundation.css `::selection`),
+ * in the theme's accent with its text colour, so it suits whichever theme
+ * is on and reads as picked out.
  */
 export const SEARCH_MATCH_CLASS =
-  "rounded-[0.2em] bg-[color-mix(in_srgb,var(--accent)_38%,transparent)] box-decoration-clone px-0.5 text-inherit";
+  "rounded-[0.2em] bg-(--accent) box-decoration-clone px-0.5 text-(--on-accent)";
 
 /** `text` with the words the current search found highlighted. */
 export function HighlightedText({ text }: { text: string }): ReactNode {
