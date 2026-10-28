@@ -48,6 +48,7 @@ import {
   useMyQuizzes,
 } from "../services/quizzes";
 import { SelectCourseForQuizModal } from "./SelectCourseForQuizModal";
+import { formatMarksOutOf } from "./quizMarks";
 import { useCoursesWithQuizzes } from "./useCoursesWithQuizzes";
 import { ElevatedCard, elevatedCardClasses } from "../components/ElevatedCard";
 
@@ -1180,11 +1181,19 @@ function InstructorAnalytics() {
                   <span
                     className={`block text-sm font-semibold ${student.status === "passed" ? "text-emerald-500" : student.status === "failed" ? "text-red-400" : "text-(--text)"}`}
                   >
-                    {student.latestScore === null
-                      ? "—"
-                      : percent(student.latestScore)}
+                    {student.latestMarks
+                      ? formatMarksOutOf(
+                          student.latestMarks.obtained,
+                          student.latestMarks.max,
+                        )
+                      : student.latestScore === null
+                        ? "—"
+                        : percent(student.latestScore)}
                   </span>
                   <span className="mt-1 block text-[0.68rem] capitalize text-(--muted)">
+                    {student.latestMarks && student.latestScore !== null
+                      ? `${percent(student.latestScore)} · `
+                      : null}
                     {student.status.replaceAll("_", " ")}
                   </span>
                 </span>

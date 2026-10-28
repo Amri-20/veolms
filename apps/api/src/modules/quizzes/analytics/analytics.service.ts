@@ -17,6 +17,8 @@ function pct(value: number, total: number) {
   return total ? (value / total) * 100 : 0;
 }
 
+const isClosed = (status: string) => status !== "in_progress";
+
 export function createAnalyticsService(options: QuizServiceOptions) {
   const { database, accessService, courseService } = options;
 
@@ -57,6 +59,31 @@ export function createAnalyticsService(options: QuizServiceOptions) {
   }
 
   /**
+   * The total each attempt is marked out of: its recorded maximum, or its
+   * quiz version's points when it has none. Grading records the maximum, so
+   * the versions are only read for open attempts and older rows without one.
+   */
+  async function attemptTotals(
+    attempts: readonly { maxScore: number | null; quizVersionId: string }[],
+  ) {
+    const versionIds = [
+      ...new Set(
+        attempts
+          .filter((item) => item.maxScore === null)
+          .map((item) => item.quizVersionId),
+      ),
+    ];
+    const versionTotals = new Map(
+      (await repo.listVersionPointTotals(database, versionIds)).map((row) => [
+        row.versionId,
+        Number(row.totalPoints ?? 0),
+      ]),
+    );
+    return (attempt: { maxScore: number | null; quizVersionId: string }) =>
+      Number(attempt.maxScore ?? versionTotals.get(attempt.quizVersionId) ?? 0);
+  }
+
+  /**
    * One assignment's outcomes, per student and in total, from an
    * already-authorized assignment and the course's active-student list.
    * Students are identified by id only: the course report never shows a
@@ -69,6 +96,13 @@ export function createAnalyticsService(options: QuizServiceOptions) {
     const attempts = await repo.listAnalyticsAttempts(database, assignment.id);
     const grouped = group(attempts);
     const studentIds = [...new Set([...activeStudents, ...grouped.keys()])];
+    // Only the latest attempts are shown as marks; an open one shows none.
+    const totalOf = await attemptTotals(
+      studentIds.flatMap((studentId) => {
+        const latest = grouped.get(studentId)?.[0];
+        return latest && isClosed(latest.status) ? [latest] : [];
+      }),
+    );
     const students = studentIds.map((studentId) => {
       const records = grouped.get(studentId) ?? [];
       const latest = records[0];
@@ -89,6 +123,15 @@ export function createAnalyticsService(options: QuizServiceOptions) {
           latest?.scorePercentage === undefined
             ? null
             : Number(latest.scorePercentage),
+        // The latest score as marks out of the quiz total ("6 / 21"), the
+        // way the course team reads it. None until an attempt is closed.
+        latestMarks:
+          latest && isClosed(latest.status)
+            ? {
+                obtained: Number(latest.scoreObtained ?? 0),
+                max: totalOf(latest),
+              }
+            : null,
         status,
         lastAttempt: latest?.submittedAt?.toISOString() ?? null,
       };
@@ -300,16 +343,23 @@ export function createAnalyticsService(options: QuizServiceOptions) {
     if (!attempt)
       throw new AppError(404, "ATTEMPT_NOT_FOUND", "Quiz attempt not found.");
 
-    const [questions, answers, quiz, lessons, names] = await Promise.all([
-      repo.listGradingQuestions(database, attempt.quiz_version_id, {
-        prompt: true,
-        explanation: true,
-      }),
-      repo.listAnswers(database, attempt.id),
-      repo.findQuiz(database, row.quiz_id),
-      repo.listLessonsByIds(database, [row.lesson_id]),
-      options.authService.listUserDisplayNamesByIds([studentId]),
-    ]);
+    const [questions, answers, quiz, lessons, names, totalOf] =
+      await Promise.all([
+        repo.listGradingQuestions(database, attempt.quiz_version_id, {
+          prompt: true,
+          explanation: true,
+        }),
+        repo.listAnswers(database, attempt.id),
+        repo.findQuiz(database, row.quiz_id),
+        repo.listLessonsByIds(database, [row.lesson_id]),
+        options.authService.listUserDisplayNamesByIds([studentId]),
+        attemptTotals(
+          attempts.map((item) => ({
+            maxScore: item.max_score,
+            quizVersionId: item.quiz_version_id,
+          })),
+        ),
+      ]);
     const keyOptions = await repo.listKeyOptions(
       database,
       questions.map((question) => question.id),
@@ -319,7 +369,14 @@ export function createAnalyticsService(options: QuizServiceOptions) {
       quizTitle: quiz?.title ?? "Quiz",
       lessonTitle: lessons[0]?.title ?? null,
       student: { id: studentId, name: names[0]?.display_name ?? studentId },
-      attempts,
+      // Every attempt with the total it is marked out of.
+      attempts: attempts.map((item) => ({
+        ...item,
+        max_score: totalOf({
+          maxScore: item.max_score,
+          quizVersionId: item.quiz_version_id,
+        }),
+      })),
       attempt,
       questions,
       options: keyOptions,

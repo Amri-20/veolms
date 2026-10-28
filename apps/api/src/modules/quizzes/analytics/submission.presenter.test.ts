@@ -263,3 +263,33 @@ await test("an attempt that expired with nothing saved reads as unanswered", () 
     ),
   );
 });
+
+await test("each attempt in the picker carries its marks out of its total", () => {
+  // The caller fills a missing maximum from the attempt's own version.
+  const scored: Attempt = { ...older, score_obtained: 6, max_score: 21 };
+  const open: Attempt = {
+    ...graded,
+    id: "00000000-0000-4000-8000-000000000005",
+    attempt_number: 3,
+    status: "in_progress",
+    submitted_at: null,
+    score_obtained: null,
+    score_percentage: null,
+    max_score: 21,
+  };
+  const submission = present(graded, [open, graded, scored]);
+  assert.doesNotThrow(() => quizSubmissionSchema.parse(submission));
+  assert.deepEqual(
+    submission.attempts.map(({ attemptNumber, score, maxScore }) => [
+      attemptNumber,
+      score,
+      maxScore,
+    ]),
+    [
+      [3, null, 21],
+      // The attempt shown falls back to its questions' points (9).
+      [2, 1, 9],
+      [1, 6, 21],
+    ],
+  );
+});

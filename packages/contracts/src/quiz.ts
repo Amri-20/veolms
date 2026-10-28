@@ -344,6 +344,13 @@ export const quizAnalyticsSchema = z.strictObject({
       studentName: z.string(),
       attemptCount: z.number().int().nonnegative(),
       latestScore: z.number().nullable(),
+      /**
+       * The latest closed attempt's marks out of the quiz total ("6 / 21").
+       * Null when the student has not attempted or the attempt is open.
+       */
+      latestMarks: z
+        .strictObject({ obtained: nonNegativeNumber, max: nonNegativeNumber })
+        .nullable(),
       status: z.enum(["passed", "failed", "in_progress", "not_attempted"]),
       lastAttempt: z.string().nullable(),
     }),
@@ -355,6 +362,10 @@ export const quizSubmissionAttemptSummarySchema = z.strictObject({
   id: uuid,
   attemptNumber: z.number().int().positive(),
   status: quizAttemptStatusSchema,
+  /** Marks obtained; null while the attempt is still open. */
+  score: nonNegativeNumber.nullable(),
+  /** The total the attempt is marked out of. */
+  maxScore: nonNegativeNumber,
   /**
    * Null while the attempt is still open. Not capped at 100: attempts
    * imported from another platform can carry a recorded score above the

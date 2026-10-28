@@ -14,6 +14,7 @@ import {
 import { useBackDismiss } from "../../navigation/useBackDismiss";
 import { useQuizSubmission } from "../../services/quizzes";
 import { ThemedSelect, type ThemedSelectOption } from "../../ThemedSelect";
+import { formatMarksOutOf } from "../quizMarks";
 import { QuizSubmissionAnswer } from "./QuizSubmissionAnswer";
 
 export interface QuizSubmissionStep {
@@ -35,11 +36,6 @@ interface QuizSubmissionPanelProps {
 
 function percent(value: number | null) {
   return value === null ? "—" : `${Math.round(value)}%`;
-}
-
-function formatMarks(value: number | null) {
-  if (value === null) return "—";
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
 function formatDate(value: string | null) {
@@ -201,7 +197,7 @@ function SubmissionHeader({
     () =>
       attempts.map((item) => [
         item.id,
-        `Attempt ${item.attemptNumber} · ${item.percentage === null ? "In progress" : percent(item.percentage)}`,
+        `Attempt ${item.attemptNumber} · ${item.score === null ? "In progress" : formatMarksOutOf(item.score, item.maxScore)}`,
         { subtitle: formatDate(item.submittedAt) },
       ]),
     [attempts],
@@ -250,8 +246,8 @@ function SubmissionBody({ submission }: { submission: QuizSubmission }) {
     <>
       <div className="grid grid-cols-2 gap-3 rounded-xl border border-(--border) p-3.5 sm:grid-cols-4 sm:p-4">
         <MetricTile
-          label="Score"
-          value={`${formatMarks(attempt.score)} / ${formatMarks(attempt.maxScore)}`}
+          label="Marks"
+          value={formatMarksOutOf(attempt.score, attempt.maxScore)}
         />
         <MetricTile label="Percentage" value={percent(attempt.percentage)} />
         <MetricTile
