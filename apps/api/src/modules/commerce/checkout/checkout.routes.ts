@@ -19,7 +19,7 @@ const checkoutRoutes: RoutePlugin = async (app, options) => {
   const ctx = createCommerceContext(options);
   const service = createCheckoutService({
     database: options.database,
-    paymentGateway: options.services.paymentGateway,
+    paymentGateways: options.services.paymentGateways,
   });
   const controller = createCheckoutController({
     service,

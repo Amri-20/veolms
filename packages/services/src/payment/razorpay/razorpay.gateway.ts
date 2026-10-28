@@ -10,9 +10,10 @@ import type {
   GatewayRefundOutput,
   GatewayRefundDetails,
   NormalizedPaymentEvent,
+  GatewayWebhookHeaders,
 } from "@veolms/contracts";
 import { AppError } from "@veolms/api-core";
-import { secureCompare } from "../utils/secure-compare.ts";
+import { secureCompare } from "../../utils/secure-compare.ts";
 
 export interface RazorpayGatewayConfig {
   keyId: string;
@@ -158,8 +159,15 @@ export class RazorpayPaymentGateway implements PaymentGateway {
     };
   }
 
+  /** Razorpay's widget is opened with the order's id: there is no page. */
+  checkoutUrl(_gatewayOrderId: string): string | undefined {
+    return undefined;
+  }
+
   verifyPaymentSignature(input: VerifyGatewayPaymentInput): boolean {
     const { gatewayOrderId, gatewayPaymentId, gatewaySignature } = input;
+    // Razorpay's widget always signs what it reports.
+    if (!gatewaySignature) return false;
     const body = `${gatewayOrderId}|${gatewayPaymentId}`;
 
     const expectedSignature = crypto
@@ -362,9 +370,10 @@ export class RazorpayPaymentGateway implements PaymentGateway {
 
   verifyWebhookSignature(
     rawBody: string | Uint8Array,
-    signature: string,
+    headers: GatewayWebhookHeaders,
   ): boolean {
-    if (!this.webhookSecret || !rawBody) {
+    const signature = headers["x-razorpay-signature"];
+    if (!this.webhookSecret || !rawBody || !signature) {
       return false;
     }
 
@@ -379,6 +388,10 @@ export class RazorpayPaymentGateway implements PaymentGateway {
       .digest("hex");
 
     return secureCompare(expectedSignature, signature);
+  }
+
+  webhookEventId(headers: GatewayWebhookHeaders): string | undefined {
+    return headers["x-razorpay-event-id"];
   }
 
   normalizeWebhookEvent(
