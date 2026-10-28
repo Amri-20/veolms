@@ -16,6 +16,7 @@ import { DiscussionAvatar } from "../learning/DiscussionAvatar";
 import type { NavigateTo } from "../routing/navigation";
 import { DiscussionLikeButton } from "./DiscussionLikeButton";
 import { DiscussionRowAction } from "./DiscussionRowAction";
+import { DiscussionStaffActions } from "./DiscussionStaffActions";
 import { DiscussionWorkspaceActionMenu } from "./DiscussionWorkspaceActionMenu";
 import { useDiscussionWorkspaceCardLongPress } from "./useDiscussionWorkspaceCardLongPress";
 import type { DiscussionWorkspaceCard } from "./discussions-workspace.adapter";
@@ -368,6 +369,7 @@ export function DiscussionWorkspaceRow({
               }}
             />
           )}
+          <DiscussionStaffActions card={card} staff={actions.staff} />
         </div>
       </div>
 

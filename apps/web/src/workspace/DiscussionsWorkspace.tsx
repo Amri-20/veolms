@@ -1884,9 +1884,10 @@ export function DiscussionsWorkspace({
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounce(query, DEFAULT_DEBOUNCE_DELAY_MS);
   const [status, setStatus] = useState("all");
-  const [sort, setSort] = useState("activity");
+  // Newest first by default: the order the posts were written in.
+  const [sort, setSort] = useState("latest");
   const [qnaStatus, setQnaStatus] = useState("all");
-  const [qnaSort, setQnaSort] = useState("activity");
+  const [qnaSort, setQnaSort] = useState("latest");
   const [notesSort, setNotesSort] = useState<"activity" | "latest">("activity");
   const [composer, setComposer] = useState<"question" | "discussion" | null>(
     null,
@@ -2214,16 +2215,16 @@ export function DiscussionsWorkspace({
       courseId: "all",
       ownership: effectiveOwnership,
       qnaStatus: "all",
-      qnaSort: "activity",
+      qnaSort: "latest",
       notesSort: "activity",
-      sort: "activity",
+      sort: "latest",
     });
 
     if (isQnaTab) {
       setQnaStatus("all");
-      setQnaSort("activity");
+      setQnaSort("latest");
     } else if (isCommentsTab || isAllTab) {
-      setSort("activity");
+      setSort("latest");
     } else if (isNotesTab) {
       setNotesSort("activity");
     }
@@ -2771,11 +2772,12 @@ export function DiscussionsWorkspace({
                     options={
                       isQnaTab
                         ? ([
-                            ["activity", "Latest activity"],
                             ["latest", "Newest"],
+                            ["activity", "Latest activity"],
                             ["replies", "Most replies"],
                           ] as const)
                         : ([
+                            ["latest", "Newest"],
                             ["activity", "Latest activity"],
                             ["replies", "Most replies"],
                           ] as const)
