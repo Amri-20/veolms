@@ -157,7 +157,12 @@ export function AcademyRouteGuard({ children }: { children: ReactNode }) {
     !canAccessDashboard;
   // A team member on a staff page their permissions do not open (typed
   // in, or an old link) goes home instead, as the sidebar never offers it.
+  // The home is left to the check above: it is a staff page only as the
+  // dashboard. In the student view it is the learner home the menu offers,
+  // and judging it here sent a team member without the revenue permission
+  // back to the courses each time they opened Home.
   const staffPageDenied =
+    path !== APP_HOME_PATH &&
     access.isSessionReady &&
     dashboardCapabilities.isSuccess &&
     hasTeamRole(user?.roles) &&
