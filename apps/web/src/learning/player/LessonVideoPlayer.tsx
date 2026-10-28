@@ -1869,11 +1869,23 @@ export function LessonVideoPlayer({
         presentation === "mini"
           ? `${MINI_PLAYER_VIDEO_CORNERS_CLASS} !shadow-none`
           : fullscreenCoursePanelActive
-            ? "border-0 !h-auto !max-h-full !w-(--learning-fullscreen-video-width) !max-w-none !translate-x-(--learning-fullscreen-video-offset-x) !shrink-0 !rounded-none !shadow-none [[data-fullscreen-lessons-beside=wide]_&]:!h-full [[data-fullscreen-lessons-beside=wide]_&]:!aspect-auto"
+            ? cn(
+                "border-0 !h-auto !max-h-full !w-(--learning-fullscreen-video-width) !max-w-none !translate-x-(--learning-fullscreen-video-offset-x) !shrink-0 !rounded-none !shadow-none [[data-fullscreen-lessons-beside=wide]_&]:!h-full [[data-fullscreen-lessons-beside=wide]_&]:!aspect-auto",
+                // Full screen with the lessons beside it, the video's pane
+                // is taller than the picture: with ambient mode on, the
+                // bands above and below it show the glow behind (the
+                // full-screen projection, LessonAmbientProjection), not
+                // black.
+                ambientEnabled && "!bg-transparent",
+              )
             : "border-0 !rounded-none"
       }
       mediaClassName={
-        presentation === "mini" ? MINI_PLAYER_VIDEO_CORNERS_CLASS : undefined
+        presentation === "mini"
+          ? MINI_PLAYER_VIDEO_CORNERS_CLASS
+          : fullscreenCoursePanelActive && ambientEnabled
+            ? "!bg-transparent"
+            : undefined
       }
       centralControl={
         presentation === "mini" ? (
