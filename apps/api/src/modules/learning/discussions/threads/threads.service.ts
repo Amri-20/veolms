@@ -770,7 +770,7 @@ export function createThreadsService(
       };
       const tab = query.tab || "q-and-a";
       // Anyone on the team may have something to moderate; which courses,
-      // if any, is the permission check in listModeratableCourseIds.
+      // if any, is the permission check in listStaffReadableCourseIds.
       const isStaff = actor.roles.some((r) => r.toLowerCase() !== "student");
       const isAuthorRestrictedTab =
         tab === "all" ||
@@ -795,18 +795,20 @@ export function createThreadsService(
         }
       }
 
-      // The staff view (everyone's threads) covers only the courses the
-      // actor may moderate: all of them for an admin, the courses they
-      // created for anyone else. Asking for a course outside that set drops
-      // the actor back to the ordinary learner view.
-      const moderatableCourseIds = isStaff
-        ? await courseAccess.listModeratableCourseIds(db, actor)
+      // The staff view (everyone's threads, read-only) covers the courses
+      // the actor reads as staff: every course with "View discussions" (or
+      // moderation) held for every course, the courses they created
+      // otherwise. Asking for a course outside that set, or holding none,
+      // drops the actor back to the ordinary learner view rather than an
+      // empty staff one. Moderating stays per thread (canModerateCourse).
+      const staffCourseIds = isStaff
+        ? await courseAccess.listStaffReadableCourseIds(db, actor)
         : [];
       const hasStaffView =
         isStaff &&
-        (moderatableCourseIds === "all" ||
-          !query.courseId ||
-          moderatableCourseIds.includes(query.courseId));
+        (staffCourseIds === "all" ||
+          (staffCourseIds.length > 0 &&
+            (!query.courseId || staffCourseIds.includes(query.courseId))));
       const effectiveMine =
         isAuthorRestrictedTab && !hasStaffView ? true : query.mine;
 
@@ -818,7 +820,7 @@ export function createThreadsService(
         tab === "mentions" ||
         !hasStaffView
           ? await courseAccess.listAccessibleCourseIds(db, actor)
-          : moderatableCourseIds;
+          : staffCourseIds;
 
       if (
         accessibleCourseIds !== "all" &&

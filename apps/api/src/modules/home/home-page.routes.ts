@@ -25,6 +25,12 @@ import { createHomePageService } from "./home-page.service.ts";
 
 const homePageRoutes: RoutePlugin = async (app, options) => {
   const { requires } = createPermissionPreHandlers(options.database);
+  // The Platform page opens with platform.settings.read, its Home page tab
+  // included: reading what the home page shows takes no more than that.
+  const readsHomePageSettings = requires([
+    "platform.settings.read",
+    "platform.homepage.update",
+  ]);
 
   const service = createHomePageService({
     database: options.database,
@@ -70,7 +76,7 @@ const homePageRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/home/page-settings",
     {
-      preHandler: requires("platform.homepage.update"),
+      preHandler: readsHomePageSettings,
       schema: {
         operationId: "getHomePageSettings",
         tags: ["Home"],
@@ -91,7 +97,7 @@ const homePageRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/home/page-settings/options",
     {
-      preHandler: requires("platform.homepage.update"),
+      preHandler: readsHomePageSettings,
       schema: {
         operationId: "getHomePageSettingsOptions",
         tags: ["Home"],
@@ -114,7 +120,7 @@ const homePageRoutes: RoutePlugin = async (app, options) => {
   app.get(
     "/home/page-settings/options/courses/:courseId/lessons",
     {
-      preHandler: requires("platform.homepage.update"),
+      preHandler: readsHomePageSettings,
       schema: {
         operationId: "getHomePageLessonVideoOptions",
         tags: ["Home"],
