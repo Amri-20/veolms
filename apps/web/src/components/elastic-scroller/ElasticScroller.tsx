@@ -112,7 +112,12 @@ export const ElasticScroller = forwardRef<
   return (
     <div
       className={cn(
-        "elastic-scroller pointer-events-none sticky top-[calc(100%-var(--elastic-scroller-bottom-clearance))] z-30 flex h-0 flex-none justify-center",
+        "elastic-scroller pointer-events-none sticky top-[calc(100%-var(--elastic-scroller-bottom-clearance))] flex h-0 flex-none justify-center",
+        // In use (pulled, or scrolling by itself), it is drawn over the
+        // phone's bottom menu (z-index 140, mobile-navigation.css): its
+        // socket, sent down as it is pulled up, would otherwise pass under
+        // it. At rest it stays under the menu, so the menu stays pressable.
+        control.mode === "idle" ? "z-30" : "z-[145]",
         visible
           ? "visible translate-y-0 opacity-100"
           : control.direction === "down"
