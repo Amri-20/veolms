@@ -10,6 +10,8 @@ import {
 import { useAnchorPositionFallback } from "./useAnchorPositionFallback";
 import "../learning-feature.css";
 import { createPortal } from "react-dom";
+import { getPageFullscreenElement } from "@veolms/video-player";
+import { getDocumentFullscreenElement } from "../../fullscreen";
 import {
   LessonVideoPlayer,
   type LessonVideoPlayerProps,
@@ -460,6 +462,10 @@ export function PersistentLearningPlayerHost({
         return;
       }
 
+      // In full screen the page is not on screen: the wheel is left to
+      // what is (the lessons beside the video scroll with it).
+      if (getDocumentFullscreenElement() ?? getPageFullscreenElement()) return;
+
       const target = event.target;
       if (
         target instanceof Element &&
@@ -468,6 +474,23 @@ export function PersistentLearningPlayerHost({
         )
       ) {
         return;
+      }
+
+      // A list over the player (the course's lessons) scrolls itself while
+      // it has further to go in the wheel's direction.
+      for (
+        let element = target instanceof Element ? target : null;
+        element && element !== host;
+        element = element.parentElement
+      ) {
+        if (!/(auto|scroll)/.test(getComputedStyle(element).overflowY)) {
+          continue;
+        }
+        const room =
+          event.deltaY > 0
+            ? element.scrollHeight - element.clientHeight - element.scrollTop
+            : element.scrollTop;
+        if (room > 1) return;
       }
 
       // A reading scrolls inside the player. While it has further to go in
