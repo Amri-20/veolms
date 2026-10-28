@@ -1,4 +1,14 @@
-import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { BookOpenIcon as BookOpen } from "@phosphor-icons/react/BookOpen";
 import { ChatCircleIcon as ChatCircle } from "@phosphor-icons/react/ChatCircle";
 import { PaperclipIcon as Paperclip } from "@phosphor-icons/react/Paperclip";
@@ -17,6 +27,78 @@ import {
 } from "./DiscussionCourseThumbnail";
 import { renderContentWithMentions } from "../learning/discussion-editor/MentionLink";
 import { requestDiscussionReplyFocus } from "./discussionReplyFocus";
+import { cn } from "../lib/utils";
+import { createDiscussionDraft } from "../learning/discussion-editor/types";
+
+// Loaded once the list has rows to draw, as the rest of the page loads it.
+const DiscussionMarkdown = lazy(() =>
+  import("../learning/discussion-editor/DiscussionMarkdown").then((module) => ({
+    default: module.DiscussionMarkdown,
+  })),
+);
+
+const ROW_TEXT_CLASS =
+  "max-w-180 text-base leading-relaxed max-[48.75rem]:text-[0.9375rem] wrap-anywhere text-(--text) select-text";
+
+/**
+ * A row's post, drawn as Markdown (a table as a table, a list as a list)
+ * and kept to four lines' height: a longer one is cut there and fades out,
+ * and opens in full with the discussion. Until the Markdown is drawn, and
+ * for a post with none, its plain text stands in, cut to four lines.
+ */
+function RowMarkdown({
+  markdown,
+  fallbackText,
+}: {
+  markdown: string;
+  fallbackText: string;
+}) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  const content = useMemo(() => createDiscussionDraft(markdown), [markdown]);
+
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return undefined;
+    const measure = () => {
+      const next = box.scrollHeight > box.clientHeight + 1;
+      setOverflowing((current) => (current === next ? current : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    if (box.firstElementChild) observer.observe(box.firstElementChild);
+    return () => observer.disconnect();
+  }, [markdown]);
+
+  const plain = (
+    <p className={cn("m-0 line-clamp-4", ROW_TEXT_CLASS)}>
+      {renderContentWithMentions(fallbackText)}
+    </p>
+  );
+  if (!markdown) return plain;
+
+  return (
+    <div
+      ref={boxRef}
+      className={cn(
+        "max-h-[4lh] overflow-hidden",
+        ROW_TEXT_CLASS,
+        overflowing &&
+          "[mask-image:linear-gradient(to_bottom,black_calc(100%-1.5lh),transparent)]",
+      )}
+    >
+      <Suspense fallback={plain}>
+        <DiscussionMarkdown
+          content={content}
+          label="Post"
+          preserveSoftBreaks
+          className="max-w-none [&_p:first-child]:mt-0"
+        />
+      </Suspense>
+    </div>
+  );
+}
 
 /** What the row's small label says next to the time, if anything. */
 function getKindLabel(card: DiscussionWorkspaceCard): string | null {
@@ -83,6 +165,9 @@ export function DiscussionWorkspaceRow({
   const kindLabel = getKindLabel(card);
   const attachmentLabel = getDiscussionAttachmentLabel(card.attachmentSummary);
   const text = card.excerpt || card.title || "";
+  // The post as written, drawn as it is in the lesson (tables, lists,
+  // code), not the plain-text excerpt the list is sent.
+  const markdown = card.content?.trim() || "";
   const isNote = card.itemType === "note" || card.kind === "note";
   const username = card.authorUsername.replace(/^@+/, "");
 
@@ -183,10 +268,8 @@ export function DiscussionWorkspaceRow({
           </p>
         )}
 
-        {text && (
-          <p className="m-0 line-clamp-4 max-w-180 text-base leading-relaxed max-[48.75rem]:text-[0.9375rem] wrap-anywhere text-(--text) select-text">
-            {renderContentWithMentions(text)}
-          </p>
+        {(markdown || text) && (
+          <RowMarkdown markdown={markdown} fallbackText={text} />
         )}
 
         {attachmentLabel && (
