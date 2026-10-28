@@ -295,16 +295,54 @@ export const permissionCatalogue: readonly PermissionCatalogueGroup[] = [
   {
     area: "analytics",
     label: "Analytics",
+    // One tick per tab of the Analytics page, so a role opens exactly the
+    // tabs it is given.
     entries: [
       entry(
-        "analytics.course.read",
-        "View course analytics",
-        "See learner progress and engagement.",
+        "analytics.overview.read",
+        "Overview tab",
+        "The Overview tab, and the learner numbers on the Home dashboard.",
       ),
       entry(
         "analytics.revenue.read",
-        "View revenue analytics",
-        "See sales and revenue reports.",
+        "Revenue tab",
+        "The Revenue tab, and money wherever analytics show it.",
+      ),
+      entry(
+        "analytics.course.read",
+        "Courses & Content tab",
+        "How courses, lessons and quizzes perform.",
+      ),
+      // The tabs the advanced analytics plugin adds, where it is installed.
+      entry(
+        "analytics.learning.read",
+        "Learning tab",
+        "How learners progress through lessons and courses.",
+      ),
+      entry(
+        "analytics.learners.read",
+        "Learners tab",
+        "Who is learning, how active they are, and who has drifted.",
+      ),
+      entry(
+        "analytics.conversion.read",
+        "Conversion tab",
+        "How visitors become enrolled and paying learners.",
+      ),
+      entry(
+        "analytics.delivery.read",
+        "Data Delivery tab",
+        "How much video and data the academy serves.",
+      ),
+      entry(
+        "analytics.storage.read",
+        "Storage tab",
+        "How much storage the academy's media uses.",
+      ),
+      entry(
+        "analytics.video_quality.read",
+        "Video Quality tab",
+        "Playback quality, buffering and errors learners see.",
       ),
     ],
   },
