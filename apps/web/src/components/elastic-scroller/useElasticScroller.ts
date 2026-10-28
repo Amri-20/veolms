@@ -9,6 +9,8 @@ import type { ElasticScrollGestureSide } from "../../settings/settingsPreference
 import {
   ELASTIC_SCROLL_CONTROL_DRAG_DEAD_ZONE,
   ELASTIC_SCROLL_CONTROL_DRAG_MAX_DISTANCE,
+  ELASTIC_SCROLL_CONTROL_EDGE_INSET,
+  getElasticScrollEndPositions,
   ELASTIC_SCROLL_CONTROL_INLINE_MAX_DISTANCE,
   ELASTIC_SCROLL_CONTROL_LOCK_THRESHOLD,
   ELASTIC_SCROLL_CONTROL_LONG_PRESS_DELAY_MS,
@@ -19,6 +21,7 @@ import {
   getScrollProgress,
 } from "./elasticScrollerModel";
 import type {
+  ElasticScrollDragRoom,
   ElasticScrollMode,
   ScrollDirection,
 } from "./elasticScrollerModel";
@@ -58,6 +61,7 @@ export function useElasticScroller({
   const [direction, setDirection] = useState<ScrollDirection>("up");
   const [mode, setMode] = useState<ElasticScrollMode>("idle");
   const [dragOffset, setDragOffset] = useState(0);
+  const [dragRoom, setDragRoom] = useState<ElasticScrollDragRoom | null>(null);
   const [dragInlineOffset, setDragInlineOffset] = useState(0);
   const [scrollOffset, setScrollOffset] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
@@ -523,6 +527,24 @@ export function useElasticScroller({
       dragPointerBaseOffsetRef.current = startedLocked
         ? lockedOffsetRef.current
         : 0;
+      // How far the ends may go before they would leave what can be seen
+      // of the scrollport (and of the window), from where the control
+      // rests: a locked control is drawn already pulled.
+      const restingCenterY =
+        controlBounds.top +
+        controlBounds.height / 2 -
+        (startedLocked ? lockedOffsetRef.current : 0);
+      const scrollportBounds = scrollportRef.current?.getBoundingClientRect();
+      const visibleTop = Math.max(0, scrollportBounds?.top ?? 0);
+      const visibleBottom = Math.min(
+        window.innerHeight,
+        scrollportBounds?.bottom ?? window.innerHeight,
+      );
+      setDragRoom({
+        above: restingCenterY - visibleTop - ELASTIC_SCROLL_CONTROL_EDGE_INSET,
+        below:
+          visibleBottom - restingCenterY - ELASTIC_SCROLL_CONTROL_EDGE_INSET,
+      });
       dragPointerOffsetRef.current = dragPointerBaseOffsetRef.current;
       setScrollOffset(dragPointerBaseOffsetRef.current);
 
@@ -545,6 +567,7 @@ export function useElasticScroller({
       clearGestureFeedback,
       clearIdleTimer,
       clearLongPressTimer,
+      scrollportRef,
       startDragScroll,
     ],
   );
@@ -840,6 +863,7 @@ export function useElasticScroller({
     direction,
     mode,
     dragOffset,
+    dragEnds: getElasticScrollEndPositions(dragOffset, dragRoom),
     dragInlineOffset,
     dragIntensity: getElasticScrollDragIntensity(scrollOffset),
     isLocked,
