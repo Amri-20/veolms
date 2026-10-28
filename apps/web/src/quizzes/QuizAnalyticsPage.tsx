@@ -1187,6 +1187,11 @@ function InstructorAnalytics() {
                   ["all", "All", outcomes.counts.all],
                 ]}
               />
+              <p className="text-xs text-(--muted)" aria-live="polite">
+                {outcomes.query
+                  ? `${outcomes.visible.length.toLocaleString()} matching ${outcomes.visible.length === 1 ? "student" : "students"}`
+                  : `${outcomes.counts.attempted.toLocaleString()} attempted of ${outcomes.counts.all.toLocaleString()} students`}
+              </p>
             </div>
           ) : null}
           <div
@@ -1214,9 +1219,11 @@ function InstructorAnalytics() {
                   <span className="mt-1 block text-xs text-(--muted)">
                     {student.attemptCount} attempt
                     {student.attemptCount === 1 ? "" : "s"} ·{" "}
-                    {student.lastAttempt
-                      ? formatDate(student.lastAttempt)
-                      : "Never attempted"}
+                    {student.status === "in_progress"
+                      ? "Attempt in progress"
+                      : student.lastAttempt
+                        ? formatDate(student.lastAttempt)
+                        : "Never attempted"}
                   </span>
                 </span>
                 <span className="shrink-0 text-right">
@@ -1246,12 +1253,32 @@ function InstructorAnalytics() {
               onLoadMore={loadMoreStudents}
               containerRef={studentsContainerRef}
             />
-            {!assignmentAnalytics.data?.students.length ? (
+            {/* A failed or unfinished request used to read as "No learner
+                data", the same as an assessment nobody is enrolled in. */}
+            {assignmentAnalytics.isError && !assignmentAnalytics.data ? (
+              <EmptyState
+                compact
+                icon={<Users size={22} />}
+                title="Learner outcomes could not be loaded"
+                message="Please check your connection and try again."
+                action={
+                  <Button onClick={() => void assignmentAnalytics.refetch()}>
+                    Try again
+                  </Button>
+                }
+              />
+            ) : assignmentAnalytics.isLoading ? (
+              <LoadingRows />
+            ) : !assignmentAnalytics.data?.students.length ? (
               <EmptyState
                 compact
                 icon={<Users size={22} />}
                 title="No learner data"
-                message="Select an assessment to view participation."
+                message={
+                  assignmentAnalytics.data
+                    ? "No students are enrolled in this assessment's course yet."
+                    : "Select an assessment to view participation."
+                }
               />
             ) : !outcomes.visible.length ? (
               <EmptyState
