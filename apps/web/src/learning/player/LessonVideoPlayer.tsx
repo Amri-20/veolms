@@ -30,6 +30,7 @@ import { readLearningPreferences } from "../../settings/settingsPreferences";
 import { LessonAmbientProjection } from "./LessonAmbientProjection";
 import { LessonTroubleIllustration } from "./LessonTroubleIllustration";
 import { useMiniPlayerSwipeVolume } from "./useMiniPlayerSwipeVolume";
+import type { SubscribeOutsideFraction } from "./useLearningMiniPlayerGestures";
 import {
   OctopusIllustration,
   type OctopusKind,
@@ -196,10 +197,11 @@ export interface LessonVideoPlayerProps {
    */
   fadeOutAudio?: boolean;
   /**
-   * How much of the mini player is dragged out of the window, 0 to 1: a
-   * playing video's sound drops by as much (see useMiniPlayerSwipeVolume).
+   * Tells how much of the mini player is dragged out of the window, 0 to 1,
+   * as it moves: a playing video's sound drops by as much (see
+   * useMiniPlayerSwipeVolume).
    */
-  swipeOutsideFraction?: number;
+  subscribeSwipeOutsideFraction?: SubscribeOutsideFraction;
   onMobileLandscapeFullscreenChange?: (active: boolean) => void;
   onProgressChange?: (progress: number) => void;
   /**
@@ -436,7 +438,7 @@ export function LessonVideoPlayer({
   onMiniClose,
   onMiniRestore,
   fadeOutAudio = false,
-  swipeOutsideFraction = 0,
+  subscribeSwipeOutsideFraction,
   onMobileLandscapeFullscreenChange,
   onTheaterToggle,
   onSeekToTimestampReady,
@@ -470,7 +472,7 @@ export function LessonVideoPlayer({
   // lowered volumes are not the learner's, and are never saved.
   const swipeHeldVolumeRef = useMiniPlayerSwipeVolume(
     playerRef,
-    swipeOutsideFraction,
+    subscribeSwipeOutsideFraction,
     fadeOutAudio,
   );
   // Volumes taken from another tab (a `storage` event) in the last moments.
