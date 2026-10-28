@@ -49,6 +49,7 @@ import {
 } from "../services/quizzes";
 import { SelectCourseForQuizModal } from "./SelectCourseForQuizModal";
 import { formatMarksOutOf } from "./quizMarks";
+import { useStudentOutcomeFilter } from "./useStudentOutcomeFilter";
 import { useCoursesWithQuizzes } from "./useCoursesWithQuizzes";
 import { ElevatedCard, elevatedCardClasses } from "../components/ElevatedCard";
 
@@ -72,6 +73,8 @@ type InstructorView = "overview" | "library" | "analytics";
 type LearnerFilter = "all" | "todo" | "in_progress" | "completed";
 
 const surfaceClass = `${elevatedCardClasses} text-(--text)`;
+// A stable empty list, so the student filter is not recomputed every render.
+const NO_STUDENTS: never[] = [];
 const insetClass = elevatedCardClasses;
 const inputClass =
   "h-9 sm:h-10 rounded-[10px] border border-[color-mix(in_srgb,var(--text)_12%,transparent)] bg-[color-mix(in_srgb,var(--canvas)_75%,var(--surface))] px-2.5 sm:px-3.5 text-xs sm:text-sm text-(--text) outline-none transition-all placeholder:text-(--muted) focus:border-(--accent) focus:ring-2 focus:ring-(--accent)/20";
@@ -858,14 +861,14 @@ function InstructorAnalytics() {
     if (submission && submission.assignmentId !== assignmentId)
       setSubmission(null);
   }, [assignmentId, submission]);
-  // Students with an attempt on this assessment, in the list's order: the
+  const outcomes = useStudentOutcomeFilter(
+    assignmentAnalytics.data?.students ?? NO_STUDENTS,
+  );
+  // Students with an attempt among those listed, in the list's order: the
   // ones whose submission can be opened, and stepped through in the panel.
   const submittedStudents = useMemo(
-    () =>
-      (assignmentAnalytics.data?.students ?? []).filter(
-        (student) => student.attemptCount > 0,
-      ),
-    [assignmentAnalytics.data?.students],
+    () => outcomes.visible.filter((student) => student.attemptCount > 0),
+    [outcomes.visible],
   );
   const openSubmissionIndex =
     submission && submission.assignmentId === assignmentId
@@ -934,7 +937,7 @@ function InstructorAnalytics() {
     displayedItems: displayedStudents,
     hasMore: hasMoreStudents,
     loadMore: loadMoreStudents,
-  } = useInfiniteList(assignmentAnalytics.data?.students ?? [], 20);
+  } = useInfiniteList(outcomes.visible, 20);
 
   return (
     <div className="grid gap-3.5 sm:gap-6">
@@ -1147,6 +1150,45 @@ function InstructorAnalytics() {
             title="Student outcomes"
             description="Choose a learner to review their submission and quiz report."
           />
+          {assignmentAnalytics.data?.students.length ? (
+            <div className="grid gap-2.5 border-b border-(--border) px-3 py-2.5 sm:px-5 sm:py-3.5">
+              <label className="relative flex items-center">
+                <span className="sr-only">Search students</span>
+                <MagnifyingGlass
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-(--muted)"
+                  size={16}
+                />
+                <input
+                  type="search"
+                  value={outcomes.search}
+                  onChange={(event) => outcomes.setSearch(event.target.value)}
+                  placeholder={
+                    assignmentAnalytics.data.students.some(
+                      (student) => student.studentEmail,
+                    )
+                      ? "Search by name or email..."
+                      : "Search by name..."
+                  }
+                  className={`${inputClass} w-full !pl-9`}
+                />
+              </label>
+              <FilterTabs
+                label="Student filters"
+                compact
+                value={outcomes.filter}
+                onChange={outcomes.setFilter}
+                options={[
+                  ["attempted", "Attempted", outcomes.counts.attempted],
+                  [
+                    "not_attempted",
+                    "Not attempted",
+                    outcomes.counts.not_attempted,
+                  ],
+                  ["all", "All", outcomes.counts.all],
+                ]}
+              />
+            </div>
+          ) : null}
           <div
             ref={studentsContainerRef}
             onPointerEnter={preloadSubmissionPanel}
@@ -1210,6 +1252,25 @@ function InstructorAnalytics() {
                 icon={<Users size={22} />}
                 title="No learner data"
                 message="Select an assessment to view participation."
+              />
+            ) : !outcomes.visible.length ? (
+              <EmptyState
+                compact
+                icon={<MagnifyingGlass size={22} />}
+                title={
+                  outcomes.query
+                    ? "No matching students"
+                    : outcomes.filter === "attempted"
+                      ? "No attempts yet"
+                      : "Everyone has attempted"
+                }
+                message={
+                  outcomes.query
+                    ? "Try another name or email, or a different filter."
+                    : outcomes.filter === "attempted"
+                      ? "No student has attempted this assessment yet."
+                      : "Every student on this assessment has an attempt."
+                }
               />
             ) : null}
           </div>
@@ -1396,31 +1457,17 @@ function LearnerQuizDashboard({
               Required work and optional practice in one place.
             </p>
           </div>
-          <div
-            className="flex flex-wrap gap-1 rounded-lg border border-(--border) bg-(--canvas) p-1"
-            role="tablist"
-            aria-label="Quiz filters"
-          >
-            {(
-              [
-                ["all", "All"],
-                ["todo", "To do"],
-                ["in_progress", "In progress"],
-                ["completed", "Completed"],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={filter === key}
-                onClick={() => setFilter(key)}
-                className={`rounded-md px-2.5 py-1 sm:px-3 sm:py-1.5 text-xs font-semibold ${filter === key ? "bg-(--surface) text-(--text) shadow-sm" : "text-(--muted) hover:text-(--text)"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <FilterTabs
+            label="Quiz filters"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              ["all", "All"],
+              ["todo", "To do"],
+              ["in_progress", "In progress"],
+              ["completed", "Completed"],
+            ]}
+          />
         </div>
         <div className="grid gap-2.5 sm:gap-3 p-3 sm:grid-cols-2 sm:p-7 xl:grid-cols-3">
           {assignments.isLoading ? (
@@ -1680,6 +1727,61 @@ function QuizLibraryRow({
           <ArrowRight size={14} weight="bold" />
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * A row of filter tabs on a sunken track, the selected one raised: the
+ * learner's quiz filters and the Student outcomes filter. A count, when
+ * given, follows the label.
+ */
+function FilterTabs<Value extends string>({
+  label,
+  value,
+  onChange,
+  options,
+  compact = false,
+}: {
+  label: string;
+  value: Value;
+  onChange: (value: Value) => void;
+  options: readonly (readonly [Value, string, number?])[];
+  /**
+   * Equal tabs across the track's width, each count under its label, so
+   * they fit a narrow column without wrapping.
+   */
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`${compact ? "grid auto-cols-fr grid-flow-col" : "flex flex-wrap"} gap-1 rounded-lg border border-(--border) bg-(--canvas) p-1`}
+      role="tablist"
+      aria-label={label}
+    >
+      {options.map(([key, text, count]) => (
+        <button
+          key={key}
+          type="button"
+          role="tab"
+          aria-selected={value === key}
+          onClick={() => onChange(key)}
+          className={`rounded-md text-xs font-semibold ${compact ? "flex min-w-0 flex-col items-center px-1.5 py-1.5" : "px-2.5 py-1 sm:px-3 sm:py-1.5"} ${value === key ? "bg-(--surface) text-(--text) shadow-sm" : "text-(--muted) hover:text-(--text)"}`}
+        >
+          <span
+            className={compact ? "max-w-full truncate leading-4" : undefined}
+          >
+            {text}
+          </span>
+          {count === undefined ? null : (
+            <span
+              className={`tabular-nums text-(--muted) ${compact ? "mt-0.5 text-[0.68rem] leading-3.5 font-medium" : "ml-1.5"}`}
+            >
+              {count}
+            </span>
+          )}
+        </button>
+      ))}
     </div>
   );
 }

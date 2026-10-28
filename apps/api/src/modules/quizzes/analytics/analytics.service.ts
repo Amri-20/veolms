@@ -1,6 +1,7 @@
 import type { QuizActor, QuizServiceOptions } from "../shared/quiz.types.ts";
 import {
   assertCanManageCourse,
+  canManageCourse,
   reachesEveryQuiz,
   requireAcademyId,
 } from "../shared/quiz.types.ts";
@@ -37,18 +38,14 @@ export function createAnalyticsService(options: QuizServiceOptions) {
         "ASSIGNMENT_NOT_FOUND",
         "Quiz assignment not found.",
       );
-    await assertCanManageCourse(
-      database,
-      actor,
-      await requireCourse(assignment.course_id),
-      "submission.read",
-    );
+    const course = await requireCourse(assignment.course_id);
+    await assertCanManageCourse(database, actor, course, "submission.read");
     if (!(await reachesEveryQuiz(database, actor, "submission.read"))) {
       const quiz = await repo.findQuiz(database, assignment.quiz_id);
       if (!quiz || quiz.creator_id !== actor.id)
         throw new AppError(403, "FORBIDDEN", "You do not own this Quiz.");
     }
-    return assignment;
+    return { assignment, course };
   }
 
   function group(rows: AnalyticsRow[]) {
@@ -136,6 +133,20 @@ export function createAnalyticsService(options: QuizServiceOptions) {
         lastAttempt: latest?.submittedAt?.toISOString() ?? null,
       };
     });
+    // Students who attempted come first, the latest activity first (a
+    // submission, or the start of an open attempt), as a list of responses
+    // reads. Students who have not attempted follow in their own order.
+    const activity = (studentId: string) => {
+      const latest = grouped.get(studentId)?.[0];
+      return (latest?.submittedAt ?? latest?.createdAt)?.getTime() ?? null;
+    };
+    students.sort((a, b) => {
+      const first = activity(a.studentId);
+      const second = activity(b.studentId);
+      if (first === null || second === null)
+        return first === second ? 0 : first === null ? 1 : -1;
+      return second - first;
+    });
     const scores = attempts
       .filter(
         (attempt) =>
@@ -160,27 +171,42 @@ export function createAnalyticsService(options: QuizServiceOptions) {
   }
 
   async function assignment(actor: QuizActor, assignmentId: string) {
-    const row = await assertOwned(actor, assignmentId);
+    const { assignment: row, course } = await assertOwned(actor, assignmentId);
     const activeStudents = await accessService.listActiveUserIdsForCourse(
       database,
       row.course_id,
     );
     const report = await summarizeAssignment(row, activeStudents);
-    // Names are resolved in one bulk query, for this report only.
-    const nameById = new Map(
-      (
-        await options.authService.listUserDisplayNamesByIds(
-          report.students.map((student) => student.studentId),
-        )
-      ).map((user) => [user.id, user.display_name]),
+    // Emails go only to someone who may read this course's students (the
+    // Students page's rule), so they can search by email as well as name.
+    const withEmails = await canManageCourse(
+      database,
+      actor,
+      course,
+      "student.read",
     );
-    return {
-      ...report,
-      students: report.students.map((student) => ({
-        ...student,
-        studentName: nameById.get(student.studentId) ?? student.studentId,
-      })),
-    };
+    const studentIds = report.students.map((student) => student.studentId);
+    // Names (and emails) are resolved in one bulk query, for this report.
+    const people = new Map(
+      (withEmails
+        ? await options.authService.listUserNamesAndEmailsByIds(studentIds)
+        : (await options.authService.listUserDisplayNamesByIds(studentIds)).map(
+            (user) => ({ ...user, email: null }),
+          )
+      ).map((user) => [user.id, user]),
+    );
+    const students = report.students.map((student) => ({
+      ...student,
+      studentName:
+        people.get(student.studentId)?.display_name ?? student.studentId,
+      studentEmail: people.get(student.studentId)?.email ?? null,
+    }));
+    // Those who have not attempted are listed by name, after the others.
+    const attempted = students.filter((student) => student.attemptCount > 0);
+    const notAttempted = students
+      .filter((student) => student.attemptCount === 0)
+      .sort((a, b) => a.studentName.localeCompare(b.studentName));
+    return { ...report, students: [...attempted, ...notAttempted] };
   }
 
   async function course(actor: QuizActor, courseId: string) {
@@ -331,7 +357,7 @@ export function createAnalyticsService(options: QuizServiceOptions) {
     studentId: string,
     attemptId?: string,
   ) {
-    const row = await assertOwned(actor, assignmentId);
+    const { assignment: row } = await assertOwned(actor, assignmentId);
     const attempts = await repo.listSubmissionAttempts(
       database,
       row.id,

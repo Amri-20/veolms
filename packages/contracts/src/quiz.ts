@@ -329,6 +329,10 @@ export const myQuizAssignmentSchema = z.strictObject({
 export const myQuizAssignmentsResponseSchema = z.strictObject({
   assignments: z.array(myQuizAssignmentSchema),
 });
+/**
+ * One assignment's outcomes. `students` lists those who attempted first, the
+ * latest activity first, then those who have not attempted, by name.
+ */
 export const quizAnalyticsSchema = z.strictObject({
   assignedStudents: z.number().int().nonnegative(),
   attempted: z.number().int().nonnegative(),
@@ -342,6 +346,11 @@ export const quizAnalyticsSchema = z.strictObject({
     z.strictObject({
       studentId: uuid,
       studentName: z.string(),
+      /**
+       * Present only for someone who may read the course's students, to
+       * find a student by email.
+       */
+      studentEmail: z.string().nullable(),
       attemptCount: z.number().int().nonnegative(),
       latestScore: z.number().nullable(),
       /**
