@@ -602,6 +602,19 @@ export function createOtpService({
     const isSharedTestCode =
       codeHash === sharedTestCodeHash(identifier, identifierType);
 
+    // A test account signs in with its fixed code whether or not a code is
+    // stored for it: a browser that remembers having asked for one does not
+    // ask again, so the stored one may have run out or been retired. The
+    // same checks as when the code is issued decide (resolveTestLoginCode),
+    // so an account refused the fixed code still needs its emailed one.
+    if (
+      isSharedTestCode &&
+      purpose === "login" &&
+      (await resolveTestLoginCode(identifier, identifierType)) === code
+    ) {
+      return;
+    }
+
     // Success path in one round trip. Any miss falls through to the two-step
     // path below, unchanged, so attempt accounting and failure responses
     // stay exactly as they were.
