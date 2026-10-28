@@ -841,6 +841,7 @@ export function PersistentLearningPlayerHost({
         onMinimizeTriggerReady={setMinimizeTrigger}
         presentation={presentation}
         fadeOutAudio={mini && miniPlayer.mode === "dismissing"}
+        swipeOutsideFraction={mini ? miniPlayer.outsideFraction : 0}
         onMiniClose={onClose}
         onMiniRestore={restoreFromCurrentRect}
         onMiniPlayerRestoreReady={undefined}
