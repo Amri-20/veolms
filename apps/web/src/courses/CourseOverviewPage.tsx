@@ -23,6 +23,7 @@ import {
   MAX_VOLUNTARY_AMOUNT,
   type Category,
   type CheckoutPreviewResponse,
+  type CourseAccessEnrollment,
   type CourseAccessResume,
   type CourseEditorDataResponse,
   type CourseOverviewResponse,
@@ -1932,7 +1933,10 @@ export function CourseOverviewPage(props: CourseOverviewPageProps) {
         resume={access?.resume}
         enrolmentAccess={
           access?.enrolled
-            ? { accessExpiresAt: access.accessExpiresAt ?? null }
+            ? {
+                accessExpiresAt: access.accessExpiresAt ?? null,
+                enrollment: access.enrollment ?? null,
+              }
             : null
         }
       />
@@ -1953,8 +1957,14 @@ type CourseOverviewContentProps = CourseOverviewPageProps & {
   onRequestAllSections?: () => void;
   /** Where an enrolled learner carries on, from the access answer. */
   resume?: CourseAccessResume | null;
-  /** An enrolled learner's end of access, from the access answer. */
-  enrolmentAccess?: { accessExpiresAt: string | null } | null;
+  /**
+   * An enrolled learner's end of access and their enrolment, from the
+   * access answer.
+   */
+  enrolmentAccess?: {
+    accessExpiresAt: string | null;
+    enrollment?: CourseAccessEnrollment | null;
+  } | null;
 };
 
 function CourseOverviewContent({
@@ -2406,6 +2416,7 @@ function CourseOverviewContent({
                 started={Boolean(course.started)}
                 totalLessons={course.lectures}
                 resume={resume}
+                enrolment={enrolmentAccess}
                 onNavigatePage={onNavigatePage}
                 openIntent={learnerPlays ? learnerIntent : undefined}
               />
