@@ -1875,8 +1875,10 @@ export function LessonVideoPlayer({
                 // is taller than the picture: with ambient mode on, the
                 // bands above and below it show the glow behind (the
                 // full-screen projection, LessonAmbientProjection), not
-                // black.
-                ambientEnabled && "!bg-transparent",
+                // black. The zoom layers the video lies in (PlayerZoomMedia)
+                // are black of their own, so they go see-through too.
+                ambientEnabled &&
+                  "!bg-transparent [&_[data-player-zoom-viewport]]:!bg-transparent [&_[data-player-zoom-media-plane]]:!bg-transparent",
               )
             : "border-0 !rounded-none"
       }
