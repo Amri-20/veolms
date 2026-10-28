@@ -13,6 +13,7 @@ import {
   updateDiscussionsWorkspaceItem,
 } from "../services/learning-interactions";
 import { copyTextToClipboard } from "../lib/clipboard";
+import { markdownToPlainText } from "../learning/discussion-editor/types";
 import {
   markDiscussionPostHidden,
   useDiscussionPostHidden,
@@ -177,7 +178,12 @@ export function useDiscussionWorkspaceCardActions({
     }
   };
 
+  // "Copy text" is readable text (no Markdown signs, a table as tab-separated
+  // rows); "Copy Markdown" is the post as written.
   const copyText = async () => {
+    await copyTextToClipboard(markdownToPlainText(copyTextValue), setNotice);
+  };
+  const copyMarkdown = async () => {
     await copyTextToClipboard(copyTextValue, setNotice);
   };
 
@@ -334,6 +340,7 @@ export function useDiscussionWorkspaceCardActions({
     like,
     confirmingDelete,
     copyLink,
+    copyMarkdown,
     deleteItem,
     deleteLabel: confirmingDelete ? "Confirm delete" : `Delete ${deleteNoun}`,
     resetDelete: () => setConfirmingDelete(false),

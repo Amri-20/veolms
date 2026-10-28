@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BellSimpleIcon as BellSimple } from "@phosphor-icons/react/BellSimple";
 import { BookmarkSimpleIcon as BookmarkSimple } from "@phosphor-icons/react/BookmarkSimple";
 import { CopySimpleIcon as CopySimple } from "@phosphor-icons/react/CopySimple";
+import { MarkdownLogoIcon as MarkdownLogo } from "@phosphor-icons/react/MarkdownLogo";
 import { EyeIcon as Eye } from "@phosphor-icons/react/Eye";
 import { EyeSlashIcon as EyeSlash } from "@phosphor-icons/react/EyeSlash";
 import { FlagIcon as Flag } from "@phosphor-icons/react/Flag";
@@ -100,13 +101,22 @@ export function DiscussionWorkspaceActionMenu({
         />
       )}
       {actions.canCopyText && (
-        <MenuAction
-          Icon={CopySimple}
-          label="Copy text"
-          onClick={() => {
-            void actions.copyText();
-          }}
-        />
+        <>
+          <MenuAction
+            Icon={CopySimple}
+            label="Copy text"
+            onClick={() => {
+              void actions.copyText();
+            }}
+          />
+          <MenuAction
+            Icon={MarkdownLogo}
+            label="Copy Markdown"
+            onClick={() => {
+              void actions.copyMarkdown();
+            }}
+          />
+        </>
       )}
       {textSize && <DiscussionTextSizeMenuItem />}
       {(canReport || actions.canHide || actions.canDelete) && <MenuDivider />}

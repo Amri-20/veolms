@@ -8,9 +8,11 @@ import {
   useEffect,
   useEffectEvent,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
+import { PAGE_FULLSCREEN_CHANGE_EVENT } from "@veolms/video-player";
 import type { ReactNode, RefObject } from "react";
 import type { LessonResource } from "@veolms/contracts";
 import { DEFAULT_DEBOUNCE_DELAY_MS, useDebounce } from "../hooks/useDebounce";
@@ -243,6 +245,24 @@ interface CurriculumProps {
 /** A little over the time a section takes to close (learning.css). */
 const SECTION_CLOSE_MS = 260;
 /** The learner taking the scroll back ends a hold on it. */
+interface ScrollToItemOptions {
+  instant?: boolean;
+  onSettled?: () => void;
+}
+
+interface RevealOptions {
+  instant?: boolean;
+  /** Keeps the lessons out of sight until the list rests on the item. */
+  hidden?: boolean;
+}
+
+// A full screen the page draws itself (Safari on iPhone) counts as one.
+const FULLSCREEN_CHANGE_EVENTS = [
+  "fullscreenchange",
+  "webkitfullscreenchange",
+  PAGE_FULLSCREEN_CHANGE_EVENT,
+];
+
 const HOLD_CANCEL_EVENTS = [
   "wheel",
   "touchstart",
@@ -508,20 +528,44 @@ export const Curriculum = memo(function Curriculum({
     [],
   );
 
+  /**
+   * The lessons are hidden while the list is moved for the learner rather
+   * than by them (a page just opened, the panel shown again, full screen
+   * entered or left): they appear already at the lesson being played, and
+   * the list is never seen running down to it.
+   */
+  const setLessonsHidden = useCallback((hidden: boolean) => {
+    const lessonList = lessonListRef.current;
+    if (!lessonList) return;
+    if (hidden) lessonList.style.visibility = "hidden";
+    else lessonList.style.removeProperty("visibility");
+  }, []);
+
+  /**
+   * `instant` moves the list in one step, for a move the learner did not
+   * make themself (a lesson opened, the panel shown); the jump chips glide.
+   * `onSettled` is called once the list rests on the item.
+   */
   const scrollItemToTop = useCallback(
-    (element: HTMLElement | null) => {
+    (
+      element: HTMLElement | null,
+      { instant = false, onSettled }: ScrollToItemOptions = {},
+    ) => {
       const curriculum = element?.closest<HTMLElement>(".learning-curriculum");
-      if (!element || !curriculum) return;
-      const behavior = window.matchMedia("(prefers-reduced-motion: reduce)")
-        .matches
-        ? "auto"
-        : "smooth";
+      if (!element || !curriculum) {
+        onSettled?.();
+        return;
+      }
+      const behavior =
+        instant || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth";
       let target = measureItemTop(element, curriculum);
       const go = () => {
-        if (typeof curriculum.scrollTo === "function") {
-          curriculum.scrollTo({ top: target, behavior });
-        } else {
+        if (behavior === "auto" || typeof curriculum.scrollTo !== "function") {
           curriculum.scrollTop = target;
+        } else {
+          curriculum.scrollTo({ top: target, behavior });
         }
       };
       go();
@@ -539,6 +583,7 @@ export const Curriculum = memo(function Curriculum({
         for (const type of HOLD_CANCEL_EVENTS) {
           curriculum.removeEventListener(type, stop);
         }
+        onSettled?.();
       };
       const settle = () => {
         if (!element.isConnected) return stop();
@@ -568,7 +613,15 @@ export const Curriculum = memo(function Curriculum({
    * first (`--curriculum-reveal-space`).
    */
   const revealAtTop = useCallback(
-    (getTarget: () => HTMLElement | null) => {
+    (
+      getTarget: () => HTMLElement | null,
+      { instant = false, hidden = false }: RevealOptions = {},
+    ) => {
+      if (hidden) setLessonsHidden(true);
+      const options: ScrollToItemOptions = {
+        instant,
+        onSettled: hidden ? () => setLessonsHidden(false) : undefined,
+      };
       // On a page just opened the lessons may not be drawn yet (a section
       // has its lessons once the course's file is in), so the item is
       // looked for again each frame, for half a second at most.
@@ -582,6 +635,7 @@ export const Curriculum = memo(function Curriculum({
         if (!targetElement || !curriculum || !lessonList) {
           tries += 1;
           if (tries < 30) window.requestAnimationFrame(attempt);
+          else options.onSettled?.();
           return;
         }
 
@@ -606,16 +660,18 @@ export const Curriculum = memo(function Curriculum({
             `${nextRevealSpace}px`,
           );
           window.requestAnimationFrame(() => {
-            window.requestAnimationFrame(() => scrollItemToTop(targetElement));
+            window.requestAnimationFrame(() =>
+              scrollItemToTop(targetElement, options),
+            );
           });
           return;
         }
 
-        scrollItemToTop(targetElement);
+        scrollItemToTop(targetElement, options);
       };
       window.requestAnimationFrame(() => window.requestAnimationFrame(attempt));
     },
-    [measureItemTop, scrollItemToTop],
+    [measureItemTop, scrollItemToTop, setLessonsHidden],
   );
 
   const revealAndScrollTo = (
@@ -641,10 +697,64 @@ export const Curriculum = memo(function Curriculum({
   // the learner is searching it.
   // Read when a lesson opens, not followed: opening the search must not
   // scroll the list again.
+  // The list moves in one step; the first time (the page just opened) its
+  // lessons stay hidden until it is there.
+  const lessonRevealedRef = useRef(false);
   const revealOpenedLesson = useEffectEvent(() => {
-    if (hideHero || searchOpen) return;
-    revealAtTop(() => activeLessonRef.current);
+    const firstReveal = !lessonRevealedRef.current;
+    lessonRevealedRef.current = true;
+    if (hideHero || searchOpen) {
+      if (firstReveal) setLessonsHidden(false);
+      return;
+    }
+    revealAtTop(() => activeLessonRef.current, {
+      instant: true,
+      hidden: firstReveal,
+    });
   });
+  // Hidden before the first paint, so the list is never seen at its top
+  // and then moved; `revealOpenedLesson` shows it again. Not when the
+  // sections are opened from outside, where no reveal follows.
+  useLayoutEffect(() => {
+    if (!hideHero && !searchOpen && !expandAllSections && !isExpandedControlled)
+      setLessonsHidden(true);
+    // Only on the first paint.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * The lesson being played is brought back to the top, in one step and
+   * out of sight, whenever the list is shown again: when full screen is
+   * entered or left (the side panel was left behind it, the full-screen
+   * panel opens with it) and when the panel goes from hidden to shown.
+   */
+  const revealAgain = useEffectEvent(() => {
+    if (hideHero || searchOpen || !lessonRevealedRef.current) return;
+    revealAtTop(() => activeLessonRef.current, { instant: true, hidden: true });
+  });
+  useEffect(() => {
+    const scrollport = curriculumRef.current;
+    const onFullscreenChange = () => revealAgain();
+    for (const type of FULLSCREEN_CHANGE_EVENTS) {
+      document.addEventListener(type, onFullscreenChange);
+    }
+    let shown = Boolean(scrollport && scrollport.clientHeight > 0);
+    const observer =
+      scrollport && typeof ResizeObserver === "function"
+        ? new ResizeObserver(() => {
+            const nowShown = scrollport.clientHeight > 0;
+            if (nowShown && !shown) revealAgain();
+            shown = nowShown;
+          })
+        : null;
+    if (scrollport) observer?.observe(scrollport);
+    return () => {
+      for (const type of FULLSCREEN_CHANGE_EVENTS) {
+        document.removeEventListener(type, onFullscreenChange);
+      }
+      observer?.disconnect();
+    };
+  }, []);
   useEffect(() => {
     if (expandAllSections || isExpandedControlled) return;
     const sectionChanged = openedForSectionRef.current !== currentSection.id;
@@ -794,19 +904,36 @@ export const Curriculum = memo(function Curriculum({
         : [...current, currentSection.id],
     );
 
+    // The panel was just opened to show where the learner is: the lessons
+    // appear there, not at wherever the list was left.
+    setLessonsHidden(true);
+    const reveal = () => setLessonsHidden(false);
     let firstFrame: number;
     let secondFrame: number | undefined;
     firstFrame = window.requestAnimationFrame(() => {
       secondFrame = window.requestAnimationFrame(() => {
-        scrollItemToTop(activeLessonRef.current);
+        secondFrame = undefined;
+        scrollItemToTop(activeLessonRef.current, {
+          instant: true,
+          onSettled: reveal,
+        });
       });
     });
 
     return () => {
       window.cancelAnimationFrame(firstFrame);
-      if (secondFrame) window.cancelAnimationFrame(secondFrame);
+      if (secondFrame) {
+        window.cancelAnimationFrame(secondFrame);
+        reveal();
+      }
     };
-  }, [focusRequest, currentSection.id, scrollItemToTop, setExpanded]);
+  }, [
+    focusRequest,
+    currentSection.id,
+    scrollItemToTop,
+    setExpanded,
+    setLessonsHidden,
+  ]);
 
   useEffect(() => {
     if (!topRequest || topRequest === handledTopRequestRef.current)
@@ -867,7 +994,7 @@ export const Curriculum = memo(function Curriculum({
           }
         }
 
-        scrollItemToTop(targetElement);
+        scrollItemToTop(targetElement, { instant: true });
       });
     });
 

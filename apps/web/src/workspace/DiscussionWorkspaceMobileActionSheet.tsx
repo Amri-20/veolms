@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { BellSimpleIcon as BellSimple } from "@phosphor-icons/react/BellSimple";
 import { BookmarkSimpleIcon as BookmarkSimple } from "@phosphor-icons/react/BookmarkSimple";
 import { CopySimpleIcon as CopySimple } from "@phosphor-icons/react/CopySimple";
+import { MarkdownLogoIcon as MarkdownLogo } from "@phosphor-icons/react/MarkdownLogo";
 import { LinkSimpleIcon as LinkSimple } from "@phosphor-icons/react/LinkSimple";
 import { TrashIcon as Trash } from "@phosphor-icons/react/Trash";
 import { EyeIcon as Eye } from "@phosphor-icons/react/Eye";
@@ -196,6 +197,19 @@ export function DiscussionWorkspaceMobileActionSheet({
               >
                 <CopySimple size={19} weight="regular" aria-hidden="true" />
                 <span>Copy text</span>
+              </button>
+            )}
+            {actions.canCopyText && (
+              <button
+                type="button"
+                className="flex min-h-12 w-full items-center gap-3 border-t border-(--border) px-4 text-left text-sm font-medium text-(--text) transition-colors hover:bg-(--hover) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--accent)"
+                onClick={() => {
+                  closeSheet();
+                  void actions.copyMarkdown();
+                }}
+              >
+                <MarkdownLogo size={19} weight="regular" aria-hidden="true" />
+                <span>Copy Markdown</span>
               </button>
             )}
             {actions.canEdit && onEdit && (

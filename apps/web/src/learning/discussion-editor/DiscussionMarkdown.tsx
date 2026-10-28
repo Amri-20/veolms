@@ -701,9 +701,31 @@ const MARKDOWN_COMPONENTS: Components = {
   ),
 };
 
-const MARKDOWN_PLUGINS = [remarkGfm, remarkHighlightMarks];
+/**
+ * A line of "=" or "-" under text is Markdown's underlined heading. Nobody
+ * writes headings that way in a comment, but plain text does it by chance:
+ * a comment brought over from the old platform listed "const", "age", ":",
+ * "number", "=" one per line, and the lone "=" turned the lines above it
+ * into a large heading. Headings are written with "#" only.
+ */
+function remarkNoUnderlinedHeadings(this: {
+  data(): { micromarkExtensions?: unknown[] };
+}) {
+  const data = this.data();
+  data.micromarkExtensions = [
+    ...(data.micromarkExtensions ?? []),
+    { disable: { null: ["setextUnderline"] } },
+  ];
+}
+
+const MARKDOWN_PLUGINS = [
+  remarkGfm,
+  remarkNoUnderlinedHeadings,
+  remarkHighlightMarks,
+];
 const MARKDOWN_SOFT_BREAK_PLUGINS = [
   remarkGfm,
+  remarkNoUnderlinedHeadings,
   remarkHighlightMarks,
   remarkLessonDescriptionSoftBreaks,
 ];

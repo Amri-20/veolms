@@ -219,7 +219,7 @@ export const ElasticScroller = forwardRef<
           // moved. Its growth is part of this transform, after the shift
           // that centres it: as a `scale` of its own it would scale that
           // shift too, and slide the ring out from behind the button.
-          transform: `translate(-50%, ${-control.dragOffset}px) scale(${placement.moving ? 1.5 : 1})`,
+          transform: `translate(-50%, ${control.dragEnds.socket}px) scale(${placement.moving ? 1.5 : 1})`,
           translate: `0 ${puckFeedbackOffset}px`,
           transition:
             control.mode === "drag"
@@ -253,7 +253,9 @@ export const ElasticScroller = forwardRef<
         data-visible
         style={{
           opacity: control.dragIntensity,
-          transform: `translateX(-50%) scaleY(${control.dragIntensity})`,
+          // Drawn between where the two ends stand (it is 384px long,
+          // centred on the resting control, at full scale).
+          transform: `translateX(-50%) translateY(${(control.dragEnds.button + control.dragEnds.socket) / 2}px) scaleY(${Math.abs(control.dragEnds.button - control.dragEnds.socket) / 384})`,
           transition:
             control.mode === "drag"
               ? "none"
@@ -301,7 +303,7 @@ export const ElasticScroller = forwardRef<
         data-drag-distance={Math.round(Math.abs(control.dragOffset))}
         data-drag-inline-distance={Math.round(control.dragInlineOffset)}
         style={{
-          transform: `translateY(${control.dragOffset}px)`,
+          transform: `translateY(${control.dragEnds.button}px)`,
           translate: `0 ${buttonFeedbackOffset}px`,
           transition:
             control.mode === "drag"

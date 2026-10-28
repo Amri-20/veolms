@@ -47,6 +47,8 @@ const DISMISS_DISTANCE = 56;
 const DISMISS_VELOCITY = 0.45;
 const DISMISS_DURATION = 200;
 type MiniPlayerDismissDirection = "down" | "left" | "right" | "up";
+/** Dragged this much out of the window (by area) and let go, it closes. */
+const DISMISS_OUTSIDE_FRACTION = 0.5;
 /** How long it takes to come to rest once let go: an unhurried glide. */
 const SETTLE_DURATION = 560;
 
@@ -278,6 +280,63 @@ const getFlickDirectedCornerLayout = (
 const getReleaseVelocity = (recent: number, average: number) =>
   Math.abs(recent) >= DOCK_FLICK_VELOCITY ? recent : average;
 
+/** How far the player goes past each edge of the window, in px. */
+const getOverflow = (layout: MiniPlayerLayout, isExpanded: boolean) => {
+  const viewport = getViewportBounds();
+  const height = getLearningMiniPlayerHeight(
+    layout.width,
+    isDesktopLearningMinimizeViewport(),
+    isExpanded,
+    getPlaylistHeight(layout),
+  );
+  return {
+    height,
+    left: Math.max(0, viewport.left - layout.left),
+    right: Math.max(
+      0,
+      layout.left + layout.width - (viewport.left + viewport.width),
+    ),
+    up: Math.max(0, viewport.top - layout.top),
+    down: Math.max(0, layout.top + height - (viewport.top + viewport.height)),
+  };
+};
+
+/** How much of the player is out of the window, by area: 0 to 1. */
+const getOutsideFraction = (layout: MiniPlayerLayout, isExpanded: boolean) => {
+  const overflow = getOverflow(layout, isExpanded);
+  if (layout.width <= 0 || overflow.height <= 0) return 0;
+  const insideWidth = Math.max(
+    0,
+    layout.width - overflow.left - overflow.right,
+  );
+  const insideHeight = Math.max(
+    0,
+    overflow.height - overflow.up - overflow.down,
+  );
+  return clamp(
+    1 - (insideWidth * insideHeight) / (layout.width * overflow.height),
+    0,
+    1,
+  );
+};
+
+/** The edge the player is furthest past, which it leaves by. */
+const getOutsideDirection = (
+  layout: MiniPlayerLayout,
+  isExpanded: boolean,
+): MiniPlayerDismissDirection => {
+  const overflow = getOverflow(layout, isExpanded);
+  const sides = [
+    ["down", overflow.down / overflow.height],
+    ["up", overflow.up / overflow.height],
+    ["left", overflow.left / layout.width],
+    ["right", overflow.right / layout.width],
+  ] as const;
+  return sides.reduce((furthest, side) =>
+    side[1] > furthest[1] ? side : furthest,
+  )[0];
+};
+
 const getDownmostLayout = (
   layout: MiniPlayerLayout,
   viewport = getViewportBounds(),
@@ -336,6 +395,9 @@ export function useLearningMiniPlayerGestures(
   const [mode, setMode] = useState<MiniPlayerGestureMode>("idle");
   const [dismissDistance, setDismissDistance] = useState(0);
   const [dismissShift, setDismissShift] = useState(0);
+  // How much of the player is dragged out of the window, 0 to 1: its
+  // sound drops by as much (see useMiniPlayerSwipeVolume).
+  const [outsideFraction, setOutsideFraction] = useState(0);
   const layoutRef = useRef<MiniPlayerLayout | null>(null);
   const restingPlaceRef = useRef<MiniPlayerRestingPlace | null>(null);
   const modeRef = useRef<MiniPlayerGestureMode>("idle");
@@ -579,6 +641,7 @@ export function useLearningMiniPlayerGestures(
     setMode("idle");
     setDismissDistance(0);
     setDismissShift(0);
+    setOutsideFraction(0);
     pointersRef.current.clear();
     singleGestureRef.current = null;
     pinchGestureRef.current = null;
@@ -1046,6 +1109,7 @@ export function useLearningMiniPlayerGestures(
       };
       settleCandidateRef.current = nextLayout;
       showLiveLayout(nextLayout);
+      setOutsideFraction(getOutsideFraction(nextLayout, isExpanded));
     },
     [
       enabled,
@@ -1134,9 +1198,27 @@ export function useLearningMiniPlayerGestures(
               : nextLayout;
         showLiveLayout(nextLayout);
 
-        // It closes one way only: swiped downwards while it is already
-        // resting at the bottom. Flicked or dragged towards any other edge,
-        // or downwards from higher up, it just moves.
+        // Let go with half of it or more out of the window, it goes on out
+        // on that side and closes; with less, but some, it goes back to
+        // where it was before the drag.
+        const outside = cancelled
+          ? 0
+          : getOutsideFraction(nextLayout, isExpanded);
+        if (outside >= DISMISS_OUTSIDE_FRACTION) {
+          pointersRef.current.clear();
+          singleGestureRef.current = null;
+          pinchGestureRef.current = null;
+          settleCandidateRef.current = null;
+          scheduleClickRelease();
+          dismiss(getOutsideDirection(nextLayout, isExpanded));
+          return;
+        }
+        setOutsideFraction(0);
+
+        // It also closes when swiped downwards while it is already resting
+        // at the bottom (a flick: little of it need be out of the window).
+        // Flicked or dragged towards any other edge, or downwards from
+        // higher up, it just moves.
         const downwardSwipe =
           !cancelled &&
           (isDesktop || directPointer) &&
@@ -1161,6 +1243,7 @@ export function useLearningMiniPlayerGestures(
             settleCandidateRef.current = getDownmostLayout(nextLayout);
           }
         }
+        if (outside > 0) settleCandidateRef.current = single.initialLayout;
       }
 
       if (shouldRestoreFromDirectTap) {
@@ -1276,6 +1359,7 @@ export function useLearningMiniPlayerGestures(
 
   return {
     mode,
+    outsideFraction,
     style,
     gestureProps: {
       onClickCapture: handleClickCapture,
