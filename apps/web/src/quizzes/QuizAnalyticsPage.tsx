@@ -52,6 +52,7 @@ import { formatMarksOutOf } from "./quizMarks";
 import { useStudentOutcomeFilter } from "./useStudentOutcomeFilter";
 import { useCoursesWithQuizzes } from "./useCoursesWithQuizzes";
 import { ElevatedCard, elevatedCardClasses } from "../components/ElevatedCard";
+import { fuzzyMatches } from "../lib/fuzzySearch";
 
 // A submission is opened on demand, and it brings the Markdown renderer for
 // question text, so it stays out of the page's own code. It is fetched when
@@ -718,7 +719,7 @@ function QuizLibrary({
   const visible = quizzes.filter(
     (quiz) =>
       (status === "all" || quiz.status === status) &&
-      quiz.title.toLowerCase().includes(debouncedSearch.trim().toLowerCase()),
+      fuzzyMatches(debouncedSearch, quiz.title),
   );
   const {
     displayedItems: displayedLibraryQuizzes,

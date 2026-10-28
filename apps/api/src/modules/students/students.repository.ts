@@ -3,6 +3,7 @@ import type { ExpressionBuilder } from "kysely";
 import type { Database, DatabaseExecutor } from "@veolms/database";
 import { exactCursorTimestamp, isCursorUuid } from "../../lib/keyset.ts";
 import { escapeLikePattern } from "../../lib/like-pattern.ts";
+import { fuzzyMatchesAny } from "../../lib/fuzzy-search.ts";
 
 export type StudentsExecutor = DatabaseExecutor;
 
@@ -59,6 +60,10 @@ function studentSearchCondition(
       eb("u.display_name", "ilike", term),
       eb("u.username", "ilike", term),
       eb("u.email", "ilike", term),
+      fuzzyMatchesAny(cleanSearch, [
+        sql.ref("u.display_name"),
+        sql.ref("u.username"),
+      ]),
       ...(includePhone && phoneDigits.length >= 3
         ? [
             eb(

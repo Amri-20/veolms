@@ -89,18 +89,27 @@ export function createViewerAccessService({
     };
   }
 
+  /** The learner's enrolments: progress in each, and when access ends. */
   async function listProgressByCourse(
     user: ViewerAccessUser | undefined,
-  ): Promise<Map<string, CourseAccessProgress>> {
+  ): Promise<
+    Map<
+      string,
+      { progress: CourseAccessProgress; accessExpiresAt: Date | null }
+    >
+  > {
     if (!user) return new Map();
     const rows = await enrollmentService.listEnrollmentProgress(user.id);
     return new Map(
       rows.map((row) => [
         row.courseId,
         {
-          percent: Math.min(100, Math.max(0, Math.round(row.progress))),
-          started: row.progress > 0 || row.lastAccessedAt !== null,
-          lastAccessedAt: row.lastAccessedAt?.toISOString() ?? null,
+          progress: {
+            percent: Math.min(100, Math.max(0, Math.round(row.progress))),
+            started: row.progress > 0 || row.lastAccessedAt !== null,
+            lastAccessedAt: row.lastAccessedAt?.toISOString() ?? null,
+          },
+          accessExpiresAt: row.accessExpiresAt,
         },
       ]),
     );
@@ -147,7 +156,7 @@ export function createViewerAccessService({
           course,
           viewer,
           heldCourseIds.has(course.id),
-          progressByCourse.get(course.id),
+          progressByCourse.get(course.id)?.progress,
         ),
       ),
     };
@@ -223,12 +232,8 @@ export function createViewerAccessService({
       throw new AppError(404, "COURSE_NOT_FOUND", "Course not found.");
     }
 
-    const summary = summarize(
-      facts,
-      viewer,
-      holdsGrant,
-      progressByCourse.get(course.id),
-    );
+    const enrollment = progressByCourse.get(course.id);
+    const summary = summarize(facts, viewer, holdsGrant, enrollment?.progress);
     const [resume, mayJoinDiscussions] = await Promise.all([
       user && summary.access === "full"
         ? getResume(user, course.id)
@@ -240,6 +245,7 @@ export function createViewerAccessService({
       ...summary,
       mayJoinDiscussions,
       resume,
+      accessExpiresAt: enrollment?.accessExpiresAt?.toISOString() ?? null,
       curriculumVersion: curriculumVersion ?? NO_PUBLIC_CURRICULUM,
     };
   }

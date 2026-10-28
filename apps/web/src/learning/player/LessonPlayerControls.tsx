@@ -915,6 +915,12 @@ function MenuToggle({ checked }: { checked: boolean }) {
   );
 }
 
+/** See `wideLessonsBeside` in `LessonPlayerControls`. */
+function markWideLessonsBeside(shell: HTMLElement, wide: boolean) {
+  if (wide) shell.setAttribute("data-fullscreen-lessons-beside", "wide");
+  else shell.removeAttribute("data-fullscreen-lessons-beside");
+}
+
 export function LessonPlayerControls({
   shortPlayer = false,
   seekTimeOnly = false,
@@ -980,7 +986,7 @@ export function LessonPlayerControls({
     error,
     fullscreen,
     lifecycle,
-    previewTime,
+    previewing,
     scrubbing,
     settingsOpen,
   } = usePlayerState(
@@ -990,7 +996,9 @@ export function LessonPlayerControls({
       error: media.error,
       fullscreen: ui.fullscreen,
       lifecycle: media.lifecycle,
-      previewTime: ui.previewTime,
+      // Whether a moment is previewed, not which: the time changes on every
+      // move over the timeline, and this whole bar re-rendered for each.
+      previewing: ui.previewTime !== null,
       scrubbing: ui.scrubbing,
       settingsOpen: ui.settingsView !== "closed",
     }),
@@ -1000,7 +1008,7 @@ export function LessonPlayerControls({
       left.error === right.error &&
       left.fullscreen === right.fullscreen &&
       left.lifecycle === right.lifecycle &&
-      left.previewTime === right.previewTime &&
+      left.previewing === right.previewing &&
       left.scrubbing === right.scrubbing &&
       left.settingsOpen === right.settingsOpen,
   );
@@ -1036,10 +1044,14 @@ export function LessonPlayerControls({
   const timelineDisplayed = visible || persistentProgressVisible;
   const landscapeOrientation = useLandscapeOrientation();
   const mobileLandscapeFullscreen = mobileFullscreen && landscapeOrientation;
+  // Full screen shows the video shell alone, so the page's own lesson list
+  // (beside the video on a wide screen) is out of sight: the lessons open
+  // beside the video inside full screen instead, on a wide screen as on a
+  // phone turned sideways.
+  const fullscreenLessonsBeside =
+    mobileLandscapeFullscreen || (fullscreen && desktopLayout);
   const fullscreenCoursePanelVisible =
-    mobileLandscapeFullscreen &&
-    courseLessonsOpen &&
-    Boolean(courseLessonsPanel);
+    fullscreenLessonsBeside && courseLessonsOpen && Boolean(courseLessonsPanel);
   const mobileTimelineGeometry = scrubbing
     ? "max-sm:[&_[data-timeline-track]]:!h-0.75"
     : "max-sm:[&_[data-timeline-track]]:!h-0.5";
@@ -1049,12 +1061,19 @@ export function LessonPlayerControls({
       : "[&_[data-timeline-track]]:!h-0.5"
     : "";
 
+  // The seek-preview bar runs along the top edge, under this layer (and under the
+  // full screen vignette layer), so the top vignette fades out while the bar is on
+  // screen (PreviewLoadBar marks it data-shown; once a lesson's previews are all
+  // here it shows no more) and comes back as the bar fades. On a phone a drag also
+  // hides the buttons along the top (PersistentLearningPlayerHost), and the
+  // vignette goes with them.
+  const topVignetteHiddenClass = `[.video-shell:has([data-video-player-preview-bar][data-shown=true])_&]:opacity-0 [.video-shell:has([data-video-player-preview-bar][data-shown=true])_&]:delay-0 [.video-shell:has([data-video-player-preview-bar][data-shown=true])_&]:duration-150 ${scrubbing ? "max-[640px]:opacity-0 max-[640px]:delay-0 max-[640px]:duration-150" : ""}`;
   const mobileVignettes = (
     <>
       <div
         aria-hidden="true"
         data-mobile-player-vignette="top"
-        className={`absolute inset-x-0 top-0 h-16 bg-[linear-gradient(180deg,color-mix(in_srgb,#05070b_50%,var(--accent)_4%)_0%,color-mix(in_srgb,#05070b_20%,var(--accent)_2%)_58%,transparent_100%)] sm:hidden ${mobileInteraction ? "sm:!block" : ""}`}
+        className={`absolute inset-x-0 top-0 h-16 bg-[linear-gradient(180deg,color-mix(in_srgb,#05070b_50%,var(--accent)_4%)_0%,color-mix(in_srgb,#05070b_20%,var(--accent)_2%)_58%,transparent_100%)] transition-opacity delay-500 duration-300 motion-reduce:transition-none sm:hidden ${mobileInteraction ? "sm:!block" : ""} ${topVignetteHiddenClass}`}
       />
       <div
         aria-hidden="true"
@@ -1071,8 +1090,18 @@ export function LessonPlayerControls({
   }, []);
 
   useEffect(() => {
-    onMobileLandscapeFullscreenChange?.(mobileLandscapeFullscreen);
-  }, [mobileLandscapeFullscreen, onMobileLandscapeFullscreenChange]);
+    onMobileLandscapeFullscreenChange?.(fullscreenLessonsBeside);
+  }, [fullscreenLessonsBeside, onMobileLandscapeFullscreenChange]);
+  // Marks a wide screen's full screen with the lessons beside the video,
+  // for the player sized by the page (LessonVideoPlayer): there it keeps the
+  // screen's height, with the picture letterboxed in its narrower pane, so
+  // its control bar stays at the foot of the screen.
+  const wideLessonsBeside = fullscreenCoursePanelVisible && !mobileInteraction;
+  useLayoutEffect(() => {
+    if (!timelineHost) return undefined;
+    markWideLessonsBeside(timelineHost, wideLessonsBeside);
+    return () => markWideLessonsBeside(timelineHost, false);
+  }, [timelineHost, wideLessonsBeside]);
 
   // In fullscreen on a touch device at landscape widths, the timeline sits
   // 44px up and the corner controls 64px up, which leaves 12px between the
@@ -1081,7 +1110,7 @@ export function LessonPlayerControls({
     <div
       data-player-timeline-wrap=""
       data-player-timeline-layer=""
-      className={`pointer-events-none absolute inset-x-0 bottom-0 translate-y-1/2 z-80 overflow-visible max-sm:z-170 transition-opacity duration-200 motion-reduce:transition-none sm:inset-x-3 sm:bottom-16 sm:translate-y-0 ${EXPAND_MOTION_HIDDEN_CLASS} ${timelineDisplayed ? "visible opacity-100" : "invisible opacity-0"} ${visible ? "" : "[&_*]:!pointer-events-none"} ${mobileInteraction ? (mobileFullscreen ? (fullscreenCoursePanelVisible ? `!left-(--learning-fullscreen-video-offset-x) !right-auto !bottom-0 !z-170 !w-(--learning-fullscreen-video-width) !max-w-full !translate-x-0 !translate-y-1/2 !px-3 sm:!left-(--learning-fullscreen-video-offset-x) sm:!right-auto sm:!bottom-11 sm:!w-(--learning-fullscreen-video-width) sm:!translate-x-0 sm:!translate-y-0 sm:!px-3 ${QUARTER_TURN_TIMELINE_CLASS}` : `!left-1/2 !right-auto !bottom-0 !z-170 !w-[min(100%,calc(var(--player-screen-height,100dvh)*16/9))] !max-w-full !-translate-x-1/2 !translate-y-1/2 !px-3 sm:!left-1/2 sm:!right-auto sm:!bottom-11 sm:!w-[min(100%,calc(var(--player-screen-height,100dvh)*16/9))] sm:!-translate-x-1/2 sm:!translate-y-0 sm:!px-3 ${QUARTER_TURN_TIMELINE_CLASS}`) : "!z-170 sm:!inset-x-0 sm:!bottom-2 sm:!translate-y-0") : ""}`}
+      className={`pointer-events-none absolute inset-x-0 bottom-0 translate-y-1/2 z-80 overflow-visible max-sm:z-170 transition-opacity duration-200 motion-reduce:transition-none sm:inset-x-3 sm:bottom-16 sm:translate-y-0 ${EXPAND_MOTION_HIDDEN_CLASS} ${wideLessonsBeside ? "sm:!right-[calc(100%-var(--learning-fullscreen-video-width)+0.75rem)]" : ""} ${timelineDisplayed ? "visible opacity-100" : "invisible opacity-0"} ${visible ? "" : "[&_*]:!pointer-events-none"} ${mobileInteraction ? (mobileFullscreen ? (fullscreenCoursePanelVisible ? `!left-(--learning-fullscreen-video-offset-x) !right-auto !bottom-0 !z-170 !w-(--learning-fullscreen-video-width) !max-w-full !translate-x-0 !translate-y-1/2 !px-3 sm:!left-(--learning-fullscreen-video-offset-x) sm:!right-auto sm:!bottom-11 sm:!w-(--learning-fullscreen-video-width) sm:!translate-x-0 sm:!translate-y-0 sm:!px-3 ${QUARTER_TURN_TIMELINE_CLASS}` : `!left-1/2 !right-auto !bottom-0 !z-170 !w-[min(100%,calc(var(--player-screen-height,100dvh)*16/9))] !max-w-full !-translate-x-1/2 !translate-y-1/2 !px-3 sm:!left-1/2 sm:!right-auto sm:!bottom-11 sm:!w-[min(100%,calc(var(--player-screen-height,100dvh)*16/9))] sm:!-translate-x-1/2 sm:!translate-y-0 sm:!px-3 ${QUARTER_TURN_TIMELINE_CLASS}`) : "!z-170 sm:!inset-x-0 sm:!bottom-2 sm:!translate-y-0") : ""}`}
       aria-hidden={visible ? undefined : true}
       inert={visible ? undefined : true}
     >
@@ -1139,11 +1168,13 @@ export function LessonPlayerControls({
   const mobileTimeCorner = (
     <div
       data-mobile-player-corner="time"
-      data-preview-obscured={previewTime !== null ? "true" : "false"}
+      data-preview-obscured={previewing ? "true" : "false"}
       className={`pointer-events-none absolute bottom-2.5 left-2 flex h-11 w-fit items-center transition-opacity duration-150 ease-out motion-reduce:transition-none sm:bottom-2.5 sm:left-3 sm:right-auto sm:h-auto ${mobileInteraction ? `sm:!h-11 ${mobileFullscreen ? `!bottom-15 !left-3 sm:!bottom-16 sm:!left-3 ${QUARTER_TURN_CORNER_CLASS}` : "sm:!left-2"}` : ""} ${
-        fullscreenCoursePanelVisible ? "!static sm:!static" : ""
+        fullscreenCoursePanelVisible && mobileInteraction
+          ? "!static sm:!static"
+          : ""
       } ${
-        previewTime !== null
+        previewing
           ? `max-sm:pointer-events-none max-sm:opacity-0 ${mobileInteraction ? "sm:!pointer-events-none sm:!opacity-0" : ""}`
           : "max-sm:opacity-100"
       }`}
@@ -1193,11 +1224,13 @@ export function LessonPlayerControls({
   const mobileFullscreenCorner = (
     <div
       data-mobile-player-corner="fullscreen"
-      data-preview-obscured={previewTime !== null ? "true" : "false"}
+      data-preview-obscured={previewing ? "true" : "false"}
       className={`pointer-events-auto absolute bottom-2.5 right-2 z-60 transition-opacity duration-150 ease-out motion-reduce:transition-none sm:hidden ${mobileInteraction ? `sm:!block ${mobileFullscreen ? `!bottom-15 !right-3 sm:!bottom-16 sm:!right-3 ${QUARTER_TURN_CORNER_CLASS}` : ""}` : ""} ${
-        fullscreenCoursePanelVisible ? "!static sm:!static" : ""
+        fullscreenCoursePanelVisible && mobileInteraction
+          ? "!static sm:!static"
+          : ""
       } ${
-        previewTime !== null
+        previewing
           ? `max-sm:pointer-events-none max-sm:opacity-0 ${mobileInteraction ? "sm:!pointer-events-none sm:!opacity-0" : ""}`
           : "max-sm:opacity-100"
       }`}
@@ -1354,7 +1387,11 @@ export function LessonPlayerControls({
         onToggle={() =>
           onCourseLessonsToggle(courseLessonsSidePanel ? "side" : "drawer")
         }
-        secondPressHold={courseLessonsSecondPressHold}
+        // The page's lesson column answers the second press and hold; in
+        // full screen the lessons open beside the video instead, by a press.
+        secondPressHold={
+          fullscreenLessonsBeside ? undefined : courseLessonsSecondPressHold
+        }
         shortcutLabel={courseLessonsShortcutLabel}
         sidePanel={courseLessonsSidePanel}
         opensFromBottom={!courseLessonsSidePanel && courseLessonsBottomSheet}
@@ -1462,10 +1499,13 @@ export function LessonPlayerControls({
       {timelineHost && fullscreenCoursePanelVisible
         ? createPortal(courseLessonsPanel, timelineHost)
         : null}
-      {timelineHost && fullscreenCoursePanelVisible
+      {/* A phone beside its lessons gets a bottom row of its own; a wide
+          screen keeps the player's control bar, which shrinks with the
+          video. */}
+      {timelineHost && fullscreenCoursePanelVisible && mobileInteraction
         ? createPortal(fullscreenBottomControlsLayer, timelineHost)
         : null}
-      {timelineHost && !fullscreenCoursePanelVisible
+      {timelineHost && !(fullscreenCoursePanelVisible && mobileInteraction)
         ? createPortal(bottomCornerControlsLayer, timelineHost)
         : null}
       {chaptersPanel && (chaptersSideHost ?? timelineHost)

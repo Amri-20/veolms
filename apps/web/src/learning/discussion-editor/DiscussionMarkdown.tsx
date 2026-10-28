@@ -23,6 +23,8 @@ import type { DiscussionAttachmentItem } from "../discussion-attachments";
 import { normalizePreviewUrl } from "@veolms/contracts";
 
 import { renderContentWithMentions } from "./MentionLink";
+import { tabSeparatedTablesToMarkdown } from "./tabSeparatedTables";
+import { textDiagramsToCodeBlocks } from "./textDiagrams";
 
 export { renderContentWithMentions };
 
@@ -657,7 +659,9 @@ const MARKDOWN_COMPONENTS: Components = {
   pre: ({ children }) => <>{children}</>,
   table: ({ children }) => (
     <div className="my-3 max-w-full overflow-x-auto rounded-lg shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--text)_12%,transparent)]">
-      <table className="w-full border-collapse text-left text-sm">
+      {/* Words keep whole in a cell: the text around it may break anywhere,
+          which let columns shrink to a letter instead of the box scrolling. */}
+      <table className="w-full border-collapse text-left text-sm wrap-normal">
         {children}
       </table>
     </div>
@@ -714,8 +718,11 @@ export function DiscussionMarkdown({
   preserveSoftBreaks = false,
   className = "",
 }: DiscussionMarkdownProps) {
-  const markdown =
-    typeof content === "string" ? content : content.markdown || "";
+  const markdown = textDiagramsToCodeBlocks(
+    tabSeparatedTablesToMarkdown(
+      typeof content === "string" ? content : content.markdown || "",
+    ),
+  );
   const chapterMarkdown = chapterDeclarations
     ? preparePlainChapterMarkdown(markdown, chapterDeclarations)
     : markdown;

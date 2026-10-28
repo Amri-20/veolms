@@ -1,3 +1,4 @@
+import { fuzzyMatches } from "../lib/fuzzySearch";
 export type CourseLevel = "Beginner" | "Intermediate";
 export type CourseCategory = "Design" | "Development" | "Database" | "Cloud";
 export type CourseRole = "student" | "creator";
@@ -157,9 +158,7 @@ function matchesCourseSearch(
 ): boolean {
   return (
     !normalizedSearch ||
-    `${course.title} ${course.description}`
-      .toLowerCase()
-      .includes(normalizedSearch)
+    fuzzyMatches(normalizedSearch, course.title, course.description)
   );
 }
 
@@ -318,9 +317,7 @@ export function getVisibleCourses(
     }
     return (
       !normalizedSearch ||
-      `${course.title} ${course.description}`
-        .toLowerCase()
-        .includes(normalizedSearch)
+      fuzzyMatches(normalizedSearch, course.title, course.description)
     );
   });
   if (

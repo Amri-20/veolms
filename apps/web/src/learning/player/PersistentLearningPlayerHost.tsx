@@ -817,6 +817,7 @@ export function PersistentLearningPlayerHost({
         onMinimizeGestureStart={finishRestoreBeforeMinimize}
         onMinimizeTriggerReady={setMinimizeTrigger}
         presentation={presentation}
+        fadeOutAudio={mini && miniPlayer.mode === "dismissing"}
         onMiniClose={onClose}
         onMiniRestore={restoreFromCurrentRect}
         onMiniPlayerRestoreReady={undefined}

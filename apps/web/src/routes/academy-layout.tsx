@@ -2008,10 +2008,6 @@ export default function AcademyLayout() {
     )
       ? learningReturnLocation.section
       : null;
-  const learningOriginPage =
-    onLearningRoute && isSettingsPath(learningReturnLocation.path)
-      ? "settings"
-      : null;
 
   return (
     <AcademyRouteGuard>
@@ -2051,7 +2047,6 @@ export default function AcademyLayout() {
             miniPlayerLessonPath: learningMiniPlayer?.lessonPath,
           })}
           learningBackground={learningBackground}
-          learningOriginPage={learningOriginPage}
           learningOriginSection={learningOriginSection}
           learningMotionStageRef={learningMotionStageRef}
           onNavigatePage={navigateTo}

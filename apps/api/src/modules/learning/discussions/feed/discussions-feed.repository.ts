@@ -5,6 +5,10 @@ import { exactCursorTimestamp } from "../../../../lib/keyset.ts";
 import { containsPattern } from "../../../../lib/like-pattern.ts";
 import { toDate } from "../shared/discussion.utils.ts";
 import { discussionVisibilityPredicate } from "../shared/discussion.visibility.ts";
+import {
+  fuzzyMatchesAny,
+  termFromContainsPattern,
+} from "../../../../lib/fuzzy-search.ts";
 
 export const FEED_SOURCE_RANK = {
   note: 1,
@@ -67,6 +71,10 @@ function authorNamedSql(userIdColumn: string, pattern: string) {
       and (
         lower(su.display_name) like ${pattern}
         or lower(su.username) like ${pattern}
+        or ${fuzzyMatchesAny(termFromContainsPattern(pattern), [
+          sql.ref("su.display_name"),
+          sql.ref("su.username"),
+        ])}
       )
   )`;
 }
@@ -75,6 +83,7 @@ function authorNamedSql(userIdColumn: string, pattern: string) {
 function threadSearchSql(pattern: string) {
   return sql<boolean>`(
     lower(coalesce(t.title, '')) like ${pattern}
+    or ${fuzzyMatchesAny(termFromContainsPattern(pattern), [sql.ref("t.title")])}
     or lower(t.plain_text) like ${pattern}
     or ${authorNamedSql("t.user_id", pattern)}
     or exists (
@@ -92,6 +101,7 @@ function threadSearchSql(pattern: string) {
 function noteSearchSql(pattern: string) {
   return sql<boolean>`(
     lower(coalesce(n.title, '')) like ${pattern}
+    or ${fuzzyMatchesAny(termFromContainsPattern(pattern), [sql.ref("n.title")])}
     or lower(n.plain_text) like ${pattern}
     or ${authorNamedSql("n.user_id", pattern)}
   )`;

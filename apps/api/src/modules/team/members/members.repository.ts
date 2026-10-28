@@ -1,6 +1,7 @@
 import { sql, type Expression, type SqlBool } from "kysely";
 import type { DatabaseExecutor as Executor } from "@veolms/database";
 import { containsPattern } from "../../../lib/like-pattern.ts";
+import { fuzzyMatchesAny } from "../../../lib/fuzzy-search.ts";
 
 export interface MemberRow {
   user_id: string;
@@ -40,6 +41,7 @@ function userSearch(
     lower(u.display_name) like ${pattern}
     or lower(u.username) like ${pattern}
     or lower(coalesce(u.email, '')) like ${pattern}
+    or ${fuzzyMatchesAny(search, [sql.ref("u.display_name"), sql.ref("u.username")])}
   )`;
 }
 

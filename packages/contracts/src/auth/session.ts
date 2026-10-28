@@ -121,8 +121,24 @@ export const sessionResponseSchema = z.object({
   id: z.uuid(),
   ipAddress: z.string().max(45).nullable(),
   userAgent: z.string().max(255).nullable(),
+  location: z.string().max(255).nullable().meta({
+    description: "Roughly where the device signed in from, e.g. a city.",
+  }),
   isCurrent: z.boolean(),
   lastUsedAt: z.string().max(40),
+});
+
+/**
+ * A student at the academy's device limit, signing in on one more: the
+ * devices they are signed in on, one of which they sign out to continue.
+ */
+export const deviceLimitResponseSchema = z.object({
+  limit: z.number().int().positive().nullable(),
+  sessions: sessionResponseSchema.array(),
+});
+
+export const resolveDeviceLimitRequestSchema = z.object({
+  sessionId: z.uuid().describe("The session to sign out to make room."),
 });
 
 export const sessionParamsSchema = z.object({
@@ -328,6 +344,10 @@ export type AuthMessageResponse = z.output<typeof authMessageResponseSchema>;
 export type OtpSendResponse = z.output<typeof otpSendResponseSchema>;
 export type SessionParams = z.input<typeof sessionParamsSchema>;
 export type SessionResponse = z.output<typeof sessionResponseSchema>;
+export type DeviceLimitResponse = z.output<typeof deviceLimitResponseSchema>;
+export type ResolveDeviceLimitRequest = z.input<
+  typeof resolveDeviceLimitRequestSchema
+>;
 export type PasskeyRegisterVerifyRequest = z.input<
   typeof passkeyRegisterVerifyRequestSchema
 >;

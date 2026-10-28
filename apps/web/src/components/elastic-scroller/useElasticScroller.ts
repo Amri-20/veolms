@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { scrollEventTarget, setScrollTopAtOnce } from "./pageScrollport";
 import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
@@ -286,7 +287,8 @@ export function useElasticScroller({
       }
     };
 
-    scrollport.addEventListener("scroll", updateControl, { passive: true });
+    const scrollEvents = scrollEventTarget(scrollport);
+    scrollEvents.addEventListener("scroll", updateControl, { passive: true });
     scrollport.addEventListener("wheel", interruptAutomatedScroll, {
       passive: true,
     });
@@ -296,7 +298,7 @@ export function useElasticScroller({
     scrollport.addEventListener("pointerdown", beginScrollbarScroll);
     scrollport.addEventListener("keydown", interruptFromKeyboard);
     return () => {
-      scrollport.removeEventListener("scroll", updateControl);
+      scrollEvents.removeEventListener("scroll", updateControl);
       scrollport.removeEventListener("wheel", interruptAutomatedScroll);
       scrollport.removeEventListener("touchmove", interruptAutomatedScroll);
       scrollport.removeEventListener("pointerdown", beginScrollbarScroll);
@@ -367,7 +369,7 @@ export function useElasticScroller({
       setVisible(true);
       setMode("edge");
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        scrollport.scrollTop = target;
+        setScrollTopAtOnce(scrollport, target);
         syncDirectionAtEdge(nextDirection);
         setMode("idle");
         scheduleHide();
@@ -383,14 +385,14 @@ export function useElasticScroller({
         if (startedAt === null) startedAt = timestamp;
         const progress = Math.min(1, (timestamp - startedAt) / duration);
         const easedProgress = 1 - Math.pow(1 - progress, 4);
-        scrollport.scrollTop = start + distance * easedProgress;
+        setScrollTopAtOnce(scrollport, start + distance * easedProgress);
 
         if (progress < 1) {
           edgeScrollFrameRef.current = window.requestAnimationFrame(advance);
           return;
         }
 
-        scrollport.scrollTop = target;
+        setScrollTopAtOnce(scrollport, target);
         edgeScrollFrameRef.current = null;
         syncDirectionAtEdge(nextDirection);
         setMode("idle");
@@ -442,7 +444,7 @@ export function useElasticScroller({
         maximumScrollTop,
         Math.max(0, requestedScrollTop),
       );
-      scrollport.scrollTop = nextScrollTop;
+      setScrollTopAtOnce(scrollport, nextScrollTop);
 
       const reachedLockedEdge =
         lockedRef.current &&
@@ -817,7 +819,7 @@ export function useElasticScroller({
     if (!scrollport) return;
     cancelAutomatedScroll();
     lastScrollTopRef.current = 0;
-    scrollport.scrollTop = 0;
+    setScrollTopAtOnce(scrollport, 0);
   }, [cancelAutomatedScroll, scrollportRef]);
 
   let lockFeedback: "closed" | null = null;

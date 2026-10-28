@@ -2,6 +2,7 @@ import { memo } from "react";
 import type { RefObject } from "react";
 import { CheckIcon as Check } from "@phosphor-icons/react/Check";
 import { CircleIcon as Circle } from "@phosphor-icons/react/Circle";
+import { ProgressRing } from "../components/ProgressRing";
 import type { LessonResource } from "@veolms/contracts";
 import type { Lesson } from "./courseContent";
 import { CurriculumLessonCard } from "./CurriculumLessonCard";
@@ -86,23 +87,12 @@ const CurriculumLessonButton = memo(function CurriculumLessonButton({
           aria-valuenow={Math.round(progress)}
           aria-valuetext={`${Math.round(progress)}% watched`}
         >
-          <svg viewBox="0 0 20 20" aria-hidden="true">
-            <circle
-              className="learning-curriculum__lesson-progress-track"
-              cx="10"
-              cy="10"
-              r="8"
-            />
-            <circle
-              className="learning-curriculum__lesson-progress-value"
-              cx="10"
-              cy="10"
-              r="8"
-              pathLength="100"
-              strokeDasharray="100"
-              strokeDashoffset={100 - progress}
-            />
-          </svg>
+          <ProgressRing
+            share={progress / 100}
+            stroke={4.5}
+            animate={false}
+            className="size-full"
+          />
         </span>
       ) : (
         <Circle

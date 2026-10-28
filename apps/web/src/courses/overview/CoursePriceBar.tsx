@@ -17,6 +17,7 @@ import type {
   CoursePurchaseGuarantee,
   CoursePurchasePerk,
 } from "./coursePurchasePerks";
+import { Link } from "react-router";
 import { overviewCardClasses } from "./overviewStyles";
 
 export interface CoursePriceBarProps {
@@ -407,6 +408,25 @@ export function CoursePriceBar({
           <p className="-mt-1 m-0 flex items-center justify-center gap-1.5 text-center text-[0.8rem] text-(--muted)">
             <LockSimple size={15} className="shrink-0" aria-hidden="true" />
             {checkoutNote}
+          </p>
+        ) : null}
+        {checkoutNote && !closedMessage ? (
+          <p className="m-0 text-center text-[0.75rem] text-(--muted)">
+            By continuing you agree to the{" "}
+            <Link
+              to="/terms"
+              className="underline underline-offset-2 hover:text-(--text)"
+            >
+              Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link
+              to="/refund-policy"
+              className="underline underline-offset-2 hover:text-(--text)"
+            >
+              Refund Policy
+            </Link>
+            .
           </p>
         ) : null}
 

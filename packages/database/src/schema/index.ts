@@ -27,6 +27,7 @@ import type {
   MenuTable,
   MenuPermissionTable,
   SessionTable,
+  PendingDeviceSignInTable,
   OauthAccountTable,
   OtpCodeTable,
   PasskeyTable,
@@ -154,6 +155,7 @@ export interface Database {
   team_invitations: TeamInvitationTable;
   team_invitation_roles: TeamInvitationRoleTable;
   sessions: SessionTable;
+  pending_device_sign_ins: PendingDeviceSignInTable;
   oauth_accounts: OauthAccountTable;
   otp_codes: OtpCodeTable;
   passkeys: PasskeyTable;

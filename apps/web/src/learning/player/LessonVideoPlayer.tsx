@@ -28,6 +28,7 @@ import type {
 import type { CourseVideo } from "../courseContent";
 import { readLearningPreferences } from "../../settings/settingsPreferences";
 import { LessonAmbientProjection } from "./LessonAmbientProjection";
+import { MiniPlayerReadingModeEffects } from "./MiniPlayerReadingModeEffects";
 import { LessonTroubleIllustration } from "./LessonTroubleIllustration";
 import {
   OctopusIllustration,
@@ -103,6 +104,11 @@ import { createPlaybackTelemetry } from "./playbackTelemetry";
 import { trackAnalyticsEvent } from "../../lib/analytics-track";
 
 const RESUME_PERSIST_INTERVAL_MS = 5_000;
+/**
+ * How long a swiped-away mini player's sound takes to fade: within the
+ * swipe's own animation (200ms, `useLearningMiniPlayerGestures`).
+ */
+const MINI_DISMISS_FADE_MS = 180;
 // A lesson left this close to its end counts as finished when it is reopened.
 const FINISHED_LESSON_RESUME_TAIL_SECONDS = 3;
 // From here on the next lesson is preloaded, whatever the video's length: a
@@ -189,6 +195,11 @@ export interface LessonVideoPlayerProps {
   onMiniPlayerRestoreReady?: () => void;
   onMiniClose?: () => void;
   onMiniRestore?: () => void;
+  /**
+   * The mini player is being swiped away: a playing video's sound fades out
+   * with it instead of stopping at once when it is gone.
+   */
+  fadeOutAudio?: boolean;
   onMobileLandscapeFullscreenChange?: (active: boolean) => void;
   onProgressChange?: (progress: number) => void;
   /**
@@ -424,6 +435,7 @@ export function LessonVideoPlayer({
   onMiniPlayerRestoreReady,
   onMiniClose,
   onMiniRestore,
+  fadeOutAudio = false,
   onMobileLandscapeFullscreenChange,
   onTheaterToggle,
   onSeekToTimestampReady,
@@ -452,6 +464,9 @@ export function LessonVideoPlayer({
   const playerPrefsRef = useRef({ ...initialPlayerPreferences });
   const playbackPrefsAppliedRef = useRef(false);
   const applyingPlaybackPrefsRef = useRef(false);
+  // Set once the sound fades out for a swiped-away mini player: the fade's
+  // volumes are not the learner's, and are never saved.
+  const fadingOutRef = useRef(false);
   // Volumes taken from another tab (a `storage` event) in the last moments.
   // The volume change each causes here is that tab's, not this one's, and
   // is not saved again: saved, it reached the other tab as a new change,
@@ -849,16 +864,22 @@ export function LessonVideoPlayer({
         latestPositionRef.current = event.detail.currentTime;
         persistResumePosition();
         tryFinishPlayingMiniPlayerRestore();
+        // Not while the timeline is dragged: every step of the drag seeks,
+        // and each reported a new progress that re-rendered the whole lesson
+        // list. The seek where it is let go reports where it ended.
+        const scrubbing = playerRef.current?.getSnapshot().ui.scrubbing;
         if (event.detail.duration > 0) {
-          onProgressChange?.(
-            Math.max(
-              0,
-              Math.min(
-                100,
-                (event.detail.currentTime / event.detail.duration) * 100,
+          if (!scrubbing) {
+            onProgressChange?.(
+              Math.max(
+                0,
+                Math.min(
+                  100,
+                  (event.detail.currentTime / event.detail.duration) * 100,
+                ),
               ),
-            ),
-          );
+            );
+          }
           if (
             event.detail.duration - event.detail.currentTime <=
             NEAR_LESSON_END_SECONDS
@@ -881,6 +902,13 @@ export function LessonVideoPlayer({
         const currentTime = snapshot?.media.currentTime ?? 0;
         if (showEndScreen && duration > 0 && currentTime < duration - 1) {
           setShowEndScreen(false);
+        }
+        // Where a drag of the timeline ended (its own steps report nothing,
+        // see `timeupdate`), also for a paused video.
+        if (duration > 0 && !snapshot?.ui.scrubbing) {
+          onProgressChange?.(
+            Math.max(0, Math.min(100, (currentTime / duration) * 100)),
+          );
         }
       } else if (event.type === "pause") {
         const snapshot = playerRef.current?.getSnapshot();
@@ -907,6 +935,7 @@ export function LessonVideoPlayer({
         }
       } else if (event.type === "volumechange") {
         if (
+          fadingOutRef.current ||
           restoreAutoplayRef.current !== null ||
           handoffMutingRef.current ||
           applyingPlaybackPrefsRef.current
@@ -1176,6 +1205,26 @@ export function LessonVideoPlayer({
     },
     [onTheaterToggle, theaterMode],
   );
+
+  // A playing mini player swiped away: its sound fades to nothing over the
+  // swipe's animation (see `fadeOutAudio`).
+  useEffect(() => {
+    if (!fadeOutAudio) return undefined;
+    const player = playerRef.current;
+    const media = player?.getSnapshot().media;
+    if (!player || !media?.playing || media.muted || media.volume <= 0) {
+      return undefined;
+    }
+    fadingOutRef.current = true;
+    const startVolume = media.volume;
+    const startedAt = performance.now();
+    let frame = window.requestAnimationFrame(function fade(now) {
+      const progress = Math.min(1, (now - startedAt) / MINI_DISMISS_FADE_MS);
+      player.setVolume(startVolume * (1 - progress));
+      if (progress < 1) frame = window.requestAnimationFrame(fade);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [fadeOutAudio]);
 
   useLayoutEffect(() => {
     const prefs = getInitialLearningPlayerPreferences();
@@ -1831,7 +1880,7 @@ export function LessonVideoPlayer({
         presentation === "mini"
           ? `${MINI_PLAYER_VIDEO_CORNERS_CLASS} !shadow-none`
           : fullscreenCoursePanelActive
-            ? "border-0 !h-auto !max-h-full !w-(--learning-fullscreen-video-width) !max-w-none !translate-x-(--learning-fullscreen-video-offset-x) !shrink-0 !rounded-none !shadow-none"
+            ? "border-0 !h-auto !max-h-full !w-(--learning-fullscreen-video-width) !max-w-none !translate-x-(--learning-fullscreen-video-offset-x) !shrink-0 !rounded-none !shadow-none [[data-fullscreen-lessons-beside=wide]_&]:!h-full [[data-fullscreen-lessons-beside=wide]_&]:!aspect-auto"
             : "border-0 !rounded-none"
       }
       mediaClassName={
@@ -1901,43 +1950,53 @@ export function LessonVideoPlayer({
         )
       }
       overlays={
-        holdingPreviousLesson ? (
-          // The same waiting surface the player used to be replaced with:
-          // black over the held lesson, with the loader, above the controls.
-          // In full screen the controls stay above it, so the learner can
-          // still leave full screen or pick another lesson.
-          <div
-            className={cn(
-              "absolute inset-0 grid place-items-center bg-black",
-              playerFullscreen ? "pointer-events-none z-20" : "z-50",
-            )}
-            role="status"
-            aria-label="Loading video"
-            data-learning-playback-gate="pending"
-          >
-            <VideoLoadingSpinner />
-          </div>
-        ) : presentation === "full" && !minimizeGesture.controlsSuppressed ? (
-          <>
-            <LessonAmbientProjection enabled={ambientEnabled} />
-            {endScreenVisible ? (
-              <LessonEndScreenOverlay
-                nextLesson={
-                  canGoNext
-                    ? (nextLessonInfo ?? { id: 0, title: "Next lesson" })
-                    : undefined
-                }
-                autoplayEnabled={autoplayEnabled && !autoplayCancelled}
-                courseComplete={courseComplete}
-                onGoNext={handleGoNextFromEndScreen}
-                onRestart={handleRestart}
-                onCancelAutoplay={cancelEndScreenAutoplay}
-                onClose={dismissEndScreen}
-                controlsInset
-              />
-            ) : null}
-          </>
-        ) : undefined
+        <>
+          {holdingPreviousLesson ? (
+            // The same waiting surface the player used to be replaced with:
+            // black over the held lesson, with the loader, above the controls.
+            // In full screen the controls stay above it, so the learner can
+            // still leave full screen or pick another lesson.
+            <div
+              className={cn(
+                "absolute inset-0 grid place-items-center bg-black",
+                playerFullscreen ? "pointer-events-none z-20" : "z-50",
+              )}
+              role="status"
+              aria-label="Loading video"
+              data-learning-playback-gate="pending"
+            >
+              <VideoLoadingSpinner />
+            </div>
+          ) : presentation === "full" && !minimizeGesture.controlsSuppressed ? (
+            <>
+              <LessonAmbientProjection enabled={ambientEnabled} />
+              {endScreenVisible ? (
+                <LessonEndScreenOverlay
+                  nextLesson={
+                    canGoNext
+                      ? (nextLessonInfo ?? { id: 0, title: "Next lesson" })
+                      : undefined
+                  }
+                  autoplayEnabled={autoplayEnabled && !autoplayCancelled}
+                  courseComplete={courseComplete}
+                  onGoNext={handleGoNextFromEndScreen}
+                  onRestart={handleRestart}
+                  onCancelAutoplay={cancelEndScreenAutoplay}
+                  onClose={dismissEndScreen}
+                  controlsInset
+                />
+              ) : null}
+            </>
+          ) : undefined}
+          {/* Reading mode is drawn over the page, which a full screen leaves
+              behind (only the full-screen element is painted): the same
+              layers are repeated over the player while it is full screen. */}
+          {playerFullscreen ? (
+            <div className="pointer-events-none absolute inset-0 z-100">
+              <MiniPlayerReadingModeEffects />
+            </div>
+          ) : null}
+        </>
       }
       playbackFeedback={
         presentation === "mini" || minimizeGesture.controlsSuppressed

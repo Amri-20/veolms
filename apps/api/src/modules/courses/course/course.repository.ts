@@ -1,6 +1,7 @@
 import { sql, type Kysely } from "kysely";
 import type { Database, DatabaseExecutor } from "@veolms/database";
 import { hasDiscountBadgeColumn } from "../shared/discount-badge-column.ts";
+import { fuzzyMatchesAny } from "../../../lib/fuzzy-search.ts";
 
 /**
  * The discount badge flag of a listed course. Before the migration that adds
@@ -315,6 +316,10 @@ export async function listPublishedCourses(
         eb("courses.title", "ilike", searchPattern),
         eb("courses.short_description", "ilike", searchPattern),
         eb("courses.description", "ilike", searchPattern),
+        fuzzyMatchesAny(filters.search!, [
+          sql.ref("courses.title"),
+          sql.ref("courses.short_description"),
+        ]),
       ]),
     );
   }

@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   DEFAULT_PLATFORM_APPEARANCE_SETTINGS,
+  MAX_MAX_DEVICES_PER_STUDENT,
+  MIN_MAX_DEVICES_PER_STUDENT,
   PLATFORM_DISPLAY_MODES,
   type PlatformAppearanceSettings,
   type PlatformInvoiceSettings,
@@ -25,6 +27,12 @@ export const platformAppearanceSettingsSchema = z.strictObject({
 
 export const platformSecuritySettingsSchema = z.strictObject({
   requireVerifiedPhoneForEnrollment: z.boolean(),
+  maxDevicesPerStudent: z
+    .number()
+    .int()
+    .min(MIN_MAX_DEVICES_PER_STUDENT)
+    .max(MAX_MAX_DEVICES_PER_STUDENT)
+    .nullable(),
 }) satisfies z.ZodType<PlatformSecuritySettings>;
 
 /** A GSTIN: state code, PAN, entity number, "Z", check character. */

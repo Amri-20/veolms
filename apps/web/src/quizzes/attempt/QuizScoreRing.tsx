@@ -1,7 +1,5 @@
+import { ProgressRing } from "../../components/ProgressRing";
 import type { QuizTone } from "./QuizStage";
-
-const RADIUS = 52;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 const RING_STROKE: Record<QuizTone, string> = {
   neutral: "stroke-(--accent)",
@@ -36,27 +34,12 @@ export function QuizScoreRing({
           : `${caption ?? "Score"}: ${percentage.toFixed(0)} percent`
       }
     >
-      <svg viewBox="0 0 120 120" className="size-full -rotate-90">
-        <circle
-          cx="60"
-          cy="60"
-          r={RADIUS}
-          fill="none"
-          strokeWidth="9"
-          className="stroke-[color-mix(in_srgb,var(--text)_10%,transparent)]"
-        />
-        <circle
-          cx="60"
-          cy="60"
-          r={RADIUS}
-          fill="none"
-          strokeWidth="9"
-          strokeLinecap="round"
-          strokeDasharray={CIRCUMFERENCE}
-          strokeDashoffset={CIRCUMFERENCE * (1 - share)}
-          className={`${RING_STROKE[tone]} transition-[stroke-dashoffset] duration-700 ease-out motion-reduce:transition-none`}
-        />
-      </svg>
+      <ProgressRing
+        share={share}
+        stroke={4.4}
+        arcClassName={RING_STROKE[tone]}
+        className="size-full"
+      />
       <div className="absolute inset-0 grid place-content-center text-center">
         <span className="text-[1.75rem] leading-none font-bold tracking-tight text-(--text) tabular-nums sm:text-[2rem]">
           {percentage === null ? "—" : `${percentage.toFixed(0)}%`}
