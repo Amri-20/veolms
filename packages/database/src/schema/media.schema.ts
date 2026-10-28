@@ -127,6 +127,25 @@ export interface YoutubeImportJobTable {
   updated_at: Generated<Date>;
 }
 
+export type MediaSourceProvider = "youtube";
+
+/** How a video's source was learned. */
+export type MediaSourceRecordedVia = "import" | "cli" | "backfill";
+
+/** Where a video came from, e.g. the YouTube video it was imported from. */
+export interface MediaSourceTable {
+  media_id: string;
+  provider: MediaSourceProvider;
+  /** The provider's id of the video (YouTube's 11-character id). */
+  external_id: string;
+  source_url: string;
+  /** As the provider showed them at import time. */
+  title: string | null;
+  channel: string | null;
+  recorded_via: MediaSourceRecordedVia;
+  created_at: Generated<Date>;
+}
+
 export interface VideoOutputTable {
   id: string;
   video_id: string;

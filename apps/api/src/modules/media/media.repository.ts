@@ -4,6 +4,8 @@ import type {
   DatabaseExecutor,
   Json,
   MediaAssetStatus,
+  MediaSourceProvider,
+  MediaSourceRecordedVia,
 } from "@veolms/database";
 import type { VideoJobStatus, VideoQualityLevel } from "@veolms/contracts";
 
@@ -184,6 +186,45 @@ export async function insertMediaAsset(
   },
 ) {
   await database.insertInto("media_assets").values(values).execute();
+}
+
+/** Records where a video came from (one source per video; a second is ignored). */
+export async function insertMediaSource(
+  database: DatabaseExecutor,
+  source: {
+    media_id: string;
+    provider: MediaSourceProvider;
+    external_id: string;
+    source_url: string;
+    title: string | null;
+    channel: string | null;
+    recorded_via: MediaSourceRecordedVia;
+  },
+): Promise<void> {
+  await database
+    .insertInto("media_sources")
+    .values(source)
+    .onConflict((conflict) => conflict.column("media_id").doNothing())
+    .execute();
+}
+
+/**
+ * Fills in the title and channel once they are known (an import learns
+ * them only when its worker reads the video), keeping any already set.
+ */
+export async function fillMediaSourceDetails(
+  database: DatabaseExecutor,
+  mediaId: string,
+  details: { title: string | null; channel: string | null },
+): Promise<void> {
+  await database
+    .updateTable("media_sources")
+    .set((eb) => ({
+      title: eb.fn.coalesce("title", eb.val(details.title)),
+      channel: eb.fn.coalesce("channel", eb.val(details.channel)),
+    }))
+    .where("media_id", "=", mediaId)
+    .execute();
 }
 
 /** Records (or clears) the resumable upload handle for a media asset. */
