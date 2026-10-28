@@ -18,6 +18,7 @@ import {
 } from "../../../lib/media-tools/disk.ts";
 import { createChapterSyncService } from "../../courses/chapters/chapters.service.ts";
 import { createCurriculumService } from "../../courses/index.ts";
+import * as mediaRepo from "../media.repository.ts";
 import { clearHlsPackager } from "./clear-hls.packager.ts";
 import { outputPrefixFor } from "./youtube-import.cancel.ts";
 import {
@@ -281,6 +282,10 @@ export function startYoutubeImportWorker({
           duration_seconds: metadata.durationSeconds ?? job.duration_seconds,
           completed_stage: "resolved",
           progress_percent: STAGE_END.resolved,
+        });
+        await mediaRepo.fillMediaSourceDetails(database, job.media_id, {
+          title: metadata.title,
+          channel: metadata.channel,
         });
 
         const needed = estimateScratchBytes(

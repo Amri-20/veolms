@@ -576,6 +576,7 @@ export function LessonVideoPlayer({
       segmentToken: playbackBootstrap?.segmentToken,
       segmentTokenExpiresAt: playbackBootstrap?.segmentTokenExpiresAt,
       inlinedMasterManifest: playbackBootstrap?.inlinedMasterManifest,
+      subtitles: playbackBootstrap?.subtitles,
       refreshSegmentToken:
         playbackBootstrap?.segmentToken && refreshPlaybackToken
           ? refreshPlaybackToken
@@ -977,6 +978,20 @@ export function LessonVideoPlayer({
         });
       } else if (event.type === "texttrackchange") {
         captionsEnabledRef.current = event.detail.track !== null;
+      } else if (event.type === "trackschanged") {
+        // Subtitles are added once the video is ready, after `loaded`, so
+        // captions left on in the previous lesson are turned on here.
+        const { textTracks } = event.detail;
+        if (
+          captionsEnabledRef.current &&
+          textTracks.length > 0 &&
+          !textTracks.some((track) => track.active)
+        ) {
+          const preferredTrack =
+            textTracks.find((track) => track.language === "en") ??
+            textTracks[0]!;
+          playerRef.current?.selectTextTrack(preferredTrack.id);
+        }
       }
     },
     [

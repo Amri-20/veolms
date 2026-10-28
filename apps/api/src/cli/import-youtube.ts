@@ -12,6 +12,7 @@ import {
   grantPlatformRole,
 } from "@veolms/database";
 import { cacheTags, publishCacheInvalidation } from "@veolms/api-core";
+import { canonicalYoutubeWatchUrl } from "@veolms/contracts";
 import { config } from "../config.ts";
 import { createServices } from "../services/index.ts";
 import { createMediaService } from "../modules/media/index.ts";
@@ -2406,6 +2407,15 @@ ${bold("Examples:")}
       // media that was never actually persisted.
       await database.transaction().execute(async (trx) => {
         await pendingMediaWrite!(trx);
+        await mediaRepo.insertMediaSource(trx, {
+          media_id: videoMediaId,
+          provider: "youtube",
+          external_id: video.id,
+          source_url: canonicalYoutubeWatchUrl(video.id),
+          title: video.title,
+          channel: null,
+          recorded_via: "cli",
+        });
         await trx
           .insertInto("course_lessons")
           .values({

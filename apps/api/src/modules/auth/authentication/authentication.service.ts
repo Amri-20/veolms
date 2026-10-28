@@ -182,6 +182,11 @@ export function createAuthService({
     return userRepository.listUserDisplayNamesByIds(database, userIds);
   }
 
+  /** Bulk name and email lookup, for staff lists that search by either. */
+  function listUserNamesAndEmailsByIds(userIds: readonly string[]) {
+    return userRepository.listUserNamesAndEmailsByIds(database, userIds);
+  }
+
   /** Name, username and avatar of each user, for lists that show people. */
   function listUserCardsByIds(userIds: readonly string[]) {
     return userRepository.listUserCardsByIds(database, userIds);
@@ -1735,6 +1740,7 @@ export function createAuthService({
     findUserById,
     findUserByIdForNotification,
     listUserDisplayNamesByIds,
+    listUserNamesAndEmailsByIds,
     listUserCardsByIds,
     findUserCardByUsername,
     listNotificationRecipientsByIds,

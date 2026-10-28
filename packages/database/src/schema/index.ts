@@ -5,6 +5,7 @@ export * from "./auth.schema.ts";
 export * from "./authorization.schema.ts";
 export * from "./courses.schema.ts";
 export * from "./chapters.schema.ts";
+export * from "./subtitles.schema.ts";
 export * from "./media.schema.ts";
 export * from "./commerce.schema.ts";
 export * from "./learning-interactions.schema.ts";
@@ -61,9 +62,11 @@ import type {
   CourseDeletionStorageItemTable,
 } from "./courses.schema.ts";
 import type { LessonChapterTable } from "./chapters.schema.ts";
+import type { LessonSubtitleTable } from "./subtitles.schema.ts";
 import type {
   ImageJobTable,
   MediaAssetTable,
+  MediaSourceTable,
   VideoJobTable,
   VideoOutputTable,
   YoutubeImportJobTable,
@@ -182,6 +185,7 @@ export interface Database {
   video_outputs: VideoOutputTable;
   video_jobs: VideoJobTable;
   youtube_import_jobs: YoutubeImportJobTable;
+  media_sources: MediaSourceTable;
 
   // Commerce, Orders & Payments
   course_bundles: CourseBundleTable;
@@ -248,6 +252,9 @@ export interface Database {
 
   // Derived from lesson descriptions
   lesson_chapters: LessonChapterTable;
+
+  // Subtitle tracks for lesson videos
+  lesson_subtitles: LessonSubtitleTable;
 }
 
 export type PurchaseTable = OrderTable;
