@@ -46,6 +46,7 @@ import { useDiscussionReplyFocus } from "./discussionReplyFocus";
 import { TimeAgo } from "../components/TimeAgo";
 import { DiscussionCourseThumbnail } from "./DiscussionCourseThumbnail";
 import { DiscussionAttachmentsList } from "../learning/discussion-attachments/DiscussionAttachmentsList";
+import { DiscussionStaffActions } from "./DiscussionStaffActions";
 
 const DiscussionMarkdown = lazy(() =>
   import("../learning/discussion-editor/DiscussionMarkdown").then((module) => ({
@@ -867,12 +868,13 @@ export function DiscussionPanelContent({
           </div>
 
           {!isReplyCard && postActions.canLike && (
-            <div className="mt-3 -ml-2.5 flex items-center gap-1">
+            <div className="mt-3 -ml-2.5 flex flex-wrap items-center gap-1">
               <DiscussionLikeButton
                 liked={Boolean(card.isLiked)}
                 count={card.likes}
                 onToggle={postActions.like}
               />
+              <DiscussionStaffActions card={card} staff={postActions.staff} />
             </div>
           )}
         </article>
