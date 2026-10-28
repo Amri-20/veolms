@@ -788,6 +788,7 @@ export function LearningWorkspace({
             discussionPersistenceKey={discussionPersistenceKey}
             courseSlug={courseSlug}
             courseId={courseId}
+            courseCreatorId={courseOverview?.course?.creatorId}
             backendLessonId={backendLessonId}
             noteDeepLinkId={noteDeepLinkId}
             mobileBottomNavigation={mobileBottomNavigation}

@@ -19,11 +19,9 @@ import type { AdminOrder, StudentCourseDetail } from "@veolms/contracts";
 import { safeExternalUrl } from "../lib/external-url";
 import { OrderRefundModal } from "../orders/OrderRefundModal";
 import type { NavigateTo } from "../routing/navigation";
-import { useCurrentUser } from "../services/auth";
 import { useFetchOrder } from "../services/orders";
 import { useStudent } from "../services/students";
 import { useCapabilities } from "../services/authorization";
-import { hasAdminRole } from "../shell/workspaceRole";
 import {
   StudentCourseAccessModal,
   type StudentCourseAccessChange,
@@ -38,7 +36,8 @@ export interface StudentDetailsPageProps {
   setNotice?: (message: string) => void;
 }
 
-// Only admins open it, and it carries the contact form's validation.
+// Only staff who may edit contact details open it, and it carries the
+// contact form's validation.
 const StudentContactModal = lazy(() =>
   import("./StudentContactModal").then((module) => ({
     default: module.StudentContactModal,
@@ -58,11 +57,11 @@ export function StudentDetailsPage({
   setNotice,
 }: StudentDetailsPageProps) {
   const { data, isLoading, isError, refetch } = useStudent(username);
-  // A learner's day-by-day progress is theirs to share; an admin can open
-  // it either way. Anyone else here would only be told it is private.
-  const isAdmin = hasAdminRole(useCurrentUser().data?.roles);
-  const canOpenProgress = isAdmin;
-  const { can } = useCapabilities();
+  // A learner's day-by-day progress is theirs to share; staff who see every
+  // student (student.read for every course, as an admin has) can open it
+  // either way. Anyone else here would only be told it is private.
+  const { can, canOnCourse } = useCapabilities();
+  const canOpenProgress = canOnCourse("student.read", null);
   const canEditContact = can("student.contact.update");
   const canManageAccess = can("student.access.manage");
   const canIssueRefunds = can("billing.manage");
