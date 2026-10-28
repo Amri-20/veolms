@@ -2484,6 +2484,7 @@ export function createMediaService({
   }
 
   return {
+    reachesAllMedia,
     presignMediaUpload,
     startMultipartUpload,
     getMultipartUploadStatus,

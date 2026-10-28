@@ -38,6 +38,7 @@ import {
   useRestoreCourse,
 } from "../../services/courses";
 import { useEnrolledCourses } from "../../services/enrollments";
+import { useCapabilities } from "../../services/authorization";
 import {
   isViewerCourseStateKnown,
   useHydrated,
@@ -251,10 +252,16 @@ export function useCatalogueQueries({
         shouldQueryCreatorCourses),
   });
   const myCoursesData = myCoursesQuery.data;
+  // The bin lists every deleted course, so it takes the academy-wide key.
+  const binCapabilities = useCapabilities({
+    enabled: isAuthenticated && effectiveRole === "creator",
+  });
+  const canOpenBin =
+    isAdmin || binCapabilities.canOnCourse("course.restore", null);
   // Asked for on every tab, not only on Bin: the tab's badge is this list's
   // length, so asked for only once the tab was open it read 0 until clicked.
   const deletedCoursesQuery = useDeletedCourses(undefined, {
-    enabled: shouldQueryCourses && isAdmin && effectiveRole === "creator",
+    enabled: shouldQueryCourses && canOpenBin && effectiveRole === "creator",
   });
   const deletedCoursesData = deletedCoursesQuery.data;
   const isCourseCatalogueLoadError =
@@ -292,7 +299,7 @@ export function useCatalogueQueries({
       ? shouldQueryCourses && isPublishedFetching && !hasPublishedCourseData
       : enrollmentFilter === "bin"
         ? shouldQueryCourses &&
-          isAdmin &&
+          canOpenBin &&
           deletedCoursesQuery.isFetching &&
           !deletedCoursesData
         : shouldQueryCreatorCourses &&
@@ -302,13 +309,16 @@ export function useCatalogueQueries({
   useEffect(() => {
     if (
       creatorEnrollmentFilter === "bin" &&
-      (!isAdmin || effectiveRole !== "creator")
+      // Not before the permissions have answered.
+      ((!canOpenBin && binCapabilities.data !== undefined) ||
+        effectiveRole !== "creator")
     ) {
       setCreatorEnrollmentFilter("all");
     }
   }, [
     creatorEnrollmentFilter,
-    isAdmin,
+    canOpenBin,
+    binCapabilities.data,
     effectiveRole,
     setCreatorEnrollmentFilter,
   ]);

@@ -7,6 +7,7 @@ import { TagIcon as Tag } from "@phosphor-icons/react/Tag";
 import { WarningCircleIcon as WarningCircle } from "@phosphor-icons/react/WarningCircle";
 import { ThemedSelect } from "../../ThemedSelect";
 import type { NavigateTo } from "../../routing/navigation";
+import { useCapabilities } from "../../services/authorization";
 import { type CourseWizardStepId, parseWizardTab } from "./wizardSteps";
 import {
   type PricingControlKey,
@@ -53,6 +54,8 @@ export function PricingStepPanel({
   navigateToStep,
   onNavigatePage,
 }: PricingStepPanelProps) {
+  // Quiz pricing is read and saved with quiz.settings.update.
+  const setsQuizPricing = useCapabilities().can("quiz.settings.update");
   // prettier-ignore
   return (
     <div className="flex w-full flex-col gap-5">
@@ -281,14 +284,16 @@ export function PricingStepPanel({
       <CourseLinkedCoursesCard courseId={currentCourseId} />
 
       {/* Card 3: Quiz Pricing */}
-      <CourseQuizPricingCard
-        courseId={currentCourseId}
-        courseCurrency={pricing.currency || "INR"}
-        onNavigateTab={(tab) => {
-          const stepId = parseWizardTab(tab);
-          if (stepId) void navigateToStep(stepId);
-        }}
-      />
+      {setsQuizPricing && (
+        <CourseQuizPricingCard
+          courseId={currentCourseId}
+          courseCurrency={pricing.currency || "INR"}
+          onNavigateTab={(tab) => {
+            const stepId = parseWizardTab(tab);
+            if (stepId) void navigateToStep(stepId);
+          }}
+        />
+      )}
 
       {/* Bottom Card: Coupons Banner */}
       <div className="flex items-center justify-between border border-[color-mix(in_srgb,var(--text)_10%,transparent)] rounded-[14px] px-5.5 py-4 bg-(--surface) shadow-(--card-shadow) max-[768px]:flex-col max-[768px]:items-start max-[768px]:gap-3.5">

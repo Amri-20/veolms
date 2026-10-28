@@ -9,15 +9,15 @@ import {
 } from "@veolms/contracts";
 import { useState } from "react";
 import { Button } from "../../components/Button";
+import { ElevatedCard } from "../../components/ElevatedCard";
 import { useTeamRoles } from "../../services/team";
 import type { ToastMessage } from "../../ToastNotification";
 import { roleLabel } from "../teamFormat";
-import { EmptyState, secondaryButtonClassName } from "../TeamBits";
+import { chipClassName, EmptyState, LoadError } from "../TeamBits";
 import { useTeamAccess } from "../useTeamAccess";
 import { RoleEditorPanel, type RoleEditorTarget } from "./RoleEditorPanel";
 
-const line = "border-[color-mix(in_srgb,var(--text)_9%,transparent)]";
-const card = `rounded-2xl border ${line} bg-[color-mix(in_srgb,var(--text)_2%,transparent)]`;
+const line = "border-(--border)";
 
 /** Broadest first, as the list in the side column reads. */
 const byReach = (a: TeamRole, b: TeamRole) =>
@@ -42,7 +42,7 @@ function RoleListItem({
       >
         <span className="truncate">{roleLabel(role.name)}</span>
         <span
-          className={`shrink-0 font-mono text-[0.7rem] tabular-nums ${active ? "text-(--accent)" : "text-(--muted)"}`}
+          className={`${chipClassName} shrink-0 tabular-nums ${active ? "text-(--accent)!" : "text-(--muted)!"}`}
         >
           {role.permissions.length}
         </span>
@@ -71,7 +71,7 @@ function AreaBars({ role }: { role: TeamRole }) {
                 {count}/{total}
               </span>
             </div>
-            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--text)_10%,transparent)]">
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full border border-[color-mix(in_srgb,var(--text)_7%,transparent)] bg-[color-mix(in_srgb,var(--surface-strong)_90%,transparent)]">
               <div
                 className="h-full rounded-full bg-(--accent)"
                 style={{ width: `${(count / total) * 100}%` }}
@@ -90,7 +90,7 @@ export function RolesTab({
   setNotice?: (message: ToastMessage) => void;
 }) {
   const rolesQuery = useTeamRoles();
-  const { can } = useTeamAccess();
+  const { can, canEditRole } = useTeamAccess();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editor, setEditor] = useState<RoleEditorTarget | null>(null);
   const roles = rolesQuery.data?.roles ?? [];
@@ -108,29 +108,32 @@ export function RolesTab({
         className="grid gap-4 lg:grid-cols-[19rem_minmax(0,1fr)]"
         aria-busy="true"
       >
-        <div className="h-96 animate-pulse rounded-2xl bg-(--hover)" />
-        <div className="h-64 animate-pulse rounded-2xl bg-(--hover)" />
+        <ElevatedCard as="div" className="h-96 animate-pulse" />
+        <ElevatedCard as="div" className="h-64 animate-pulse" />
       </div>
     );
   }
 
   if (rolesQuery.isError) {
     return (
-      <p className="text-sm text-rose-500">
-        Roles could not be loaded. {rolesQuery.error.message}
-      </p>
+      <LoadError
+        icon={ShieldCheck}
+        title="Unable to load roles"
+        message={rolesQuery.error.message}
+        onRetry={() => void rolesQuery.refetch()}
+      />
     );
   }
 
   if (!selected) return <EmptyState icon={ShieldCheck} title="No roles yet" />;
 
-  const editable = !selected.isSystem && can("role.update");
+  const editable = canEditRole(selected);
   const total = allPermissions.length;
 
   return (
     <div className="grid items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)]">
-      <nav aria-label="Roles" className={`${card} p-2`}>
-        <p className="px-3 pt-2 pb-1.5 text-[0.68rem] font-semibold tracking-wider text-(--muted) uppercase">
+      <ElevatedCard as="nav" aria-label="Roles" className="p-2">
+        <p className="px-3 pt-2 pb-1.5 text-[11px] font-bold tracking-wider text-(--muted) uppercase">
           Built-in
         </p>
         <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
@@ -146,7 +149,7 @@ export function RolesTab({
 
         {custom.length > 0 ? (
           <>
-            <p className="px-3 pt-4 pb-1.5 text-[0.68rem] font-semibold tracking-wider text-(--muted) uppercase">
+            <p className="px-3 pt-4 pb-1.5 text-[11px] font-bold tracking-wider text-(--muted) uppercase">
               Custom
             </p>
             <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
@@ -174,14 +177,14 @@ export function RolesTab({
             </button>
           </div>
         ) : null}
-      </nav>
+      </ElevatedCard>
 
-      <section aria-label={roleLabel(selected.name)} className={`${card} p-6`}>
+      <ElevatedCard aria-label={roleLabel(selected.name)} className="p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <h2 className="flex flex-wrap items-center gap-2 text-xl font-bold text-(--text)">
+            <h2 className="flex flex-wrap items-center gap-2 text-xl font-bold tracking-tight text-(--text)">
               {roleLabel(selected.name)}
-              <span className="rounded-md bg-[color-mix(in_srgb,var(--text)_9%,transparent)] px-1.5 py-0.5 text-[0.7rem] font-semibold text-(--muted)">
+              <span className={`${chipClassName} text-(--muted)!`}>
                 {selected.isSystem ? "Built-in" : "Custom"}
               </span>
             </h2>
@@ -190,22 +193,22 @@ export function RolesTab({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={secondaryButtonClassName}
+            <Button
+              variant={editable ? "primary" : "quiet"}
               onClick={() => setEditor({ mode: "edit", role: selected })}
             >
               {editable ? (
                 <>
                   <PencilSimple size={15} weight="bold" />
-                  Edit role
+                  Edit permissions
                 </>
               ) : (
                 "View all permissions"
               )}
-            </button>
+            </Button>
             {canCreate ? (
               <Button
+                variant="quiet"
                 onClick={() => setEditor({ mode: "create", from: selected })}
               >
                 <Copy size={15} weight="bold" />
@@ -231,7 +234,7 @@ export function RolesTab({
         </div>
 
         <AreaBars role={selected} />
-      </section>
+      </ElevatedCard>
 
       {editor ? (
         <RoleEditorPanel
