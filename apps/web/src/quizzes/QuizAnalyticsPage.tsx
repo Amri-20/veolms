@@ -669,16 +669,15 @@ function InstructorOverview({
             description="Keep your assessment workflow moving."
           />
           <div className="mt-5 grid gap-2">
-            <QuickAction
-              icon={<Plus size={19} weight="bold" />}
-              title="Create a quiz"
-              detail="Start a new draft"
-              onClick={() =>
-                onOpenCreateQuiz
-                  ? onOpenCreateQuiz()
-                  : onNavigatePage?.("/quizzes/create")
-              }
-            />
+            {/* Left out without quiz.create, as the header's button is. */}
+            {onOpenCreateQuiz ? (
+              <QuickAction
+                icon={<Plus size={19} weight="bold" />}
+                title="Create a quiz"
+                detail="Start a new draft"
+                onClick={onOpenCreateQuiz}
+              />
+            ) : null}
             <QuickAction
               icon={<ChartBar size={19} weight="bold" />}
               title="Review analytics"

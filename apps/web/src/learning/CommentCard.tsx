@@ -1448,11 +1448,12 @@ export function CommentActionMenu({
   className,
 }: CommentActionMenuProps) {
   const [open, setOpen] = useState(false);
-  // Admins may delete anyone's comment, Q&A, reply or note.
+  // Moderators of every course may delete anyone's comment, Q&A, reply or
+  // note (the API takes discussion.moderate through an academy-wide role).
   const { data: currentUser } = useCurrentUser();
-  const isAdmin = Boolean(
-    currentUser?.roles?.some((role) => role.toLowerCase() === "admin"),
-  );
+  const moderatesEveryCourse = useCapabilities({
+    enabled: Boolean(currentUser),
+  }).canOnCourse("discussion.moderate", null);
   const isNote = kind === "note";
   const actionLabel = kind === "question" ? "Q&A" : isNote ? "note" : kind;
   const menuLabel =
@@ -1482,7 +1483,7 @@ export function CommentActionMenu({
     copyResult?.item === item && copyResult.copied ? CheckCircle : icon;
 
   const deleteOthersAction =
-    isAdmin && canDelete ? (
+    moderatesEveryCourse && canDelete ? (
       <>
         <MenuDivider />
         <MenuAction

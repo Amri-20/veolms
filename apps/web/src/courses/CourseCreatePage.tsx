@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import "../styles/features/course-wizard.css";
 import { createPortal } from "react-dom";
 import { CenteredLoadingSpinner } from "../components/LoadingSpinner";
@@ -1371,6 +1371,20 @@ export function CourseCreatePage({
     persistBasicsField,
     flushBasicsPersistence,
   });
+
+  // A step this person cannot change (Basics, where the editor opens, for a
+  // role that only edits lessons) gives way to the first one they can.
+  const permissionsKnown = capabilities.isFetched && Boolean(editedCourse);
+  const firstAllowedStep = permissionsKnown
+    ? WIZARD_STEP_IDS.find(isStepAllowed)
+    : undefined;
+  const activeStepAllowed = !permissionsKnown || isStepAllowed(activeStep);
+  useEffect(() => {
+    if (activeStepAllowed || !firstAllowedStep) return;
+    void navigateToStep(firstAllowedStep);
+    // navigateToStep is rebuilt each render; the step decides.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStepAllowed, firstAllowedStep]);
 
   if (isEditorError && !editorData && isEditing) {
     return (

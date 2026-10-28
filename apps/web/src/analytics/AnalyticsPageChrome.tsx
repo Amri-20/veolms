@@ -11,6 +11,7 @@ import { elevatedCardTokenScopeClasses } from "../components/ElevatedCard";
 import { PageHeading } from "../components/PageHeading";
 import { ThemedSelect, type ThemedSelectOption } from "../ThemedSelect";
 import { useWebContributions } from "../lib/web-contributions";
+import { useCapabilities } from "../services/authorization";
 import { SettingsTabBar } from "../settings/SettingsTabBar";
 import type { PageTabDefinition } from "../settings/settingsTabs";
 import { CORE_ANALYTICS_TABS } from "./analyticsTabs";
@@ -50,19 +51,38 @@ const TAB_DESCRIPTIONS: Record<string, string> = {
   courses: "Measure how your courses and content drive learning outcomes.",
 };
 
+/**
+ * Whether the Revenue section is for this person: the revenue permission
+ * opens it, and so does an instructor's own-course analytics. Course
+ * analytics held for every course (a team role) stop short of money, as
+ * the API does.
+ */
+function useSeesRevenue(seesAcademyRevenue: boolean): boolean {
+  const { data, can, canOnCourse } = useCapabilities({
+    enabled: !seesAcademyRevenue,
+  });
+  if (seesAcademyRevenue) return true;
+  if (!data) return false;
+  return (
+    can("analytics.revenue.read") || !canOnCourse("analytics.course.read", null)
+  );
+}
+
 /** The page's own sections and the ones plugins registered, in order. */
 export function useAnalyticsTabs(
   isAdmin: boolean,
 ): readonly AnalyticsTabContribution[] {
   const contributions = useWebContributions();
+  const seesRevenue = useSeesRevenue(isAdmin);
   return useMemo(() => {
     const extra = contributions.analyticsTabs.filter(
       (tab) => isAdmin || !tab.adminOnly,
     );
-    return [...CORE_ANALYTICS_TABS, ...extra].sort(
-      (a, b) => (a.order ?? 0) - (b.order ?? 0),
+    const core = CORE_ANALYTICS_TABS.filter(
+      (tab) => seesRevenue || tab.id !== "revenue",
     );
-  }, [contributions.analyticsTabs, isAdmin]);
+    return [...core, ...extra].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }, [contributions.analyticsTabs, isAdmin, seesRevenue]);
 }
 
 export function resolveAnalyticsTab(
