@@ -10,6 +10,7 @@ import { FileTextIcon as FileText } from "@phosphor-icons/react/FileText";
 import { FlagIcon as Flag } from "@phosphor-icons/react/Flag";
 import { LockIcon as Lock } from "@phosphor-icons/react/Lock";
 import { LockOpenIcon as LockOpen } from "@phosphor-icons/react/LockOpen";
+import { MarkdownLogoIcon as MarkdownLogo } from "@phosphor-icons/react/MarkdownLogo";
 import { NotepadIcon as Notepad } from "@phosphor-icons/react/Notepad";
 import { PencilSimpleIcon as PencilSimple } from "@phosphor-icons/react/PencilSimple";
 import { QuestionIcon as Question } from "@phosphor-icons/react/Question";
@@ -29,6 +30,7 @@ import {
   createDiscussionDraft,
   createEmptyDiscussionDraft,
   hasDiscussionDraftContent,
+  markdownToPlainText,
 } from "./discussion-editor/types";
 import { DiscussionMarkdown } from "./discussion-editor/DiscussionMarkdown";
 import { DiscussionEditor } from "./discussion-editor/DiscussionEditor";
@@ -1407,6 +1409,11 @@ interface CommentActionMenuProps {
   onToggleBookmark?: () => void;
   isFollowing?: boolean;
   onToggleFollow?: () => void;
+  /**
+   * The post as written, in Markdown. "Copy text" copies it as readable
+   * text (no Markdown signs, a table as tab-separated rows); "Copy
+   * Markdown" copies it as it is.
+   */
   textToCopy?: string;
   onCopyTextNotice?: (message: string) => void;
   onEdit: () => void;
@@ -1422,6 +1429,8 @@ interface CommentActionMenuProps {
 
 /** How long a "Copied" label stays up before its menu closes. */
 const COPIED_LABEL_MS = 1300;
+
+type CopyItem = "share" | "text" | "markdown";
 
 export function CommentActionMenu({
   name,
@@ -1465,20 +1474,20 @@ export function CommentActionMenu({
   // Copying answers inside the menu: the item that was chosen turns into
   // "Copied" for a moment, then the menu closes.
   const [copyResult, setCopyResult] = useState<{
-    item: "share" | "text";
+    item: CopyItem;
     copied: boolean;
   } | null>(null);
-  const showCopyResult = (item: "share" | "text", copied: boolean) => {
+  const showCopyResult = (item: CopyItem, copied: boolean) => {
     setCopyResult({ item, copied });
     window.setTimeout(() => setCopyResult(null), COPIED_LABEL_MS + 200);
   };
-  const copyLabel = (item: "share" | "text", label: string, done: string) =>
+  const copyLabel = (item: CopyItem, label: string, done: string) =>
     copyResult?.item === item
       ? copyResult.copied
         ? done
         : "Couldn't copy"
       : label;
-  const copyIcon = (item: "share" | "text", icon: typeof CopySimple) =>
+  const copyIcon = (item: CopyItem, icon: typeof CopySimple) =>
     copyResult?.item === item && copyResult.copied ? CheckCircle : icon;
 
   const deleteOthersAction =
@@ -1506,16 +1515,28 @@ export function CommentActionMenu({
     />
   );
   const copyTextAction = textToCopy?.trim() ? (
-    <MenuAction
-      Icon={copyIcon("text", CopySimple)}
-      label={copyLabel("text", "Copy text", "Copied")}
-      stayOpenMs={COPIED_LABEL_MS}
-      onClick={() => {
-        void copyTextToClipboard(textToCopy).then((copied) =>
-          showCopyResult("text", copied),
-        );
-      }}
-    />
+    <>
+      <MenuAction
+        Icon={copyIcon("text", CopySimple)}
+        label={copyLabel("text", "Copy text", "Copied")}
+        stayOpenMs={COPIED_LABEL_MS}
+        onClick={() => {
+          void copyTextToClipboard(markdownToPlainText(textToCopy)).then(
+            (copied) => showCopyResult("text", copied),
+          );
+        }}
+      />
+      <MenuAction
+        Icon={copyIcon("markdown", MarkdownLogo)}
+        label={copyLabel("markdown", "Copy Markdown", "Copied")}
+        stayOpenMs={COPIED_LABEL_MS}
+        onClick={() => {
+          void copyTextToClipboard(textToCopy).then((copied) =>
+            showCopyResult("markdown", copied),
+          );
+        }}
+      />
+    </>
   ) : null;
 
   return (
