@@ -6,6 +6,7 @@ import type {
   QuizSubmissionQuestion,
 } from "@veolms/contracts";
 import { QuizFormattedText } from "../attempt/QuizFormattedText";
+import { formatMarksOutOf } from "../quizMarks";
 
 const QUESTION_TYPE_LABEL: Record<QuizQuestionType, string> = {
   single_choice: "Single choice",
@@ -43,10 +44,6 @@ const VERDICT: Record<Verdict, { label: string; className: string }> = {
   },
 };
 
-function formatMarks(value: number) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
-}
-
 /**
  * One question of a submission: the prompt, every option with the one(s)
  * the student picked and the answer key, or their written answer, and the
@@ -77,9 +74,7 @@ export function QuizSubmissionAnswer({
             {VERDICT[verdict].label}
           </span>
           <span className="text-xs font-semibold tabular-nums text-(--text)">
-            {question.pointsAwarded === null
-              ? `— / ${formatMarks(question.points)}`
-              : `${formatMarks(question.pointsAwarded)} / ${formatMarks(question.points)}`}
+            {formatMarksOutOf(question.pointsAwarded, question.points)}
             <span className="sr-only"> marks</span>
           </span>
         </div>

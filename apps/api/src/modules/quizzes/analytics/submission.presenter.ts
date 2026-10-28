@@ -52,6 +52,17 @@ function outcome(
   return { percentage, passed: percentage >= Number(passPercentage) };
 }
 
+/** What an attempt is marked out of: its recorded maximum or its points. */
+function maxScoreOf(
+  attempt: Pick<SubmissionAttempt, "max_score">,
+  questions: readonly SubmissionQuestion[],
+) {
+  return Number(
+    attempt.max_score ??
+      questions.reduce((sum, question) => sum + Number(question.points), 0),
+  );
+}
+
 /**
  * The wire shape of a submission (`quizSubmissionSchema`). Stored grading
  * wins over a fresh one: imported attempts carry the marks their platform
@@ -134,10 +145,7 @@ export function presentQuizSubmission(input: {
     };
   });
 
-  const maxScore = Number(
-    attempt.max_score ??
-      questions.reduce((sum, question) => sum + Number(question.points), 0),
-  );
+  const maxScore = maxScoreOf(attempt, questions);
   return {
     assignmentId: assignment.id,
     quizTitle: input.quizTitle,
@@ -148,6 +156,13 @@ export function presentQuizSubmission(input: {
       id: item.id,
       attemptNumber: item.attempt_number,
       status: item.status,
+      score: isClosed(item.status) ? Number(item.score_obtained ?? 0) : null,
+      // The caller fills a missing maximum from the attempt's own version;
+      // this attempt's questions are only a fallback for the one shown.
+      maxScore: Number(
+        item.max_score ??
+          (item.id === attempt.id ? maxScoreOf(attempt, questions) : 0),
+      ),
       ...outcome(item, assignment.pass_percentage),
       submittedAt: item.submitted_at?.toISOString() ?? null,
     })),

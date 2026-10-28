@@ -951,12 +951,36 @@ export async function listAnalyticsAttempts(
     .select([
       "user_id as studentId",
       "status",
+      "quiz_version_id as quizVersionId",
+      "score_obtained as scoreObtained",
+      "max_score as maxScore",
       "score_percentage as scorePercentage",
       "created_at as createdAt",
       "submitted_at as submittedAt",
     ])
     .where("assignment_id", "=", assignmentId)
     .orderBy("created_at", "desc")
+    .execute();
+}
+
+/**
+ * Each version's total points, for attempts that do not record their own
+ * maximum (`max_score`): one grouped query for all the versions asked for.
+ */
+export async function listVersionPointTotals(
+  database: DatabaseExecutor,
+  versionIds: readonly string[],
+) {
+  if (versionIds.length === 0) return [];
+  return await database
+    .selectFrom("quiz_questions")
+    .select(({ fn }) => [
+      "quiz_version_id as versionId",
+      fn.sum<string>("points").as("totalPoints"),
+    ])
+    .where("quiz_version_id", "in", [...versionIds])
+    .where("deleted_at", "is", null)
+    .groupBy("quiz_version_id")
     .execute();
 }
 
