@@ -66,6 +66,7 @@ import type { LessonSubtitleTable } from "./subtitles.schema.ts";
 import type {
   ImageJobTable,
   MediaAssetTable,
+  MediaSourceTable,
   VideoJobTable,
   VideoOutputTable,
   YoutubeImportJobTable,
@@ -184,6 +185,7 @@ export interface Database {
   video_outputs: VideoOutputTable;
   video_jobs: VideoJobTable;
   youtube_import_jobs: YoutubeImportJobTable;
+  media_sources: MediaSourceTable;
 
   // Commerce, Orders & Payments
   course_bundles: CourseBundleTable;

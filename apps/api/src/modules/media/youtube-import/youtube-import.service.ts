@@ -23,6 +23,7 @@ import {
   YoutubeUnavailableError,
   readVideoMetadata,
 } from "./source/youtube.ts";
+import * as mediaRepo from "../media.repository.ts";
 import * as importRepo from "./youtube-import.repository.ts";
 import type { YoutubeImportTools } from "./youtube-import.tools.ts";
 import { cancelImportJob, outputPrefixFor } from "./youtube-import.cancel.ts";
@@ -199,6 +200,16 @@ export function createYoutubeImportService({
         youtube_id: videoId,
         title: null,
         duration_seconds: null,
+      });
+      // The worker fills in the title and channel once it reads the video.
+      await mediaRepo.insertMediaSource(trx, {
+        media_id: mediaId,
+        provider: "youtube",
+        external_id: videoId,
+        source_url: sourceUrl,
+        title: null,
+        channel: null,
+        recorded_via: "import",
       });
     });
     logger.info(
