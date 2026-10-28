@@ -63,6 +63,14 @@ export class DeviceLimitReachedError extends AppError {
   }
 }
 
+/** Whether the account is a shared test account listed in TEST_LOGIN_ACCOUNTS. */
+function isSharedTestAccount(user: SessionUser): boolean {
+  return (
+    user.email !== null &&
+    config.TEST_LOGIN_ACCOUNTS.has(user.email.toLowerCase())
+  );
+}
+
 export interface SessionServiceOptions {
   database: Kysely<Database>;
 }
@@ -266,10 +274,13 @@ export function createSessionService({ database }: SessionServiceOptions) {
     };
 
     // A new device for a student counts against the academy's limit; staff
-    // are never limited, and a browser already signed in (above) is no new
-    // device.
+    // and the shared test accounts (TEST_LOGIN_ACCOUNTS), which several
+    // testers sign in to at once, are never limited, and a browser already
+    // signed in (above) is no new device.
     const limit =
-      options?.skipDeviceLimit || isStaffAccount(roles)
+      options?.skipDeviceLimit ||
+      isStaffAccount(roles) ||
+      isSharedTestAccount(user)
         ? null
         : await platformSettings.maxDevicesPerStudent();
     if (limit === null) {
