@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import type { MouseEvent } from "react";
-import { useParams } from "react-router";
+import { useLocation, useParams } from "react-router";
 import { BookOpen } from "@phosphor-icons/react/BookOpen";
 import { CaretDown } from "@phosphor-icons/react/CaretDown";
 import { PencilSimple } from "@phosphor-icons/react/PencilSimple";
@@ -19,7 +19,6 @@ import { Heart } from "@phosphor-icons/react/Heart";
 import { Play } from "@phosphor-icons/react/Play";
 import { ShoppingBag } from "@phosphor-icons/react/ShoppingBag";
 import {
-  CHECKOUT_WINDOW_SECONDS,
   MAX_VOLUNTARY_AMOUNT,
   type Category,
   type CheckoutPreviewResponse,
@@ -60,7 +59,13 @@ import {
 import type { LessonIntentFor } from "./overview/CourseOverviewCurriculum";
 import type { NavigateTo } from "../routing/navigation";
 import { productName } from "../routing/routeDescriptors";
-import { useAuthStore } from "../store/auth.store";
+import { authStore, useAuthStore } from "../store/auth.store";
+import { LOGIN_DIALOG_PARAM } from "../routing/routeAccess";
+import {
+  forgetPendingPurchase,
+  rememberPendingPurchase,
+  takePendingPurchase,
+} from "./overview/pendingPurchase";
 import { useCoursePageData } from "./overview/useCoursePageData";
 import { CurriculumIntentContext } from "./overview/curriculumIntent";
 import type { CourseCurriculumPreview } from "./staticCurriculum";
@@ -68,8 +73,8 @@ import { getApiError } from "../lib/api-error";
 import { trackAnalyticsEvent } from "../lib/analytics-track";
 import {
   readCheckoutStartError,
-  CHECKOUT_WINDOW_BLOCKED_MESSAGE,
-  openCheckoutWindow,
+  openGatewayCheckout,
+  type StopGatewayCheckout,
   useCheckoutPreview,
   useAwaitPaidOrder,
   useCreateCheckoutOrder,
@@ -104,7 +109,6 @@ import {
 } from "./overview/courseViewerState";
 import { HoverFillIcon } from "./overview/HoverFillIcon";
 import { PayCardIcon } from "./overview/PayCardIcon";
-import "../services/payments/razorpay-checkout.css";
 import {
   CoursePriceBar,
   type CoursePriceDisplayPrice,
@@ -138,27 +142,6 @@ export { CourseOverviewSkeleton };
 // ─── Helpers for Currency, Sale Window, Language, and Price Sizing ────────────
 
 export type PriceSizeVariant = "normal" | "medium" | "large" | "xlarge";
-
-declare global {
-  interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => {
-      open: () => void;
-      close?: () => void;
-    };
-  }
-}
-
-async function loadRazorpay() {
-  if (typeof window === "undefined" || window.Razorpay) return;
-  await new Promise<void>((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = () => resolve();
-    script.onerror = () =>
-      reject(new Error("Unable to load payment checkout."));
-    document.head.appendChild(script);
-  });
-}
 
 export function getPriceSizeVariant(priceStr: string): PriceSizeVariant {
   if (!priceStr || priceStr.toLowerCase() === "free") return "normal";
@@ -345,6 +328,11 @@ interface CoursePurchaseSectionProps {
   isCreator?: boolean;
   /** The overview's `canSelfEnroll`; only `false` closes enrolment. */
   canSelfEnroll?: boolean;
+  /**
+   * Whether the page knows who is looking (see `courseViewerState`): a
+   * purchase started before signing in waits for it.
+   */
+  viewerKnown?: boolean;
 }
 
 function CoursePurchaseSection({
@@ -355,6 +343,7 @@ function CoursePurchaseSection({
   isReadOnlyPreview = false,
   isCreator = false,
   canSelfEnroll,
+  viewerKnown = true,
 }: CoursePurchaseSectionProps) {
   const user = useAuthStore((state) => state.user);
   const preview = useCheckoutPreview();
@@ -372,18 +361,9 @@ function CoursePurchaseSection({
   const paymentConfirmationRef = useRef<AbortController | null>(null);
   useEffect(() => () => paymentConfirmationRef.current?.abort(), []);
   // The watch kept on the gateway's window while it is open (see
-  // `watchForUnansweredClose`).
-  const checkoutWatchRef = useRef<number | null>(null);
-  const stopCheckoutWatch = () => {
-    if (checkoutWatchRef.current !== null) {
-      window.clearInterval(checkoutWatchRef.current);
-      checkoutWatchRef.current = null;
-    }
-  };
-  useEffect(() => stopCheckoutWatch, []);
-  // Whether the gateway's window came up (see openCheckoutWindow).
-  const stopWindowLoadWatchRef = useRef<(() => void) | null>(null);
-  useEffect(() => () => stopWindowLoadWatchRef.current?.(), []);
+  // `openGatewayCheckout`).
+  const stopGatewayCheckoutRef = useRef<StopGatewayCheckout | null>(null);
+  useEffect(() => () => stopGatewayCheckoutRef.current?.(), []);
   const isEnrolled = Boolean(user && course.enrolled);
 
   const [isPaymentBusy, setIsPaymentBusy] = useState(false);
@@ -395,6 +375,7 @@ function CoursePurchaseSection({
   const currentUser = useCurrentUser();
   const [phoneGate, setPhoneGate] = useState<{
     amount: number | undefined;
+    couponCode: string | undefined;
   } | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
@@ -725,34 +706,13 @@ function CoursePurchaseSection({
    * card may already have been charged by then, as it was when this was
    * found: the gateway had captured the payment and failed afterwards.
    *
-   * So while the window is open the page watches it, and if it closes
-   * unanswered the button is given back with a message that tells the truth
-   * about what is not known, and the order goes on being watched: the
-   * server's recovery cycle marks a captured payment paid within a few
-   * minutes, and the course then opens without the learner paying twice.
+   * So while the window is open it is watched (see openGatewayCheckout),
+   * and if it closes unanswered the button is given back with a message
+   * that tells the truth about what is not known, and the order goes on
+   * being watched: the server's recovery cycle marks a captured payment paid
+   * within a few minutes, and the course then opens without the learner
+   * paying twice.
    */
-  const watchForUnansweredClose = (
-    orderId: string,
-    answered: () => boolean,
-  ) => {
-    stopCheckoutWatch();
-    let seenOpen = false;
-    checkoutWatchRef.current = window.setInterval(() => {
-      if (answered()) return stopCheckoutWatch();
-      const container = document.querySelector(".razorpay-container");
-      const isOpen =
-        container !== null &&
-        window.getComputedStyle(container).display !== "none";
-      if (isOpen) {
-        seenOpen = true;
-        return;
-      }
-      if (!seenOpen) return;
-      stopCheckoutWatch();
-      void followUpUnansweredClose(orderId);
-    }, 500);
-  };
-
   const followUpUnansweredClose = async (orderId: string) => {
     paymentConfirmationRef.current?.abort();
     const confirmation = new AbortController();
@@ -778,20 +738,41 @@ function CoursePurchaseSection({
 
   const handlePayNow = async (
     voluntaryContributionAmount?: number,
-    { phoneChecked = false }: { phoneChecked?: boolean } = {},
+    {
+      phoneChecked = false,
+      couponCode: couponOverride,
+      resumed = false,
+    }: {
+      phoneChecked?: boolean;
+      /** The coupon to buy with, when it is not (yet) the applied one. */
+      couponCode?: string;
+      /** Carried on after signing in; the press was counted then. */
+      resumed?: boolean;
+    } = {},
   ) => {
     if (isReadOnlyPreview) return;
-    if (!phoneChecked) {
+    if (!phoneChecked && !resumed) {
       trackAnalyticsEvent("enroll_click", {
         courseId: course.id,
         outcome: user ? "signed_in" : "guest",
       });
     }
     if (!user) {
-      // Opens the login pop-up over this course page, so the visitor is back
-      // on the price card as soon as they are signed in.
-      if (onNavigatePage) onNavigatePage("/login");
-      else setPaymentError("Please log in before enrolling.");
+      // Opens the login pop-up over this course page, and keeps the press:
+      // once signed in, the page carries on with this purchase (see
+      // pendingPurchase.ts).
+      if (onNavigatePage) {
+        rememberPendingPurchase({
+          courseId: course.id,
+          ...(voluntaryContributionAmount !== undefined
+            ? { amount: voluntaryContributionAmount }
+            : {}),
+          ...(!isFree && appliedCoupon
+            ? { couponCode: appliedCoupon.code }
+            : {}),
+        });
+        onNavigatePage("/login");
+      } else setPaymentError("Please log in before enrolling.");
       return;
     }
     setIsPaymentBusy(true);
@@ -803,7 +784,7 @@ function CoursePurchaseSection({
         amount: voluntaryContributionAmount ?? 0,
         catalogPrice: baseNumericPrice,
       });
-      const coupon = appliedCoupon?.code?.trim();
+      const coupon = (couponOverride ?? appliedCoupon?.code)?.trim();
       const couponCode = !isFree && coupon ? coupon.toUpperCase() : undefined;
       // The key identifies this purchase, not this click: a second click on
       // the same course, amount and coupon must reach the same order. A new
@@ -848,74 +829,60 @@ function CoursePurchaseSection({
         return;
       }
 
-      await loadRazorpay();
-      if (!window.Razorpay) {
-        throw new Error("Payment checkout is unavailable.");
-      }
+      // The order is cancelled on the server, so paying again (with another
+      // coupon, at another amount) is not refused as a second payment while
+      // the closed window's time runs out. The button waits for that
+      // answer, so a quick second click does not race it. A payment the
+      // gateway may still take keeps its order.
+      const releaseThisOrder = () =>
+        void releaseOrder
+          .mutateAsync(order.order.id)
+          .then((result) => {
+            if (result.released) checkoutIntentRef.current = null;
+          })
+          .catch(() => undefined)
+          .finally(() => setIsPaymentBusy(false));
 
-      trackAnalyticsEvent("checkout_step", {
-        courseId: course.id,
-        orderId: order.order.id,
-        step: "gateway_opened",
-      });
-      // Whether the gateway's window has told the page how it ended.
-      let checkoutAnswered = false;
-      // The gateway refused to load its window here (see
-      // openCheckoutWindow); its own close then says nothing more.
-      let windowBlocked = false;
-      const rzp = new window.Razorpay({
-        key: order.gateway.keyId,
-        amount: order.gateway.amount,
-        currency: order.gateway.currency,
-        name: productName,
-        description:
-          (voluntaryContributionAmount ?? 0) > baseNumericPrice ||
-          (isFree && (voluntaryContributionAmount ?? 0) > 0)
-            ? `Support Creator - ${course.title}`
-            : course.title,
-        order_id: order.gateway.gatewayOrderId,
-        // The window closes itself, so a payment cannot be completed in it
-        // long after the server has let the buyer start another one.
-        timeout: CHECKOUT_WINDOW_SECONDS,
-        prefill: {
-          name: user.displayName || user.username,
-          email: user.email,
+      // The gateway the server chose for this buyer (by their country):
+      // Razorpay in India, Dodo Payments elsewhere.
+      stopGatewayCheckoutRef.current?.();
+      stopGatewayCheckoutRef.current = await openGatewayCheckout(
+        {
+          gateway: order.gateway,
+          name: productName,
+          description:
+            (voluntaryContributionAmount ?? 0) > baseNumericPrice ||
+            (isFree && (voluntaryContributionAmount ?? 0) > 0)
+              ? `Support Creator - ${course.title}`
+              : course.title,
+          prefill: {
+            name: user.displayName || user.username,
+            email: user.email,
+          },
         },
-        handler: async (response: {
-          razorpay_order_id: string;
-          razorpay_payment_id: string;
-          razorpay_signature: string;
-        }) => {
-          checkoutAnswered = true;
-          trackAnalyticsEvent("payment_result", {
-            courseId: course.id,
-            orderId: order.order.id,
-            outcome: "paid",
-          });
-          try {
-            await verify.mutateAsync({
+        {
+          onPaid: async (proof) => {
+            trackAnalyticsEvent("payment_result", {
+              courseId: course.id,
               orderId: order.order.id,
-              gatewayOrderId: response.razorpay_order_id,
-              gatewayPaymentId: response.razorpay_payment_id,
-              gatewaySignature: response.razorpay_signature,
+              outcome: "paid",
             });
-            trackPaidEnrollment(order.order.id);
-            setIsPaymentBusy(false);
-            onNavigatePage?.(
-              `/learn/${encodeURIComponent(getCourseRouteKey(course))}`,
-            );
-          } catch {
-            // The gateway has taken the payment; only our confirmation call
-            // failed. The server still fulfils the order from the gateway
-            // webhook or its recovery cycle, so wait for that rather than
-            // telling the learner to pay again.
-            await confirmPaidOrder(order.order.id);
-          }
-        },
-        modal: {
-          ondismiss: () => {
-            checkoutAnswered = true;
-            if (windowBlocked) return;
+            try {
+              await verify.mutateAsync({ orderId: order.order.id, ...proof });
+              trackPaidEnrollment(order.order.id);
+              setIsPaymentBusy(false);
+              onNavigatePage?.(
+                `/learn/${encodeURIComponent(getCourseRouteKey(course))}`,
+              );
+            } catch {
+              // The gateway has taken the payment; only our confirmation
+              // call failed. The server still fulfils the order from the
+              // gateway webhook or its recovery cycle, so wait for that
+              // rather than telling the learner to pay again.
+              await confirmPaidOrder(order.order.id);
+            }
+          },
+          onDismissed: () => {
             // A payment that went through is being confirmed; the gateway
             // closing its own window afterwards is not a cancellation.
             const confirmation = paymentConfirmationRef.current;
@@ -928,45 +895,28 @@ function CoursePurchaseSection({
             setPaymentError(
               "The payment window was closed before the payment was completed. You can try again whenever you are ready.",
             );
-            // The order is cancelled on the server, so paying again (with
-            // another coupon, at another amount) is not refused as a second
-            // payment while the closed window's time runs out. The button
-            // waits for that answer, so a quick second click does not race
-            // it. A payment the gateway may still take keeps its order.
-            void releaseOrder
-              .mutateAsync(order.order.id)
-              .then((result) => {
-                if (result.released) checkoutIntentRef.current = null;
-              })
-              .catch(() => undefined)
-              .finally(() => setIsPaymentBusy(false));
+            releaseThisOrder();
           },
+          // The window never came up, so nothing can have been paid in it:
+          // the order is let go and the button given back with the reason.
+          onBlocked: (message) => {
+            trackAnalyticsEvent("payment_result", {
+              courseId: course.id,
+              orderId: order.order.id,
+              outcome: "blocked",
+            });
+            setPaymentError(message);
+            releaseThisOrder();
+          },
+          onClosedUnanswered: () =>
+            void followUpUnansweredClose(order.order.id),
         },
+      );
+      trackAnalyticsEvent("checkout_step", {
+        courseId: course.id,
+        orderId: order.order.id,
+        step: "gateway_opened",
       });
-
-      // Opens the window. If it never comes up, nothing can have been paid
-      // in it, so the order is let go and the button given back with the
-      // reason.
-      stopWindowLoadWatchRef.current?.();
-      stopWindowLoadWatchRef.current = openCheckoutWindow(rzp, () => {
-        windowBlocked = true;
-        checkoutAnswered = true;
-        stopCheckoutWatch();
-        trackAnalyticsEvent("payment_result", {
-          courseId: course.id,
-          orderId: order.order.id,
-          outcome: "blocked",
-        });
-        setPaymentError(CHECKOUT_WINDOW_BLOCKED_MESSAGE);
-        void releaseOrder
-          .mutateAsync(order.order.id)
-          .then((result) => {
-            if (result.released) checkoutIntentRef.current = null;
-          })
-          .catch(() => undefined)
-          .finally(() => setIsPaymentBusy(false));
-      });
-      watchForUnansweredClose(order.order.id, () => checkoutAnswered);
     } catch (error) {
       // The server asks for the number of a new account that has none.
       if (
@@ -974,7 +924,10 @@ function CoursePurchaseSection({
         "PHONE_VERIFICATION_REQUIRED"
       ) {
         setIsPaymentBusy(false);
-        setPhoneGate({ amount: voluntaryContributionAmount });
+        setPhoneGate({
+          amount: voluntaryContributionAmount,
+          couponCode: couponOverride,
+        });
         trackAnalyticsEvent("checkout_step", {
           courseId: course.id,
           step: "phone_verification",
@@ -995,6 +948,61 @@ function CoursePurchaseSection({
       setIsPaymentBusy(false);
     }
   };
+
+  // A purchase started before signing in (see pendingPurchase.ts) carries
+  // on by itself once the buyer is signed in and the page knows the course
+  // is still theirs to buy: the mobile number first where it is asked for,
+  // then the payment window. Someone who turns out to own or manage the
+  // course is shown that instead (the page drops the press).
+  const canResumePurchase =
+    Boolean(user) &&
+    viewerKnown &&
+    !isReadOnlyPreview &&
+    !isCreatorNormal &&
+    !isEnrolled &&
+    !isInvitationOnly;
+  const resumePendingPurchase = useEffectEvent(() => {
+    const pending = takePendingPurchase(course.id);
+    if (!pending) return;
+    trackAnalyticsEvent("checkout_step", {
+      courseId: course.id,
+      step: "resumed_after_sign_in",
+    });
+    // The guest's coupon goes back on the card as well; the order is made
+    // with it either way.
+    if (pending.couponCode && !appliedCoupon) {
+      void applyCouponCode(pending.couponCode);
+    }
+    void handlePayNow(pending.amount, {
+      couponCode: pending.couponCode,
+      resumed: true,
+    });
+  });
+  useEffect(() => {
+    if (canResumePurchase) resumePendingPurchase();
+  }, [canResumePurchase]);
+
+  // Closing the login pop-up without signing in drops the press: signing in
+  // later, some other way, is not taken to mean paying. Signing in closes
+  // the pop-up too, about when the session reaches this page, so only a
+  // pop-up that closed with nobody signed in a moment later counts.
+  const location = useLocation();
+  const loginOpen = new URLSearchParams(location.search).has(
+    LOGIN_DIALOG_PARAM,
+  );
+  const loginWasOpenRef = useRef(false);
+  useEffect(() => {
+    if (loginOpen) {
+      loginWasOpenRef.current = true;
+      return undefined;
+    }
+    if (!loginWasOpenRef.current) return undefined;
+    loginWasOpenRef.current = false;
+    const timer = window.setTimeout(() => {
+      if (!authStore.getState().user) forgetPendingPurchase(course.id);
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [loginOpen, course.id]);
 
   // "Pay Now", with a card for its icon: the amount stands on the bar
   // beside the button. A buyer's own, higher amount is still named, and a
@@ -1340,9 +1348,9 @@ function CoursePurchaseSection({
             }
             onClose={() => setPhoneGate(null)}
             onVerified={() => {
-              const { amount } = phoneGate;
+              const { amount, couponCode } = phoneGate;
               setPhoneGate(null);
-              void handlePayNow(amount, { phoneChecked: true });
+              void handlePayNow(amount, { phoneChecked: true, couponCode });
             }}
           />
         </Suspense>
@@ -2143,6 +2151,12 @@ function CourseOverviewContent({
         : undefined,
   };
   const isEnrolled = Boolean(user && course.enrolled);
+  // A purchase started before signing in is not carried on for a course
+  // the buyer turns out to own or manage (see pendingPurchase.ts).
+  const ownsOrManages = Boolean(user) && (isEnrolled || managesCourse);
+  useEffect(() => {
+    if (viewer === "known" && ownsOrManages) forgetPendingPurchase(course.id);
+  }, [viewer, ownsOrManages, course.id]);
   // An enrolled learner's play button on the picture opens the lesson they
   // go on with, as the band's button under the hero does (it shares its
   // request for that lesson when the page was not given it).
@@ -2418,6 +2432,7 @@ function CourseOverviewContent({
                 isReadOnlyPreview={isReadOnlyPreview}
                 isCreator={isCreator}
                 canSelfEnroll={adaptedFromPreview?.canSelfEnroll}
+                viewerKnown={viewer === "known"}
               />
             )}
           </div>

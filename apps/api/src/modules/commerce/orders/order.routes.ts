@@ -34,7 +34,7 @@ const orderRoutes: RoutePlugin = async (app, options) => {
   });
   const refundService = createRefundService({
     database: options.database,
-    paymentGateway: options.services.paymentGateway,
+    paymentGateways: options.services.paymentGateways,
   });
   const authorizationService = createAuthorizationService(options.database);
   const needsRefundService = createNeedsRefundService({

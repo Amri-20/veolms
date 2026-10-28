@@ -60,12 +60,12 @@ export function registerBackgroundJobs(
     logger: app.log,
     // With the gateway, an extra payment is refunded as soon as its event
     // is processed rather than on the scheduler's next pass.
-    paymentGateway: services.paymentGateway,
+    paymentGateways: services.paymentGateways,
   });
 
   const paymentEventQueue = new BackgroundPaymentEventQueue({
     database,
-    paymentGateway: services.paymentGateway,
+    paymentGateways: services.paymentGateways,
     logger: app.log,
     handler: async (event) => {
       await paymentWorker.processPaymentJob(event);
@@ -75,7 +75,7 @@ export function registerBackgroundJobs(
 
   const fulfillmentScheduler = new CommerceFulfillmentScheduler({
     database,
-    paymentGateway: services.paymentGateway,
+    paymentGateways: services.paymentGateways,
     logger: app.log,
   });
   fulfillmentScheduler.start();

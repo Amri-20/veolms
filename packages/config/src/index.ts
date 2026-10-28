@@ -53,6 +53,33 @@ const otpResendCooldownSecondsSchema = z.coerce
   .max(3600)
   .default(60);
 
+/**
+ * "IN:razorpay,*:dodo": the gateway a checkout opens, by the buyer's
+ * country. Parsed into pairs in the order written; "*" is any country.
+ */
+const paymentGatewayByCountrySchema = (defaultValue: string) =>
+  z
+    .string()
+    .default(defaultValue)
+    .transform((value, context) => {
+      const pairs: Array<{ country: string; provider: string }> = [];
+      for (const part of value.split(",")) {
+        if (!part.trim()) continue;
+        const match = /^\s*(\*|[A-Za-z]{2})\s*:\s*([a-z][a-z0-9_]*)\s*$/u.exec(
+          part,
+        );
+        if (!match) {
+          context.addIssue({
+            code: "custom",
+            message: `Expected country:gateway pairs such as "IN:razorpay,*:dodo"; "${part.trim()}" is not one.`,
+          });
+          return z.NEVER;
+        }
+        pairs.push({ country: match[1]!.toUpperCase(), provider: match[2]! });
+      }
+      return pairs;
+    });
+
 const folderListSchema = (defaultValue: string) =>
   z
     .string()
@@ -536,6 +563,54 @@ const serverConfigSchema = z.object({
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+
+  // Dodo Payments, a merchant of record that takes cards from abroad. Off
+  // while its API key is unset. The webhook key is the endpoint's secret
+  // (whsec_…) from the Dodo dashboard. Test and live mode have separate
+  // keys; the mode must match the key.
+  DODO_PAYMENTS_API_KEY: z.string().optional(),
+  DODO_PAYMENTS_WEBHOOK_KEY: z.string().optional(),
+  DODO_PAYMENTS_ENVIRONMENT: z
+    .enum(["test_mode", "live_mode"])
+    .default("test_mode"),
+  // Dodo, as the seller, charges the buyer's tax (GST, VAT, sales tax).
+  // false: added on top of the course price at checkout, paid by the buyer.
+  // true: taken out of the course price, so less of it reaches us.
+  DODO_PAYMENTS_TAX_INCLUSIVE: booleanEnvironmentValueSchema.default(false),
+
+  // Cashfree Payments, an Indian gateway that also takes cards and PayPal
+  // from abroad (once Cashfree turns international payments on). Off while
+  // its keys are unset. Its webhooks are signed with the secret key, so it
+  // has no webhook secret of its own. Sandbox and production have separate
+  // keys; the environment must match them.
+  CASHFREE_APP_ID: z.string().optional(),
+  CASHFREE_SECRET_KEY: z.string().optional(),
+  CASHFREE_ENVIRONMENT: z.enum(["sandbox", "production"]).default("sandbox"),
+
+  // Which gateway a new checkout opens. PAYMENT_GATEWAY_BY_COUNTRY lists
+  // country:gateway pairs, ISO country codes, "*" for every other country:
+  // by default buyers in India pay through Razorpay and everyone else
+  // through Dodo Payments. A pair naming a gateway that is not set up is
+  // skipped. A buyer whose country is not known gets PAYMENT_GATEWAY_DEFAULT.
+  PAYMENT_GATEWAY_DEFAULT: z.string().trim().min(1).default("razorpay"),
+  PAYMENT_GATEWAY_BY_COUNTRY:
+    paymentGatewayByCountrySchema("IN:razorpay,*:dodo"),
+  // The request header that carries the buyer's country, as Cloudflare
+  // sends it in front of the API.
+  PAYMENT_COUNTRY_HEADER: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .default("cf-ipcountry"),
+  // Development only: the country a checkout is taken to come from when
+  // the request says none (there is no Cloudflare in front of a local API).
+  // Set it to US to get the international gateway on localhost.
+  PAYMENT_TEST_COUNTRY: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z]{2}$/u, "Expected a two-letter country code, such as US.")
+    .transform((value) => value.toUpperCase())
+    .optional(),
 
   // An extra payment taken by the gateway (a second payment for a paid
   // order, or a late payment for something the buyer already has) is sent

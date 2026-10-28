@@ -5,7 +5,25 @@ import type {
 } from "@veolms/contracts";
 import type { CheckoutService } from "./checkout.service.ts";
 import { AppError } from "../../../lib/errors.ts";
+import { config } from "../../../config.ts";
 import type { PlatformSettingsService } from "../../platform/index.ts";
+
+/**
+ * The buyer's country, as the proxy in front of the API (Cloudflare) names
+ * it in PAYMENT_COUNTRY_HEADER. On a development machine, with no proxy,
+ * PAYMENT_TEST_COUNTRY stands in for it.
+ */
+function buyerCountry(request: FastifyRequest): string | null {
+  const header = request.headers[config.PAYMENT_COUNTRY_HEADER];
+  const value = Array.isArray(header) ? header[0] : header;
+  if (value && /^[A-Za-z0-9]{2}$/u.test(value.trim())) {
+    return value.trim().toUpperCase();
+  }
+  if (config.NODE_ENV === "development" && config.PAYMENT_TEST_COUNTRY) {
+    return config.PAYMENT_TEST_COUNTRY;
+  }
+  return null;
+}
 
 export function createCheckoutController({
   service,
@@ -49,7 +67,9 @@ export function createCheckoutController({
       email: request.user!.email,
       phone: request.user!.phoneNo,
     };
-    return await service.createOrder(user, request.body);
+    return await service.createOrder(user, request.body, {
+      country: buyerCountry(request),
+    });
   }
 
   async function releaseCheckoutOrder(
