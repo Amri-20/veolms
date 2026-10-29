@@ -3,14 +3,13 @@ import {
   cloneElement,
   useCallback,
   useEffect,
-  lazy,
   useMemo,
   useRef,
-  Suspense,
   useState,
   useSyncExternalStore,
 } from "react";
 import "../styles/features/discussions.css";
+import { DiscussionMarkdown } from "../learning/discussion-editor/DiscussionMarkdown";
 import { elevatedCardTokenScopeClasses } from "../components/ElevatedCard";
 import type { PublicPopularDiscussion } from "@veolms/contracts";
 import type {
@@ -102,14 +101,6 @@ import {
   readApplicationScrollPosition,
   type ApplicationScrollPosition,
 } from "../shell/applicationScroll";
-
-const loadDiscussionMarkdown = () =>
-  import("../learning/discussion-editor/DiscussionMarkdown");
-const DiscussionMarkdown = lazy(() =>
-  loadDiscussionMarkdown().then((module) => ({
-    default: module.DiscussionMarkdown,
-  })),
-);
 
 type DiscussionStatus = NonNullable<DiscussionWorkspaceCard["status"]>;
 type DiscussionEffectiveOwnership = "all" | "mine";
@@ -755,20 +746,12 @@ function DiscussionWorkspaceCardContent({
               <HighlightedText text={normalizedTitle} />
             </div>
           )}
-          <Suspense
-            fallback={
-              <div className="discussion-hub__card-expanded-markdown max-w-none">
-                {normalizedBody}
-              </div>
-            }
-          >
-            <DiscussionMarkdown
-              content={content}
-              label={`${label} by ${thread.author}`}
-              preserveSoftBreaks
-              className="discussion-hub__card-expanded-markdown max-w-none"
-            />
-          </Suspense>
+          <DiscussionMarkdown
+            content={content}
+            label={`${label} by ${thread.author}`}
+            preserveSoftBreaks
+            className="discussion-hub__card-expanded-markdown max-w-none"
+          />
           {utility(true)}
         </div>
       ) : (
@@ -1905,10 +1888,6 @@ export function DiscussionsWorkspace({
     top: string;
     width: string;
   } | null>(null);
-
-  useEffect(() => {
-    void loadDiscussionMarkdown().catch(() => undefined);
-  }, []);
 
   useEffect(() => {
     setMobileActionTarget(null);
