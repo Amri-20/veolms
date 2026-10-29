@@ -29,7 +29,10 @@ import * as oauthRepository from "../oauth/oauth.repository.ts";
 import * as userRepository from "./authentication.repository.ts";
 import type { OtpService } from "../otp/otp.service.ts";
 import type { SessionService } from "../session/session.service.ts";
-import { normalizePhoneIdentifier } from "../shared/auth.utils.ts";
+import {
+  normalizePhoneIdentifier,
+  refusesUnconfirmedPhoneSignIn,
+} from "../shared/auth.utils.ts";
 import { evictCachedUserSessions } from "../shared/session-auth-cache.ts";
 import {
   AVATAR_CONTENT_TYPES,
@@ -975,16 +978,12 @@ export function createAuthService({
       );
     }
 
-    // A number nobody confirmed (the one typed during platform setup) is not
-    // proof of ownership: whoever holds it would receive the code. It cannot
-    // sign in until the owner confirms it from their profile. An account
-    // with no confirmed email is left alone: its number is the channel it
-    // was opened with, and it has no other way in.
-    if (
-      input.identifierType === "phone" &&
-      !user.phone_verified_at &&
-      user.email_verified_at
-    ) {
+    // A number nobody confirmed (the one typed during platform setup, or by
+    // staff adding a student) cannot sign in until the owner confirms it
+    // from their profile. That holds whether or not the email is confirmed
+    // yet: a student added by staff has neither, and a mistyped number would
+    // otherwise open their account to its holder.
+    if (refusesUnconfirmedPhoneSignIn(input.identifierType, user)) {
       await otpService.assertOtpMatches(
         input.identifier,
         input.identifierType,

@@ -59,6 +59,15 @@ const studentsRoutes: RoutePlugin = async (app, options) => {
     "/students",
     {
       preHandler: canCreate,
+      // Every student added sends a welcome email to an address the caller
+      // chose, so a stolen staff session must not be able to mail people
+      // without limit in the academy's name.
+      config: {
+        rateLimit: {
+          max: 30,
+          timeWindow: "1 minute",
+        },
+      },
       schema: {
         operationId: "createStudent",
         tags: ["Students"],
@@ -78,6 +87,7 @@ const studentsRoutes: RoutePlugin = async (app, options) => {
           401: errorResponse("Authentication required"),
           403: errorResponse("Forbidden"),
           409: errorResponse("Email or phone number already in use"),
+          429: errorResponse("Too many students added in a short time"),
         },
       },
     },
