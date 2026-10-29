@@ -556,6 +556,7 @@ export function LearningWorkspace({
     setCurriculumWidth,
     curriculumCollapsed,
     setCurriculumCollapsed,
+    setCurriculumFocusRequest,
     curriculumResizing,
     setCurriculumResizing,
     setCurriculumResizePreviewWidth,
