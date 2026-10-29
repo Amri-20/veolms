@@ -34,6 +34,13 @@ export interface LessonEndScreenOverlayProps {
   countdownSeconds?: number;
   /** The player's timeline and bottom row are shown over the end screen. */
   controlsInset?: boolean;
+  /**
+   * The player is the mini window: the screen is drawn small, under the
+   * window's own close and expand, and the countdown stands still (it goes
+   * on when the player is full again), so the next lesson never starts while
+   * the learner is busy elsewhere. Enter and Esc are left to the page.
+   */
+  minimized?: boolean;
 }
 
 /*
@@ -93,6 +100,7 @@ export function LessonEndScreenOverlay({
   onClose,
   countdownSeconds = 5,
   controlsInset = false,
+  minimized = false,
 }: LessonEndScreenOverlayProps) {
   const [secondsRemaining, setSecondsRemaining] = useState(countdownSeconds);
   // A click or tap on the screen (not on its buttons) holds the countdown
@@ -106,7 +114,9 @@ export function LessonEndScreenOverlay({
   const isCountdownActive = autoplayEnabled && hasNextLesson;
 
   useEffect(() => {
-    if (!autoplayEnabled || !hasNextLesson || countdownHeld) return;
+    if (!autoplayEnabled || !hasNextLesson || countdownHeld || minimized) {
+      return;
+    }
 
     if (secondsRemaining <= 0) {
       onGoNext();
@@ -122,14 +132,20 @@ export function LessonEndScreenOverlay({
     autoplayEnabled,
     countdownHeld,
     hasNextLesson,
+    minimized,
     onGoNext,
     secondsRemaining,
   ]);
 
   // Enter goes on to the next lesson, Esc cancels the countdown (or, with
   // none running, closes the end screen), as the two keycaps say.
-  const keysRef = useRef({ hasNextLesson, isCountdownActive, onGoNext });
-  keysRef.current = { hasNextLesson, isCountdownActive, onGoNext };
+  const keysRef = useRef({
+    hasNextLesson,
+    isCountdownActive,
+    minimized,
+    onGoNext,
+  });
+  keysRef.current = { hasNextLesson, isCountdownActive, minimized, onGoNext };
   const cancelKeyRef = useRef(onCancelAutoplay);
   cancelKeyRef.current = onCancelAutoplay;
   const closeKeyRef = useRef(onClose);
@@ -148,6 +164,7 @@ export function LessonEndScreenOverlay({
         return;
       }
       const keys = keysRef.current;
+      if (keys.minimized) return;
       if (event.key === "Enter" && keys.hasNextLesson) {
         event.preventDefault();
         keys.onGoNext();
@@ -170,9 +187,14 @@ export function LessonEndScreenOverlay({
     "aria-label": nextLesson ? "Up next" : "Lesson finished",
     "data-countdown-held": countdownHeld ? "" : undefined,
     // The screen keeps its clicks: one that reached the video beneath
-    // would play it, and playing closes the end screen.
-    onPointerDown: (event: ReactPointerEvent) => event.stopPropagation(),
-    onPointerUp: (event: ReactPointerEvent) => event.stopPropagation(),
+    // would play it, and playing closes the end screen. The mini window
+    // still gets the presses, so it can be dragged from anywhere on it.
+    onPointerDown: minimized
+      ? undefined
+      : (event: ReactPointerEvent) => event.stopPropagation(),
+    onPointerUp: minimized
+      ? undefined
+      : (event: ReactPointerEvent) => event.stopPropagation(),
     onDoubleClick: (event: ReactMouseEvent) => event.stopPropagation(),
     onClick: (event: ReactMouseEvent) => {
       event.stopPropagation();
@@ -186,6 +208,21 @@ export function LessonEndScreenOverlay({
     // The player's controls layer (z-30) is drawn over the end screen.
     controlsInset ? "z-20" : "z-50"
   }`;
+
+  if (minimized) {
+    return (
+      <MinimizedLessonEndScreen
+        screenProps={screenProps}
+        screenClass={screenClass}
+        nextLesson={nextLesson}
+        courseComplete={courseComplete}
+        isCountdownActive={isCountdownActive}
+        onGoNext={onGoNext}
+        onRestart={onRestart}
+        onCancelAutoplay={onCancelAutoplay}
+      />
+    );
+  }
 
   if (centralControlsShown) {
     return (
@@ -488,6 +525,89 @@ function LessonEndScreenAroundCentralControls({
   );
 }
 
+/** Buttons small enough for the mini window. */
+const miniButtonClass =
+  "inline-flex h-8 shrink-0 cursor-pointer items-center justify-center rounded-lg px-3 text-xs font-semibold whitespace-nowrap transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
+
+/**
+ * The end screen in the mini window: what comes next on one line and its
+ * title on another, with Cancel (or Replay) and Next under them, below the
+ * window's own close and expand. No countdown is shown, as none runs here.
+ */
+function MinimizedLessonEndScreen({
+  screenProps,
+  screenClass,
+  nextLesson,
+  courseComplete,
+  isCountdownActive,
+  onGoNext,
+  onRestart,
+  onCancelAutoplay,
+}: {
+  screenProps: HTMLAttributes<HTMLDivElement>;
+  screenClass: string;
+  nextLesson?: NextLessonInfo;
+  courseComplete: boolean;
+  isCountdownActive: boolean;
+  onGoNext: () => void;
+  onRestart: () => void;
+  onCancelAutoplay: () => void;
+}) {
+  const label = nextLesson
+    ? "Up next"
+    : courseComplete
+      ? "Course complete"
+      : "You've reached the last lesson";
+
+  return (
+    <div
+      {...screenProps}
+      className={`${screenClass} flex flex-col items-center justify-center px-3 pt-9 pb-2 text-center`}
+    >
+      <p className="text-xs font-medium text-white/65">{label}</p>
+      {nextLesson ? (
+        <h2 className="mt-0.5 line-clamp-1 max-w-full text-sm leading-snug font-semibold">
+          {nextLesson.title}
+        </h2>
+      ) : null}
+      <div className="mt-2 flex items-center justify-center gap-2">
+        {isCountdownActive ? (
+          <button
+            type="button"
+            onClick={onCancelAutoplay}
+            className={`${miniButtonClass} bg-white/12 text-white hover:bg-white/20`}
+          >
+            Cancel
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onRestart}
+            className={`${miniButtonClass} gap-1.5 ${
+              nextLesson
+                ? "bg-white/12 text-white hover:bg-white/20"
+                : "bg-white text-black hover:bg-white/85"
+            }`}
+          >
+            <ArrowCounterClockwise weight="bold" className="size-3.5" />
+            Replay
+          </button>
+        )}
+        {nextLesson ? (
+          <button
+            type="button"
+            onClick={onGoNext}
+            className={`${miniButtonClass} bg-white text-black hover:bg-white/85`}
+            aria-label="Next lesson"
+          >
+            Next
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 /** Where the next lesson stands in the course, its section and length. */
 function NextLessonDetails({ lesson }: { lesson: NextLessonInfo }) {
   const details = [
@@ -522,6 +642,9 @@ function CountdownRing({
 }) {
   const progressRef = useRef<SVGCircleElement>(null);
   const animationRef = useRef<Animation | null>(null);
+  // A ring drawn part way through (the player made full again from the mini
+  // window, where the countdown stood still) starts where the count is.
+  const startRemainingRef = useRef(remaining);
 
   useEffect(() => {
     const circle = progressRef.current;
@@ -530,6 +653,8 @@ function CountdownRing({
       [{ strokeDashoffset: RING_LENGTH }, { strokeDashoffset: 0 }],
       { duration: seconds * 1000, easing: "linear", fill: "forwards" },
     );
+    animation.currentTime =
+      Math.max(0, seconds - startRemainingRef.current) * 1000;
     animationRef.current = animation;
     return () => {
       animation.cancel();

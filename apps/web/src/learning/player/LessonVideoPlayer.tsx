@@ -1722,10 +1722,11 @@ export function LessonVideoPlayer({
   // above anything inside the player. The timeline and the bottom row stay
   // up over it, and its words and buttons sit above them (`controlsInset`),
   // so the learner can scrub back or press play from it; the top row stands
-  // down for its close button. Dragging the timeline closes it.
+  // down for its close button. Dragging the timeline closes it. The mini
+  // window keeps it, small, with its countdown standing still.
   const endScreenVisible =
-    presentation === "full" &&
-    !minimizeGesture.controlsSuppressed &&
+    (presentation === "mini" ||
+      (presentation === "full" && !minimizeGesture.controlsSuppressed)) &&
     showCompletionOverlay &&
     showEndScreen;
   const chromeSuppressed = minimizeGesture.controlsSuppressed;
@@ -1916,6 +1917,7 @@ export function LessonVideoPlayer({
             onClose={onMiniClose ?? (() => undefined)}
             onRestore={onMiniRestore ?? (() => undefined)}
             source={playerSource}
+            endScreenOpen={endScreenVisible}
           />
         ) : (
           <LessonPlayerControls
@@ -1971,26 +1973,27 @@ export function LessonVideoPlayer({
               <VideoLoadingSpinner />
             </div>
           ) : presentation === "full" && !minimizeGesture.controlsSuppressed ? (
-            <>
-              <LessonAmbientProjection enabled={ambientEnabled} />
-              {endScreenVisible ? (
-                <LessonEndScreenOverlay
-                  nextLesson={
-                    canGoNext
-                      ? (nextLessonInfo ?? { id: 0, title: "Next lesson" })
-                      : undefined
-                  }
-                  autoplayEnabled={autoplayEnabled && !autoplayCancelled}
-                  courseComplete={courseComplete}
-                  onGoNext={handleGoNextFromEndScreen}
-                  onRestart={handleRestart}
-                  onCancelAutoplay={cancelEndScreenAutoplay}
-                  onClose={dismissEndScreen}
-                  controlsInset
-                />
-              ) : null}
-            </>
+            <LessonAmbientProjection enabled={ambientEnabled} />
           ) : undefined}
+          {/* In the same place for both presentations, so minimizing keeps
+              the countdown where it was instead of starting it again. */}
+          {!holdingPreviousLesson && endScreenVisible ? (
+            <LessonEndScreenOverlay
+              nextLesson={
+                canGoNext
+                  ? (nextLessonInfo ?? { id: 0, title: "Next lesson" })
+                  : undefined
+              }
+              autoplayEnabled={autoplayEnabled && !autoplayCancelled}
+              courseComplete={courseComplete}
+              onGoNext={handleGoNextFromEndScreen}
+              onRestart={handleRestart}
+              onCancelAutoplay={cancelEndScreenAutoplay}
+              onClose={dismissEndScreen}
+              controlsInset={presentation === "full"}
+              minimized={presentation === "mini"}
+            />
+          ) : null}
         </>
       }
       playbackFeedback={
