@@ -1,11 +1,12 @@
 import { SmileyIcon as Smiley } from "@phosphor-icons/react/Smiley";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "../components/ui/popover";
 import type { DiscussionEditorController } from "./discussion-editor/DiscussionEditor";
+import type { DiscussionEditorSelection } from "./discussion-editor/commands";
 
 const EmojiPicker = lazy(() => import("emoji-picker-react"));
 
@@ -28,6 +29,7 @@ export function CommentEmojiPicker({
 }: CommentEmojiPickerProps) {
   const [open, setOpen] = useState(false);
   const [recentEmojis, setRecentEmojis] = useState(readRecentEmojis);
+  const selectionRef = useRef<DiscussionEditorSelection | null>(null);
   const colorScheme = useDocumentColorScheme();
 
   const addRecentEmoji = (unified: string) => {
@@ -46,6 +48,7 @@ export function CommentEmojiPicker({
       onEditorNeeded?.();
       return;
     }
+    selectionRef.current = nextOpen ? (editor?.getSelection() ?? null) : null;
     setOpen(nextOpen);
   };
 
@@ -70,7 +73,11 @@ export function CommentEmojiPicker({
           align="start"
           side="top"
           sideOffset={10}
+          data-comment-emoji-picker=""
           className="w-auto max-w-[calc(100vw-1rem)] overflow-hidden p-0"
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onPointerCancel={(event) => event.stopPropagation()}
         >
           <Suspense
             fallback={
@@ -91,8 +98,9 @@ export function CommentEmojiPicker({
               suggestedEmojis={recentEmojis}
               previewConfig={{ showPreview: false }}
               onEmojiClick={(emoji) => {
-                editor?.insertMarkdown(emoji.emoji);
+                editor?.insertMarkdown(emoji.emoji, selectionRef.current);
                 addRecentEmoji(emoji.unified);
+                selectionRef.current = null;
                 setOpen(false);
               }}
             />
